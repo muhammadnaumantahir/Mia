@@ -1043,6 +1043,25 @@ def create_app(
             raise HTTPException(status_code=404, detail="Capability version not found")
         return candidate
 
+    @app.get("/api/capabilities/{capability_id}/{version}/source")
+    def get_capability_source(capability_id: str, version: str) -> dict[str, Any]:
+        candidate = capability_versions.get(capability_id, version)
+        if candidate is None:
+            raise HTTPException(status_code=404, detail="Capability version not found")
+        try:
+            source_code = capability_versions.read_source(capability_id, version)
+            test_source_code = capability_versions.read_test_source(capability_id, version)
+        except (CapabilityLifecycleError, OSError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {
+            "capability_id": candidate["capability_id"],
+            "version": candidate["version"],
+            "source_sha256": candidate["source_sha256"],
+            "test_sha256": candidate["test_sha256"],
+            "source_code": source_code,
+            "test_source_code": test_source_code,
+        }
+
     @app.get("/api/capabilities/{capability_id}/{version}/lineage")
     def capability_lineage(capability_id: str, version: str) -> dict[str, Any]:
         try:

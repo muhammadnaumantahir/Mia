@@ -176,3 +176,48 @@ def test_capability_validation_requires_test_source_before_sandbox(tmp_path):
     assert response.status_code == 422
     assert runner.calls == []
     assert store.get("missing-tests", "0.1.0")["status"] == "proposed"
+
+
+def test_capability_source_api_returns_hash_verified_immutable_source(tmp_path):
+    store = CapabilityStore(tmp_path / "capabilities.sqlite3", tmp_path / "generated")
+    client = TestClient(
+        create_app(
+            store=ObservatoryStore(tmp_path / "observatory.sqlite3"),
+            capability_store=store,
+        )
+    )
+    source = "def add(a, b):\n    return a + b\n"
+    tests = "from candidate import add\n\ndef test_add():\n    assert add(2, 3) == 5\n"
+    created = _create_candidate(client, "math-check", source, tests)
+    assert created.status_code == 201
+
+    response = client.get("/api/capabilities/math-check/0.1.0/source")
+    assert response.status_code == 200
+    assert response.json()["source_code"] == source
+    assert response.json()["test_source_code"] == tests
+    assert response.json()["source_sha256"] == created.json()["source_sha256"]
+    assert response.json()["test_sha256"] == created.json()["test_sha256"]
+
+
+def test_capability_source_api_rejects_tampered_source(tmp_path):
+    store = CapabilityStore(tmp_path / "capabilities.sqlite3", tmp_path / "generated")
+    client = TestClient(
+        create_app(
+            store=ObservatoryStore(tmp_path / "observatory.sqlite3"),
+            capability_store=store,
+        )
+    )
+    created = _create_candidate(
+        client,
+        "tampered-source",
+        "def value(): return 1\n",
+        "from candidate import value\ndef test_value(): assert value() == 1\n",
+    )
+    assert created.status_code == 201
+    path = store.get("tampered-source", "0.1.0")["source_path"]
+    with open(path, "w", encoding="utf-8") as source_file:
+        source_file.write("def value(): return 99\n")
+
+    response = client.get("/api/capabilities/tampered-source/0.1.0/source")
+    assert response.status_code == 409
+    assert "hash does not match" in response.json()["detail"]
