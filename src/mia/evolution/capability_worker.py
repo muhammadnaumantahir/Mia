@@ -74,9 +74,8 @@ def run_candidate(source_path: str | Path, input_data: dict[str, Any]) -> dict[s
         raise ValueError("capability input exceeds 32 KB")
 
     candidate_path = Path(source_path).resolve()
-    candidate_path.relative_to(Path("/candidate").resolve())
     if candidate_path.name != "candidate.py":
-        raise ValueError("capability source path is not the staged candidate")
+        raise ValueError("capability source path must name candidate.py")
     source = candidate_path.read_text(encoding="utf-8")
     if not source or len(source.encode("utf-8")) > 512 * 1024:
         raise ValueError("candidate source must be 1-512 KB")
@@ -116,8 +115,9 @@ def main() -> int:
             raise ValueError("input exceeds 32 KB")
         input_data = json.loads(payload)
         source_path = os.environ.get("MIA_CAPABILITY_SOURCE", "")
-        if not source_path:
-            raise ValueError("capability source path is missing")
+        expected_path = Path("/candidate/candidate.py").resolve()
+        if not source_path or Path(source_path).resolve() != expected_path:
+            raise ValueError("capability source path is not the mounted candidate")
         result = run_candidate(source_path, input_data)
         sys.stdout.write(json.dumps(
             {"ok": True, "result": result},
