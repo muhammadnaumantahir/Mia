@@ -588,6 +588,7 @@ class ObservatoryStore:
             raise ValueError("stored Day 0 baseline manifest is invalid") from exc
 
         snapshots: list[dict[str, Any]] = []
+        unavailable_days: set[int] = set()
         for row in snapshot_rows:
             snapshot_json = str(row["snapshot_json"])
             if sha256_text(snapshot_json) != row["manifest_sha256"]:
@@ -615,6 +616,14 @@ class ObservatoryStore:
                 raise ValueError(
                     f"stored Day {row['day_index']} snapshot metadata is inconsistent"
                 )
+            if int(row["day_index"]) > 0:
+                snapshot_missing = evidence.get("missing_day_indices", [])
+                if isinstance(snapshot_missing, list):
+                    unavailable_days.update(
+                        day for day in snapshot_missing
+                        if isinstance(day, int) and not isinstance(day, bool)
+                        and 1 <= day <= int(experiment["planned_days"])
+                    )
             snapshots.append({
                 "snapshot_id": row["snapshot_id"],
                 "day_index": int(row["day_index"]),
@@ -625,7 +634,6 @@ class ObservatoryStore:
             })
 
         events: list[dict[str, Any]] = []
-        unavailable_days: set[int] = set()
         event_counts: dict[str, int] = {}
         for row in event_rows:
             item = dict(row)

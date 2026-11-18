@@ -250,3 +250,45 @@ def test_report_request_closes_expired_run_as_incomplete_without_status_poll(tmp
         event for event in report["events"]
         if event["event_type"] == "experiment_incomplete"
     ]) == 1
+
+
+def test_report_uses_snapshot_embedded_offline_days_if_event_write_was_interrupted(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    database = tmp_path / "snapshot-unavailable-days.sqlite3"
+    store = ObservatoryStore(database)
+    prepared = store.prepare_experiment(
+        name="Snapshot embedded offline days",
+        baseline_manifest=baseline_manifest(),
+        planned_days=4,
+    )
+    experiment_id = prepared["experiment_id"]
+    store.start_experiment(experiment_id)
+    started_at = (datetime.now(UTC) - timedelta(days=3, hours=1)).isoformat()
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE experiments SET started_at = ? WHERE experiment_id = ?",
+            (started_at, experiment_id),
+        )
+        connection.commit()
+
+    # Model a host crash after snapshot commit but before the unavailable-day
+    # event is written. The immutable snapshot still carries the evidence.
+    store.record_daily_snapshot(
+        experiment_id=experiment_id,
+        day_index=3,
+        source_commit="5123456789abcdef0123456789abcdef01234567",
+        snapshot={
+            "day_index": 3,
+            "source_commit": "5123456789abcdef0123456789abcdef01234567",
+            "missing_day_indices": [1, 2],
+        },
+    )
+
+    report = store.build_experiment_report(experiment_id)
+
+    assert report is not None
+    assert report["days"]["recorded"] == [0, 3]
+    assert report["days"]["missing"] == [1, 2, 4]
+    assert report["days"]["unavailable"] == [1, 2]
+    assert report["days"]["unaccounted"] == [4]
