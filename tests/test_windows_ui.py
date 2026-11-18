@@ -9,6 +9,17 @@ from mia.computer.windows_ui import DesktopAccessError, WindowsUIAdapter
 class FakeControl:
     def __init__(self):
         self.text = None
+        self.element_info = type(
+            "ControlInfo",
+            (),
+            {
+                "control_type": "Edit",
+                "automation_id": "editor",
+                "name": "Document",
+                "class_name": "Edit",
+                "is_password": False,
+            },
+        )()
 
     def is_visible(self):
         return True
@@ -36,6 +47,9 @@ class FakeWindow:
 
     def set_focus(self):
         self.focused = True
+
+    def descendants(self):
+        return [self.control]
 
     def child_window(self, *, auto_id, control_type):
         assert auto_id == "editor"
@@ -152,3 +166,24 @@ def test_windows_adapter_refuses_non_windows_platform(tmp_path):
     adapter = WindowsUIAdapter(approvals, platform_name="linux")
     with pytest.raises(RuntimeError, match="only on Windows"):
         adapter.list_windows()
+
+
+def test_window_inspection_returns_control_metadata_without_control_values(tmp_path):
+    adapter, _, _ = build_adapter(tmp_path)
+    result = adapter.inspect_window(123)
+    assert result["window_title"] == "Notepad"
+    assert result["controls"] == [{
+        "automation_id": "editor",
+        "control_type": "Edit",
+        "name": "Document",
+        "class_name": "Edit",
+    }]
+    assert "text" not in result["controls"][0]
+
+
+def test_window_inspection_rejects_unknown_window_and_bad_limit(tmp_path):
+    adapter, _, _ = build_adapter(tmp_path)
+    with pytest.raises(DesktopAccessError):
+        adapter.inspect_window(999)
+    with pytest.raises(ValueError):
+        adapter.inspect_window(123, limit=201)

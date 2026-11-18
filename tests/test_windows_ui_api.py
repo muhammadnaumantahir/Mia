@@ -71,6 +71,10 @@ def test_windows_ui_preview_and_execution_api_are_approval_gated(tmp_path):
     assert listed.status_code == 200
     assert listed.json()["items"][0]["title"] == "Notepad"
 
+    controls = client.get("/api/desktop/windows/123/controls")
+    assert controls.status_code == 200
+    assert controls.json()["controls"][0]["automation_id"] == "editor"
+
     preview = adapter.preview_type_text(
         window_handle=123,
         window_title="Notepad",

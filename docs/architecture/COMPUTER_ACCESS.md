@@ -95,6 +95,7 @@ The URL filter is a defense-in-depth control, not a complete network sandbox. DN
 
 The optional Windows adapter uses pywinauto's UI Automation backend:
 - It can enumerate visible windows and expose only title, handle, process ID and window class.
+- It can inspect a selected window's visible, enabled, non-password text-control metadata (AutomationId, control type, label and class), never the control's current text value.
 - Text entry is limited to visible, enabled controls with a stable AutomationId and one of the supported text-control types.
 - The preview is bound to the exact window handle/title, control ID/type and text SHA-256.
 - The approval card displays the proposed text and its hash; no typing occurs before approval.
