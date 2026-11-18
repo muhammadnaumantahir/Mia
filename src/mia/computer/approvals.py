@@ -6,9 +6,10 @@ import hashlib
 import json
 import sqlite3
 import uuid
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 
 def _now() -> datetime:
@@ -37,13 +38,21 @@ class ApprovalStore:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
 
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.database_path, timeout=10)
-        connection.row_factory = sqlite3.Row
-        return connection
+    @contextmanager
+    def _connection(self) -> Iterator[sqlite3.Connection]:
+        db = sqlite3.connect(self.database_path, timeout=10)
+        db.row_factory = sqlite3.Row
+        try:
+            yield db
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
 
     def _initialize(self) -> None:
-        with self._connect() as db:
+        with self._connection() as db:
             db.execute("""
                 CREATE TABLE IF NOT EXISTS action_approvals (
                     approval_id TEXT PRIMARY KEY,
@@ -77,7 +86,7 @@ class ApprovalStore:
         created = _now()
         expires = created + timedelta(seconds=ttl_seconds)
         approval_id = uuid.uuid4().hex
-        with self._connect() as db:
+        with self._connection() as db:
             db.execute(
                 """
                 INSERT INTO action_approvals (
@@ -102,8 +111,11 @@ class ApprovalStore:
         }
 
     def approve(self, approval_id: str) -> dict[str, str]:
-        now = _now().isoformat()
-        with self._connect() as db:
+        now = _now()
+        now_text = now.isoformat()
+        expired = False
+        summary = ""
+        with self._connection() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute(
                 "SELECT status, expires_at, summary FROM action_approvals WHERE approval_id = ?",
@@ -113,21 +125,25 @@ class ApprovalStore:
                 raise ApprovalError("Approval was not found")
             if row["status"] != "pending":
                 raise ApprovalError(f"Approval is {row['status']}, not pending")
-            if row["expires_at"] <= now:
+            summary = row["summary"]
+            if datetime.fromisoformat(row["expires_at"]) <= now:
                 db.execute(
                     "UPDATE action_approvals SET status = 'expired' WHERE approval_id = ?",
                     (approval_id,),
                 )
-                raise ApprovalError("Approval has expired")
-            db.execute(
-                """
-                UPDATE action_approvals
-                SET status = 'approved', approved_at = ?
-                WHERE approval_id = ? AND status = 'pending'
-                """,
-                (now, approval_id),
-            )
-        return {"approval_id": approval_id, "status": "approved", "summary": row["summary"]}
+                expired = True
+            else:
+                db.execute(
+                    """
+                    UPDATE action_approvals
+                    SET status = 'approved', approved_at = ?
+                    WHERE approval_id = ? AND status = 'pending'
+                    """,
+                    (now_text, approval_id),
+                )
+        if expired:
+            raise ApprovalError("Approval has expired")
+        return {"approval_id": approval_id, "status": "approved", "summary": summary}
 
     def consume(
         self,
@@ -138,7 +154,8 @@ class ApprovalStore:
     ) -> None:
         now = _now()
         now_text = now.isoformat()
-        with self._connect() as db:
+        expired = False
+        with self._connection() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute(
                 """
@@ -156,24 +173,27 @@ class ApprovalStore:
                     "UPDATE action_approvals SET status = 'expired' WHERE approval_id = ?",
                     (approval_id,),
                 )
-                raise ApprovalError("Approval has expired")
-            if row["action_id"] != action_id:
+                expired = True
+            elif row["action_id"] != action_id:
                 raise ApprovalError("Approval action does not match")
-            if row["payload_sha256"] != _digest(action_id, payload):
+            elif row["payload_sha256"] != _digest(action_id, payload):
                 raise ApprovalError("Approved payload has changed")
-            updated = db.execute(
-                """
-                UPDATE action_approvals
-                SET status = 'consumed', consumed_at = ?
-                WHERE approval_id = ? AND status = 'approved'
-                """,
-                (now_text, approval_id),
-            )
-            if updated.rowcount != 1:
-                raise ApprovalError("Approval was already consumed")
+            else:
+                updated = db.execute(
+                    """
+                    UPDATE action_approvals
+                    SET status = 'consumed', consumed_at = ?
+                    WHERE approval_id = ? AND status = 'approved'
+                    """,
+                    (now_text, approval_id),
+                )
+                if updated.rowcount != 1:
+                    raise ApprovalError("Approval was already consumed")
+        if expired:
+            raise ApprovalError("Approval has expired")
 
     def list_pending(self) -> list[dict[str, str]]:
-        with self._connect() as db:
+        with self._connection() as db:
             rows = db.execute("""
                 SELECT approval_id, action_id, summary, status, created_at, expires_at
                 FROM action_approvals
