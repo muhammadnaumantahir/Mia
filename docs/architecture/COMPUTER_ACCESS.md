@@ -74,6 +74,8 @@ The service remains bound to localhost. Remote access must not be enabled until 
 
 Copy `config/applications.example.json` to `config/applications.json` and edit it for the applications actually installed on the machine. The personal file is ignored by Git.
 
+Install the optional browser adapter with `python -m pip install -e ".[computer]"` and `playwright install chromium`.
+
 ## Browser automation
 
 - Uses Playwright with a temporary isolated browser context, not the user's default browser profile.

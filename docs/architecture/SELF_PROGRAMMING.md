@@ -23,7 +23,7 @@ The current CapabilityStore:
 - records validation evidence as structured, append-only events;
 - prevents a previously persisted capability version from being overwritten.
 
-The store persists candidate source only. It does not execute or import generated code.
+The store persists candidate source only. It does not execute or import generated code. The local API exposes candidate proposal, validation start/report, registration, lineage and activation-status routes. Activation requests return a conflict explaining that the OS sandbox is missing.
 
 ## Validation contract
 

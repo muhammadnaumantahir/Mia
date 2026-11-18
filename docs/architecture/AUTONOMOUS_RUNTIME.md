@@ -26,6 +26,12 @@ Task states:
 
 Transitions are checked centrally. Completed, rejected and cancelled tasks are terminal. Failed work must be explicitly re-approved before another attempt.
 
+## Evidence-backed workload discovery
+
+The current WorkloadDiscovery component accepts findings from self-assessment, internal tests, benchmarks, research, environment observations and experience analysis. It writes proposed tasks with an evidence ID, risk label and a stable deduplication key. Repeated observations map to the existing task rather than flooding the queue. Discovery never approves a task automatically.
+
+The local API exposes task proposals, task history, approval, rejection and cancellation. The Evolution Observatory dashboard includes a task-control panel. There is no autonomous scheduler or planner connected yet.
+
 ## Autonomy gate
 
 The dispatcher is a single-cycle primitive and does not start a background worker. It only claims approved tasks when all of these checks pass:
@@ -38,7 +44,7 @@ Unknown resource usage means pause, not assume the machine is idle. The default 
 
 ## Current boundary
 
-The task executor is injected as a callback. Mia does not yet autonomously plan tool calls, run arbitrary shell commands, create schedules or execute generated code. Those require the permissioned tool catalog, runtime monitor, sandbox and task cancellation/recovery paths.
+The task executor is injected as a callback. The current HTTP API does not expose automatic dispatch. Mia does not yet autonomously plan tool calls, run arbitrary shell commands, create schedules or execute generated code. Those require the permissioned tool catalog, runtime monitor, sandbox and task cancellation/recovery paths.
 
 ## Planned next integrations
 

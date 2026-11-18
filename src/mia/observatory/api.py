@@ -16,6 +16,11 @@ from pydantic import BaseModel, Field
 
 from mia.agent.discovery import DiscoveryFinding, WorkloadDiscovery
 from mia.agent.tasks import AutonomyPolicy, TaskCoordinator, TaskStore, TaskTransitionError
+from mia.evolution.capabilities import (
+    CapabilityActivationBlocked,
+    CapabilityLifecycleError,
+    CapabilityStore,
+)
 from mia.computer.approvals import ApprovalError, ApprovalStore
 from mia.computer.applications import ApplicationLaunchError, ApplicationLauncher
 from mia.computer.browser import BrowserAccessError, BrowserController
@@ -26,11 +31,6 @@ from mia.gateway.service import ModelGateway
 from mia.knowledge.document_ingestion import DocumentIngestor, DocumentIngestionError
 from mia.memory.store import MemoryStore
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider
-from mia.evolution.capabilities import (
-    CapabilityActivationBlocked,
-    CapabilityLifecycleError,
-    CapabilityStore,
-)
 
 from .store import ObservatoryStore
 

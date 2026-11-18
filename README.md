@@ -70,6 +70,13 @@ For PDF, DOCX, XLSX and PPTX extraction, install the optional document parsers:
 python -m pip install -e ".[documents]"
 ~~~
 
+For isolated browser automation, install Playwright and its Chromium runtime:
+
+~~~powershell
+python -m pip install -e ".[computer]"
+playwright install chromium
+~~~
+
 The first transcription downloads the selected Faster-Whisper model into the local Mia data directory. The default is the multilingual `base` model, CPU int8, and two worker threads. Voice recognition is push-to-talk; no background microphone listener is started.
 
 Computer file access defaults to Mia's own `workspace` folder. To grant additional roots, add a semicolon-separated list to `.env`, for example `MIA_COMPUTER_ROOTS=D:/Projects;D:/Documents`. File writes require a preview, explicit approval and an exact payload match. Copy `config/applications.example.json` to `config/applications.json` to enable the Notepad/Calculator/File Explorer allowlist. Browser navigation uses an isolated profile; clicks need approval. See [Computer Access](docs/architecture/COMPUTER_ACCESS.md).
@@ -96,8 +103,8 @@ Recent conversations are stored locally and can be restored from the sidebar. Lo
 | 3. Voice | Push-to-talk, local STT and installed browser/OS speech voices | In progress |
 | 4. Computer intelligence | Scoped filesystem, approved app launch and isolated public-web browser | In progress |
 | 5. Memory and knowledge | Persistent conversations, FTS5 knowledge and source-aware document ingestion | In progress |
-| 6. Autonomous agent | Task lifecycle and opt-in resource-gated dispatcher foundation | Foundation in progress |
-| 7. Self-programming | Versioned candidate persistence and validation lifecycle; activation blocked | Foundation in progress |
+| 6. Autonomous agent | Task lifecycle, evidence-backed proposals and resource-gated dispatcher primitive | Foundation in progress |
+| 7. Self-programming | Candidate versioning, lineage, validation/registration APIs; activation blocked | Foundation in progress |
 | 8. 30-day experiment | Immutable baseline, daily snapshots, fixed benchmarks and final evaluation | Planned |
 
 Phases are quality gates, not calendar promises. A phase is not complete until its documented exit criteria and tests pass. See [the complete roadmap](docs/ROADMAP.md).
@@ -125,6 +132,8 @@ See [Safety and Governance](docs/SAFETY_AND_GOVERNANCE.md).
 ~~~text
 docs/                  Research, architecture, phases and experiment protocol
 src/mia/               Python application and SPS foundations
+src/mia/agent/         Task lifecycle, workload discovery and autonomy gates
+src/mia/evolution/    Versioned capability persistence and validation lifecycle
 src/mia/gateway/       Provider contracts and routing policy
 src/mia/observatory/   SQLite event/metric store and dashboard
 tests/                 Automated tests
