@@ -35,6 +35,18 @@ class MetricInput(BaseModel):
     context: dict[str, Any] = Field(default_factory=dict)
 
 
+class ExperimentPreparation(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    planned_days: int = Field(default=30, ge=1, le=365)
+    baseline_manifest: dict[str, Any]
+
+
+class DailySnapshotInput(BaseModel):
+    day_index: int = Field(ge=1)
+    source_commit: str = Field(min_length=7, max_length=64)
+    snapshot: dict[str, Any]
+
+
 def create_app(store: ObservatoryStore | None = None) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -75,6 +87,54 @@ def create_app(store: ObservatoryStore | None = None) -> FastAPI:
     @app.post("/api/observatory/metrics", status_code=201)
     def add_metric(item: MetricInput) -> dict[str, str]:
         return {"sample_id": observatory.record_metric(**item.model_dump())}
+
+    @app.get("/api/experiments")
+    def experiments() -> dict[str, Any]:
+        return {"items": observatory.list_experiments()}
+
+    @app.get("/api/experiments/{experiment_id}/snapshots")
+    def snapshots(experiment_id: str) -> dict[str, Any]:
+        known_ids = {
+            item["experiment_id"] for item in observatory.list_experiments()
+        }
+        if experiment_id not in known_ids:
+            raise HTTPException(status_code=404, detail="Experiment not found")
+        return {"items": observatory.list_snapshots(experiment_id)}
+
+    @app.post("/api/experiments/prepare", status_code=201)
+    def prepare_experiment(item: ExperimentPreparation) -> dict[str, str]:
+        try:
+            return observatory.prepare_experiment(
+                name=item.name,
+                baseline_manifest=item.baseline_manifest,
+                planned_days=item.planned_days,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/experiments/{experiment_id}/start")
+    def start_experiment(experiment_id: str) -> dict[str, str]:
+        try:
+            observatory.start_experiment(experiment_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {"experiment_id": experiment_id, "status": "running"}
+
+    @app.post("/api/experiments/{experiment_id}/snapshots", status_code=201)
+    def add_snapshot(
+        experiment_id: str,
+        item: DailySnapshotInput,
+    ) -> dict[str, str]:
+        try:
+            snapshot_id = observatory.record_daily_snapshot(
+                experiment_id=experiment_id,
+                day_index=item.day_index,
+                source_commit=item.source_commit,
+                snapshot=item.snapshot,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {"snapshot_id": snapshot_id}
 
     return app
 
