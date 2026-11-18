@@ -121,6 +121,10 @@ class CapabilityCandidateInput(BaseModel):
     permissions: list[str] = Field(default_factory=list, max_length=50)
 
 
+class CapabilityExecutionInput(BaseModel):
+    input_data: dict[str, Any] = Field(default_factory=dict)
+
+
 class EventInput(BaseModel):
     category: str = Field(min_length=1, max_length=80)
     event_type: str = Field(min_length=1, max_length=100)
@@ -307,6 +311,7 @@ def create_app(
         image=os.getenv("MIA_SANDBOX_IMAGE", "mia-sandbox:py313-v1"),
     )
     app.state.sandbox_runner = sandbox_validation
+    app.state.capability_executor = sandbox_validation
     resource_monitor_service = resource_monitor or ResourceMonitor()
     app.state.resource_monitor = resource_monitor_service
     experiment_snapshot_capturer = ExperimentSnapshotCapturer(
@@ -1701,6 +1706,146 @@ def create_app(
             payload={"capability_id": capability_id, "version": version},
         )
         return candidate
+
+    @app.post("/api/capabilities/{capability_id}/{version}/execute")
+    async def execute_registered_capability(
+        capability_id: str,
+        version: str,
+        item: CapabilityExecutionInput,
+    ) -> dict[str, Any]:
+        candidate = capability_versions.get(capability_id, version)
+        if candidate is None:
+            raise HTTPException(status_code=404, detail="Capability version not found")
+        if candidate["status"] != "registered":
+            raise HTTPException(
+                status_code=409,
+                detail="Only registered capability versions may be executed",
+            )
+        validation = candidate.get("validation") or {}
+        required_gates = (
+            "static_checks",
+            "unit_tests",
+            "security_checks",
+            "regression_tests",
+        )
+        if any(validation.get(gate) is not True for gate in required_gates):
+            raise HTTPException(
+                status_code=409,
+                detail="Capability does not have four passing sandbox validation gates",
+            )
+        permissions = candidate.get("permissions")
+        if permissions != []:
+            raise HTTPException(
+                status_code=403,
+                detail="One-shot execution is limited to permission-free capabilities",
+            )
+
+        try:
+            input_json = json.dumps(
+                item.input_data,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+            )
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="Capability input_data must contain JSON values only",
+            ) from exc
+        input_bytes = input_json.encode("utf-8")
+        if len(input_bytes) > DockerSandboxRunner.MAX_CAPABILITY_INPUT_BYTES:
+            raise HTTPException(
+                status_code=422,
+                detail="Capability input_data exceeds 32 KB",
+            )
+
+        try:
+            source_code = capability_versions.read_source(capability_id, version)
+        except (CapabilityLifecycleError, OSError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        try:
+            source_tree = ast.parse(source_code)
+        except SyntaxError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail="Registered capability source is no longer valid Python",
+            ) from exc
+        run_functions = [
+            node for node in source_tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "run"
+        ]
+        if len(run_functions) != 1:
+            raise HTTPException(
+                status_code=409,
+                detail="Capability must export exactly one synchronous run(input_data) function",
+            )
+        run_args = run_functions[0].args
+        if (
+            len(run_args.args) != 1
+            or run_args.args[0].arg != "input_data"
+            or run_args.posonlyargs
+            or run_args.vararg is not None
+            or run_args.kwarg is not None
+            or run_args.kwonlyargs
+            or run_args.defaults
+            or any(value is not None for value in run_args.kw_defaults)
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Capability run function must use exactly the signature run(input_data)",
+            )
+        security_findings = _all_security_findings(source_code, None)
+        if any(security_findings.values()):
+            raise HTTPException(
+                status_code=409,
+                detail="Capability source violates the restricted pure-Python execution policy",
+            )
+
+        try:
+            execution = await run_in_threadpool(
+                app.state.capability_executor.execute_capability,
+                source_code=source_code,
+                source_sha256=candidate["source_sha256"],
+                input_data=item.input_data,
+            )
+        except SandboxUnavailableError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except SandboxExecutionError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        observatory.record_event(
+            category="evolution",
+            event_type="capability_executed",
+            summary=f"One-shot isolated capability execution: {capability_id} {version}",
+            outcome="success",
+            layer_id="SPS-10",
+            payload={
+                "capability_id": capability_id,
+                "version": version,
+                "source_sha256": candidate["source_sha256"],
+                "input_sha256": hashlib.sha256(input_bytes).hexdigest(),
+                "input_bytes": len(input_bytes),
+                "output_bytes": len(json.dumps(
+                    execution["result"],
+                    ensure_ascii=False,
+                    allow_nan=False,
+                ).encode("utf-8")),
+                "runner": execution["runner"],
+                "image_id": execution["image_id"],
+                "activated": False,
+            },
+        )
+        return {
+            "capability_id": capability_id,
+            "version": version,
+            "result": execution["result"],
+            "source_sha256": candidate["source_sha256"],
+            "runner": execution["runner"],
+            "image_id": execution["image_id"],
+            "activated": False,
+        }
 
     @app.post("/api/capabilities/{capability_id}/{version}/activate")
     def activate_capability(capability_id: str, version: str) -> dict[str, Any]:

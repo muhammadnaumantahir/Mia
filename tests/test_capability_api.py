@@ -12,9 +12,23 @@ class FakeSandboxRunner:
         self.passing = passing
         self.available = available
         self.calls = []
+        self.execution_calls = []
 
     def is_available(self):
         return self.available
+
+    def execute_capability(self, *, source_code, source_sha256, input_data):
+        self.execution_calls.append({
+            "source_code": source_code,
+            "source_sha256": source_sha256,
+            "input_data": input_data,
+        })
+        return {
+            "result": {"echo": input_data.get("value", 0)},
+            "source_sha256": source_sha256,
+            "image_id": "sha256:test-image",
+            "runner": "docker-capability-execution-v1",
+        }
 
     def validate_candidate(
         self,
@@ -248,3 +262,106 @@ def test_capability_source_api_allows_legacy_source_without_tests(tmp_path):
     assert response.status_code == 200
     assert response.json()["source_code"] == source
     assert response.json()["test_source_code"] is None
+
+
+def test_registered_permission_free_capability_executes_through_isolated_runner(tmp_path):
+    store = CapabilityStore(tmp_path / "capabilities.sqlite3", tmp_path / "generated")
+    runner = FakeSandboxRunner()
+    client = TestClient(
+        create_app(
+            store=ObservatoryStore(tmp_path / "observatory.sqlite3"),
+            capability_store=store,
+            sandbox_runner=runner,
+        )
+    )
+    source = (
+        "def run(input_data):\n"
+        "    return {'echo': input_data.get('value', 0)}\n"
+    )
+    tests = (
+        "from candidate import run\n"
+        "def test_run():\n"
+        "    assert run({'value': 3}) == {'echo': 3}\n"
+    )
+    created = _create_candidate(client, "echo-capability", source, tests)
+    assert created.status_code == 201
+    assert client.post(
+        "/api/capabilities/echo-capability/0.1.0/validate/start"
+    ).status_code == 200
+    validated = client.post("/api/capabilities/echo-capability/0.1.0/validate")
+    assert validated.status_code == 200
+    assert validated.json()["status"] == "validated"
+    registered = client.post("/api/capabilities/echo-capability/0.1.0/register")
+    assert registered.status_code == 200
+
+    executed = client.post(
+        "/api/capabilities/echo-capability/0.1.0/execute",
+        json={"input_data": {"value": 37}},
+    )
+
+    assert executed.status_code == 200, executed.text
+    body = executed.json()
+    assert body["result"] == {"echo": 37}
+    assert body["activated"] is False
+    assert body["runner"] == "docker-capability-execution-v1"
+    assert runner.execution_calls == [{
+        "source_code": source,
+        "source_sha256": created.json()["source_sha256"],
+        "input_data": {"value": 37},
+    }]
+    assert any(
+        event["event_type"] == "capability_executed"
+        for event in store_events(client)
+    )
+
+
+def store_events(client):
+    response = client.get("/api/observatory/events?limit=50")
+    assert response.status_code == 200
+    return response.json()["items"]
+
+
+def test_capability_execution_requires_registration_and_empty_permissions(tmp_path):
+    store = CapabilityStore(tmp_path / "capabilities.sqlite3", tmp_path / "generated")
+    runner = FakeSandboxRunner()
+    client = TestClient(
+        create_app(
+            store=ObservatoryStore(tmp_path / "observatory.sqlite3"),
+            capability_store=store,
+            sandbox_runner=runner,
+        )
+    )
+    source = "def run(input_data):\n    return {'ok': True}\n"
+    tests = (
+        "from candidate import run\n"
+        "def test_run():\n"
+        "    assert run({}) == {'ok': True}\n"
+    )
+    created = client.post(
+        "/api/capabilities",
+        json={
+            "capability_id": "scoped-capability",
+            "version": "0.1.0",
+            "name": "Scoped capability",
+            "source_code": source,
+            "test_source_code": tests,
+            "rationale": "Verify permission gating.",
+            "permissions": ["filesystem.read"],
+        },
+    )
+    assert created.status_code == 201
+    early = client.post(
+        "/api/capabilities/scoped-capability/0.1.0/execute",
+        json={"input_data": {}},
+    )
+    assert early.status_code == 409
+    client.post("/api/capabilities/scoped-capability/0.1.0/validate/start")
+    client.post("/api/capabilities/scoped-capability/0.1.0/validate")
+    client.post("/api/capabilities/scoped-capability/0.1.0/register")
+
+    blocked = client.post(
+        "/api/capabilities/scoped-capability/0.1.0/execute",
+        json={"input_data": {}},
+    )
+    assert blocked.status_code == 403
+    assert runner.execution_calls == []
