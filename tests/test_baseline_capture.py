@@ -171,6 +171,17 @@ def _baseline_manifest(passed=True):
             "pytest_exit_code": 0,
             "suite_id": "mia-foundation-v2",
         },
+        "runtime_settings": {
+            "MIA_EXPERIMENT_AUTO_CAPTURE": True,
+            "MIA_AUTONOMY_ENABLED": False,
+            "MIA_EMERGENCY_STOP": False,
+            "MIA_ALLOW_PAID": False,
+            "MIA_MAX_CPU_PERCENT": 75,
+            "MIA_MAX_RAM_PERCENT": 85,
+            "MIA_AUTONOMY_INTERVAL_SECONDS": 30,
+            "MIA_APPLICATIONS_CONFIG_PRESENT": False,
+            "MIA_APPLICATIONS_CONFIG_SHA256": None,
+        },
         "baseline_results": {
             "tests": 6,
             "passed": 6 if passed else 5,

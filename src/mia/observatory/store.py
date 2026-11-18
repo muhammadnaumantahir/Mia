@@ -152,6 +152,7 @@ class ObservatoryStore:
             "environment",
             "baseline_results",
             "fixed_benchmark_results",
+            "runtime_settings",
             "verification_passed",
         }
         missing = sorted(required.difference(baseline_manifest))
@@ -182,6 +183,17 @@ class ObservatoryStore:
             for key in ("os", "python", "platform", "machine")
         ):
             raise ValueError("environment must record local OS, Python, platform and machine")
+        runtime_settings = baseline_manifest["runtime_settings"]
+        required_runtime_settings = {
+            "MIA_EXPERIMENT_AUTO_CAPTURE", "MIA_AUTONOMY_ENABLED",
+            "MIA_EMERGENCY_STOP", "MIA_ALLOW_PAID", "MIA_MAX_CPU_PERCENT",
+            "MIA_MAX_RAM_PERCENT", "MIA_AUTONOMY_INTERVAL_SECONDS",
+            "MIA_APPLICATIONS_CONFIG_PRESENT", "MIA_APPLICATIONS_CONFIG_SHA256",
+        }
+        if not isinstance(runtime_settings, dict) or not required_runtime_settings.issubset(
+            runtime_settings
+        ):
+            raise ValueError("runtime_settings must include the non-secret experiment policy")
         results = baseline_manifest["baseline_results"]
         result_keys = {
             "tests", "passed", "failures", "errors", "skipped",

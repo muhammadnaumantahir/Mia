@@ -149,6 +149,7 @@ class ExperimentSnapshotCapturer:
             "configuration_hash": manifest["configuration_hash"],
             "benchmark_suite_id": manifest["benchmark_suite_id"],
             "environment": manifest["environment"],
+            "runtime_settings": manifest["runtime_settings"],
             "verification": manifest["baseline_results"],
             "fixed_benchmark_results": manifest["fixed_benchmark_results"],
             "resources": resources,
