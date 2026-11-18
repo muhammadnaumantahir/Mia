@@ -30,7 +30,8 @@ disposable container per candidate. The container has:
 - Private IPC and cgroup namespaces, an init process, and no swap beyond the
   configured memory ceiling
 - No added Linux capabilities and \`no-new-privileges\`
-- A non-root UID/GID, a 64-process ceiling, bounded CPU and memory
+- A non-root UID/GID, a 64-process ceiling, bounded CPU and memory; staged
+  host files are readable to UID 10001 but have read-only file and mount modes
 - A small no-exec temporary filesystem for pytest scratch files
 - No host environment variables, credentials, Docker socket or writable host
   directories

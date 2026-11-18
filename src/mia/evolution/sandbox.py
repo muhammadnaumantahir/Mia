@@ -173,9 +173,16 @@ class DockerSandboxRunner:
 
         with tempfile.TemporaryDirectory(prefix="mia-sandbox-") as temporary:
             staging = Path(temporary).resolve()
-            (staging / "candidate.py").write_bytes(source_bytes)
+            # tempfile creates owner-only directories; UID 10001 inside Docker
+            # must be able to traverse the mount and read its files.
+            staging.chmod(0o755)
+            candidate_path = staging / "candidate.py"
+            candidate_path.write_bytes(source_bytes)
+            candidate_path.chmod(0o444)
             if test_bytes is not None:
-                (staging / "test_candidate.py").write_bytes(test_bytes)
+                test_path = staging / "test_candidate.py"
+                test_path.write_bytes(test_bytes)
+                test_path.chmod(0o444)
 
             mount_path = staging.as_posix()
             mount_spec = (
