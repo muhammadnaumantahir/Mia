@@ -156,3 +156,61 @@ async def test_scheduler_is_disabled_by_default(tmp_path):
     assert scheduler.status()["enabled"] is False
     assert await scheduler.run_once() == []
     assert resources.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_scheduler_marks_run_incomplete_after_final_day_window_is_missed(tmp_path):
+    store, experiment_id = create_due_experiment(tmp_path)
+    now = datetime.now(UTC)
+    started_at = (now - timedelta(days=4)).isoformat()
+    with sqlite3.connect(store.database_path) as connection:
+        connection.execute(
+            "UPDATE experiments SET started_at = ? WHERE experiment_id = ?",
+            (started_at, experiment_id),
+        )
+        connection.commit()
+
+    status = store.get_snapshot_status(experiment_id, now=now)
+
+    assert status is not None
+    assert status["status"] == "incomplete"
+    assert status["due"] is False
+    assert "final daily snapshot was not captured" in status["reason"]
+    assert store.list_experiments()[0]["status"] == "incomplete"
+    incomplete_events = [
+        event for event in store.list_events(limit=20)
+        if event["event_type"] == "experiment_incomplete"
+    ]
+    assert len(incomplete_events) == 1
+    assert incomplete_events[0]["payload"] == {
+        "planned_days": 3,
+        "latest_recorded_day": 0,
+        "elapsed_day": 4,
+        "final_day_snapshot_missing": True,
+    }
+
+    # Repeated polling must not append duplicate terminal events.
+    store.get_snapshot_status(experiment_id, now=now)
+    assert len([
+        event for event in store.list_events(limit=20)
+        if event["event_type"] == "experiment_incomplete"
+    ]) == 1
+
+
+def test_final_planned_day_remains_capturable_until_its_24_hour_window_ends(tmp_path):
+    store, experiment_id = create_due_experiment(tmp_path)
+    now = datetime.now(UTC)
+    started_at = (now - timedelta(days=3, hours=1)).isoformat()
+    with sqlite3.connect(store.database_path) as connection:
+        connection.execute(
+            "UPDATE experiments SET started_at = ? WHERE experiment_id = ?",
+            (started_at, experiment_id),
+        )
+        connection.commit()
+
+    status = store.get_snapshot_status(experiment_id, now=now)
+
+    assert status is not None
+    assert status["status"] == "running"
+    assert status["day_index"] == 3
+    assert status["due"] is True

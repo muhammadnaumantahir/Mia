@@ -367,6 +367,16 @@ class ObservatoryStore:
         *,
         now: datetime | None = None,
     ) -> dict[str, Any] | None:
+        """Return capture readiness and close runs that missed their final day.
+
+        The final planned day remains eligible for capture for its full 24-hour
+        window. Once that window has passed, a still-running experiment becomes
+        terminally incomplete; it is never reported as completed.
+        """
+        instant = now or datetime.now(UTC)
+        if instant.tzinfo is None:
+            instant = instant.replace(tzinfo=UTC)
+
         with self._connection() as db:
             row = db.execute(
                 """
@@ -379,54 +389,119 @@ class ObservatoryStore:
                 """,
                 (experiment_id,),
             ).fetchone()
-        if row is None:
-            return None
-        latest_day = int(row["latest_day_index"])
-        started_at = row["started_at"]
-        if row["status"] != "running" or not started_at:
+            if row is None:
+                return None
+
+            latest_day = int(row["latest_day_index"])
+            started_at = row["started_at"]
+            status = str(row["status"])
+            planned_days = int(row["planned_days"])
+            if status != "running" or not started_at:
+                return {
+                    "experiment_id": experiment_id,
+                    "status": status,
+                    "planned_days": planned_days,
+                    "started_at": started_at,
+                    "latest_day_index": latest_day,
+                    "day_index": None,
+                    "due": False,
+                    "days_missed": [],
+                    "reason": (
+                        "the experiment is incomplete; its final daily snapshot "
+                        "was not captured"
+                        if status == "incomplete"
+                        else "experiment is not running"
+                    ),
+                }
+
+            started = datetime.fromisoformat(started_at)
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=UTC)
+            elapsed_seconds = max(0, (instant - started).total_seconds())
+            elapsed_day = int(elapsed_seconds // 86400)
+
+            if elapsed_day > planned_days:
+                cursor = db.execute(
+                    """
+                    UPDATE experiments SET status = 'incomplete'
+                    WHERE experiment_id = ? AND status = 'running'
+                    """,
+                    (experiment_id,),
+                )
+                if cursor.rowcount == 1:
+                    db.execute(
+                        """
+                        INSERT INTO events (
+                            event_id, occurred_at, experiment_id, day_index,
+                            layer_id, category, event_type, outcome, summary,
+                            payload_json
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            uuid.uuid4().hex,
+                            instant.isoformat(),
+                            experiment_id,
+                            planned_days,
+                            "SPS-09",
+                            "experiment",
+                            "experiment_incomplete",
+                            "incomplete",
+                            "Experiment duration elapsed before the final daily evidence was captured",
+                            json.dumps(
+                                {
+                                    "planned_days": planned_days,
+                                    "latest_recorded_day": latest_day,
+                                    "elapsed_day": elapsed_day,
+                                    "final_day_snapshot_missing": latest_day < planned_days,
+                                },
+                                sort_keys=True,
+                            ),
+                        ),
+                    )
+                    status = "incomplete"
+                else:
+                    current = db.execute(
+                        "SELECT status FROM experiments WHERE experiment_id = ?",
+                        (experiment_id,),
+                    ).fetchone()
+                    status = str(current["status"]) if current else "unknown"
+
+                return {
+                    "experiment_id": experiment_id,
+                    "status": status,
+                    "planned_days": planned_days,
+                    "started_at": started_at,
+                    "latest_day_index": latest_day,
+                    "day_index": None,
+                    "due": False,
+                    "days_missed": [],
+                    "reason": (
+                        "the experiment is incomplete because the final daily "
+                        "snapshot was not captured within its scheduled window"
+                        if status == "incomplete"
+                        else "experiment is not running"
+                    ),
+                }
+
+            due = elapsed_day >= 1 and elapsed_day > latest_day
+            reason = None
+            if elapsed_day < 1:
+                reason = "the first daily snapshot is due 24 hours after experiment start"
+            elif elapsed_day <= latest_day:
+                reason = "a snapshot for the current experiment day already exists"
             return {
                 "experiment_id": experiment_id,
-                "status": row["status"],
+                "status": status,
+                "planned_days": planned_days,
+                "started_at": started_at,
                 "latest_day_index": latest_day,
-                "day_index": None,
-                "due": False,
-                "days_missed": [],
-                "reason": "experiment is not running",
+                "day_index": elapsed_day if elapsed_day >= 1 else None,
+                "due": due,
+                "days_missed": (
+                    list(range(latest_day + 1, elapsed_day)) if due else []
+                ),
+                "reason": reason,
             }
-
-        started = datetime.fromisoformat(started_at)
-        if started.tzinfo is None:
-            started = started.replace(tzinfo=UTC)
-        instant = now or datetime.now(UTC)
-        if instant.tzinfo is None:
-            instant = instant.replace(tzinfo=UTC)
-        elapsed_seconds = max(0, (instant - started).total_seconds())
-        elapsed_day = int(elapsed_seconds // 86400)
-        due = (
-            elapsed_day >= 1
-            and elapsed_day <= int(row["planned_days"])
-            and elapsed_day > latest_day
-        )
-        reason = None
-        if elapsed_day < 1:
-            reason = "the first daily snapshot is due 24 hours after experiment start"
-        elif elapsed_day > int(row["planned_days"]):
-            reason = "the planned experiment duration has elapsed"
-        elif elapsed_day <= latest_day:
-            reason = "a snapshot for the current experiment day already exists"
-        return {
-            "experiment_id": experiment_id,
-            "status": row["status"],
-            "planned_days": int(row["planned_days"]),
-            "started_at": started_at,
-            "latest_day_index": latest_day,
-            "day_index": elapsed_day if elapsed_day >= 1 else None,
-            "due": due,
-            "days_missed": (
-                list(range(latest_day + 1, elapsed_day)) if due else []
-            ),
-            "reason": reason,
-        }
 
     def list_snapshots(self, experiment_id: str) -> list[dict[str, Any]]:
         with self._connection() as db:

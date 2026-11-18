@@ -162,7 +162,8 @@ async function loadExperimentControl(){
   const items=listData.items||[];
   activeExperiment=items.find(item=>item.status==='running')||
    items.find(item=>item.status==='prepared')||
-   items.find(item=>item.status==='completed')||null;
+   items.find(item=>item.status==='completed')||
+   items.find(item=>item.status==='incomplete')||null;
   if(!activeExperiment){
    el('experimentControlState').textContent='Not prepared';
    capture.disabled=false;
@@ -187,11 +188,12 @@ async function loadExperimentControl(){
   const running=activeExperiment.status==='running';
   const prepared=activeExperiment.status==='prepared';
   const completed=activeExperiment.status==='completed';
+  const incomplete=activeExperiment.status==='incomplete';
   const snapshots=snapshotsData.items||[];
   let latestDay=0;
   snapshots.forEach(item=>{latestDay=Math.max(latestDay,Number(item.day_index)||0);});
 
-  el('experimentControlState').textContent=running?'Running':completed?'Completed':'Baseline frozen';
+  el('experimentControlState').textContent=running?'Running':completed?'Completed':incomplete?'Incomplete':'Baseline frozen';
   capture.disabled=true;
   start.disabled=!prepared;
   refresh.disabled=false;
@@ -227,6 +229,11 @@ async function loadExperimentControl(){
    setExperimentNotice('Experiment completed. Day 0 and all stored daily snapshots remain frozen.');
    return;
   }
+  if(incomplete){
+   el('dailySnapshotStatus').textContent='The planned duration elapsed before the final daily snapshot was captured. This run is incomplete; no completion claim is made. Its existing evidence remains immutable.';
+   setExperimentNotice('Experiment incomplete. Review the missing final-day evidence before preparing a new run.',true);
+   return;
+  }
   if(prepared){
    el('dailySnapshotStatus').textContent='Daily capture is unavailable until the experiment has been explicitly started.';
    setExperimentNotice('Day 0 is verified and frozen. Click Start experiment separately to begin Day 1.');
@@ -236,6 +243,15 @@ async function loadExperimentControl(){
   const statusResponse=await fetch('/api/experiments/'+experimentId+'/snapshot-status');
   const snapshotStatus=await statusResponse.json();
   if(!statusResponse.ok)throw new Error(snapshotStatus.detail||'Daily snapshot status unavailable');
+
+  if(snapshotStatus.status==='incomplete'){
+   activeExperiment.status='incomplete';
+   el('experimentControlState').textContent='Incomplete';
+   daily.disabled=true;
+   el('dailySnapshotStatus').textContent=snapshotStatus.reason||'The final daily snapshot was not captured. This run is incomplete.';
+   setExperimentNotice('Experiment incomplete. Its stored evidence is preserved; it was not marked completed.',true);
+   return;
+  }
 
   if(snapshotStatus.due){
    daily.disabled=dailyCaptureInProgress;
