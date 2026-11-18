@@ -28,9 +28,13 @@ class ModelGateway:
         self.providers = providers
 
     async def discover_models(self) -> list[ModelCandidate]:
+        """Discover from all usable providers; one offline provider must not block others."""
         candidates: list[ModelCandidate] = []
         for provider in self.providers.values():
-            candidates.extend(await provider.list_models())
+            try:
+                candidates.extend(await provider.list_models())
+            except TransientProviderError:
+                continue
         return candidates
 
     async def complete(
