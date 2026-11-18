@@ -54,3 +54,8 @@ Streaming, model-specific capability metadata, monthly cost ledger and benchmark
 - No automatic key/account rotation to bypass rate limits.
 - Do not retry a request with side effects unless idempotency is guaranteed.
 - Store provider terms/quotas as versioned policy metadata.
+
+
+Ollama is marked as a local inference provider. An OpenAI-compatible provider, including FreeLLMAPI, is treated as non-local unless `MIA_FREELLMAPI_DATA_LOCAL=true` is explicitly set after checking the complete upstream route. Localhost hosting alone is not proof that the provider will not forward data externally.
+
+The chat tool loop withholds file and knowledge contents from non-local providers by default. `MIA_ALLOW_REMOTE_FILE_CONTEXT=true` is a separate owner opt-in that permits this data egress.

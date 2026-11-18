@@ -53,6 +53,7 @@ async def test_openai_compatible_adapter_supports_local_freellmapi_endpoint():
         "http://127.0.0.1:3001/v1",
         api_key="test-only-key",
         free_tier=False,
+        data_local=True,
     )
     models = await provider.list_models()
     answer = await provider.complete(
@@ -60,6 +61,7 @@ async def test_openai_compatible_adapter_supports_local_freellmapi_endpoint():
         ModelRequest(task_type="chat", prompt="Hello"),
     )
     assert models[0].free_tier is False
+    assert models[0].data_local is True
     assert answer.content == "Gateway response"
     assert request_route.calls[0].request.headers["Authorization"] == "Bearer test-only-key"
 

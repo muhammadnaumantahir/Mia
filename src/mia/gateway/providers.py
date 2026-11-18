@@ -29,6 +29,7 @@ class OllamaProvider:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.supports_tools = supports_tools
+        self.data_local = data_local
 
     @staticmethod
     def _httpx():
@@ -153,6 +154,7 @@ class OpenAICompatibleProvider:
         free_tier: bool = False,
         model_context_window: int = 8192,
         supports_tools: bool = False,
+        data_local: bool = False,
     ):
         if not provider_id.strip():
             raise ValueError("provider_id is required")
@@ -231,6 +233,7 @@ class OpenAICompatibleProvider:
                     ),
                     context_window=self.model_context_window,
                     free_tier=self.free_tier,
+                    data_local=self.data_local,
                     healthy=True,
                     enabled=True,
                 )

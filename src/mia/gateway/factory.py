@@ -49,6 +49,12 @@ def build_default_registry() -> ProviderRegistry:
                         "false",
                     ).strip().lower() == "true"
                 ),
+                data_local=(
+                    os.getenv(
+                        "MIA_FREELLMAPI_DATA_LOCAL",
+                        "false",
+                    ).strip().lower() == "true"
+                ),
             )
         )
 
