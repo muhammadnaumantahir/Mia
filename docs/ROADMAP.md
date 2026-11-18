@@ -129,7 +129,8 @@ Work:
 - A user-visible activity ledger.
 
 Exit criteria:
-- Tasks resume safely after restart.
+- Tasks left running by a process restart are atomically marked failed with an append-only recovery event; no task is silently replayed, and retry requires owner re-approval.
+- Automatic continuation across restart requires a future durable lease/heartbeat design and remains a separate exit gate.
 - The system can explain why a task was selected and what evidence changed its state.
 - A manually invoked read-only execution has an append-only lifecycle trace; background scheduler execution, restart recovery and cancellable isolated workers remain separate exit gates.
 - Background workload pauses under resource pressure.

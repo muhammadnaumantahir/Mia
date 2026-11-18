@@ -105,7 +105,7 @@ The Evolution Observatory includes a **Capability Lab** where Mia can draft pure
 | 3. Voice | Push-to-talk, local STT and installed browser/OS speech voices | In progress |
 | 4. Computer intelligence | Scoped filesystem, approved app launch and isolated public-web browser | In progress |
 | 5. Memory and knowledge | Persistent conversations, FTS5 knowledge and source-aware document ingestion | In progress |
-| 6. Autonomous agent | Task Desk, manual read-only execution and opt-in background dispatch for approved system-inspection tasks | Partial implementation; multi-step execution, restart recovery, broader governed tools and target-device verification remain |
+| 6. Autonomous agent | Task Desk, manual read-only execution and opt-in background dispatch for approved system-inspection tasks | Partial implementation; multi-step execution, automatic restart resumption, broader governed tools and target-device verification remain |
 | 7. Self-programming | Candidate versioning, lineage, validation/registration APIs; activation blocked | Foundation in progress |
 | 8. 30-day experiment | Immutable Day 0, explicit start, host-verified daily snapshots and optional resource-aware scheduler | Report API/viewer and terminal incomplete handling are implemented; owner-host baseline, real 30-day run and evidence-backed final results remain pending |
 
