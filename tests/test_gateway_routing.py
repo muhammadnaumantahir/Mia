@@ -19,7 +19,11 @@ def candidate(provider, model, *, free=True, healthy=True, quota=100, score=0.8)
 
 
 def test_free_first_and_reliability_order():
-    request = ModelRequest(task_type="coding", prompt="test", required_capabilities=frozenset({"coding"}))
+    request = ModelRequest(
+        task_type="coding",
+        prompt="test",
+        required_capabilities=frozenset({"coding"}),
+    )
     options = [
         candidate("paid", "paid-model", free=False),
         candidate("free-low", "low", score=0.5),
@@ -31,13 +35,18 @@ def test_free_first_and_reliability_order():
 
 def test_paid_requires_explicit_permission_and_budget():
     request = ModelRequest(
-        task_type="coding", prompt="test", estimated_input_tokens=1000,
-        max_output_tokens=1000, required_capabilities=frozenset({"coding"}),
+        task_type="coding",
+        prompt="test",
+        estimated_input_tokens=1000,
+        max_output_tokens=1000,
+        required_capabilities=frozenset({"coding"}),
     )
     paid = candidate("paid", "model", free=False)
     assert rank_candidates([paid], request) == []
-    assert rank_candidates([paid], request, RoutePolicy(allow_paid=True, max_request_cost_usd=0.01)) == [paid]
-    assert rank_candidates([paid], request, RoutePolicy(allow_paid=True, max_request_cost_usd=0.001)) == []
+    allowed = RoutePolicy(allow_paid=True, max_request_cost_usd=0.01)
+    blocked = RoutePolicy(allow_paid=True, max_request_cost_usd=0.001)
+    assert rank_candidates([paid], request, allowed) == [paid]
+    assert rank_candidates([paid], request, blocked) == []
 
 
 def test_unhealthy_or_depleted_candidates_are_excluded():
