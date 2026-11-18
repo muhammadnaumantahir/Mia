@@ -97,3 +97,24 @@ The static source policy also rejects direct file/input access and common
 interpreter-reflection hooks. This remains defense in depth only; Docker's
 network, filesystem, UID, capability and resource boundaries are the primary
 containment layer.
+
+
+## One-shot execution of registered capabilities
+
+A registered capability is not automatically active. The Capability Lab may
+invoke a registered version once through
+`POST /api/capabilities/{id}/{version}/execute` when its four validation
+gates still pass and its declared permissions list is empty. The source is
+read through the hash-verifying store and its `run(input_data)` contract and
+static policy are checked again. Input is a JSON object limited to 32 KB;
+output must be a JSON object limited to 64 KB.
+
+The runner starts a fresh container using the immutable local image ID, with
+no network, a read-only candidate mount, a non-root user, dropped Linux
+capabilities, a read-only root filesystem, bounded memory/CPU/PIDs and a
+60-second wall-clock limit. Only the candidate source is mounted. The JSON
+input is sent over stdin; no host paths, credentials or tool handles enter the
+container. Execution metadata and hashes are logged, not the raw input or
+result. This is an explicit one-shot invocation, not activation, hot-loading
+or background use. Candidates declaring any permissions remain blocked until
+a permission broker and separate authorization model are implemented.

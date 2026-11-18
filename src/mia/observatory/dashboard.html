@@ -493,8 +493,41 @@ async function loadCapabilities(){
     card.append(actions);
    }else if(cap.status==='registered'){
     const blocked=document.createElement('div');blocked.className='cap-blocked';
-    blocked.textContent='Registered, not active. Runtime activation and rollback remain disabled.';
+    blocked.textContent='Registered, not active. Permission-free versions can run once in an isolated Docker container. Runtime activation and rollback remain disabled.';
     card.append(blocked);
+    if(!Array.isArray(cap.permissions)||cap.permissions.length===0){
+     const inputLabel=document.createElement('div');inputLabel.className='cap-card-meta';
+     inputLabel.textContent='JSON input_data (max 32 KB)';
+     const input=document.createElement('textarea');input.rows=4;input.value='{}';
+     input.style.cssText='width:100%;box-sizing:border-box;background:#101916;color:#dce9e4;border:1px solid #35514a;border-radius:8px;padding:9px;font:11px ui-monospace,monospace;margin:6px 0';
+     const output=document.createElement('pre');output.hidden=true;
+     output.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto;background:#101916;padding:9px;border-radius:8px;color:#cbded2;font-size:10px';
+     const run=capabilityButton('Run once in isolated Docker',async()=>{
+      let inputData;
+      try{
+       inputData=JSON.parse(input.value);
+       if(!inputData||typeof inputData!=='object'||Array.isArray(inputData)){
+        throw new Error('input_data must be a JSON object');
+       }
+      }catch(error){setCapabilityNotice(error.message,true);return;}
+      run.disabled=true;output.hidden=false;output.textContent='Starting isolated one-shot execution…';
+      try{
+       const response=await fetch('/api/capabilities/'+encodeURIComponent(cap.capability_id)+'/'+encodeURIComponent(cap.version)+'/execute',{
+        method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({input_data:inputData})
+       });
+       const result=await response.json();
+       if(!response.ok)throw new Error(result.detail||'Capability execution failed');
+       output.textContent=JSON.stringify(result.result,null,2);
+       setCapabilityNotice('Capability ran once in the isolated Docker worker. It remains registered and inactive.');
+      }catch(error){output.textContent=error.message;setCapabilityNotice(error.message,true);}
+      finally{run.disabled=false;}
+     });
+     card.append(inputLabel,input,run,output);
+    }else{
+     const permissionNote=document.createElement('div');permissionNote.className='cap-blocked';
+     permissionNote.textContent='This version declares permissions. One-shot execution is blocked until a permission broker exists.';
+     card.append(permissionNote);
+    }
    }else if(cap.status==='rejected'){
     const blocked=document.createElement('div');blocked.className='cap-blocked';
     blocked.textContent='Validation rejected this version. Source is immutable; create a new version for changes.';
