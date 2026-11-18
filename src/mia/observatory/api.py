@@ -2232,6 +2232,13 @@ def create_app(
         )
         return result
 
+    @app.get("/api/memory/export")
+    def export_memory() -> dict[str, Any]:
+        try:
+            return memory_store.export_data()
+        except ValueError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+
     @app.get("/api/memory/items")
     def memory_items(limit: int = 100) -> dict[str, Any]:
         return {"items": memory_store.list_items(limit)}
