@@ -280,3 +280,152 @@ def test_experiment_start_is_explicit_and_records_event(tmp_path):
         event["event_type"] == "experiment_started"
         for event in store.list_events(limit=10)
     )
+
+
+class FakeDailyResources:
+    def snapshot(self):
+        return {
+            "cpu_percent": 17.5,
+            "memory_percent": 42.0,
+            "memory_available_bytes": 500000,
+            "memory_total_bytes": 1000000,
+            "process_count": 37,
+        }
+
+
+def test_daily_snapshot_is_captured_on_host_and_not_client_supplied(tmp_path):
+    from datetime import UTC, datetime, timedelta
+    import sqlite3
+
+    store = ObservatoryStore(tmp_path / "daily.sqlite3")
+    client = TestClient(
+        create_app(
+            store=store,
+            baseline_capture=lambda root: _baseline_manifest(),
+            resource_monitor=FakeDailyResources(),
+        )
+    )
+    prepared = client.post(
+        "/api/experiments/prepare",
+        json={"name": "Daily capture", "planned_days": 3},
+    )
+    assert prepared.status_code == 201
+    experiment_id = prepared.json()["experiment_id"]
+    assert client.post(f"/api/experiments/{experiment_id}/start").status_code == 200
+
+    started_at = (datetime.now(UTC) - timedelta(days=1, hours=2)).isoformat()
+    with sqlite3.connect(store.database_path) as db:
+        db.execute(
+            "UPDATE experiments SET started_at = ? WHERE experiment_id = ?",
+            (started_at, experiment_id),
+        )
+        db.commit()
+
+    due = client.get(f"/api/experiments/{experiment_id}/snapshot-status")
+    assert due.status_code == 200
+    assert due.json()["due"] is True
+    assert due.json()["day_index"] == 1
+
+    captured = client.post(f"/api/experiments/{experiment_id}/snapshots/capture")
+    assert captured.status_code == 201, captured.text
+    body = captured.json()
+    assert body["day_index"] == 1
+    assert body["resources"]["cpu_percent"] == 17.5
+    assert body["verification"]["ruff_passed"] is True
+    snapshots = store.list_snapshots(experiment_id)
+    assert [item["day_index"] for item in snapshots] == [0, 1]
+    assert any(
+        item["metric_name"] == "cpu_percent"
+        for item in store.list_metrics()
+    )
+
+    client_supplied = client.post(
+        f"/api/experiments/{experiment_id}/snapshots",
+        json={
+            "day_index": 2,
+            "source_commit": "f" * 40,
+            "snapshot": {"made_up": True},
+        },
+    )
+    assert client_supplied.status_code == 410
+
+
+def test_daily_snapshot_does_not_fill_missing_days_with_fake_values(tmp_path):
+    from datetime import UTC, datetime, timedelta
+    import sqlite3
+
+    store = ObservatoryStore(tmp_path / "missed-days.sqlite3")
+    client = TestClient(
+        create_app(
+            store=store,
+            baseline_capture=lambda root: _baseline_manifest(),
+            resource_monitor=FakeDailyResources(),
+        )
+    )
+    prepared = client.post(
+        "/api/experiments/prepare",
+        json={"name": "Missed days", "planned_days": 5},
+    )
+    experiment_id = prepared.json()["experiment_id"]
+    client.post(f"/api/experiments/{experiment_id}/start")
+    started_at = (datetime.now(UTC) - timedelta(days=3, hours=2)).isoformat()
+    with sqlite3.connect(store.database_path) as db:
+        db.execute(
+            "UPDATE experiments SET started_at = ? WHERE experiment_id = ?",
+            (started_at, experiment_id),
+        )
+        db.commit()
+
+    status = client.get(f"/api/experiments/{experiment_id}/snapshot-status").json()
+    assert status["day_index"] == 3
+    assert status["days_missed"] == [1, 2]
+
+    captured = client.post(f"/api/experiments/{experiment_id}/snapshots/capture")
+    assert captured.status_code == 201
+    assert captured.json()["missing_day_indices"] == [1, 2]
+    snapshots = store.list_snapshots(experiment_id)
+    assert [item["day_index"] for item in snapshots] == [0, 3]
+    assert any(
+        event["event_type"] == "daily_snapshots_unavailable"
+        for event in store.list_events(limit=20)
+    )
+
+
+def test_daily_snapshot_blocks_configuration_drift_from_day_zero(tmp_path):
+    manifests = [_baseline_manifest(), _baseline_manifest()]
+    manifests[1]["configuration_hash"] = "sha256:" + "c" * 64
+    calls = []
+
+    def capture(root):
+        calls.append(root)
+        return manifests[min(len(calls) - 1, 1)]
+
+    store = ObservatoryStore(tmp_path / "config-drift.sqlite3")
+    client = TestClient(
+        create_app(
+            store=store,
+            baseline_capture=capture,
+            resource_monitor=FakeDailyResources(),
+        )
+    )
+    prepared = client.post(
+        "/api/experiments/prepare",
+        json={"name": "Config drift", "planned_days": 2},
+    )
+    experiment_id = prepared.json()["experiment_id"]
+    client.post(f"/api/experiments/{experiment_id}/start")
+    from datetime import UTC, datetime, timedelta
+    import sqlite3
+
+    started_at = (datetime.now(UTC) - timedelta(days=1, hours=1)).isoformat()
+    with sqlite3.connect(store.database_path) as db:
+        db.execute(
+            "UPDATE experiments SET started_at = ? WHERE experiment_id = ?",
+            (started_at, experiment_id),
+        )
+        db.commit()
+
+    response = client.post(f"/api/experiments/{experiment_id}/snapshots/capture")
+    assert response.status_code == 409
+    assert "configuration differs" in response.json()["detail"]
+    assert [item["day_index"] for item in store.list_snapshots(experiment_id)] == [0]

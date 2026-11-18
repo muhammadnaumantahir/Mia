@@ -17,7 +17,7 @@
 | 5. Memory and knowledge | In progress | Persistent conversations, FTS5 memory, provenance labels and document parsers; parser integration/export/retention tests remain |
 | 6. Autonomous agent | Task Desk + manual read-only execution | Task Desk submits model-assisted plans, lists proposals, and supports approve/reject/cancel. A safe CPU/RAM task demonstrates explicit approval and one registered read-only tool through POST /api/tasks/{task_id}/execute; preview and mutation tools remain excluded. Background scheduler still has no production executor/API lifecycle, and target-device checks remain open |
 | 7. Self-programming | AI draft + Capability Lab + Docker validation | Mia can draft a pure-Python run(input_data) module and pytest file using free-only model routing; drafts are reviewed in-browser and must be explicitly saved. The Lab stores immutable source/test versions, runs Docker validation and registers only passing versions. No network, read-only candidate mount, non-root worker and bounded resources; Windows verification, activation and rollback remain |
-| 8. 30-day experiment | Local Day 0 capture + explicit start implemented | Dashboard captures a clean-commit Day 0 on the Mia host using Ruff and the full pytest suite; the immutable manifest is hash-verified and Start remains a separate manual action. No real baseline has been captured on the owner's Windows machine yet |
+| 8. 30-day experiment | Local Day 0 capture + explicit start implemented | Dashboard captures a clean-commit Day 0 on the Mia host using Ruff and the full pytest suite; the immutable manifest is hash-verified and Start remains a separate manual action. Daily evidence is server-generated and resource-sampled, with missing days marked unavailable. No real baseline has been captured on the owner's Windows machine yet; local daily scheduling remains open |
 
 ## Verification
 
@@ -30,7 +30,7 @@
 
 Mia is not yet a finished personal assistant. Production autonomous planning/execution, isolated self-programming, hot activation, verified OS-level sandbox, always-on wake word, real desktop interaction and the 30-day experiment remain incomplete.
 
-No Day 0 or daily growth data may be fabricated.
+No Day 0 or daily growth data may be fabricated. Daily snapshots require local host verification and are not auto-filled when Mia is offline.
 
 ## Phase completion rule
 

@@ -315,6 +315,12 @@ class ObservatoryStore:
                     "a snapshot already exists for this experiment day; "
                     "append a correction event instead of replacing it"
                 ) from exc
+            if day_index == int(experiment["planned_days"]):
+                db.execute(
+                    "UPDATE experiments SET status = 'completed' "
+                    "WHERE experiment_id = ? AND status = 'running'",
+                    (experiment_id,),
+                )
         return snapshot_id
 
     def list_experiments(self) -> list[dict[str, Any]]:
@@ -353,6 +359,73 @@ class ObservatoryStore:
             "captured_at": row["captured_at"],
             "baseline_sha256": row["manifest_sha256"],
             "manifest": manifest,
+        }
+
+    def get_snapshot_status(
+        self,
+        experiment_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any] | None:
+        with self._connection() as db:
+            row = db.execute(
+                """
+                SELECT e.experiment_id, e.status, e.planned_days, e.started_at,
+                       COALESCE(MAX(s.day_index), 0) AS latest_day_index
+                FROM experiments e
+                LEFT JOIN daily_snapshots s ON s.experiment_id = e.experiment_id
+                WHERE e.experiment_id = ?
+                GROUP BY e.experiment_id
+                """,
+                (experiment_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        latest_day = int(row["latest_day_index"])
+        started_at = row["started_at"]
+        if row["status"] != "running" or not started_at:
+            return {
+                "experiment_id": experiment_id,
+                "status": row["status"],
+                "latest_day_index": latest_day,
+                "day_index": None,
+                "due": False,
+                "days_missed": [],
+                "reason": "experiment is not running",
+            }
+
+        started = datetime.fromisoformat(started_at)
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=UTC)
+        instant = now or datetime.now(UTC)
+        if instant.tzinfo is None:
+            instant = instant.replace(tzinfo=UTC)
+        elapsed_seconds = max(0, (instant - started).total_seconds())
+        elapsed_day = int(elapsed_seconds // 86400)
+        due = (
+            elapsed_day >= 1
+            and elapsed_day <= int(row["planned_days"])
+            and elapsed_day > latest_day
+        )
+        reason = None
+        if elapsed_day < 1:
+            reason = "the first daily snapshot is due 24 hours after experiment start"
+        elif elapsed_day > int(row["planned_days"]):
+            reason = "the planned experiment duration has elapsed"
+        elif elapsed_day <= latest_day:
+            reason = "a snapshot for the current experiment day already exists"
+        return {
+            "experiment_id": experiment_id,
+            "status": row["status"],
+            "planned_days": int(row["planned_days"]),
+            "started_at": started_at,
+            "latest_day_index": latest_day,
+            "day_index": elapsed_day if elapsed_day >= 1 else None,
+            "due": due,
+            "days_missed": (
+                list(range(latest_day + 1, elapsed_day)) if due else []
+            ),
+            "reason": reason,
         }
 
     def list_snapshots(self, experiment_id: str) -> list[dict[str, Any]]:
