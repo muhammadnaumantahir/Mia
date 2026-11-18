@@ -91,3 +91,9 @@ There is no client-supplied validation report or four-boolean override. The
 stored report is accepted only when its sandbox identity and source/test hashes
 match the immutable candidate records. If Docker is unavailable, validation
 does not start (or remains retryable if the runtime disappears during a run).
+
+
+The static source policy also rejects direct file/input access and common
+interpreter-reflection hooks. This remains defense in depth only; Docker's
+network, filesystem, UID, capability and resource boundaries are the primary
+containment layer.

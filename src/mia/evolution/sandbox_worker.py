@@ -63,7 +63,13 @@ def _security_findings(source: str) -> list[str]:
         return [f"source is not valid Python: {exc.msg}"]
 
     for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
+        if isinstance(node, ast.Name) and node.id in {
+            "__builtins__",
+            "__loader__",
+            "__spec__",
+        }:
+            findings.append(f"forbidden interpreter reference: {node.id}")
+        elif isinstance(node, ast.Import):
             for alias in node.names:
                 root = alias.name.split(".", 1)[0]
                 if root in _FORBIDDEN_IMPORTS:
@@ -76,23 +82,28 @@ def _security_findings(source: str) -> list[str]:
             function = node.func
             if isinstance(function, ast.Name) and function.id in _FORBIDDEN_CALLS:
                 findings.append(f"forbidden dynamic call: {function.id}")
-            elif isinstance(function, ast.Attribute):
-                if function.attr in {
-                    "system",
-                    "popen",
-                    "remove",
-                    "unlink",
-                    "rmdir",
-                    "rename",
-                    "replace",
-                    "write_text",
-                    "write_bytes",
-                    "mkdir",
-                    "chmod",
-                    "chown",
-                    "kill",
-                }:
-                    findings.append(f"forbidden operation: {function.attr}")
+        elif isinstance(node, ast.Attribute) and node.attr in {
+            "__class__",
+            "__dict__",
+            "__getattribute__",
+            "__globals__",
+            "__mro__",
+            "__subclasses__",
+            "system",
+            "popen",
+            "remove",
+            "unlink",
+            "rmdir",
+            "rename",
+            "replace",
+            "write_text",
+            "write_bytes",
+            "mkdir",
+            "chmod",
+            "chown",
+            "kill",
+        }:
+            findings.append(f"forbidden operation or reflection: {node.attr}")
     return sorted(set(findings))
 
 

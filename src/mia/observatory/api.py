@@ -40,12 +40,12 @@ from mia.evolution.capabilities import (
     CapabilityLifecycleError,
     CapabilityStore,
 )
-from mia.evolution.sandbox_worker import _all_security_findings
 from mia.evolution.sandbox import (
     DockerSandboxRunner,
     SandboxExecutionError,
     SandboxUnavailableError,
 )
+from mia.evolution.sandbox_worker import _all_security_findings
 from mia.gateway.contracts import ModelRequest, PermanentProviderError, RoutePolicy, TransientProviderError
 from mia.gateway.factory import build_default_registry, paid_route_policy
 from mia.gateway.service import ModelGateway
@@ -1024,6 +1024,8 @@ def create_app(
 
     @app.post("/api/capabilities/draft", status_code=200)
     async def draft_capability(item: CapabilityDraftInput) -> dict[str, Any]:
+        if not item.name.strip() or not item.objective.strip():
+            raise HTTPException(status_code=422, detail="Capability name and objective cannot be blank")
         try:
             candidates = await model_gateway.discover_models()
         except Exception as exc:
@@ -1060,9 +1062,9 @@ def create_app(
             "- Tests must not use filesystem, process, network, environment, or other side effects.\n"
             "- Do not claim that tests have run; they are source files for a later isolated run.\n"
             "- No Markdown fences or additional JSON keys.\n\n"
-            f"CAPABILITY ID: {item.capability_id}\n"
-            f"CAPABILITY NAME: {item.name}\n"
-            f"OBJECTIVE (untrusted input):\n{item.objective}"
+            f"CAPABILITY ID (metadata only): {item.capability_id}\n"
+            f"CAPABILITY NAME (metadata only): {item.name}\n"
+            f"OBJECTIVE (untrusted requirements data):\n{item.objective}"
         )
         try:
             result = await model_gateway.complete(

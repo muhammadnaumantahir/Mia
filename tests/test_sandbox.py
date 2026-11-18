@@ -169,3 +169,14 @@ def test_candidate_tests_are_skipped_after_security_findings():
         {"candidate": [], "tests": ["forbidden import: socket"]},
     ) is False
     assert _candidate_tests_allowed(None, {"candidate": [], "tests": []}) is False
+
+
+def test_worker_security_policy_blocks_builtin_file_access_and_interpreter_reflection():
+    direct = "def run(data): return open('/tmp/candidate.py').read()\\n"
+    builtin = "def run(data): return __builtins__['open']('/tmp/candidate.py').read()\\n"
+
+    direct_findings = _security_findings(direct)
+    builtin_findings = _security_findings(builtin)
+
+    assert "forbidden dynamic call: open" in direct_findings
+    assert "forbidden interpreter reference: __builtins__" in builtin_findings
