@@ -29,7 +29,6 @@ class OllamaProvider:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.supports_tools = supports_tools
-        self.data_local = data_local
 
     @staticmethod
     def _httpx():
@@ -167,6 +166,7 @@ class OpenAICompatibleProvider:
         self.free_tier = free_tier
         self.model_context_window = model_context_window
         self.supports_tools = supports_tools
+        self.data_local = data_local
 
     @staticmethod
     def _httpx():
