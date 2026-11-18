@@ -428,13 +428,17 @@ def test_autonomy_pause_survives_application_restart_until_explicit_resume(
     tmp_path,
     monkeypatch,
 ):
+    from mia.agent.resources import ResourceMonitor
+
     monkeypatch.setenv("MIA_AUTONOMY_ENABLED", "true")
     monkeypatch.setenv("MIA_EMERGENCY_STOP", "false")
     tasks = TaskStore(tmp_path / "persistent-pause-tasks.sqlite3")
+    monitor = ResourceMonitor(psutil_module=FakePsutil())
 
     first_app = create_app(
         store=ObservatoryStore(tmp_path / "persistent-pause-observatory-1.sqlite3"),
         task_store=tasks,
+        resource_monitor=monitor,
     )
     with TestClient(first_app) as first_client:
         assert first_client.get("/api/autonomy/status").json()["automatic_dispatch"] is True
@@ -445,6 +449,7 @@ def test_autonomy_pause_survives_application_restart_until_explicit_resume(
     second_app = create_app(
         store=ObservatoryStore(tmp_path / "persistent-pause-observatory-2.sqlite3"),
         task_store=tasks,
+        resource_monitor=monitor,
     )
     with TestClient(second_app) as second_client:
         status = second_client.get("/api/autonomy/status").json()
@@ -467,3 +472,31 @@ def test_autonomy_pause_survives_application_restart_until_explicit_resume(
     ]
     assert "background_dispatch_resumed" in event_types
     assert "background_dispatch_paused" in event_types
+
+
+@pytest.mark.parametrize(
+    ("enabled", "emergency_stop"),
+    [(False, False), (True, True)],
+)
+def test_autonomy_resume_cannot_clear_pause_when_policy_blocks_dispatch(
+    tmp_path,
+    monkeypatch,
+    enabled,
+    emergency_stop,
+):
+    monkeypatch.setenv("MIA_AUTONOMY_ENABLED", "true" if enabled else "false")
+    monkeypatch.setenv("MIA_EMERGENCY_STOP", "true" if emergency_stop else "false")
+    tasks = TaskStore(tmp_path / f"blocked-resume-{enabled}-{emergency_stop}.sqlite3")
+    tasks.set_autonomy_paused(True)
+    app = create_app(
+        store=ObservatoryStore(tmp_path / f"blocked-resume-obs-{enabled}-{emergency_stop}.sqlite3"),
+        task_store=tasks,
+    )
+
+    with TestClient(app) as client:
+        response = client.post("/api/autonomy/resume")
+        assert response.status_code == 409
+        assert tasks.is_autonomy_paused() is True
+        state = client.get("/api/autonomy/status").json()
+        assert state["paused"] is True
+        assert state["automatic_dispatch"] is False

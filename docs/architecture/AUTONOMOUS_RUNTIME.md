@@ -29,8 +29,9 @@ The default in .env.example is false.
   is stored in the local task database and survives Mia restarts. A saved pause
   prevents startup dispatch even when MIA_AUTONOMY_ENABLED=true. Resume is
   rejected unless environment policy enables autonomy and emergency stop is off.
-- Completed/failed background runs append a minimal Observatory event. Full
-  task lifecycle transitions remain in the task ledger.
+- Completed/failed background runs append a minimal Observatory event. Owner
+  pause/resume actions also append explicit Observatory audit events. Full task
+  lifecycle transitions remain in the task ledger.
 - pause() prevents future cycles but does not kill an in-flight call.
   Shutdown waits up to 35 seconds and records a timeout event if needed.
 - Emergency stop blocks new claims immediately, but is not an OS-level kill
