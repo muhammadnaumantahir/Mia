@@ -1,6 +1,6 @@
 # Mia project status
 
-**Last updated:** 2026-11-18  
+**Last updated:** 2026-11-19  
 **Repository:** muhammadnaumantahir/Mia  
 **Default branch:** main  
 **Overall state:** Active implementation — not release-ready
@@ -11,7 +11,7 @@
 |---|---|---|
 | 0. Research and reuse audit | In progress | Source/license matrix and upstream pins recorded; complete SBOM and legal/dependency review remain |
 | 1. Foundation | Implemented foundation; CI verification blocked | SPS registry, FastAPI app, SQLite observatory, memory/task/capability stores, approval flow and dashboards exist. Full cross-platform regression confirmation remains blocked by GitHub jobs that end before runner assignment |
-| 2. AI gateway | In progress | Ollama and OpenAI-compatible adapters, free-first router and fallback; streaming, capability metadata and cost ledger remain |
+| 2. AI gateway | In progress | Ollama and OpenAI-compatible adapters, free-first router and fallback. Text streaming over SSE (`/api/gateway/chat/stream`), provider-reported token usage, a persistent usage/cost ledger (`/api/gateway/usage`) and a runtime daily spend cap (`MIA_MAX_DAILY_SPEND_USD`) are implemented. Streaming tool calls, assistant-page streaming UI, capability metadata discovery and rate-limit tracking remain |
 | 3. Voice | Partial implementation | Push-to-talk Faster-Whisper STT, optional offline pyttsx3/SAPI5 WAV synthesis, metadata-backed local voice selector and browser fallback are connected. A metadata-reported female voice is preferred when available; no voice pack is downloaded. Windows voice inventory/latency, microphone tests and wake-word verification remain open |
 | 4. Computer intelligence | In progress | Scoped filesystem, approval-bound writes, allowlisted app launch, browser and Windows visible-window/text-control adapter; stronger OS sandbox and target-PC verification remain |
 | 5. Memory and knowledge | In progress | Persistent conversations, FTS5 memory, provenance labels, document parsers and a bounded checksummed JSON export for conversations and knowledge. Office DOCX/XLSX/PPTX ingestion now preflights ZIP entry count, expanded size, member size, encryption and compression ratio before invoking parsers; adversarial archive tests were added. Parser integration/export/retention and broader hostile-document testing remain |
@@ -36,6 +36,8 @@
 - Fixes made during that run: (1) `create_app` used `FastAPI.add_event_handler`, which current Starlette no longer provides, so every API test failed at collection; startup/shutdown hooks now run through a lifespan context (`tests/test_app_lifespan.py` covers interrupted-task recovery on startup). (2) `ExperimentSnapshotScheduler` defaulted the last-attempt time to `0.0` against `time.monotonic()`, so a host up for less than `retry_seconds` skipped its first capture; it now treats "never attempted" as `None`. (3) Stale tests were aligned with current behavior: chat system prompt, executor `validate_steps`/`should_continue` interface, immutable-baseline triggers in the tamper tests, a real minimal WAV fixture, a double-escaped sandbox source string, Docker fake call recording and the Windows UI API fake control metadata. (4) Ruff import-order, unused-import and `collections.abc` findings were cleaned up.
 
 - 2026-11-18 commits `97f4c55`, `0e39c8b`, `112d66b` and `2ecf068` harden paid inference routing: non-finite/negative budgets and price metadata, invalid price calculations and malformed spend-cap environment values now fail closed. Regression coverage added for NaN, infinities, negative and malformed budget inputs. CI verification pending.
+
+- 2026-11-19 local verification (Linux, Python 3.12.3; no Docker, no Windows; adapters tested against mocked HTTP, not a live Ollama or paid provider): `ruff check src tests` passed and `pytest` reported 272 passed after adding gateway streaming, usage ledger and daily-cap work. Not a CI result.
 
 ## Not complete
 

@@ -2,7 +2,7 @@
 
 import math
 
-from .contracts import ModelCandidate, ModelRequest, RoutePolicy
+from .contracts import ModelCandidate, ModelRequest, RoutePolicy, TokenUsage
 
 
 def estimate_cost_usd(
@@ -31,6 +31,36 @@ def estimate_cost_usd(
         / 1_000_000
     )
     total = input_cost + output_cost
+    return total if math.isfinite(total) else None
+
+
+def actual_cost_usd(
+    candidate: ModelCandidate,
+    usage: TokenUsage | None,
+    request: ModelRequest,
+) -> float | None:
+    """Cost of a finished completion.
+
+    Free-tier routes cost 0. Paid routes use provider-reported tokens; with no
+    reported usage they fall back to the worst-case estimate so spend is never
+    under-counted. Returns None only if prices are invalid (never treated as 0).
+    """
+    if candidate.free_tier:
+        return 0.0
+    prices = (
+        candidate.input_cost_per_million_usd,
+        candidate.output_cost_per_million_usd,
+    )
+    if any(price is None or not math.isfinite(price) or price < 0 for price in prices):
+        return None
+    if usage is None:
+        return estimate_cost_usd(candidate, request)
+    if usage.input_tokens < 0 or usage.output_tokens < 0:
+        return None
+    total = (
+        usage.input_tokens * candidate.input_cost_per_million_usd
+        + usage.output_tokens * candidate.output_cost_per_million_usd
+    ) / 1_000_000
     return total if math.isfinite(total) else None
 
 

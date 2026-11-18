@@ -1,5 +1,6 @@
 """Provider-neutral contracts for local and cloud inference."""
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -16,10 +17,28 @@ class ModelRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class TokenUsage:
+    """Token counts reported by a provider for one completion."""
+
+    input_tokens: int
+    output_tokens: int
+
+
+@dataclass(frozen=True, slots=True)
 class ProviderResponse:
     content: str | None = ""
     tool_calls: tuple[dict[str, Any], ...] = ()
     finish_reason: str | None = None
+    usage: TokenUsage | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class StreamChunk:
+    """One streamed fragment; usage/finish_reason arrive on the last chunk."""
+
+    delta: str = ""
+    finish_reason: str | None = None
+    usage: TokenUsage | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,4 +89,14 @@ class ModelProvider(Protocol):
         request: ModelRequest,
     ) -> ProviderResponse | str:
         """Return assistant text and optional structured tool calls."""
+        ...
+
+
+class StreamingModelProvider(ModelProvider, Protocol):
+    def stream(
+        self,
+        candidate: ModelCandidate,
+        request: ModelRequest,
+    ) -> AsyncIterator[StreamChunk]:
+        """Yield text fragments as the model produces them."""
         ...

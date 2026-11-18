@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import AsyncIterator
 from typing import Any
 
 from .contracts import (
@@ -11,8 +12,34 @@ from .contracts import (
     ModelRequest,
     PermanentProviderError,
     ProviderResponse,
+    StreamChunk,
+    TokenUsage,
     TransientProviderError,
 )
+
+
+def _count(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def _usage(input_tokens: Any, output_tokens: Any) -> TokenUsage | None:
+    prompt, completion = _count(input_tokens), _count(output_tokens)
+    if prompt is None or completion is None:
+        return None
+    return TokenUsage(prompt, completion)
+
+
+def _http_error(name: str, exc: Exception, httpx: Any) -> Exception:
+    if isinstance(exc, httpx.TimeoutException):
+        return TransientProviderError(f"{name} request timed out")
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        if status == 429 or status >= 500:
+            return TransientProviderError(f"{name} returned transient HTTP {status}")
+        return PermanentProviderError(f"{name} rejected the request with HTTP {status}")
+    return TransientProviderError(f"{name} request failed")
 
 
 class OllamaProvider:
@@ -132,7 +159,52 @@ class OllamaProvider:
             content=content,
             tool_calls=tool_calls,
             finish_reason=payload.get("done_reason"),
+            usage=_usage(payload.get("prompt_eval_count"), payload.get("eval_count")),
         )
+
+    async def stream(
+        self,
+        candidate: ModelCandidate,
+        request: ModelRequest,
+    ) -> AsyncIterator[StreamChunk]:
+        httpx = self._httpx()
+        body = {
+            "model": candidate.model_id,
+            "messages": list(request.messages) or [{"role": "user", "content": request.prompt}],
+            "stream": True,
+            "options": {"num_predict": request.max_output_tokens},
+        }
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                async with client.stream(
+                    "POST", f"{self.base_url}/api/chat", json=body
+                ) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if not line.strip():
+                            continue
+                        try:
+                            payload = json.loads(line)
+                        except ValueError as exc:
+                            raise PermanentProviderError(
+                                "Ollama returned an invalid stream line"
+                            ) from exc
+                        content = (payload.get("message") or {}).get("content")
+                        if payload.get("done"):
+                            yield StreamChunk(
+                                delta=content if isinstance(content, str) else "",
+                                finish_reason=payload.get("done_reason") or "stop",
+                                usage=_usage(
+                                    payload.get("prompt_eval_count"),
+                                    payload.get("eval_count"),
+                                ),
+                            )
+                            return
+                        if isinstance(content, str) and content:
+                            yield StreamChunk(delta=content)
+        except httpx.HTTPError as exc:
+            raise _http_error("Ollama", exc, httpx) from exc
+        raise TransientProviderError("Ollama stream ended before completion")
 
 
 class OpenAICompatibleProvider:
@@ -300,11 +372,69 @@ class OpenAICompatibleProvider:
             raise PermanentProviderError(
                 f"{self.provider_id} returned neither text nor structured tool calls"
             )
+        raw_usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else {}
         return ProviderResponse(
             content=content,
             tool_calls=tool_calls,
             finish_reason=choice.get("finish_reason"),
+            usage=_usage(raw_usage.get("prompt_tokens"), raw_usage.get("completion_tokens")),
         )
+
+    async def stream(
+        self,
+        candidate: ModelCandidate,
+        request: ModelRequest,
+    ) -> AsyncIterator[StreamChunk]:
+        httpx = self._httpx()
+        body = {
+            "model": candidate.model_id,
+            "messages": list(request.messages) or [{"role": "user", "content": request.prompt}],
+            "max_tokens": request.max_output_tokens,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+        finish: str | None = None
+        usage: TokenUsage | None = None
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                async with client.stream(
+                    "POST",
+                    f"{self.base_url}/chat/completions",
+                    headers=self._headers(),
+                    json=body,
+                ) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        line = line.strip()
+                        if not line.startswith("data:"):
+                            continue
+                        data = line[5:].strip()
+                        if data == "[DONE]":
+                            yield StreamChunk(finish_reason=finish or "stop", usage=usage)
+                            return
+                        try:
+                            payload = json.loads(data)
+                        except ValueError as exc:
+                            raise PermanentProviderError(
+                                f"{self.provider_id} returned an invalid stream event"
+                            ) from exc
+                        raw_usage = payload.get("usage")
+                        if isinstance(raw_usage, dict):
+                            usage = _usage(
+                                raw_usage.get("prompt_tokens"),
+                                raw_usage.get("completion_tokens"),
+                            ) or usage
+                        choices = payload.get("choices") or []
+                        if not choices:
+                            continue
+                        choice = choices[0]
+                        finish = choice.get("finish_reason") or finish
+                        content = (choice.get("delta") or {}).get("content")
+                        if isinstance(content, str) and content:
+                            yield StreamChunk(delta=content)
+        except httpx.HTTPError as exc:
+            raise _http_error(self.provider_id, exc, httpx) from exc
+        raise TransientProviderError(f"{self.provider_id} stream ended before completion")
 
 
 

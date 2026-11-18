@@ -59,3 +59,14 @@ Streaming, model-specific capability metadata, monthly cost ledger and benchmark
 Ollama is marked as a local inference provider. An OpenAI-compatible provider, including FreeLLMAPI, is treated as non-local unless `MIA_FREELLMAPI_DATA_LOCAL=true` is explicitly set after checking the complete upstream route. Localhost hosting alone is not proof that the provider will not forward data externally.
 
 The chat tool loop withholds file and knowledge contents from non-local providers by default. `MIA_ALLOW_REMOTE_FILE_CONTEXT=true` is a separate owner opt-in that permits this data egress.
+
+## Streaming, usage ledger and daily budget
+
+- `POST /api/gateway/chat/stream` returns Server-Sent Events: `delta` (text fragments), then `done` (provider, model, token counts, cost, conversation id) or `error` (`partial: true` when text had already been sent). Streaming is text-only: tool-bearing chat stays on `POST /api/gateway/chat`; requests with tools passed to `ModelGateway.stream` use one buffered call.
+- Fallback to the next candidate happens only before the first token. A failure after output has started is surfaced, not retried on another model; the saved assistant message is marked `[response interrupted]`.
+- Ollama (NDJSON) and OpenAI-compatible (SSE, `stream_options.include_usage`) adapters report provider token counts when available. Ledger rows say `reported` or `estimated`.
+- Cost: free-tier routes record 0. Paid routes use reported tokens times the candidate prices; with no reported usage the worst-case estimate is recorded so spend is never undercounted. Invalid prices produce no cost value and such routes are already ineligible.
+- `UsageLedger` (SQLite `mia-usage.sqlite3` in `MIA_DATA_DIR`) is append-only. `GET /api/gateway/usage?days=N` returns totals per provider/model and today's UTC spend.
+- Daily cap: `MIA_MAX_DAILY_SPEND_USD` (optional) is enforced at runtime on top of `MIA_MAX_REQUEST_SPEND_USD`. Each request's cap is `min(per-request cap, remaining daily budget)`; once spend reaches the cap, paid routing is disabled. A malformed, non-finite or negative value disables paid routing. Paid routing still requires `MIA_ALLOW_PAID=true`.
+- Not yet done: streaming tool calls, a UI for the stream and usage view, per-provider rate-limit tracking, and mid-stream cost cut-off for paid models.
+

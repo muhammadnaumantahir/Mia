@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -11,10 +12,12 @@ from .contracts import (
     PermanentProviderError,
     ProviderResponse,
     RoutePolicy,
+    StreamChunk,
+    TokenUsage,
     TransientProviderError,
 )
 from .registry import ProviderRegistry
-from .routing import rank_candidates
+from .routing import actual_cost_usd, rank_candidates
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +28,25 @@ class CompletionResult:
     attempted_candidates: tuple[str, ...]
     tool_calls: tuple[dict[str, Any], ...] = ()
     data_local: bool = False
+    usage: TokenUsage | None = None
+    cost_usd: float | None = 0.0
+    free_tier: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class StreamEvent:
+    """Gateway-level stream item. `done` is True on the final event only."""
+
+    delta: str = ""
+    done: bool = False
+    provider_id: str = ""
+    model_id: str = ""
+    attempted_candidates: tuple[str, ...] = ()
+    finish_reason: str | None = None
+    usage: TokenUsage | None = None
+    cost_usd: float | None = None
+    data_local: bool = False
+    free_tier: bool = True
 
 
 class ModelGateway:
@@ -67,12 +89,91 @@ class ModelGateway:
                     attempted_candidates=tuple(attempted),
                     tool_calls=response.tool_calls,
                     data_local=candidate.data_local,
+                    usage=response.usage,
+                    cost_usd=actual_cost_usd(candidate, response.usage, request),
+                    free_tier=candidate.free_tier,
                 )
             except TransientProviderError as exc:
                 last_error = exc
                 continue
             except PermanentProviderError:
                 raise
+
+        if last_error:
+            raise TransientProviderError(
+                f"All eligible candidates failed. Tried: {', '.join(attempted)}"
+            ) from last_error
+        raise RuntimeError("No eligible model is available under the current routing policy")
+
+    async def stream(
+        self,
+        request: ModelRequest,
+        candidates: list[ModelCandidate],
+        policy: RoutePolicy = RoutePolicy(),
+    ) -> AsyncIterator[StreamEvent]:
+        """Stream a completion with the same routing policy as complete().
+
+        Fallback to the next candidate is only safe before any text has been
+        emitted; a failure after the first delta is raised to the caller so
+        partial output is never silently mixed across models. Providers without
+        a stream() method, and tool-bearing requests, use one buffered call.
+        """
+        ranked = rank_candidates(candidates, request, policy)
+        attempted: list[str] = []
+        last_error: Exception | None = None
+
+        for candidate in ranked:
+            attempted.append(f"{candidate.provider_id}/{candidate.model_id}")
+            provider = self.providers.get(candidate.provider_id)
+            emitted = False
+            streamer = getattr(provider, "stream", None)
+            try:
+                if streamer is None or request.tools:
+                    response = await provider.complete(candidate, request)
+                    if isinstance(response, str):
+                        response = ProviderResponse(content=response)
+                    if not response.content:
+                        raise PermanentProviderError("Provider returned an empty response")
+                    chunks: list[StreamChunk] = [
+                        StreamChunk(
+                            delta=response.content,
+                            finish_reason=response.finish_reason or "stop",
+                            usage=response.usage,
+                        )
+                    ]
+                    for chunk in chunks:
+                        emitted = True
+                        yield StreamEvent(delta=chunk.delta)
+                    final = chunks[-1]
+                else:
+                    final = StreamChunk()
+                    text_parts: list[str] = []
+                    async for chunk in streamer(candidate, request):
+                        if chunk.delta:
+                            emitted = True
+                            text_parts.append(chunk.delta)
+                            yield StreamEvent(delta=chunk.delta)
+                        if chunk.finish_reason or chunk.usage:
+                            final = chunk
+                    if not text_parts:
+                        raise PermanentProviderError("Provider returned an empty response")
+                yield StreamEvent(
+                    done=True,
+                    provider_id=candidate.provider_id,
+                    model_id=candidate.model_id,
+                    attempted_candidates=tuple(attempted),
+                    finish_reason=final.finish_reason or "stop",
+                    usage=final.usage,
+                    cost_usd=actual_cost_usd(candidate, final.usage, request),
+                    data_local=candidate.data_local,
+                    free_tier=candidate.free_tier,
+                )
+                return
+            except TransientProviderError as exc:
+                if emitted:
+                    raise
+                last_error = exc
+                continue
 
         if last_error:
             raise TransientProviderError(

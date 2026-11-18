@@ -74,3 +74,35 @@ def paid_route_policy():
     if not math.isfinite(cap) or cap < 0:
         return RoutePolicy(allow_paid=False, max_request_cost_usd=0.0)
     return RoutePolicy(allow_paid=enabled, max_request_cost_usd=cap)
+
+
+def apply_daily_cap(policy, spent_today_usd: float):
+    """Tighten a route policy by the remaining daily budget (MIA_MAX_DAILY_SPEND_USD).
+
+    Unset means no daily cap (the per-request cap still applies). A malformed,
+    non-finite or negative cap, or an unusable ledger total, disables paid
+    routing. Free and local routes are never affected.
+    """
+    from .contracts import RoutePolicy
+
+    raw = os.getenv("MIA_MAX_DAILY_SPEND_USD", "").strip()
+    if not raw or not policy.allow_paid:
+        return policy
+    try:
+        cap = float(raw)
+    except ValueError:
+        return RoutePolicy(allow_paid=False, max_request_cost_usd=0.0)
+    if (
+        not math.isfinite(cap)
+        or cap < 0
+        or not math.isfinite(spent_today_usd)
+        or spent_today_usd < 0
+    ):
+        return RoutePolicy(allow_paid=False, max_request_cost_usd=0.0)
+    remaining = cap - spent_today_usd
+    if remaining <= 0:
+        return RoutePolicy(allow_paid=False, max_request_cost_usd=0.0)
+    return RoutePolicy(
+        allow_paid=True,
+        max_request_cost_usd=min(policy.max_request_cost_usd, remaining),
+    )
