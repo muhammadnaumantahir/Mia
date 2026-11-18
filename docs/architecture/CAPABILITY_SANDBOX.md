@@ -52,3 +52,16 @@ tested rollback controller exist.
 The default image is \`mia-sandbox:py313-v1\`. Override it with
 \`MIA_SANDBOX_IMAGE\`; override the executable with \`MIA_DOCKER_EXECUTABLE\`.
 No automatic image build or Docker daemon startup occurs.
+
+
+## Capability API integration
+
+Create a candidate with both `source_code` and `test_source_code`. The owner
+starts validation with `POST /api/capabilities/{id}/{version}/validate/start`;
+the API confirms that the configured image is available before moving the
+candidate to `validating`. Calling `POST /api/capabilities/{id}/{version}/validate`
+then runs the candidate and its tests in the Docker runner on the Mia host.
+There is no client-supplied validation report or four-boolean override. The
+stored report is accepted only when its sandbox identity and source/test hashes
+match the immutable candidate records. If Docker is unavailable, validation
+does not start (or remains retryable if the runtime disappears during a run).

@@ -38,6 +38,11 @@ from mia.evolution.capabilities import (
     CapabilityLifecycleError,
     CapabilityStore,
 )
+from mia.evolution.sandbox import (
+    DockerSandboxRunner,
+    SandboxExecutionError,
+    SandboxUnavailableError,
+)
 from mia.gateway.contracts import ModelRequest, PermanentProviderError, TransientProviderError
 from mia.gateway.factory import build_default_registry, paid_route_policy
 from mia.gateway.service import ModelGateway
@@ -86,6 +91,7 @@ class CapabilityCandidateInput(BaseModel):
     version: str = Field(min_length=5, max_length=80)
     name: str = Field(min_length=1, max_length=120)
     source_code: str = Field(min_length=1, max_length=524288)
+    test_source_code: str | None = Field(default=None, max_length=524288)
     rationale: str = Field(min_length=1, max_length=4000)
     source_kind: str = Field(default="generated", max_length=20)
     parent_id: str | None = Field(default=None, max_length=64)
@@ -93,13 +99,6 @@ class CapabilityCandidateInput(BaseModel):
     upstream_uri: str | None = Field(default=None, max_length=2000)
     license_id: str | None = Field(default=None, max_length=120)
     permissions: list[str] = Field(default_factory=list, max_length=50)
-
-
-class CapabilityValidationInput(BaseModel):
-    static_checks: bool
-    unit_tests: bool
-    security_checks: bool
-    regression_tests: bool
 
 
 class EventInput(BaseModel):
@@ -206,6 +205,7 @@ def create_app(
     capability_store: CapabilityStore | None = None,
     resource_monitor: ResourceMonitor | None = None,
     windows_ui: WindowsUIAdapter | None = None,
+    sandbox_runner: DockerSandboxRunner | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -262,6 +262,11 @@ def create_app(
         data_dir / "workspace" / "generated_code",
     )
     app.state.capabilities = capability_versions
+    sandbox_validation = sandbox_runner or DockerSandboxRunner(
+        docker_executable=os.getenv("MIA_DOCKER_EXECUTABLE", "docker"),
+        image=os.getenv("MIA_SANDBOX_IMAGE", "mia-sandbox:py313-v1"),
+    )
+    app.state.sandbox_runner = sandbox_validation
     resource_monitor_service = resource_monitor or ResourceMonitor()
     app.state.resource_monitor = resource_monitor_service
 
@@ -1051,24 +1056,61 @@ def create_app(
         capability_id: str,
         version: str,
     ) -> dict[str, Any]:
+        candidate = capability_versions.get(capability_id, version)
+        if candidate is None:
+            raise HTTPException(status_code=404, detail="Capability version not found")
+        if not candidate.get("test_sha256") or not candidate.get("test_source_path"):
+            raise HTTPException(
+                status_code=422,
+                detail="Candidate test_source_code is required before sandbox validation",
+            )
+        if not sandbox_validation.is_available():
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Docker sandbox image is unavailable. Build it with "
+                    "docker build --pull -f sandbox/Dockerfile -t mia-sandbox:py313-v1 ."
+                ),
+            )
         try:
             candidate = capability_versions.begin_validation(capability_id, version)
         except CapabilityLifecycleError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            # A validating candidate may be retried after a transient Docker error.
+            current = capability_versions.get(capability_id, version)
+            if current is None or current["status"] != "validating":
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            candidate = current
         return candidate
 
     @app.post("/api/capabilities/{capability_id}/{version}/validate")
-    def record_capability_validation(
+    async def record_capability_validation(
         capability_id: str,
         version: str,
-        item: CapabilityValidationInput,
     ) -> dict[str, Any]:
+        candidate = capability_versions.get(capability_id, version)
+        if candidate is None:
+            raise HTTPException(status_code=404, detail="Capability version not found")
+        if candidate["status"] != "validating":
+            raise HTTPException(status_code=409, detail="Capability is not awaiting validation")
         try:
+            source = capability_versions.read_source(capability_id, version)
+            test_source = capability_versions.read_test_source(capability_id, version)
+            report = await run_in_threadpool(
+                sandbox_validation.validate_candidate,
+                source_code=source,
+                test_source_code=test_source,
+                source_sha256=candidate["source_sha256"],
+                test_sha256=candidate["test_sha256"],
+            )
             candidate = capability_versions.record_validation(
                 capability_id,
                 version,
-                item.model_dump(),
+                report,
             )
+        except SandboxUnavailableError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except SandboxExecutionError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except CapabilityLifecycleError as exc:
@@ -1076,7 +1118,7 @@ def create_app(
         observatory.record_event(
             category="evolution",
             event_type="capability_validation",
-            summary=f"Validation recorded for {capability_id} {version}",
+            summary=f"Docker sandbox validation for {capability_id} {version}",
             outcome=candidate["status"],
             layer_id="SPS-09",
             payload={

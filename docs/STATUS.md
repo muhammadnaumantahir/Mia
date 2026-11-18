@@ -16,13 +16,13 @@
 | 4. Computer intelligence | In progress | Scoped filesystem, approval-bound writes, allowlisted app launch, browser and Windows visible-window/text-control adapter; stronger OS sandbox and target-PC verification remain |
 | 5. Memory and knowledge | In progress | Persistent conversations, FTS5 memory, provenance labels and document parsers; parser integration/export/retention tests remain |
 | 6. Autonomous agent | Task Desk + manual read-only execution | Task Desk submits model-assisted plans, lists proposals, and supports approve/reject/cancel. A safe CPU/RAM task demonstrates explicit approval and one registered read-only tool through POST /api/tasks/{task_id}/execute; preview and mutation tools remain excluded. Background scheduler still has no production executor/API lifecycle, and target-device checks remain open |
-| 7. Self-programming | Docker validation runner groundwork added | Disposable Docker runner/worker now has no-network, read-only mount, non-root, capability-drop, resource and timeout controls plus candidate unit-test/regression reporting. API integration, validation evidence binding, activation and rollback remain |
+| 7. Self-programming | Docker validation runner groundwork added | Disposable Docker runner/worker now has no-network, read-only mount, non-root, capability-drop, resource and timeout controls plus candidate unit-test/regression reporting. Windows Docker Desktop verification, isolated worker permissions, activation and rollback remain |
 | 8. 30-day experiment | Planned | No Day 0 baseline captured. Start only after sandbox, fixed benchmarks and reproducible environment manifest are ready |
 
 ## Verification
 
 - Last known fully green CI commit: 19c3fde9d110611a648c9a168b7841a0d035db75 on Windows and Ubuntu with Python 3.13.
-- Recent Actions failures returned runner ID 0 with no steps/logs. These are inconclusive and do not prove code failure or success.
+- Recent Actions failures returned runner ID 0 with no steps/logs. GitHub ended both matrix jobs before assigning runners; test/lint results remain unknown and neither success nor code failure is established.
 - Planner, scheduler, read-only task-executor, API and Task Desk tests have not yet been confirmed by a successful CI run. Recent GitHub Actions jobs report failure with empty step lists and unavailable job logs; test/lint outcomes remain unknown.
 - Windows UI adapter has mocked contract tests but has not been exercised against real desktop apps on the owner's PC.
 
