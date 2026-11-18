@@ -39,7 +39,7 @@ The coordinator/runtime connects these existing layers; it is not an additional 
 | AI gateway | Local models, multiple providers, model discovery, routing, fallbacks, usage and budget controls |
 | Computer operations | Browser, applications, files, documents and authorized OS workflows |
 | Research | Web research, repository inspection, PDFs, technical documentation and citations |
-| Memory | Searchable long-term memory, knowledge library and experience history |
+| Memory | Persistent conversations, searchable local knowledge items, source provenance and trust labels |
 | Autonomous work | Planning, scheduling, monitoring, multi-step tasks and recovery |
 | Self-programming | Discover gaps; reuse, adapt, compose, create, test, version and activate capabilities |
 | Evolution observatory | Day 0 to Day N timeline, benchmark trends, code lineage, layer health and experiment reports |
@@ -54,6 +54,7 @@ py -3.13 -m venv .venv
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev,gateway,credentials]"
 copy .env.example .env
+copy config/applications.example.json config/applications.json
 python -m mia
 ~~~
 
@@ -80,7 +81,7 @@ To connect an already-running **self-hosted** FreeLLMAPI at its default localhos
 3. Keep `MIA_FREELLMAPI_ROUTE_FREE=false` until you have checked the gateway's active model chain and confirmed all enabled routes are free tiers you are allowed to use.
 4. Restart Mia. Its key is retrieved from the OS credential store and is never put in SQLite or logged.
 
-The observatory displays actual SQLite events and metric samples; it does not generate sample growth data. The server binds to localhost by default.
+Recent conversations are stored locally and can be restored from the sidebar. Long-term notes and research documents can be added through the memory API; external content is tagged untrusted by default. See [Memory and Knowledge](docs/architecture/MEMORY_AND_KNOWLEDGE.md).\n\nThe observatory displays actual SQLite events and metric samples; it does not generate sample growth data. The server binds to localhost by default.
 
 ## Development roadmap
 
