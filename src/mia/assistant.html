@@ -24,6 +24,16 @@ textarea{width:100%;resize:vertical;min-height:65px;max-height:180px;border:0;ou
 select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9px;padding:8px;font-size:11px}
 .send{border:0;border-radius:11px;padding:10px 16px;background:linear-gradient(135deg,#47daa1,#15845f);color:#06291e;font-weight:750;font-size:12px;cursor:pointer}.send:disabled{opacity:.5;cursor:wait}
 .bottomnote{text-align:center;font-size:10px;color:#627a72;line-height:1.5;margin:14px 0 0}
+.approval-card{border:1px solid #8b7440;background:#211f17;border-radius:14px;padding:13px 15px;margin:8px 0 4px;color:#e9e0c8}
+.approval-card strong{display:block;font-size:13px;color:#f1dfa9}
+.approval-card .approval-detail{display:block;color:#b8ad8b;font-size:11px;line-height:1.5;margin-top:6px;overflow-wrap:anywhere}
+.approval-card .approval-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.approval-card .approval-actions button{border:0;border-radius:9px;padding:8px 11px;font-size:11px;font-weight:700;cursor:pointer}
+.approval-card .approve-action{background:#b8e6c9;color:#092d20}
+.approval-card .reject-action{background:#43332e;color:#f2c4ad}
+.approval-card .approval-state{font-size:11px;color:#e9d69f;margin-top:9px}
+.approval-card details{margin-top:8px;font-size:11px;color:#b8ad8b}
+.approval-card pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto;background:#141813;padding:8px;border-radius:8px;color:#d7dfc8;font-size:10px}
 @media(max-width:800px){.layout{grid-template-columns:1fr}aside{display:none}.top{padding:0 18px}.content{padding:30px 16px 18px}.welcome{margin-top:70px}.bubble{max-width:88%}}
 @media(max-width:440px){h1{font-size:29px}.composerfoot{align-items:flex-end}.hint{max-width:120px}}
 </style></head>
@@ -43,11 +53,69 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 <textarea id="prompt" rows="2" placeholder="Message Mia… (English or Roman Urdu)" aria-label="Message Mia"></textarea>
 <div class="composerfoot"><div class="hint" id="hint">Enter to send · Shift + Enter for a new line</div><div class="actions"><button class="send" id="mic" type="button" style="background:#1c3930;color:#a9ebcb;border:1px solid #356451">🎙 Record</button><select id="taskType" aria-label="Task type"><option value="chat">General</option><option value="reasoning">Reasoning</option><option value="coding">Coding</option><option value="research">Research</option></select><label style="font-size:11px;color:#94aaa2;display:flex;align-items:center;gap:5px"><input id="speakReplies" type="checkbox"> Speak</label><select id="voiceChoice" aria-label="Speech voice" title="Installed browser voices" style="max-width:110px"><option value="">Default voice</option></select><button class="send" id="send" type="submit">Send ↗</button></div></div>
 </form>
-<div class="bottomnote">Voice input is push-to-talk and transcribed locally when the optional voice extra is installed. Speech output uses voices installed in your browser/operating system.<br>Push-to-talk is available. File, app-launch and browser controls are exposed as guarded APIs, but chat does not yet invoke those tools automatically. Always-listening wake word and autonomous task execution remain disabled. Do not send secrets to cloud models.</div>
+<div class="bottomnote">Voice input is push-to-talk and transcribed locally when the optional voice extra is installed. Speech output uses voices installed in your browser/operating system.<br>Push-to-talk and model-requested read/preview tools are available when enabled for a compatible model. Writes, launches and browser clicks always require an approval card. Always-listening wake word and autonomous task execution remain disabled. Do not send secrets to cloud models.</div>
 </section></main></div>
 <script>
 const $=id=>document.getElementById(id);
 let conversationId=new URLSearchParams(window.location.search).get('conversation_id');
+function renderApprovalCards(actions){
+ (actions||[]).forEach(action=>{
+  const card=document.createElement('div');card.className='approval-card';
+  const title=document.createElement('strong');
+  title.textContent='Approval required · '+(action.summary||action.kind);
+  const detail=document.createElement('span');detail.className='approval-detail';
+  const display=action.display||{};
+  const parts=[];
+  if(display.target)parts.push('File: '+display.target);
+  if(display.size_bytes!==undefined)parts.push('Size: '+display.size_bytes+' bytes');
+  if(display.application)parts.push('Application: '+display.application);
+  if(display.page_url)parts.push('Page: '+display.page_url);
+  if(display.selector)parts.push('Control: '+display.selector);
+  if(display.new_sha256)parts.push('SHA-256: '+display.new_sha256);
+  detail.textContent=parts.join(' · ')||'Review the action before approving.';
+  card.append(title,detail);
+  if(action.kind==='filesystem.write' && typeof action.payload?.content==='string'){
+   const details=document.createElement('details');
+   const summary=document.createElement('summary');summary.textContent='Review proposed file content';
+   const pre=document.createElement('pre');pre.textContent=action.payload.content.slice(0,12000);
+   if(action.payload.content.length>12000)pre.textContent+='\n… preview truncated in this card';
+   details.append(summary,pre);card.append(details);
+  }
+  const actionsBox=document.createElement('div');actionsBox.className='approval-actions';
+  const approve=document.createElement('button');approve.className='approve-action';approve.textContent='Approve & execute';
+  const reject=document.createElement('button');reject.className='reject-action';reject.textContent='Reject';
+  const state=document.createElement('div');state.className='approval-state';state.textContent='No changes have been made.';
+  approve.addEventListener('click',async()=>{
+   approve.disabled=true;reject.disabled=true;state.textContent='Checking approval and executing exact preview…';
+   try{
+    const response=await fetch('/api/approvals/'+encodeURIComponent(action.approval_id)+'/execute',{
+     method:'POST',headers:{'Content-Type':'application/json'},
+     body:JSON.stringify({kind:action.kind,payload:action.payload})
+    });
+    const result=await response.json();
+    if(!response.ok)throw new Error(result.detail||'Action was not executed');
+    state.textContent='Completed: '+(result.result?.relative_path||result.result?.display_name||result.result?.title||action.kind);
+    state.style.color='#a9ebcb';
+    approve.remove();reject.remove();
+   }catch(error){
+    state.textContent=error.message;state.style.color='#f2b6a7';
+    approve.disabled=false;reject.disabled=false;
+   }
+  });
+  reject.addEventListener('click',async()=>{
+   approve.disabled=true;reject.disabled=true;state.textContent='Rejecting action…';
+   try{
+    const response=await fetch('/api/approvals/'+encodeURIComponent(action.approval_id)+'/reject',{method:'POST'});
+    const result=await response.json();
+    if(!response.ok)throw new Error(result.detail||'Could not reject approval');
+    state.textContent='Rejected. No action was taken.';state.style.color='#c7b8a9';
+    approve.remove();reject.remove();
+   }catch(error){state.textContent=error.message;approve.disabled=false;reject.disabled=false;}
+  });
+  actionsBox.append(approve,reject);card.append(actionsBox,state);
+  $('messages').append(card);
+ });
+}
 function addMessage(role,text,meta=''){
  $('welcome').hidden=true;const row=document.createElement('div');row.className='message '+role;
  const avatar=document.createElement('div');avatar.className='avatar';avatar.textContent=role==='user'?'You':'M';
@@ -165,6 +233,7 @@ $('composer').addEventListener('submit',async event=>{
   conversationId=result.conversation_id;
   window.history.replaceState({},'', '/assistant?conversation_id='+encodeURIComponent(conversationId));
   addMessage('assistant',result.content,result.provider_id+' · '+result.model_id);
+  renderApprovalCards(result.pending_actions||[]);
   loadConversationList();
   speakReply(result.content);
   $('hint').textContent='Response received';
