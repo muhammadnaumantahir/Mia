@@ -85,3 +85,24 @@ def test_observability_callback_failure_does_not_fail_completed_task(tmp_path):
     assert result["status"] == "completed"
     assert result["observability_error"] == "RuntimeError"
     assert tasks.get_task(task_id)["status"] == "completed"
+
+def test_background_worker_records_unexpected_cycle_error_and_stops_cleanly(tmp_path, monkeypatch):
+    runtime = AutonomyRuntime(
+        tasks=TaskStore(tmp_path / "tasks.sqlite3"),
+        monitor=ResourceMonitor(psutil_module=FakePsutil()),
+        policy=AutonomyPolicy(enabled=True),
+        executor=lambda task: {"ok": True},
+        interval_seconds=1,
+    )
+
+    def broken_cycle():
+        runtime._stop.set()
+        raise RuntimeError("unexpected failure")
+
+    monkeypatch.setattr(runtime, "run_cycle", broken_cycle)
+    runtime._run()
+    assert runtime.last_result == {
+        "status": "error",
+        "reason": "unexpected_runtime_error",
+        "error_type": "RuntimeError",
+    }

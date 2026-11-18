@@ -121,6 +121,16 @@ class AutonomyRuntime:
 
     def _run(self) -> None:
         while not self._stop.is_set():
-            self.run_cycle()
+            try:
+                self.run_cycle()
+            except Exception as exc:
+                # Unexpected scheduler faults are observable and must not kill
+                # the daemon silently. Dispatch itself remains approval-gated.
+                with self._state_lock:
+                    self._last_result = {
+                        "status": "error",
+                        "reason": "unexpected_runtime_error",
+                        "error_type": type(exc).__name__,
+                    }
             if self._stop.wait(self.interval_seconds):
                 break
