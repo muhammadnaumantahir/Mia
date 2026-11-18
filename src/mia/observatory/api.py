@@ -9,13 +9,15 @@ import os
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from mia.gateway.contracts import ModelRequest, PermanentProviderError, TransientProviderError
 from mia.gateway.factory import build_default_registry, paid_route_policy
 from mia.gateway.service import ModelGateway
+from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider
 
 from .store import ObservatoryStore
 
@@ -64,6 +66,7 @@ class ChatInput(BaseModel):
 def create_app(
     store: ObservatoryStore | None = None,
     gateway: ModelGateway | None = None,
+    transcriber: SpeechToTextProvider | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -75,6 +78,8 @@ def create_app(
     )
     app.state.observatory = observatory
     app.state.gateway = model_gateway
+    speech_to_text = transcriber or FasterWhisperTranscriber(data_dir=data_dir)
+    app.state.transcriber = speech_to_text
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -161,6 +166,74 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return {"snapshot_id": snapshot_id}
+
+    @app.get("/api/voice/status")
+    def voice_status() -> dict[str, Any]:
+        try:
+            import faster_whisper  # noqa: F401
+            installed = True
+        except ImportError:
+            installed = False
+        return {
+            "speech_to_text": "ready" if installed else "install_voice_extra",
+            "model": getattr(speech_to_text, "model_size", "custom"),
+            "text_to_speech": "browser_speech_synthesis",
+            "always_listening": False,
+        }
+
+    @app.post("/api/voice/transcribe")
+    async def transcribe_voice(request: Request) -> dict[str, Any]:
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > 15 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Audio clip exceeds 15 MB")
+        content_type = request.headers.get("content-type", "")
+        if not content_type.startswith("audio/"):
+            raise HTTPException(status_code=415, detail="Expected an audio upload")
+
+        chunks = []
+        total_bytes = 0
+        async for chunk in request.stream():
+            total_bytes += len(chunk)
+            if total_bytes > 15 * 1024 * 1024:
+                raise HTTPException(status_code=413, detail="Audio clip exceeds 15 MB")
+            chunks.append(chunk)
+        audio_bytes = b"".join(chunks)
+        if not audio_bytes:
+            raise HTTPException(status_code=400, detail="Audio clip is empty")
+
+        filename = request.query_params.get("filename", "recording.webm")
+        language = request.query_params.get("language") or None
+        try:
+            result = await run_in_threadpool(
+                speech_to_text.transcribe,
+                audio_bytes,
+                filename=filename,
+                language=language,
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        text = str(result.get("text") or "").strip()
+        observatory.record_event(
+            category="voice",
+            event_type="transcription",
+            summary="Voice clip transcribed locally",
+            outcome="success" if text else "empty_transcription",
+            payload={
+                "language": result.get("language"),
+                "language_probability": result.get("language_probability"),
+                "audio_bytes": total_bytes,
+                "audio_retained": False,
+            },
+        )
+        return {
+            "text": text,
+            "language": result.get("language"),
+            "language_probability": result.get("language_probability"),
+            "audio_retained": False,
+        }
 
     @app.get("/api/gateway/providers")
     async def providers() -> dict[str, Any]:
