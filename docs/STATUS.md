@@ -18,7 +18,7 @@
 | Phase | Status | Evidence / next gate |
 |---|---|---|
 | 0. Research and reuse audit | In progress | Initial source and license review recorded; complete dependency/runtime/security audit remains |
-| 1. Foundation | Bootstrap committed | SPS registry, SQLite observatory, API/dashboard and tests; must be executed locally/CI before completion |
+| 1. Foundation | In progress | SPS registry, SQLite telemetry, experiment preparation, immutable Day 0/daily snapshots, localhost API/dashboard, CI and tests; CI must pass on Windows and Linux before completion |
 | 2. AI gateway | Planned | Select FreeLLMAPI/LiteLLM/local adapter architecture; implement and test |
 | 3. Voice | Planned | Test STT, wake word, TTS voice and model licenses on target machine |
 | 4. Computer intelligence | Planned | Tool adapters, allowlists, approvals and Windows integration tests |
