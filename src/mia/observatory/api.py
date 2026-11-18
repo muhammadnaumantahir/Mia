@@ -701,6 +701,9 @@ def create_app(
     })
 
     def validate_automatic_task(task: dict[str, Any]) -> bool:
+        # Recheck the durable owner pause immediately before a task is claimed.
+        if durable_tasks.is_autonomy_paused():
+            return False
         try:
             tool_name, _ = task_tool_executor.validate(task)
         except TaskExecutionError:
@@ -1269,7 +1272,9 @@ def create_app(
             "enabled": autonomy_policy.enabled,
             "emergency_stop": autonomy_policy.emergency_stop,
             "paused": durable_tasks.is_autonomy_paused(),
-            "automatic_dispatch": autonomy_runtime.running,
+            "automatic_dispatch": (
+                autonomy_runtime.running and not durable_tasks.is_autonomy_paused()
+            ),
             "dispatcher": "background_read_only_task_runtime",
             "automatic_tools": sorted(automatic_read_tools),
             "cpu_limit_percent": autonomy_policy.max_cpu_percent,
@@ -1285,6 +1290,14 @@ def create_app(
     def pause_autonomy() -> dict[str, Any]:
         durable_tasks.set_autonomy_paused(True)
         autonomy_runtime.pause()
+        observatory.record_event(
+            category="autonomy",
+            event_type="background_dispatch_paused",
+            summary="Owner paused automatic task dispatch",
+            outcome="paused",
+            layer_id="SPS-02",
+            payload={"persisted": True},
+        )
         return {
             "status": "pause_requested",
             "paused": True,
@@ -1306,6 +1319,14 @@ def create_app(
         except RuntimeError as exc:
             durable_tasks.set_autonomy_paused(True)
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        observatory.record_event(
+            category="autonomy",
+            event_type="background_dispatch_resumed",
+            summary="Owner resumed automatic task dispatch",
+            outcome="running",
+            layer_id="SPS-02",
+            payload={"persisted_pause_cleared": True},
+        )
         return {
             "status": "running",
             "paused": False,

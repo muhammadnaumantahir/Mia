@@ -460,3 +460,10 @@ def test_autonomy_pause_survives_application_restart_until_explicit_resume(
         paused_again = second_client.post("/api/autonomy/pause")
         assert paused_again.status_code == 200
         assert paused_again.json()["paused"] is True
+
+    event_types = [
+        event["event_type"]
+        for event in second_app.state.observatory.list_events(limit=20)
+    ]
+    assert "background_dispatch_resumed" in event_types
+    assert "background_dispatch_paused" in event_types
