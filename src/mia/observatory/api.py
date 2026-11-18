@@ -238,8 +238,8 @@ def create_app(
         data_dir / "workspace" / "generated_code",
     )
     app.state.capabilities = capability_versions
-    system_resources = resource_monitor or ResourceMonitor()
-    app.state.resource_monitor = system_resources
+    resource_monitor_service = resource_monitor or ResourceMonitor()
+    app.state.resource_monitor = resource_monitor_service
 
     tool_registry = ToolRegistry()
 
@@ -305,11 +305,11 @@ def create_app(
         return ToolResult({"items": app_launcher.list_applications()})
 
     def tool_system_resources(args: dict[str, Any]) -> ToolResult:
-        return ToolResult(system_resources.snapshot())
+        return ToolResult(resource_monitor_service.snapshot())
 
     def tool_system_processes(args: dict[str, Any]) -> ToolResult:
         return ToolResult({
-            "items": system_resources.list_processes(limit=args.get("limit", 50))
+            "items": resource_monitor_service.list_processes(limit=args.get("limit", 50))
         })
 
     async def tool_browser_search(args: dict[str, Any]) -> ToolResult:
@@ -1256,14 +1256,14 @@ def create_app(
     @app.get("/api/system/resources")
     def system_resources() -> dict[str, Any]:
         try:
-            return system_resources.snapshot()
+            return resource_monitor_service.snapshot()
         except RuntimeError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     @app.get("/api/system/processes")
     def system_processes(limit: int = 50) -> dict[str, Any]:
         try:
-            return {"items": system_resources.list_processes(limit=limit)}
+            return {"items": resource_monitor_service.list_processes(limit=limit)}
         except RuntimeError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 

@@ -99,22 +99,28 @@ function draw(name){
 }
 async function loadSystemResources(){
  try{
-  const response=await fetch('/api/system/resources');
-  const data=await response.json();
-  if(!response.ok)throw new Error(data.detail||'Resource monitor unavailable');
+  const [resourceResponse,policyResponse]=await Promise.all([
+   fetch('/api/system/resources'),
+   fetch('/api/autonomy/status')
+  ]);
+  const data=await resourceResponse.json();
+  const policy=await policyResponse.json();
+  if(!resourceResponse.ok)throw new Error(data.detail||'Resource monitor unavailable');
   const cpu=Math.max(0,Math.min(100,Number(data.cpu_percent)||0));
   const memory=Math.max(0,Math.min(100,Number(data.memory_percent)||0));
-  $('cpuValue').textContent=cpu.toFixed(1)+'%';
-  $('memoryValue').textContent=memory.toFixed(1)+'%';
-  $('processValue').textContent=String(data.process_count??'—');
-  $('cpuFill').style.width=cpu+'%';
-  $('memoryFill').style.width=memory+'%';
-  $('resourceState').textContent=cpu>=75||memory>=85?'Near autonomy limit':'System load recorded';
+  el('cpuValue').textContent=cpu.toFixed(1)+'%';
+  el('memoryValue').textContent=memory.toFixed(1)+'%';
+  el('processValue').textContent=String(data.process_count??'—');
+  el('cpuFill').style.width=cpu+'%';
+  el('memoryFill').style.width=memory+'%';
+  const nearLimit=cpu>=Number(policy.cpu_limit_percent||75)||memory>=Number(policy.memory_limit_percent||85);
+  el('resourceState').textContent=nearLimit?'Near autonomy limit':'System load recorded';
  }catch(error){
-  $('resourceState').textContent='Monitor unavailable';
-  $('cpuValue').textContent='—';$('memoryValue').textContent='—';$('processValue').textContent='—';
+  el('resourceState').textContent='Monitor unavailable';
+  el('cpuValue').textContent='—';el('memoryValue').textContent='—';el('processValue').textContent='—';
  }
 }
+
 async function loadTasks(){
  try{
   const [tasksResponse, autonomyResponse]=await Promise.all([
