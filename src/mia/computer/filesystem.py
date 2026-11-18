@@ -16,12 +16,11 @@ class FilesystemAccessError(PermissionError):
 
 
 _BLOCKED_FILENAMES = {
-    ".env",
-    ".env.local",
-    "id_rsa",
-    "id_ed25519",
+    ".env", "id_rsa", "id_ed25519", ".npmrc", ".pypirc", ".netrc", "netrc",
+    "credentials.json", "secrets.json", "token.json", "service-account.json",
 }
 _BLOCKED_SUFFIXES = {".pem", ".key", ".pfx", ".p12", ".kdbx"}
+_BLOCKED_DIRECTORIES = {".ssh", ".gnupg", ".aws", ".azure", ".git"}
 
 
 class FilesystemAdapter:
@@ -112,6 +111,7 @@ class FilesystemAdapter:
 
     def read_bytes(self, root_id: str, relative_path: str) -> bytes:
         path = self._resolve(root_id, relative_path)
+        self._validate_read_path(path)
         if not path.is_file():
             raise FileNotFoundError("Regular file not found")
         if path.stat().st_size > 25 * 1024 * 1024:
@@ -120,6 +120,7 @@ class FilesystemAdapter:
 
     def read_text(self, root_id: str, relative_path: str) -> str:
         path = self._resolve(root_id, relative_path)
+        self._validate_read_path(path)
         if path.is_symlink() or not path.is_file():
             raise FileNotFoundError("Regular file not found")
         if path.stat().st_size > self.MAX_READ_BYTES:
@@ -143,8 +144,13 @@ class FilesystemAdapter:
         for current, dirs, files in os.walk(root, followlinks=False):
             dirs[:] = [name for name in dirs if not (Path(current) / name).is_symlink()]
             for filename in files:
+                candidate = Path(current) / filename
+                try:
+                    self._validate_read_path(candidate)
+                except FilesystemAccessError:
+                    continue
                 if query.casefold() in filename.casefold():
-                    matches.append(str((Path(current) / filename).relative_to(root)))
+                    matches.append(str(candidate.relative_to(root)))
                     if len(matches) >= safe_limit:
                         return matches
         return matches
@@ -235,7 +241,21 @@ class FilesystemAdapter:
             "size_bytes": len(encoded),
         }
 
+    @staticmethod
+    def _validate_read_path(path: Path) -> None:
+        filename = path.name.casefold()
+        if (
+            filename in _BLOCKED_FILENAMES
+            or filename.startswith(".env.")
+            or any(part.casefold() in _BLOCKED_DIRECTORIES for part in path.parts)
+            or path.suffix.casefold() in _BLOCKED_SUFFIXES
+        ):
+            raise FilesystemAccessError(
+                "Reading credential, key and private configuration files is blocked"
+            )
+
     def _validate_write_path(self, path: Path) -> None:
+        self._validate_read_path(path)
         filename = path.name.casefold()
         if filename in _BLOCKED_FILENAMES or filename.startswith(".env."):
             raise FilesystemAccessError("Writing credential and environment files is blocked")

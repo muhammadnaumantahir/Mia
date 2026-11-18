@@ -68,3 +68,19 @@ def test_credential_files_and_git_metadata_are_blocked(tmp_path):
         except FilesystemAccessError:
             continue
         raise AssertionError(f"{name} should be blocked")
+
+
+def test_filesystem_read_blocks_credentials_and_private_key_files(tmp_path):
+    fs, _, root = build_fs(tmp_path)
+    (root / ".env").write_text("API_KEY=secret", encoding="utf-8")
+    (root / ".env.production").write_text("TOKEN=secret", encoding="utf-8")
+    (root / "private.pem").write_text("private-key", encoding="utf-8")
+    (root / ".ssh").mkdir()
+    (root / ".ssh" / "id_ed25519").write_text("private-key", encoding="utf-8")
+
+    for name in (".env", ".env.production", "private.pem", ".ssh/id_ed25519"):
+        try:
+            fs.read_text("root_1", name)
+        except FilesystemAccessError:
+            continue
+        raise AssertionError(f"{name} should be blocked")

@@ -1343,7 +1343,26 @@ def create_app(
                     except json.JSONDecodeError:
                         arguments = None
 
-                    execution = await tool_registry.execute(name, arguments)
+                    allow_remote_file_context = (
+                        os.getenv("MIA_ALLOW_REMOTE_FILE_CONTEXT", "false").strip().lower()
+                        == "true"
+                    )
+                    if (
+                        not result.data_local
+                        and not allow_remote_file_context
+                        and name in {"filesystem.read_text", "memory.search_knowledge"}
+                    ):
+                        execution = ToolResult({
+                            "ok": False,
+                            "error": (
+                                "File and knowledge contents are blocked from non-local "
+                                "model providers by Mia's data-egress policy. Use local Ollama "
+                                "or explicitly enable MIA_ALLOW_REMOTE_FILE_CONTEXT after "
+                                "reviewing the provider."
+                            ),
+                        })
+                    else:
+                        execution = await tool_registry.execute(name, arguments)
                     if execution.pending_action:
                         pending_actions.append(execution.pending_action)
 

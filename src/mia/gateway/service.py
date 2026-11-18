@@ -24,6 +24,7 @@ class CompletionResult:
     content: str
     attempted_candidates: tuple[str, ...]
     tool_calls: tuple[dict[str, Any], ...] = ()
+    data_local: bool = False
 
 
 class ModelGateway:
@@ -65,6 +66,7 @@ class ModelGateway:
                     content=response.content or "",
                     attempted_candidates=tuple(attempted),
                     tool_calls=response.tool_calls,
+                    data_local=candidate.data_local,
                 )
             except TransientProviderError as exc:
                 last_error = exc

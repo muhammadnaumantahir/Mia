@@ -31,6 +31,7 @@ class ToolCallingProvider:
                 capabilities=frozenset({"chat", "tools"}),
                 context_window=8192,
                 free_tier=True,
+                data_local=True,
                 healthy=True,
                 enabled=True,
             )
@@ -173,3 +174,30 @@ def test_rejected_tool_action_never_changes_the_file(tmp_path, monkeypatch):
     )
     assert replay.status_code == 409
     assert not (root / "notes" / "no.txt").exists()
+
+
+def test_remote_provider_does_not_receive_local_file_contents_by_default(
+    tmp_path,
+    monkeypatch,
+):
+    root = tmp_path / "allowed"
+    root.mkdir()
+    (root / "notes.txt").write_text(
+        "Do not send this to a remote model.",
+        encoding="utf-8",
+    )
+    approvals = ApprovalStore(tmp_path / "approvals.sqlite3")
+    filesystem = FilesystemAdapter([root], approvals)
+    provider = ToolCallingProvider(
+        "filesystem.read_text",
+        {"root_id": "root_1", "relative_path": "notes.txt"},
+    )
+    client = build_client(tmp_path, monkeypatch, provider, filesystem, approvals)
+
+    response = client.post(
+        "/api/gateway/chat",
+        json={"prompt": "Read notes.txt", "use_tools": True},
+    )
+    assert response.status_code == 200
+    assert "blocked from non-local" in provider.tool_output["error"]
+    assert "Do not send this to a remote model." not in json.dumps(provider.tool_output)

@@ -77,6 +77,7 @@ class OllamaProvider:
                     ),
                     context_window=8192,
                     free_tier=True,
+                    data_local=True,
                     healthy=True,
                     enabled=True,
                     reliability_score=0.5,

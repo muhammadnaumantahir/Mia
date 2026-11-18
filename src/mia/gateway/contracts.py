@@ -36,6 +36,7 @@ class ModelCandidate:
     quota_remaining: float | None = None
     input_cost_per_million_usd: float | None = None
     output_cost_per_million_usd: float | None = None
+    data_local: bool = False
 
 
 @dataclass(frozen=True, slots=True)
