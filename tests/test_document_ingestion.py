@@ -1,6 +1,11 @@
+import io
+import zipfile
+
+import pytest
+
 from mia.computer.approvals import ApprovalStore
 from mia.computer.filesystem import FilesystemAdapter
-from mia.knowledge.document_ingestion import DocumentIngestor
+from mia.knowledge.document_ingestion import DocumentIngestor, DocumentIngestionError
 from mia.memory.store import MemoryStore
 
 
@@ -48,3 +53,50 @@ def test_unsupported_document_type_is_rejected(tmp_path):
         assert "Unsupported document type" in str(exc)
     else:
         raise AssertionError("Unsupported files must be rejected")
+
+
+
+def test_office_archive_rejects_invalid_zip_before_optional_parser_load(tmp_path):
+    ingestor = DocumentIngestor(
+        FilesystemAdapter(
+            [tmp_path],
+            ApprovalStore(tmp_path / "approvals.sqlite3"),
+        ),
+        MemoryStore(tmp_path / "memory.sqlite3"),
+    )
+
+    with pytest.raises(DocumentIngestionError, match="valid ZIP archive"):
+        ingestor._extract(".docx", b"not a zip archive")
+
+
+def test_office_archive_rejects_high_expansion_ratio_before_parser_load(tmp_path):
+    archive_bytes = io.BytesIO()
+    with zipfile.ZipFile(archive_bytes, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("word/document.xml", "A" * (2 * 1024 * 1024))
+
+    ingestor = DocumentIngestor(
+        FilesystemAdapter(
+            [tmp_path],
+            ApprovalStore(tmp_path / "approvals.sqlite3"),
+        ),
+        MemoryStore(tmp_path / "memory.sqlite3"),
+    )
+
+    with pytest.raises(DocumentIngestionError, match="compression ratio"):
+        ingestor._extract(".docx", archive_bytes.getvalue())
+
+
+def test_office_archive_accepts_small_valid_zip_container(tmp_path):
+    archive_bytes = io.BytesIO()
+    with zipfile.ZipFile(archive_bytes, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("word/document.xml", "<document>safe text</document>")
+
+    ingestor = DocumentIngestor(
+        FilesystemAdapter(
+            [tmp_path],
+            ApprovalStore(tmp_path / "approvals.sqlite3"),
+        ),
+        MemoryStore(tmp_path / "memory.sqlite3"),
+    )
+
+    ingestor._validate_office_archive(archive_bytes.getvalue())
