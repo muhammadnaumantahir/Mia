@@ -53,6 +53,8 @@ footer{margin-top:24px;color:#6f8580;font-size:11px;line-height:1.6}
 <div class="experiment-notice" id="experimentNotice" role="status" aria-live="polite">No Day 0 baseline has been captured on this computer.</div>
 <div class="experiment-details" id="experimentDetails"></div>
 <div class="experiment-notice" id="dailySnapshotStatus" role="status" aria-live="polite"></div>
+<div class="experiment-actions" style="margin-top:10px"><button class="send" id="buildExperimentReport" type="button" disabled style="background:#263535;color:#d8e2dd">View experiment report</button></div>
+<div class="experiment-details" id="experimentReport" hidden></div>
 </section>
 <section class="panel"><div class="panelhead"><div><h3>Measured growth over time</h3><div class="muted">Select one metric to preserve its original unit and scale.</div></div><select id="metric" aria-label="Select metric"><option value="">No metrics yet</option></select></div>
 <div id="chartEmpty" class="empty">No benchmark or metric samples have been recorded yet.<br>Complete and freeze the Day 0 baseline to begin the experiment.</div><canvas id="chart" hidden></canvas></section>
@@ -158,6 +160,11 @@ async function loadExperimentSchedulerStatus(){
  }
 }
 async function loadExperimentControl(){
+ const reportButton=el('buildExperimentReport');
+ reportButton.disabled=true;
+ const reportBox=el('experimentReport');
+ reportBox.hidden=true;
+ reportBox.replaceChildren();
  const capture=el('captureBaseline');
  const start=el('startExperiment');
  const refresh=el('refreshExperiment');
@@ -197,6 +204,7 @@ async function loadExperimentControl(){
   const completed=activeExperiment.status==='completed';
   const incomplete=activeExperiment.status==='incomplete';
   const snapshots=snapshotsData.items||[];
+  reportButton.disabled=!(completed||incomplete);
   let latestDay=0;
   snapshots.forEach(item=>{latestDay=Math.max(latestDay,Number(item.day_index)||0);});
 
@@ -234,11 +242,13 @@ async function loadExperimentControl(){
   if(completed){
    el('dailySnapshotStatus').textContent='The final planned day has been captured. This experiment is complete and its history remains immutable.';
    setExperimentNotice('Experiment completed. Day 0 and all stored daily snapshots remain frozen.');
+   reportButton.disabled=false;
    return;
   }
   if(incomplete){
    el('dailySnapshotStatus').textContent='The planned duration elapsed before the final daily snapshot was captured. This run is incomplete; no completion claim is made. Its existing evidence remains immutable.';
    setExperimentNotice('Experiment incomplete. Review the missing final-day evidence before preparing a new run.',true);
+   reportButton.disabled=false;
    return;
   }
   if(prepared){
@@ -286,6 +296,37 @@ async function loadExperimentControl(){
   el('dailySnapshotStatus').textContent='';
  }
 }
+async function showExperimentReport(){
+ if(!activeExperiment||!['completed','incomplete'].includes(activeExperiment.status))return;
+ const button=el('buildExperimentReport');button.disabled=true;
+ const box=el('experimentReport');box.hidden=false;box.textContent='Verifying stored experiment evidence…';
+ try{
+  const response=await fetch('/api/experiments/'+encodeURIComponent(activeExperiment.experiment_id)+'/report');
+  const report=await response.json();
+  if(!response.ok)throw new Error(report.detail||'Report could not be built');
+  box.replaceChildren();
+  const heading=document.createElement('strong');
+  heading.textContent=report.experiment.name+' · '+report.experiment.conclusion.toUpperCase();
+  const integrity=document.createElement('div');
+  integrity.textContent='Baseline and '+report.integrity.snapshot_count+' daily snapshot(s) hash-verified · '+report.integrity.event_count+' experiment events · '+report.integrity.metric_count+' metrics.';
+  const days=document.createElement('div');
+  days.textContent='Recorded days: '+report.days.recorded.join(', ')+' · Missing: '+(report.days.missing.join(', ')||'None')+' · Explicitly unavailable: '+(report.days.unavailable.join(', ')||'None')+' · Unaccounted: '+(report.days.unaccounted.join(', ')||'None');
+  const comparison=document.createElement('div');
+  const rate=report.comparison;
+  comparison.textContent='Day 0 test pass rate: '+(rate.baseline_test_pass_rate===null?'not available':rate.baseline_test_pass_rate.toFixed(2)+'%')+
+   ' · '+(rate.comparison_is_final?'Final':'Latest recorded')+' rate: '+(rate.latest_or_final_test_pass_rate===null?'not available':rate.latest_or_final_test_pass_rate.toFixed(2)+'%')+
+   ' · Change: '+(rate.test_pass_rate_change_points===null?'not available':(rate.test_pass_rate_change_points>0?'+':'')+rate.test_pass_rate_change_points.toFixed(2)+' points');
+  const note=document.createElement('div');
+  note.textContent=rate.comparison_is_final?'Final comparison uses the captured planned final day.':'This is not a final performance comparison; no verified final-day result exists.';
+  box.append(heading,integrity,days,comparison,note);
+  if(!report.capability_attribution.available){
+   const attribution=document.createElement('div');attribution.textContent=report.capability_attribution.reason;box.append(attribution);
+  }
+ }catch(error){box.textContent=error.message;}
+ finally{button.disabled=false;}
+}
+el('buildExperimentReport').addEventListener('click',showExperimentReport);
+
 el('experimentForm').addEventListener('submit',async event=>{
  event.preventDefault();
  const button=el('captureBaseline');
