@@ -35,6 +35,7 @@ class FakeWindow:
     def __init__(self, handle=123, title="Notepad"):
         self.handle = handle
         self._title = title
+        self.pid = 456
         self.control = FakeControl()
         self.focused = False
         self.element_info = type("Info", (), {"class_name": "Notepad"})()
@@ -43,7 +44,7 @@ class FakeWindow:
         return self._title
 
     def process_id(self):
-        return 456
+        return self.pid
 
     def set_focus(self):
         self.focused = True
@@ -187,3 +188,29 @@ def test_window_inspection_rejects_unknown_window_and_bad_limit(tmp_path):
         adapter.inspect_window(999)
     with pytest.raises(ValueError):
         adapter.inspect_window(123, limit=201)
+
+
+def test_approved_text_cannot_be_redirected_to_reused_window_handle(tmp_path):
+    adapter, approvals, window = build_adapter(tmp_path)
+    preview = adapter.preview_type_text(
+        window_handle=123,
+        window_title="Notepad",
+        automation_id="editor",
+        control_type="Edit",
+        text="Do not redirect",
+    )
+    approvals.approve(preview["approval_id"])
+    window.pid = 999
+
+    with pytest.raises(DesktopAccessError, match="process has changed"):
+        adapter.execute_type_text(
+            approval_id=preview["approval_id"],
+            window_handle=123,
+            window_title="Notepad",
+            automation_id="editor",
+            control_type="Edit",
+            text="Do not redirect",
+            process_id=456,
+            window_class="Notepad",
+        )
+    assert window.control.text is None
