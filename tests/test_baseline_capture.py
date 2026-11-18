@@ -61,10 +61,13 @@ class FakeSubprocess:
             )
         report_path = Path(command[command.index("--junitxml") + 1])
         if self.produce_report:
+            fixed_benchmark = "tests/benchmarks/test_foundation.py" in command
+            test_count = 6 if fixed_benchmark else 12
             report_path.write_text(
                 (
-                    '<testsuites><testsuite name="mia-foundation-v2" tests="6" '
-                    f'failures="{self.failures}" errors="0" skipped="{self.skipped}" time="1.25">'
+                    '<testsuites><testsuite name="mia-foundation-v2" '
+                    f'tests="{test_count}" failures="{self.failures}" '
+                    f'errors="0" skipped="{self.skipped}" time="1.25">'
                     '</testsuite></testsuites>'
                 ),
                 encoding="utf-8",
@@ -87,17 +90,23 @@ def test_local_baseline_capture_runs_git_and_fixed_suite_on_host(tmp_path, monke
     assert manifest["source_commit"] == COMMIT
     assert manifest["benchmark_suite_id"] == "mia-foundation-v2"
     assert manifest["configuration_hash"].startswith("sha256:")
-    assert manifest["baseline_results"]["tests"] == 6
-    assert manifest["baseline_results"]["passed"] == 6
+    assert manifest["baseline_results"]["tests"] == 12
+    assert manifest["baseline_results"]["passed"] == 12
     assert manifest["baseline_results"]["capture_method"] == "local-host-ruff-pytest-v2"
     assert manifest["baseline_results"]["ruff_passed"] is True
+    assert manifest["fixed_benchmark_results"]["tests"] == 6
+    assert manifest["fixed_benchmark_results"]["passed"] == 6
+    assert manifest["fixed_benchmark_results"]["suite_id"] == "mia-foundation-v2"
     assert manifest["environment"]["os"]
     assert runner.calls[0][0] == ["git", "rev-parse", "HEAD"]
     assert runner.calls[1][0] == ["git", "status", "--porcelain", "--untracked-files=normal"]
     assert runner.calls[2][0][0:3] == [sys.executable, "-m", "ruff"]
     assert runner.calls[3][0][0:3] == [sys.executable, "-m", "pytest"]
-    assert "tests" in runner.calls[3][0]
-    assert runner.calls[4][0] == ["git", "status", "--porcelain", "--untracked-files=normal"]
+    assert "tests/benchmarks/test_foundation.py" in runner.calls[3][0]
+    assert runner.calls[4][0][0:3] == [sys.executable, "-m", "pytest"]
+    assert "--ignore=tests/benchmarks" in runner.calls[4][0]
+    assert "tests" in runner.calls[4][0]
+    assert runner.calls[5][0] == ["git", "status", "--porcelain", "--untracked-files=normal"]
     assert str(tmp_path / "src") in runner.calls[2][1]["env"]["PYTHONPATH"]
     assert str(tmp_path / "src") in runner.calls[3][1]["env"]["PYTHONPATH"]
 
@@ -148,6 +157,16 @@ def _baseline_manifest(passed=True):
             "python": "3.13",
             "platform": "Windows test host",
             "machine": "AMD64",
+        },
+        "fixed_benchmark_results": {
+            "tests": 6,
+            "passed": 6,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0,
+            "duration_seconds": 1.25,
+            "pytest_exit_code": 0,
+            "suite_id": "mia-foundation-v2",
         },
         "baseline_results": {
             "tests": 6,

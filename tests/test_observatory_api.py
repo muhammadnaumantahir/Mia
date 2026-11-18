@@ -62,6 +62,16 @@ def _report_manifest():
             "platform": "Windows test host",
             "machine": "AMD64",
         },
+        "fixed_benchmark_results": {
+            "tests": 6,
+            "passed": 6,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0,
+            "duration_seconds": 1.25,
+            "pytest_exit_code": 0,
+            "suite_id": "mia-foundation-v2",
+        },
         "baseline_results": {
             "tests": 10,
             "passed": 10,
