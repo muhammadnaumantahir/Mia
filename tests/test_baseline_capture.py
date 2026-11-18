@@ -67,7 +67,8 @@ class FakeSubprocess:
         )
 
 
-def test_local_baseline_capture_runs_git_and_fixed_suite_on_host(tmp_path):
+def test_local_baseline_capture_runs_git_and_fixed_suite_on_host(tmp_path, monkeypatch):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     _write_baseline_files(tmp_path)
     runner = FakeSubprocess()
     manifest = capture_baseline_manifest(tmp_path, subprocess_run=runner)
@@ -96,7 +97,9 @@ def test_local_baseline_capture_fails_closed_on_failure_or_skip(
     return_code,
     failures,
     skipped,
+    monkeypatch,
 ):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     _write_baseline_files(tmp_path)
     manifest = capture_baseline_manifest(
         tmp_path,
@@ -109,7 +112,8 @@ def test_local_baseline_capture_fails_closed_on_failure_or_skip(
     assert manifest["verification_passed"] is False
 
 
-def test_local_baseline_capture_requires_junit_evidence(tmp_path):
+def test_local_baseline_capture_requires_junit_evidence(tmp_path, monkeypatch):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     _write_baseline_files(tmp_path)
     with pytest.raises(BaselineCaptureError, match="JUnit"):
         capture_baseline_manifest(
@@ -196,7 +200,8 @@ def test_experiment_prepare_api_does_not_prepare_when_local_baseline_fails(tmp_p
     assert store.list_experiments() == []
 
 
-def test_local_baseline_capture_rejects_dirty_tracked_worktree(tmp_path):
+def test_local_baseline_capture_rejects_dirty_tracked_worktree(tmp_path, monkeypatch):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     _write_baseline_files(tmp_path)
     with pytest.raises(BaselineCaptureError, match="tracked changes"):
         capture_baseline_manifest(
