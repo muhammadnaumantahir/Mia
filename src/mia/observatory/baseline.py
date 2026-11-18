@@ -245,6 +245,17 @@ def capture_baseline_manifest(
             raise BaselineCaptureError("Could not start the local Day 0 test suite") from exc
         results = _parse_junit(report_path)
 
+    post_test_worktree = _git_output(
+        runner,
+        ["git", "status", "--porcelain", "--untracked-files=normal"],
+        root=root,
+        env=child_env,
+    )
+    if post_test_worktree:
+        raise BaselineCaptureError(
+            "The local test suite changed tracked or untracked source files; Day 0 was not captured"
+        )
+
     elapsed = round(time.monotonic() - started, 3)
     ruff_passed = ruff_result.returncode == 0
     pytest_passed = (

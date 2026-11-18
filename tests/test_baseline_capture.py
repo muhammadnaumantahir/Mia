@@ -1,12 +1,12 @@
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
-from mia.observatory.baseline import BaselineCaptureError, capture_baseline_manifest
 from mia.observatory.api import create_app
+from mia.observatory.baseline import BaselineCaptureError, capture_baseline_manifest
 from mia.observatory.store import ObservatoryStore
 
 
@@ -97,6 +97,7 @@ def test_local_baseline_capture_runs_git_and_fixed_suite_on_host(tmp_path, monke
     assert runner.calls[2][0][0:3] == [sys.executable, "-m", "ruff"]
     assert runner.calls[3][0][0:3] == [sys.executable, "-m", "pytest"]
     assert "tests" in runner.calls[3][0]
+    assert runner.calls[4][0] == ["git", "status", "--porcelain", "--untracked-files=normal"]
     assert str(tmp_path / "src") in runner.calls[2][1]["env"]["PYTHONPATH"]
     assert str(tmp_path / "src") in runner.calls[3][1]["env"]["PYTHONPATH"]
 

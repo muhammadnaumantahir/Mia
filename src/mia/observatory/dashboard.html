@@ -186,7 +186,7 @@ el('experimentForm').addEventListener('submit',async event=>{
   await loadExperimentControl();
   setExperimentNotice('Day 0 captured and frozen. Review the source hash and baseline checks, then start separately.');
  }catch(error){setExperimentNotice(error.message,true);}
- finally{button.disabled=false;}
+ finally{await loadExperimentControl();}
 });
 el('startExperiment').addEventListener('click',async()=>{
  if(!activeExperiment||activeExperiment.status!=='prepared')return;
