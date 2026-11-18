@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 
 from .credentials import CredentialStore
@@ -66,5 +67,10 @@ def paid_route_policy():
     from .contracts import RoutePolicy
 
     enabled = os.getenv("MIA_ALLOW_PAID", "false").strip().lower() == "true"
-    cap = float(os.getenv("MIA_MAX_REQUEST_SPEND_USD", "0"))
-    return RoutePolicy(allow_paid=enabled, max_request_cost_usd=max(0.0, cap))
+    try:
+        cap = float(os.getenv("MIA_MAX_REQUEST_SPEND_USD", "0"))
+    except ValueError:
+        return RoutePolicy(allow_paid=False, max_request_cost_usd=0.0)
+    if not math.isfinite(cap) or cap < 0:
+        return RoutePolicy(allow_paid=False, max_request_cost_usd=0.0)
+    return RoutePolicy(allow_paid=enabled, max_request_cost_usd=cap)
