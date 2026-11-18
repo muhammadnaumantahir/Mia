@@ -78,6 +78,7 @@ def _report_manifest():
             "failures": 0,
             "errors": 0,
             "skipped": 0,
+            "elapsed_seconds": 6.0,
             "ruff_passed": True,
             "ruff_exit_code": 0,
             "pytest_exit_code": 0,
@@ -111,6 +112,7 @@ def test_completed_experiment_report_compares_verified_day_zero_and_final(tmp_pa
                 "errors": 0,
                 "skipped": 0,
                 "ruff_passed": True,
+                "elapsed_seconds": 5.0,
             },
             "fixed_benchmark_results": {
                 "tests": 6,
@@ -121,15 +123,6 @@ def test_completed_experiment_report_compares_verified_day_zero_and_final(tmp_pa
                 "duration_seconds": 1.0,
                 "pytest_exit_code": 0,
                 "suite_id": "mia-foundation-v2",
-            },
-            "verification": {
-                "tests": 12,
-                "passed": 12,
-                "failures": 0,
-                "errors": 0,
-                "skipped": 0,
-                "ruff_passed": True,
-                "elapsed_seconds": 5.0,
             },
             "resources": {"cpu_percent": 18.0, "memory_percent": 42.0},
             "verification_passed": True,
@@ -164,6 +157,9 @@ def test_completed_experiment_report_compares_verified_day_zero_and_final(tmp_pa
     assert report["comparison"]["latest_or_final_test_pass_rate"] == 100.0
     assert report["comparison"]["test_pass_rate_change_points"] == 0.0
     assert report["comparison"]["comparison_is_final"] is True
+    assert report["comparison"]["fixed_benchmark_duration_change_seconds"] == -0.25
+    assert report["comparison"]["baseline_full_regression"]["elapsed_seconds"] == 6.0
+    assert report["comparison"]["latest_or_final_full_regression"]["elapsed_seconds"] == 5.0
     assert report["integrity"]["baseline_verified"] is True
     assert report["integrity"]["snapshots_verified"] is True
     assert len(report["metrics"]) == 1
