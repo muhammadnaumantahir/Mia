@@ -94,3 +94,18 @@ the configured autonomy thresholds; under pressure it defers and retries
 after 15 minutes. The scheduler never starts an experiment, never runs when
 there is no explicitly running experiment, and never fills missed days with
 invented records. The manual dashboard capture remains available.
+
+
+## Final experiment report
+
+The read-only report endpoint is GET /api/experiments/{experiment_id}/report.
+It verifies the immutable Day 0 manifest and every daily snapshot hash before
+building a report from records linked to that experiment ID. It lists recorded,
+missing, explicitly unavailable and unaccounted day indices, plus the linked
+events and metric samples. A completed conclusion is allowed only when the
+planned final-day snapshot exists; an expired run without it is incomplete.
+For an incomplete run the report compares only the latest verified snapshot
+(if any) and explicitly labels that comparison non-final. Capability versions
+are not attributed by timestamp because the registry is not linked to an
+experiment ID. A report object is not evidence of a completed experiment; only
+real host-captured records can support that conclusion.
