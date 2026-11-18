@@ -149,6 +149,11 @@ class FileWriteExecution(FileWritePreview):
     approval_id: str = Field(min_length=32, max_length=32)
 
 
+class ApprovalExecutionInput(BaseModel):
+    kind: str = Field(pattern="^(filesystem.write|application.launch|browser.click)$")
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
 class ChatInput(BaseModel):
     prompt: str = Field(min_length=1, max_length=100_000)
     task_type: str = Field(default="chat", min_length=1, max_length=40)
@@ -317,6 +322,12 @@ def create_app(
                 "relative_path": args["relative_path"],
                 "content": args["content"],
             },
+            "display": {
+                "target": args["relative_path"],
+                "size_bytes": preview["size_bytes"],
+                "new_sha256": preview["new_sha256"],
+                "current_sha256": preview["current_sha256"],
+            },
         }
         return ToolResult({
             "status": "approval_required",
@@ -332,6 +343,7 @@ def create_app(
             "approval_id": preview["approval_id"],
             "summary": preview["summary"],
             "payload": {"app_id": args["app_id"]},
+            "display": {"application": preview["display_name"]},
         }
         return ToolResult({
             "status": "approval_required",
@@ -359,6 +371,10 @@ def create_app(
             "approval_id": preview["approval_id"],
             "summary": preview["summary"],
             "payload": {"selector": args["selector"]},
+            "display": {
+                "page_url": current_url,
+                "selector": args["selector"],
+            },
         }
         return ToolResult({
             "status": "approval_required",
@@ -1111,6 +1127,69 @@ def create_app(
     @app.delete("/api/memory/items/{item_id}")
     def delete_memory_item(item_id: str) -> dict[str, bool]:
         return {"deleted": memory_store.delete_item(item_id)}
+
+    @app.post("/api/approvals/{approval_id}/execute")
+    async def execute_approved_action(
+        approval_id: str,
+        item: ApprovalExecutionInput,
+    ) -> dict[str, Any]:
+        payload = item.payload
+        try:
+            approval_store.approve(approval_id)
+            if item.kind == "filesystem.write":
+                result = computer_files.execute_write(
+                    approval_id=approval_id,
+                    root_id=str(payload["root_id"]),
+                    relative_path=str(payload["relative_path"]),
+                    content=str(payload["content"]),
+                )
+                summary = f"Created or updated {result['relative_path']}"
+            elif item.kind == "application.launch":
+                result = app_launcher.execute_launch(
+                    str(payload["app_id"]),
+                    approval_id,
+                )
+                summary = f"Launched {result['display_name']}"
+            elif item.kind == "browser.click":
+                current_url = browser_controller.current_url
+                if not current_url:
+                    raise ApprovalError("Browser page is no longer active")
+                state_digest = await browser_controller.current_state_digest()
+                approval_store.consume(
+                    approval_id=approval_id,
+                    action_id="browser.click",
+                    payload={
+                        "url": current_url,
+                        "selector": str(payload["selector"]),
+                        "state_sha256": state_digest,
+                    },
+                )
+                result = await browser_controller.click(str(payload["selector"]))
+                summary = f"Clicked approved control on {current_url}"
+            else:
+                raise HTTPException(status_code=400, detail="Unsupported action kind")
+        except ApprovalError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="Invalid approved action payload") from exc
+        except FilesystemAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ApplicationLaunchError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(status_code=422, detail="Approved action could not be completed") from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Approved action failed: {type(exc).__name__}") from exc
+
+        observatory.record_event(
+            category="computer",
+            event_type="approved_tool_action",
+            summary=summary,
+            outcome="success",
+            layer_id="SPS-10",
+            payload={"approval_id": approval_id, "kind": item.kind},
+        )
+        return {"status": "completed", "kind": item.kind, "result": result}
 
     @app.get("/api/tools")
     def list_tools() -> dict[str, Any]:
