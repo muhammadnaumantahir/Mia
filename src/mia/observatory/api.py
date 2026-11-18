@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from mia.computer.approvals import ApprovalError, ApprovalStore
 from mia.computer.filesystem import FilesystemAccessError, FilesystemAdapter
+from mia.computer.applications import ApplicationLaunchError, ApplicationLauncher
 from mia.gateway.contracts import ModelRequest, PermanentProviderError, TransientProviderError
 from mia.gateway.factory import build_default_registry, paid_route_policy
 from mia.gateway.service import ModelGateway
@@ -58,6 +59,14 @@ class DailySnapshotInput(BaseModel):
     snapshot: dict[str, Any]
 
 
+class ApplicationLaunchPreview(BaseModel):
+    app_id: str = Field(min_length=1, max_length=80)
+
+
+class ApplicationLaunchExecution(ApplicationLaunchPreview):
+    approval_id: str = Field(min_length=32, max_length=32)
+
+
 class FileWritePreview(BaseModel):
     root_id: str = Field(min_length=1, max_length=40)
     relative_path: str = Field(min_length=1, max_length=1000)
@@ -81,6 +90,7 @@ def create_app(
     transcriber: SpeechToTextProvider | None = None,
     filesystem: FilesystemAdapter | None = None,
     approvals: ApprovalStore | None = None,
+    application_launcher: ApplicationLauncher | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -101,6 +111,14 @@ def create_app(
     )
     app.state.computer_files = computer_files
     app.state.approvals = approval_store
+    applications_file = Path(
+        os.getenv("MIA_APPLICATIONS_FILE", "config/applications.json")
+    )
+    app_launcher = application_launcher or ApplicationLauncher.from_json(
+        applications_file,
+        approval_store,
+    )
+    app.state.application_launcher = app_launcher
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -187,6 +205,43 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return {"snapshot_id": snapshot_id}
+
+    @app.get("/api/computer/apps")
+    def computer_apps() -> dict[str, Any]:
+        return {"items": app_launcher.list_applications()}
+
+    @app.post("/api/computer/apps/launch/preview", status_code=201)
+    def computer_app_launch_preview(item: ApplicationLaunchPreview) -> dict[str, str]:
+        try:
+            return app_launcher.preview_launch(item.app_id)
+        except ApplicationLaunchError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ApprovalError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/computer/apps/launch/execute")
+    def computer_app_launch_execute(
+        item: ApplicationLaunchExecution,
+    ) -> dict[str, Any]:
+        try:
+            result = app_launcher.execute_launch(item.app_id, item.approval_id)
+        except ApplicationLaunchError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ApprovalError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        observatory.record_event(
+            category="computer",
+            event_type="application_launch",
+            summary=f"Launched approved application {result['display_name']}",
+            outcome="success",
+            layer_id="SPS-10",
+            payload={
+                "app_id": item.app_id,
+                "process_id": result["process_id"],
+                "approval_id": item.approval_id,
+            },
+        )
+        return result
 
     @app.get("/api/computer/roots")
     def computer_roots() -> dict[str, Any]:
