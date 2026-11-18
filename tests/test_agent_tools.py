@@ -98,6 +98,7 @@ def test_registry_exposes_only_read_contracts_and_validates_without_running_hand
 
     contracts = registry.read_only_contracts()
     assert [item["name"] for item in contracts] == ["safe.list"]
+    assert contracts[0]["permission"] == "records.read"
     assert registry.validate_read_only_call("safe.list", {"limit": 3}) is None
     assert "read-only" in registry.validate_read_only_call("unsafe.preview", {})
     assert "maximum" in registry.validate_read_only_call("safe.list", {"limit": 6})

@@ -51,7 +51,7 @@ class WorkloadDiscovery:
             if not finding.evidence_summary.strip() or len(finding.evidence_summary) > 2000:
                 raise ValueError("evidence_summary must be 1-2000 characters")
 
-            identity = {
+            identity: dict[str, Any] = {
                 "source": finding.source,
                 "evidence_id": finding.evidence_id,
                 "title": finding.title.strip(),

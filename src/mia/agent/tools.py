@@ -105,6 +105,7 @@ class ToolRegistry:
             {
                 "name": tool.name,
                 "description": tool.description,
+                "permission": tool.permission,
                 "parameters": tool.parameters,
             }
             for tool in self._tools.values()
