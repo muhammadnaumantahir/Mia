@@ -25,6 +25,7 @@
 - Recent Actions runs, including 44346916562, ended both Windows and Ubuntu matrix jobs before any steps were recorded. Test/lint outcomes remain inconclusive, not passed or failed by code evidence. The current development container cannot resolve github.com for a local checkout, so no local test result is claimed.
 - Planner, scheduler, read-only task-executor, Task Desk, Capability Lab, capability lifecycle, Docker sandbox and Day 0 capture tests have not yet been confirmed by a successful CI run. Latest inspected run 44346916562 failed both matrix jobs before any steps were recorded; runner allocation/test outcomes remain inconclusive. The current development container cannot resolve github.com for a local checkout, so no local test result is claimed.
 - Windows UI adapter has mocked contract tests but has not been exercised against real desktop apps on the owner's PC.
+- 2026-11-18 follow-up commits `7f1598d` and `553e8c1` repair sandbox test-fixture defects: the Docker fake now has its `Path` dependency at module scope, and capability execution fixtures contain real Python newlines. These are source-level corrections only; the test suite has not yet been re-run, so they are not recorded as passing.
 
 ## Not complete
 
