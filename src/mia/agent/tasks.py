@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import sqlite3
 import uuid
@@ -372,6 +373,14 @@ class RuntimeLoad:
     cpu_percent: float
     memory_percent: float
 
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("cpu_percent", self.cpu_percent),
+            ("memory_percent", self.memory_percent),
+        ):
+            if not math.isfinite(value) or not 0 <= value <= 100:
+                raise ValueError(f"{name} must be a finite percentage between 0 and 100")
+
 
 @dataclass(frozen=True, slots=True)
 class AutonomyPolicy:
@@ -380,6 +389,16 @@ class AutonomyPolicy:
     max_cpu_percent: float = 75.0
     max_memory_percent: float = 85.0
     max_tasks_per_cycle: int = 1
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("max_cpu_percent", self.max_cpu_percent),
+            ("max_memory_percent", self.max_memory_percent),
+        ):
+            if not math.isfinite(value) or not 1 <= value <= 100:
+                raise ValueError(f"{name} must be a finite percentage between 1 and 100")
+        if not 1 <= self.max_tasks_per_cycle <= 10:
+            raise ValueError("max_tasks_per_cycle must be between 1 and 10")
 
 
 class TaskCoordinator:
