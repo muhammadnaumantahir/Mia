@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.tox/
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Local databases, logs and runtime data
+data/
+logs/
+workspace/
+experiment/runs/
+experiment/snapshots/
+experiment/artifacts/
+
+# Local model weights and caches
+models/
+model_cache/
+.cache/
+.cache-huggingface/
+ollama/
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Node / frontend tooling if later added
+node_modules/
