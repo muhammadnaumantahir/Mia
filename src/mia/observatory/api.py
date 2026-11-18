@@ -1125,13 +1125,31 @@ def create_app(
                 status_code=502,
                 detail=f"Generated Python has a syntax error on line {exc.lineno}",
             ) from exc
-        if not any(
-            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "run"
+        run_functions = [
+            node
             for node in source_tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "run"
+        ]
+        if len(run_functions) != 1:
+            raise HTTPException(
+                status_code=502,
+                detail="Generated source must export exactly one synchronous run(input_data) function",
+            )
+        run_function = run_functions[0]
+        run_arguments = run_function.args
+        if (
+            len(run_arguments.args) != 1
+            or run_arguments.args[0].arg != "input_data"
+            or run_arguments.posonlyargs
+            or run_arguments.vararg is not None
+            or run_arguments.kwarg is not None
+            or run_arguments.kwonlyargs
+            or run_arguments.defaults
+            or any(value is not None for value in run_arguments.kw_defaults)
         ):
             raise HTTPException(
                 status_code=502,
-                detail="Generated source must export a top-level run(input_data) function",
+                detail="Generated run function must use exactly the signature run(input_data)",
             )
         if not any(
             isinstance(node, ast.ImportFrom)
@@ -1142,6 +1160,15 @@ def create_app(
             raise HTTPException(
                 status_code=502,
                 detail="Generated tests must import run from candidate",
+            )
+        if not any(
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name.startswith("test_")
+            for node in ast.walk(test_tree)
+        ):
+            raise HTTPException(
+                status_code=502,
+                detail="Generated tests must define at least one pytest test_ function",
             )
         security_findings = _all_security_findings(source_code, test_source_code)
         if any(security_findings.values()):

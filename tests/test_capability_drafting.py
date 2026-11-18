@@ -164,3 +164,41 @@ def test_ai_capability_draft_rejects_bad_json_and_invalid_request(tmp_path):
     )
     assert invalid_request.status_code == 422
     assert capabilities.list_versions() == []
+
+
+def test_ai_capability_draft_rejects_invalid_run_signature_and_missing_pytest_tests(tmp_path):
+    invalid_signature = dict(VALID_DRAFT)
+    invalid_signature["source_code"] = "def run(value): return {'value': value}\n"
+    client, capabilities = _client(
+        tmp_path / "signature",
+        DraftGateway(json.dumps(invalid_signature)),
+    )
+    response = client.post(
+        "/api/capabilities/draft",
+        json={
+            "capability_id": "bad-signature",
+            "name": "Bad signature",
+            "objective": "Draft a pure helper.",
+        },
+    )
+    assert response.status_code == 502
+    assert "signature run(input_data)" in response.json()["detail"]
+    assert capabilities.list_versions() == []
+
+    missing_test = dict(VALID_DRAFT)
+    missing_test["test_source_code"] = "from candidate import run\n\nassert run({'value': 2})\n"
+    client, capabilities = _client(
+        tmp_path / "missing-tests",
+        DraftGateway(json.dumps(missing_test)),
+    )
+    response = client.post(
+        "/api/capabilities/draft",
+        json={
+            "capability_id": "no-pytest",
+            "name": "No pytest",
+            "objective": "Draft a pure helper.",
+        },
+    )
+    assert response.status_code == 502
+    assert "pytest test_" in response.json()["detail"]
+    assert capabilities.list_versions() == []
