@@ -26,6 +26,11 @@ from mia.gateway.service import ModelGateway
 from mia.knowledge.document_ingestion import DocumentIngestor, DocumentIngestionError
 from mia.memory.store import MemoryStore
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider
+from mia.evolution.capabilities import (
+    CapabilityActivationBlocked,
+    CapabilityLifecycleError,
+    CapabilityStore,
+)
 
 from .store import ObservatoryStore
 
@@ -55,6 +60,27 @@ class DiscoveryFindingInput(BaseModel):
 
 class DiscoveryBatchInput(BaseModel):
     findings: list[DiscoveryFindingInput] = Field(max_length=50)
+
+
+class CapabilityCandidateInput(BaseModel):
+    capability_id: str = Field(min_length=2, max_length=64)
+    version: str = Field(min_length=5, max_length=80)
+    name: str = Field(min_length=1, max_length=120)
+    source_code: str = Field(min_length=1, max_length=524288)
+    rationale: str = Field(min_length=1, max_length=4000)
+    source_kind: str = Field(default="generated", max_length=20)
+    parent_id: str | None = Field(default=None, max_length=64)
+    parent_version: str | None = Field(default=None, max_length=80)
+    upstream_uri: str | None = Field(default=None, max_length=2000)
+    license_id: str | None = Field(default=None, max_length=120)
+    permissions: list[str] = Field(default_factory=list, max_length=50)
+
+
+class CapabilityValidationInput(BaseModel):
+    static_checks: bool
+    unit_tests: bool
+    security_checks: bool
+    regression_tests: bool
 
 
 class EventInput(BaseModel):
@@ -150,6 +176,7 @@ def create_app(
     memory: MemoryStore | None = None,
     browser: BrowserController | None = None,
     task_store: TaskStore | None = None,
+    capability_store: CapabilityStore | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -196,6 +223,11 @@ def create_app(
     app.state.tasks = durable_tasks
     app.state.workload_discovery = workload_discovery
     app.state.task_coordinator = task_coordinator
+    capability_versions = capability_store or CapabilityStore(
+        data_dir / "mia-capabilities.sqlite3",
+        data_dir / "workspace" / "generated_code",
+    )
+    app.state.capabilities = capability_versions
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -576,6 +608,113 @@ def create_app(
             "memory_limit_percent": autonomy_policy.max_memory_percent,
             "reason": "Planner and governed tool executor are not yet connected",
         }
+
+    @app.get("/api/capabilities")
+    def list_capabilities(capability_id: str | None = None) -> dict[str, Any]:
+        return {"items": capability_versions.list_versions(capability_id)}
+
+    @app.post("/api/capabilities", status_code=201)
+    def propose_capability(item: CapabilityCandidateInput) -> dict[str, Any]:
+        try:
+            candidate = capability_versions.record_candidate(**item.model_dump())
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, CapabilityLifecycleError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        observatory.record_event(
+            category="evolution",
+            event_type="capability_proposed",
+            summary=f"Capability candidate persisted: {candidate['name']} {candidate['version']}",
+            outcome="proposed",
+            layer_id="SPS-08",
+            payload={
+                "capability_id": candidate["capability_id"],
+                "version": candidate["version"],
+                "source_sha256": candidate["source_sha256"],
+                "source_kind": candidate["source_kind"],
+            },
+        )
+        return candidate
+
+    @app.get("/api/capabilities/{capability_id}/{version}")
+    def get_capability(capability_id: str, version: str) -> dict[str, Any]:
+        candidate = capability_versions.get(capability_id, version)
+        if candidate is None:
+            raise HTTPException(status_code=404, detail="Capability version not found")
+        return candidate
+
+    @app.get("/api/capabilities/{capability_id}/{version}/lineage")
+    def capability_lineage(capability_id: str, version: str) -> dict[str, Any]:
+        try:
+            items = capability_versions.lineage(capability_id, version)
+        except CapabilityLifecycleError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return {"items": items}
+
+    @app.post("/api/capabilities/{capability_id}/{version}/validate/start")
+    def begin_capability_validation(
+        capability_id: str,
+        version: str,
+    ) -> dict[str, Any]:
+        try:
+            candidate = capability_versions.begin_validation(capability_id, version)
+        except CapabilityLifecycleError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return candidate
+
+    @app.post("/api/capabilities/{capability_id}/{version}/validate")
+    def record_capability_validation(
+        capability_id: str,
+        version: str,
+        item: CapabilityValidationInput,
+    ) -> dict[str, Any]:
+        try:
+            candidate = capability_versions.record_validation(
+                capability_id,
+                version,
+                item.model_dump(),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except CapabilityLifecycleError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        observatory.record_event(
+            category="evolution",
+            event_type="capability_validation",
+            summary=f"Validation recorded for {capability_id} {version}",
+            outcome=candidate["status"],
+            layer_id="SPS-09",
+            payload={
+                "capability_id": capability_id,
+                "version": version,
+                "validation": candidate["validation"],
+            },
+        )
+        return candidate
+
+    @app.post("/api/capabilities/{capability_id}/{version}/register")
+    def register_capability(capability_id: str, version: str) -> dict[str, Any]:
+        try:
+            candidate = capability_versions.register(capability_id, version)
+        except CapabilityLifecycleError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        observatory.record_event(
+            category="evolution",
+            event_type="capability_registered",
+            summary=f"Capability registered (not activated): {capability_id} {version}",
+            outcome="registered",
+            layer_id="SPS-08",
+            payload={"capability_id": capability_id, "version": version},
+        )
+        return candidate
+
+    @app.post("/api/capabilities/{capability_id}/{version}/activate")
+    def activate_capability(capability_id: str, version: str) -> dict[str, Any]:
+        try:
+            capability_versions.activate(capability_id, version)
+        except CapabilityActivationBlocked as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=501, detail="Activation is not implemented")
 
     @app.post("/api/agent/discovery/proposals", status_code=201)
     def discover_task_proposals(item: DiscoveryBatchInput) -> dict[str, Any]:
