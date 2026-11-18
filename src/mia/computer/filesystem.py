@@ -70,7 +70,18 @@ class FilesystemAdapter:
         requested = Path(relative_path or ".")
         if requested.is_absolute():
             raise FilesystemAccessError("Use a path relative to the selected root")
-        resolved = (root / requested).resolve()
+        if ".." in requested.parts:
+            raise FilesystemAccessError("Parent-directory traversal is not allowed")
+
+        candidate = root
+        for part in requested.parts:
+            if part in {"", "."}:
+                continue
+            candidate = candidate / part
+            if candidate.is_symlink():
+                raise FilesystemAccessError("Symlink paths are not available to computer tools")
+
+        resolved = candidate.resolve()
         try:
             resolved.relative_to(root)
         except ValueError as exc:
@@ -217,11 +228,12 @@ class FilesystemAdapter:
         }
 
     def _validate_write_path(self, path: Path) -> None:
-        if path.name.casefold() in _BLOCKED_FILENAMES:
+        filename = path.name.casefold()
+        if filename in _BLOCKED_FILENAMES or filename.startswith(".env."):
             raise FilesystemAccessError("Writing credential and environment files is blocked")
         if path.suffix.casefold() in _BLOCKED_SUFFIXES:
             raise FilesystemAccessError("Writing key/certificate files is blocked")
-        if ".git" in path.parts:
+        if any(part.casefold() == ".git" for part in path.parts):
             raise FilesystemAccessError("Direct writes into Git metadata are blocked")
         if path.exists() and path.is_symlink():
             raise FilesystemAccessError("Symlink targets cannot be written")
