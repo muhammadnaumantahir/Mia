@@ -114,6 +114,14 @@ def _run(command: list[str], *, timeout: int, env: dict[str, str] | None = None)
         }
 
 
+
+def _all_security_findings(source: str, test_source: str | None) -> dict[str, list[str]]:
+    return {
+        "candidate": _security_findings(source),
+        "tests": _security_findings(test_source) if test_source is not None else [],
+    }
+
+
 def main() -> int:
     source_path = Path(os.environ["MIA_SANDBOX_SOURCE"])
     test_value = os.environ.get("MIA_SANDBOX_TEST", "")
@@ -141,8 +149,8 @@ def main() -> int:
     )
     static_passed = parse_ok and static_result["passed"]
 
-    security_findings = _security_findings(source)
-    security_passed = not security_findings
+    security_findings = _all_security_findings(source, test_source)
+    security_passed = not any(security_findings.values())
 
     if test_path is not None:
         unit_result = _run(
@@ -153,6 +161,8 @@ def main() -> int:
                 "-q",
                 "-p",
                 "no:cacheprovider",
+                "-p",
+                "pytest_asyncio.plugin",
                 str(test_path),
             ],
             timeout=120,
@@ -176,6 +186,8 @@ def main() -> int:
             "-q",
             "-p",
             "no:cacheprovider",
+            "-p",
+            "pytest_asyncio.plugin",
             "/opt/mia/tests",
         ],
         timeout=240,

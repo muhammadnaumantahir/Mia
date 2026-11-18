@@ -55,6 +55,10 @@ def test_docker_sandbox_uses_no_network_and_only_read_only_candidate_mount():
 
     run_command = next(call[0] for call in docker.calls if call[0][1] == "run")
     assert "--network=none" in run_command
+    assert "--ipc=none" in run_command
+    assert "--cgroupns=private" in run_command
+    assert "--init" in run_command
+    assert "--memory-swap=768m" in run_command
     assert "--read-only" in run_command
     assert "--cap-drop=ALL" in run_command
     assert "--security-opt=no-new-privileges:true" in run_command
@@ -98,3 +102,15 @@ def test_worker_security_policy_blocks_process_and_network_imports():
 def test_worker_security_policy_allows_simple_pure_logic():
     source = "import math\n\ndef area(radius):\n    return math.pi * radius ** 2\n"
     assert _security_findings(source) == []
+
+
+
+def test_worker_security_policy_scans_candidate_tests_too():
+    from mia.evolution.sandbox_worker import _all_security_findings
+
+    findings = _all_security_findings(
+        "def calculate(value):\n    return value + 1\n",
+        "import subprocess\n\ndef test_example():\n    assert True\n",
+    )
+    assert findings["candidate"] == []
+    assert "forbidden import: subprocess" in findings["tests"]

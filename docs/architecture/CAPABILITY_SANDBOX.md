@@ -27,6 +27,8 @@ disposable container per candidate. The container has:
 - \`--network=none\`, so candidate and test code cannot reach the internet or LAN
 - A read-only root filesystem and a single read-only bind mount containing only
   the candidate file and its test file
+- Private IPC and cgroup namespaces, an init process, and no swap beyond the
+  configured memory ceiling
 - No added Linux capabilities and \`no-new-privileges\`
 - A non-root UID/GID, a 64-process ceiling, bounded CPU and memory
 - A small no-exec temporary filesystem for pytest scratch files
@@ -35,8 +37,10 @@ disposable container per candidate. The container has:
 
 Candidate tests must be supplied as \`test_source_code\`. They import the module
 as \`candidate\`. Missing tests fail the unit-test gate. The worker runs Ruff and
-syntax parsing, a conservative AST denylist, the supplied unit tests, and Mia's
-existing regression suite. Each check's exit status and bounded output are
+syntax parsing, a conservative AST denylist against both candidate and test
+source, the supplied unit tests, and Mia's existing regression suite. Pytest
+plugin auto-discovery is disabled; only the required pytest-asyncio plugin is
+loaded explicitly. Each check's exit status and bounded output are
 stored with the source/test hashes and container image ID.
 
 ## Limitations and release gates
