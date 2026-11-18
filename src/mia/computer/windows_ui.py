@@ -71,6 +71,56 @@ class WindowsUIAdapter:
                 break
         return windows
 
+    def inspect_window(self, window_handle: int, *, limit: int = 200) -> dict[str, Any]:
+        if isinstance(window_handle, bool) or not isinstance(window_handle, int) or window_handle <= 0:
+            raise ValueError("window_handle must be a positive integer")
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 200:
+            raise ValueError("limit must be between 1 and 200")
+        desktop = self._desktop()
+        window = next(
+            (
+                candidate
+                for candidate in desktop.windows(visible_only=True)
+                if int(candidate.handle) == window_handle
+            ),
+            None,
+        )
+        if window is None:
+            raise DesktopAccessError("The target window is no longer available")
+        controls = []
+        for control in window.descendants():
+            try:
+                info = control.element_info
+                if not control.is_visible() or not control.is_enabled():
+                    continue
+                if bool(getattr(info, "is_password", False)):
+                    continue
+                control_type = str(getattr(info, "control_type", "") or "")
+                automation_id = str(getattr(info, "automation_id", "") or "")
+                name = str(getattr(info, "name", "") or "")
+                if not automation_id:
+                    continue
+                if control_type not in _ALLOWED_TEXT_CONTROLS:
+                    continue
+                controls.append({
+                    "automation_id": automation_id[:160],
+                    "control_type": control_type,
+                    "name": name[:160],
+                    "class_name": str(getattr(info, "class_name", "") or "")[:120],
+                })
+            except Exception:
+                continue
+            if len(controls) >= limit:
+                break
+        return {
+            "window_handle": window_handle,
+            "window_title": str(window.window_text() or "")[:240],
+            "process_id": int(window.process_id()),
+            "window_class": str(window.element_info.class_name or "")[:120],
+            "controls": controls,
+            "content_trust": "local_ui_metadata_not_control_text",
+        }
+
     def preview_type_text(
         self,
         *,
