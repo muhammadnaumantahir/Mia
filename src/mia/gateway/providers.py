@@ -78,7 +78,7 @@ class OllamaProvider:
         httpx = self._httpx()
         body = {
             "model": candidate.model_id,
-            "messages": [{"role": "user", "content": request.prompt}],
+            "messages": list(request.messages) or [{"role": "user", "content": request.prompt}],
             "stream": False,
             "options": {"num_predict": request.max_output_tokens},
         }
