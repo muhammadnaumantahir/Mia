@@ -1,4 +1,7 @@
-"""Local-only observatory API. Authentication is required before remote binding."""
+"""Local-only observatory and optional AI gateway API.
+
+Authentication must be implemented before any remote network binding.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +12,10 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+
+from mia.gateway.contracts import ModelRequest, PermanentProviderError, TransientProviderError
+from mia.gateway.factory import build_default_registry, paid_route_policy
+from mia.gateway.service import ModelGateway
 
 from .store import ObservatoryStore
 
@@ -47,19 +54,31 @@ class DailySnapshotInput(BaseModel):
     snapshot: dict[str, Any]
 
 
-def create_app(store: ObservatoryStore | None = None) -> FastAPI:
+class ChatInput(BaseModel):
+    prompt: str = Field(min_length=1, max_length=100_000)
+    task_type: str = Field(default="chat", min_length=1, max_length=40)
+    max_output_tokens: int = Field(default=1024, ge=1, le=8192)
+    required_capabilities: set[str] = Field(default_factory=set)
+
+
+def create_app(
+    store: ObservatoryStore | None = None,
+    gateway: ModelGateway | None = None,
+) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
+    model_gateway = gateway or ModelGateway(build_default_registry())
     app = FastAPI(
         title="Mia Evolution Observatory",
         version="0.1.0",
-        description="Local-first, evidence-backed evolution telemetry.",
+        description="Local-first, evidence-backed evolution telemetry and AI gateway.",
     )
     app.state.observatory = observatory
+    app.state.gateway = model_gateway
 
     @app.get("/health")
     def health() -> dict[str, str]:
-        return {"status": "ok", "service": "mia-observatory"}
+        return {"status": "ok", "service": "mia"}
 
     @app.get("/")
     def dashboard() -> FileResponse:
@@ -135,6 +154,82 @@ def create_app(store: ObservatoryStore | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return {"snapshot_id": snapshot_id}
+
+    @app.get("/api/gateway/providers")
+    async def providers() -> dict[str, Any]:
+        results = []
+        for provider in model_gateway.providers.values():
+            try:
+                is_healthy = await provider.health()
+                state = "online" if is_healthy else "offline"
+            except RuntimeError:
+                state = "gateway_extra_not_installed"
+            results.append({"provider_id": provider.provider_id, "status": state})
+        return {"items": results}
+
+    @app.get("/api/gateway/models")
+    async def models() -> dict[str, Any]:
+        try:
+            items = await model_gateway.discover_models()
+        except TransientProviderError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return {
+            "items": [
+                {
+                    "provider_id": item.provider_id,
+                    "model_id": item.model_id,
+                    "capabilities": sorted(item.capabilities),
+                    "context_window": item.context_window,
+                    "free_tier": item.free_tier,
+                    "healthy": item.healthy,
+                }
+                for item in items
+            ]
+        }
+
+    @app.post("/api/gateway/chat")
+    async def chat(item: ChatInput) -> dict[str, Any]:
+        try:
+            candidates = await model_gateway.discover_models()
+            result = await model_gateway.complete(
+                ModelRequest(
+                    task_type=item.task_type,
+                    prompt=item.prompt,
+                    estimated_input_tokens=max(1, len(item.prompt) // 4),
+                    max_output_tokens=item.max_output_tokens,
+                    required_capabilities=frozenset(item.required_capabilities),
+                ),
+                candidates,
+                paid_route_policy(),
+            )
+        except TransientProviderError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except PermanentProviderError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+        observatory.record_event(
+            category="ai_gateway",
+            event_type="completion",
+            summary=f"Completed {item.task_type} request with {result.provider_id}/{result.model_id}",
+            outcome="success",
+            payload={
+                "provider_id": result.provider_id,
+                "model_id": result.model_id,
+                "attempted_candidates": list(result.attempted_candidates),
+            },
+        )
+        return {
+            "provider_id": result.provider_id,
+            "model_id": result.model_id,
+            "content": result.content,
+            "attempted_candidates": list(result.attempted_candidates),
+        }
 
     return app
 
