@@ -76,8 +76,10 @@ CPU/RAM values. It never creates zero-valued placeholders. If Mia was offline,
 missing day indices are recorded as unavailable and only the current verified
 day is stored. The dashboard enables **Capture today's evidence** only when a daily snapshot
 is due. It refreshes due state while open and records missed offline days as
-unavailable. Capture remains a manual action in this release; a local
-always-on scheduler and missed-day notifications remain future work.
+unavailable. Manual capture remains available; the optional host scheduler
+below can also capture due days when explicitly enabled. If the final day's
+capture window expires, the run becomes terminally incomplete rather than
+being reported as completed.
 
 
 ## Automatic daily capture scheduler

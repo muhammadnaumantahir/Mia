@@ -4,7 +4,7 @@
 
 Mia is designed to converse by voice and text, work with the computer through controlled tools, research and manage knowledge, execute multi-step tasks, and improve its own capabilities through a measurable, governed evolution process.
 
-> **Project status:** Research and foundation bootstrap. This repository does not yet claim that the full assistant, autonomous runtime, computer-control suite, or 30-day experiment is complete.
+> **Project status:** Active implementation, not release-ready. The repository does not claim that full multi-step autonomy, unrestricted computer control, safe capability activation, or a completed 30-day experiment is ready.
 
 ## Product principles
 
@@ -93,7 +93,7 @@ To connect an already-running **self-hosted** FreeLLMAPI at its default localhos
 
 For local CPU/RAM telemetry and automatic daily experiment capture, install the optional `monitoring` extra. The default scheduler is off unless `MIA_EXPERIMENT_AUTO_CAPTURE=true` is present in `.env`.
 
-The Evolution Observatory includes a **Capability Lab** where Mia can draft pure-Python source and tests through a free-only model route. Review the draft, save an immutable candidate, run the local Docker validation pipeline, and register only passing versions. Registered code remains inactive; no hot-load or rollback is implied. Recent conversations are stored locally and can be restored from the sidebar. The assistant's **Task Desk** lets you ask the model for reviewable task proposals, approve/reject them and track their state. A built-in CPU/RAM check demonstrates the manually approved, read-only task runner; free-form task descriptions are never interpreted as commands, and preview/mutation tools remain on their separate approval-card flow. Long-term notes and research documents can be added through the memory API; external content is tagged untrusted by default. See [Memory and Knowledge](docs/architecture/MEMORY_AND_KNOWLEDGE.md).\n\nThe Evolution Observatory can capture an immutable Day 0 baseline on the local Mia host after verifying a clean Git checkout, Ruff, and the full pytest suite. Starting the 30-day experiment is a separate manual action. With MIA_EXPERIMENT_AUTO_CAPTURE=true, Mia then checks for due daily snapshots while the local server is running, subject to CPU/RAM limits. The observatory displays actual SQLite events and metric samples; it does not generate sample growth data. The server binds to localhost by default.
+The Evolution Observatory includes a **Capability Lab** where Mia can draft pure-Python source and tests through a free-only model route. Review the draft, save an immutable candidate, run the local Docker validation pipeline, and register only passing versions. Registered code remains inactive; no hot-load or rollback is implied. Recent conversations are stored locally and can be restored from the sidebar. The assistant's **Task Desk** lets you ask the model for reviewable task proposals, approve/reject them and track their state. Manual execution supports registered read-only tools. Optional background dispatch is off by default (MIA_AUTONOMY_ENABLED=false); when explicitly enabled, it only runs already owner-approved system resource, process and allowlisted-application inventory checks. Unsupported tasks remain queued; filesystem, browser, desktop and every preview/mutation operation stay on their separate manual approval flows. Free-form task descriptions are never interpreted as commands. Long-term notes and research documents can be added through the memory API; external content is tagged untrusted by default. See [Memory and Knowledge](docs/architecture/MEMORY_AND_KNOWLEDGE.md).\n\nThe Evolution Observatory can capture an immutable Day 0 baseline on the local Mia host after verifying a clean Git checkout, Ruff, and the full pytest suite. Starting the 30-day experiment is a separate manual action. With MIA_EXPERIMENT_AUTO_CAPTURE=true, Mia then checks for due daily snapshots while the local server is running, subject to CPU/RAM limits. The observatory displays actual SQLite events and metric samples; it does not generate sample growth data. The server binds to localhost by default.
 
 ## Development roadmap
 
@@ -105,9 +105,9 @@ The Evolution Observatory includes a **Capability Lab** where Mia can draft pure
 | 3. Voice | Push-to-talk, local STT and installed browser/OS speech voices | In progress |
 | 4. Computer intelligence | Scoped filesystem, approved app launch and isolated public-web browser | In progress |
 | 5. Memory and knowledge | Persistent conversations, FTS5 knowledge and source-aware document ingestion | In progress |
-| 6. Autonomous agent | Task lifecycle, evidence-backed proposals and resource-gated dispatcher primitive | Foundation in progress |
+| 6. Autonomous agent | Task Desk, manual read-only execution and opt-in background dispatch for approved system-inspection tasks | Partial implementation; multi-step execution, restart recovery, broader governed tools and target-device verification remain |
 | 7. Self-programming | Candidate versioning, lineage, validation/registration APIs; activation blocked | Foundation in progress |
-| 8. 30-day experiment | Immutable baseline, daily snapshots, fixed benchmarks and final evaluation | Planned |
+| 8. 30-day experiment | Immutable Day 0, explicit start, host-verified daily snapshots and optional resource-aware scheduler | Implementation awaiting owner-host verification; no real 30-day run or final report exists yet |
 
 Phases are quality gates, not calendar promises. A phase is not complete until its documented exit criteria and tests pass. See [the complete roadmap](docs/ROADMAP.md).
 
