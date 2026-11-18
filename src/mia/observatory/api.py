@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from mia.agent.discovery import DiscoveryFinding, WorkloadDiscovery
 from mia.agent.tasks import AutonomyPolicy, TaskCoordinator, TaskStore, TaskTransitionError
 from mia.agent.tools import ToolRegistry, ToolResult
+from mia.agent.resources import ResourceMonitor
 from mia.computer.approvals import ApprovalError, ApprovalStore
 from mia.computer.applications import ApplicationLaunchError, ApplicationLauncher
 from mia.computer.browser import BrowserAccessError, BrowserController
@@ -185,6 +186,7 @@ def create_app(
     browser: BrowserController | None = None,
     task_store: TaskStore | None = None,
     capability_store: CapabilityStore | None = None,
+    resource_monitor: ResourceMonitor | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -236,6 +238,8 @@ def create_app(
         data_dir / "workspace" / "generated_code",
     )
     app.state.capabilities = capability_versions
+    system_resources = resource_monitor or ResourceMonitor()
+    app.state.resource_monitor = system_resources
 
     tool_registry = ToolRegistry()
 
@@ -299,6 +303,14 @@ def create_app(
 
     def tool_applications_list(args: dict[str, Any]) -> ToolResult:
         return ToolResult({"items": app_launcher.list_applications()})
+
+    def tool_system_resources(args: dict[str, Any]) -> ToolResult:
+        return ToolResult(system_resources.snapshot())
+
+    def tool_system_processes(args: dict[str, Any]) -> ToolResult:
+        return ToolResult({
+            "items": system_resources.list_processes(limit=args.get("limit", 50))
+        })
 
     async def tool_browser_search(args: dict[str, Any]) -> ToolResult:
         result = await browser_controller.search(args["query"])
@@ -447,6 +459,24 @@ def create_app(
         "process.inspect",
         "read",
         tool_applications_list,
+    )
+    register_tool(
+        "system.read_resources",
+        "Read current CPU and RAM usage. No process command lines or environment variables are exposed.",
+        {"type": "object", "properties": {}},
+        [],
+        "system.inspect",
+        "read",
+        tool_system_resources,
+    )
+    register_tool(
+        "system.list_processes",
+        "List running process IDs, names and statuses only. No command lines, paths or environment values are exposed.",
+        {"limit": {"type": "integer", "minimum": 1, "maximum": 100}},
+        [],
+        "process.inspect",
+        "read",
+        tool_system_processes,
     )
     register_tool(
         "browser.search_web",
@@ -1222,6 +1252,20 @@ def create_app(
             payload={"approval_id": approval_id, "kind": item.kind},
         )
         return {"status": "completed", "kind": item.kind, "result": result}
+
+    @app.get("/api/system/resources")
+    def system_resources() -> dict[str, Any]:
+        try:
+            return system_resources.snapshot()
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.get("/api/system/processes")
+    def system_processes(limit: int = 50) -> dict[str, Any]:
+        try:
+            return {"items": system_resources.list_processes(limit=limit)}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     @app.get("/api/tools")
     def list_tools() -> dict[str, Any]:

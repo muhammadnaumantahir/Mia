@@ -58,3 +58,10 @@ The task executor is injected as a callback. The current HTTP API does not expos
 ## Autonomy experiment rule
 
 A self-assessment can propose work without user input, but a proposal is not permission to mutate the computer. Low-risk internal read-only tests may later be auto-approved under a narrow owner policy. File writes, application launches, browser interactions, external communication, system changes and capability activation retain their own permission and approval requirements.
+
+
+## Current system-resource tools
+
+The optional `computer` extra installs psutil. The local API and model tool registry can read CPU percentage, RAM percentage/availability and a bounded process list containing only PID, process name and status. They do not expose command lines, process environments, executable paths or credentials. This is observational only; process termination and process launching outside the curated application allowlist are not implemented.
+
+The autonomy dispatcher still does not run a background loop. Real resource snapshots are available to the control plane, but no automatic tasks are dispatched yet.
