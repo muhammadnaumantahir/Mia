@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
-from mia.computer.approvals import ApprovalStore
 from mia.computer.applications import ApplicationDefinition, ApplicationLauncher
+from mia.computer.approvals import ApprovalStore
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
 

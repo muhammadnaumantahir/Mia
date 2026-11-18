@@ -1,7 +1,7 @@
 import json
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
 from mia.agent.tasks import TaskStore
 from mia.observatory.api import create_app
@@ -223,6 +223,7 @@ def test_manual_task_execution_respects_global_emergency_stop(tmp_path, monkeypa
 @pytest.mark.asyncio
 async def test_cancelled_execution_request_marks_running_task_cancelled(tmp_path):
     import asyncio
+
     import httpx
 
     from mia.agent.resources import ResourceMonitor
@@ -235,10 +236,11 @@ async def test_cancelled_execution_request_marks_running_task_cancelled(tmp_path
     )
 
     class BlockingExecutor:
-        def validate(self, task):
+        def validate_steps(self, task):
             assert task["status"] == "approved"
+            return [("system.read_resources", {})]
 
-        async def execute(self, task):
+        async def execute(self, task, *, should_continue=None):
             await asyncio.Event().wait()
 
     app.state.task_tool_executor = BlockingExecutor()

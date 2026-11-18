@@ -147,7 +147,6 @@ class ApprovalStore:
         return {"approval_id": approval_id, "status": "approved", "summary": summary}
 
     def reject(self, approval_id: str) -> dict[str, str]:
-        now = _now().isoformat()
         with self._connection() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute(

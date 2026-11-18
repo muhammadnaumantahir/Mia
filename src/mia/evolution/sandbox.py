@@ -7,8 +7,9 @@ import json
 import subprocess
 import tempfile
 import uuid
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 
 class SandboxUnavailableError(RuntimeError):

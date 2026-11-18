@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import os
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 from threading import Lock
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
 
 class SpeechSynthesisError(RuntimeError):

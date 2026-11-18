@@ -16,7 +16,6 @@ from typing import Any
 
 from .sandbox_worker import _security_findings
 
-
 MAX_INPUT_BYTES = 32 * 1024
 MAX_OUTPUT_BYTES = 64 * 1024
 

@@ -10,8 +10,8 @@ import asyncio
 import hashlib
 import json
 import os
-from collections.abc import Callable
-from datetime import UTC, datetime
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -33,8 +33,8 @@ from mia.agent.tasks import (
     TaskTransitionError,
 )
 from mia.agent.tools import ToolRegistry, ToolResult
+from mia.computer.applications import ApplicationLauncher, ApplicationLaunchError
 from mia.computer.approvals import ApprovalError, ApprovalStore
-from mia.computer.applications import ApplicationLaunchError, ApplicationLauncher
 from mia.computer.browser import BrowserAccessError, BrowserController
 from mia.computer.filesystem import FilesystemAccessError, FilesystemAdapter
 from mia.computer.windows_ui import DesktopAccessError, WindowsUIAdapter
@@ -49,10 +49,15 @@ from mia.evolution.sandbox import (
     SandboxUnavailableError,
 )
 from mia.evolution.sandbox_worker import _all_security_findings
-from mia.gateway.contracts import ModelRequest, PermanentProviderError, RoutePolicy, TransientProviderError
+from mia.gateway.contracts import (
+    ModelRequest,
+    PermanentProviderError,
+    RoutePolicy,
+    TransientProviderError,
+)
 from mia.gateway.factory import build_default_registry, paid_route_policy
 from mia.gateway.service import ModelGateway
-from mia.knowledge.document_ingestion import DocumentIngestor, DocumentIngestionError
+from mia.knowledge.document_ingestion import DocumentIngestionError, DocumentIngestor
 from mia.memory.store import MemoryStore
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider
 from mia.voice.tts import Pyttsx3SpeechSynthesizer, SpeechSynthesisError, SpeechSynthesizer
@@ -235,7 +240,27 @@ def create_app(
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
     model_gateway = gateway or ModelGateway(build_default_registry())
+    startup_handlers: list[Callable[[], Any]] = []
+    shutdown_handlers: list[Callable[[], Any]] = []
+
+    async def _call_handler(handler: Callable[[], Any]) -> None:
+        if asyncio.iscoroutinefunction(handler):
+            await handler()
+        else:
+            await run_in_threadpool(handler)
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        for startup in startup_handlers:
+            await _call_handler(startup)
+        try:
+            yield
+        finally:
+            for shutdown in reversed(shutdown_handlers):
+                await _call_handler(shutdown)
+
     app = FastAPI(
+        lifespan=lifespan,
         title="Mia Evolution Observatory",
         version="0.1.0",
         description="Local-first, evidence-backed evolution telemetry and AI gateway.",
@@ -299,7 +324,7 @@ def create_app(
                 payload={"task_count": len(recovered)},
             )
 
-    app.add_event_handler("startup", recover_interrupted_task_runs)
+    startup_handlers.append(recover_interrupted_task_runs)
 
     capability_versions = capability_store or CapabilityStore(
         data_dir / "mia-capabilities.sqlite3",
@@ -338,8 +363,8 @@ def create_app(
     async def stop_experiment_snapshot_scheduler() -> None:
         await experiment_snapshot_scheduler.stop()
 
-    app.add_event_handler("startup", start_experiment_snapshot_scheduler)
-    app.add_event_handler("shutdown", stop_experiment_snapshot_scheduler)
+    startup_handlers.append(start_experiment_snapshot_scheduler)
+    shutdown_handlers.append(stop_experiment_snapshot_scheduler)
 
     def register_tool(name, description, properties, required, permission, mode, handler):
         tool_registry.register(
@@ -782,8 +807,8 @@ def create_app(
                 layer_id="SPS-10",
             )
 
-    app.add_event_handler("startup", start_autonomy_runtime)
-    app.add_event_handler("shutdown", stop_autonomy_runtime)
+    startup_handlers.append(start_autonomy_runtime)
+    shutdown_handlers.append(stop_autonomy_runtime)
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -2113,7 +2138,7 @@ def create_app(
             raise
         except Exception as exc:
             try:
-                failed = durable_tasks.transition(
+                durable_tasks.transition(
                     task_id,
                     "failed",
                     reason="Read-only task execution failed",

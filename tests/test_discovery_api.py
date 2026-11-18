@@ -1,8 +1,8 @@
 from fastapi.testclient import TestClient
 
+from mia.agent.tasks import TaskStore
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
-from mia.agent.tasks import TaskStore
 
 
 def test_discovery_api_records_proposals_without_approving(tmp_path):

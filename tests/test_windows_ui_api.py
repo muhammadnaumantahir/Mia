@@ -9,6 +9,17 @@ from mia.observatory.store import ObservatoryStore
 class FakeControl:
     def __init__(self):
         self.text = None
+        self.element_info = type(
+            "ControlInfo",
+            (),
+            {
+                "control_type": "Edit",
+                "automation_id": "editor",
+                "name": "Document",
+                "class_name": "Edit",
+                "is_password": False,
+            },
+        )()
 
     def is_visible(self):
         return True
@@ -36,6 +47,9 @@ class FakeWindow:
 
     def set_focus(self):
         pass
+
+    def descendants(self):
+        return [self.control]
 
     def child_window(self, *, auto_id, control_type):
         assert auto_id == "editor"

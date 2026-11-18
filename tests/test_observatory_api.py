@@ -178,8 +178,8 @@ def test_completed_experiment_report_compares_verified_day_zero_and_final(tmp_pa
 
 
 def test_incomplete_experiment_report_never_claims_completion(tmp_path):
-    from datetime import UTC, datetime, timedelta
     import sqlite3
+    from datetime import UTC, datetime, timedelta
 
     store = ObservatoryStore(tmp_path / "incomplete-report.sqlite3")
     prepared = store.prepare_experiment(
@@ -238,6 +238,7 @@ def test_report_api_rejects_tampered_snapshot_evidence(tmp_path):
         },
     )
     with sqlite3.connect(store.database_path) as db:
+        db.execute("DROP TRIGGER immutable_snapshot_update")
         db.execute(
             "UPDATE daily_snapshots SET snapshot_json = ? WHERE experiment_id = ?",
             ('{"tampered": true}', experiment_id),
@@ -262,6 +263,9 @@ def test_report_api_rejects_tampered_day_zero_baseline(tmp_path):
     )
     experiment_id = prepared["experiment_id"]
     with sqlite3.connect(store.database_path) as db:
+        # Simulate an attacker with raw database access: the immutability trigger
+        # blocks ordinary writes, so the report verifier must catch trigger removal.
+        db.execute("DROP TRIGGER immutable_baseline_update")
         db.execute(
             "UPDATE experiment_baselines SET manifest_json = ? WHERE experiment_id = ?",
             ('{"tampered": true}', experiment_id),

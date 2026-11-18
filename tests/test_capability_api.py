@@ -1,15 +1,12 @@
 import hashlib
 
 import pytest
-
 from fastapi.testclient import TestClient
 
 from mia.agent.resources import ResourceMonitor
 from mia.evolution.capabilities import CapabilityStore
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
-
-
 
 
 class FakePsutil:

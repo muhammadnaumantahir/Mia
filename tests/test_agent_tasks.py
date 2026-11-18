@@ -1,4 +1,5 @@
 import json
+
 from mia.agent.tasks import (
     AutonomyPolicy,
     RuntimeLoad,
@@ -128,6 +129,7 @@ def test_dispatcher_rejects_non_object_executor_result(tmp_path):
 
 def test_runtime_load_rejects_non_finite_or_out_of_range_values():
     import math
+
     import pytest
 
     with pytest.raises(ValueError, match="cpu_percent"):
