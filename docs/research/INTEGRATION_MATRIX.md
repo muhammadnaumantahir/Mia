@@ -12,7 +12,7 @@ Status values: Candidate = researched but not integrated; Approved for prototype
 | Voice/device interface | 01 | Study only | AGPL-3.0 | Copyleft review; upstream README safety warning |
 | Speech-to-text | Faster-Whisper | Optional local adapter | MIT | CPU int8 benchmark; language accuracy; memory |
 | Wake-word detection | openWakeWord | Optional local adapter | Apache-2.0 | Model license; false-positive and missed-wake test |
-| Text-to-speech | Piper | Optional external process candidate | GPL-3.0 | Distribution obligations; each voice model license |
+| Text-to-speech | Kokoro-82M | Primary candidate for local TTS proof of concept | Apache-2.0 model weights; package metadata also Apache-2.0 | PyTorch/Transformers footprint; voice asset license; actual English/Urdu quality and CPU benchmark |\n| Text-to-speech alternative | Piper | Optional external process candidate | GPL-3.0 | Distribution obligations; each voice model license |
 | Browser control | Playwright Python | Browser adapter candidate | Apache-2.0 | Profile isolation; download controls; domain policy |
 
 ## Initial dependency strategy
