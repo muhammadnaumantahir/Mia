@@ -197,7 +197,15 @@ def test_experiment_prepare_api_captures_baseline_instead_of_trusting_client(
     assert calls[0].is_absolute()
     assert response.json()["status"] == "prepared"
     assert response.json()["baseline_results"]["passed"] == 6
+    assert response.json()["baseline_results"]["ruff_passed"] is True
     assert len(store.list_snapshots(response.json()["experiment_id"])) == 1
+    events = store.list_events(limit=10)
+    assert any(event["event_type"] == "day0_baseline_prepared" for event in events)
+    baseline = client.get(
+        f"/api/experiments/{response.json()['experiment_id']}/baseline"
+    )
+    assert baseline.status_code == 200
+    assert baseline.json()["baseline_sha256"] == response.json()["baseline_sha256"]
 
 
 def test_experiment_prepare_api_does_not_prepare_when_local_baseline_fails(tmp_path):
@@ -245,3 +253,29 @@ def test_local_baseline_capture_strips_secret_environment_values(tmp_path, monke
     runner = FakeSubprocess()
     capture_baseline_manifest(tmp_path, subprocess_run=runner)
     assert all("MIA_TEST_TOKEN" not in call[1]["env"] for call in runner.calls[2:])
+
+
+
+def test_experiment_start_is_explicit_and_records_event(tmp_path):
+    store = ObservatoryStore(tmp_path / "observatory.sqlite3")
+    client = TestClient(
+        create_app(
+            store=store,
+            baseline_capture=lambda repo_root: _baseline_manifest(),
+        )
+    )
+    prepared = client.post(
+        "/api/experiments/prepare",
+        json={"name": "Explicit start", "planned_days": 30},
+    )
+    assert prepared.status_code == 201
+    experiment_id = prepared.json()["experiment_id"]
+    assert store.list_experiments()[0]["status"] == "prepared"
+
+    started = client.post(f"/api/experiments/{experiment_id}/start")
+    assert started.status_code == 200
+    assert store.list_experiments()[0]["status"] == "running"
+    assert any(
+        event["event_type"] == "experiment_started"
+        for event in store.list_events(limit=10)
+    )

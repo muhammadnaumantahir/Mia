@@ -53,3 +53,14 @@ A larger capability count is not evidence of intelligence. A model's self-report
 - Mark missing days as paused, unavailable or not run, not as zero-performance days.
 - Export JSON/CSV and a final reproducibility manifest.
 - Dashboard empty states must remain empty; never insert invented sample values.
+
+
+## Day 0 capture and explicit start
+
+The dashboard captures Day 0 on the computer hosting Mia, not on a GitHub
+runner. Capture requires a clean Git working tree, records the full source
+commit and an allow-listed configuration fingerprint, runs Ruff and the full
+pytest suite with common credential environment variables removed, and stores
+test counts, exit codes and output hashes. A failed lint/test run creates no
+experiment. The baseline is immutable. The separate **Start experiment**
+action is required before Day 1; capturing Day 0 does not start autonomous work.

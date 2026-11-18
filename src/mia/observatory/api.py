@@ -688,6 +688,16 @@ def create_app(
     def experiments() -> dict[str, Any]:
         return {"items": observatory.list_experiments()}
 
+    @app.get("/api/experiments/{experiment_id}/baseline")
+    def experiment_baseline(experiment_id: str) -> dict[str, Any]:
+        try:
+            baseline = observatory.get_baseline(experiment_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        if baseline is None:
+            raise HTTPException(status_code=404, detail="Experiment baseline not found")
+        return baseline
+
     @app.get("/api/experiments/{experiment_id}/snapshots")
     def snapshots(experiment_id: str) -> dict[str, Any]:
         known_ids = {
@@ -720,6 +730,22 @@ def create_app(
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        observatory.record_event(
+            category="experiment",
+            event_type="day0_baseline_prepared",
+            summary=f"Verified Day 0 baseline captured for {item.name}",
+            outcome="prepared",
+            day_index=0,
+            experiment_id=prepared["experiment_id"],
+            layer_id="SPS-09",
+            payload={
+                "baseline_sha256": prepared["baseline_sha256"],
+                "source_commit": manifest["source_commit"],
+                "benchmark_suite_id": manifest["benchmark_suite_id"],
+                "tests": manifest["baseline_results"]["tests"],
+                "ruff_passed": manifest["baseline_results"]["ruff_passed"],
+            },
+        )
         return {
             **prepared,
             "source_commit": manifest["source_commit"],
@@ -734,6 +760,16 @@ def create_app(
             observatory.start_experiment(experiment_id)
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        observatory.record_event(
+            category="experiment",
+            event_type="experiment_started",
+            summary=f"Explicit experiment start: {experiment_id}",
+            outcome="running",
+            day_index=0,
+            experiment_id=experiment_id,
+            layer_id="SPS-09",
+            payload={"started_by": "local-dashboard"},
+        )
         return {"experiment_id": experiment_id, "status": "running"}
 
     @app.post("/api/experiments/{experiment_id}/snapshots", status_code=201)

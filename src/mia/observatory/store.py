@@ -330,6 +330,31 @@ class ObservatoryStore:
             """).fetchall()
         return [dict(row) for row in rows]
 
+    def get_baseline(self, experiment_id: str) -> dict[str, Any] | None:
+        with self._connection() as db:
+            row = db.execute(
+                """
+                SELECT captured_at, manifest_sha256, manifest_json
+                FROM experiment_baselines
+                WHERE experiment_id = ?
+                """,
+                (experiment_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        manifest_json = row["manifest_json"]
+        if sha256_text(manifest_json) != row["manifest_sha256"]:
+            raise ValueError("stored Day 0 baseline hash does not match its manifest")
+        try:
+            manifest = json.loads(manifest_json)
+        except json.JSONDecodeError as exc:
+            raise ValueError("stored Day 0 baseline manifest is invalid") from exc
+        return {
+            "captured_at": row["captured_at"],
+            "baseline_sha256": row["manifest_sha256"],
+            "manifest": manifest,
+        }
+
     def list_snapshots(self, experiment_id: str) -> list[dict[str, Any]]:
         with self._connection() as db:
             rows = db.execute("""

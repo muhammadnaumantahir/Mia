@@ -19,7 +19,7 @@ select{background:#10191b;color:#dce9e4;border:1px solid #35514a;border-radius:1
 .events{display:grid;gap:10px}.event{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid #253436;padding:10px 0}.event:last-child{border-bottom:0}
 .event strong{display:block;font-size:13px;font-weight:600}.event small{display:block;color:#829890;margin-top:5px}.tag{font-size:11px;color:#9ce4c4;border:1px solid #315b4d;background:#122820;border-radius:999px;padding:5px 9px;height:max-content}
 footer{margin-top:24px;color:#6f8580;font-size:11px;line-height:1.6}
-.resource-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.resource-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.experiment-form{display:grid;gap:12px;margin:4px 0 12px}.experiment-fields{display:grid;grid-template-columns:minmax(0,2fr) minmax(110px,1fr);gap:9px}.experiment-field{display:grid;gap:5px}.experiment-field label{font-size:11px;color:#9db2aa;font-weight:650}.experiment-field input{min-width:0;width:100%;background:#10191b;color:#dce9e4;border:1px solid #35514a;border-radius:9px;padding:10px;font:inherit;font-size:12px}.experiment-actions{display:flex;gap:8px;flex-wrap:wrap}.experiment-actions button:disabled{opacity:.45;cursor:not-allowed}.experiment-notice{font-size:11px;line-height:1.55;color:#9acbb3;min-height:18px}.experiment-notice.error{color:#f0b7a8}.experiment-details{font-size:11px;color:#849c92;line-height:1.6;overflow-wrap:anywhere}.experiment-details code{color:#b4d9c6}
 .resource-card{background:#10191b;border:1px solid #283d3a;border-radius:12px;padding:13px}
 .resource-card .resource-value{font-size:22px;font-weight:750;letter-spacing:-.6px;margin-top:5px;color:#d9ede5}
 .resource-card small{color:#829890;font-size:11px}
@@ -30,7 +30,7 @@ footer{margin-top:24px;color:#6f8580;font-size:11px;line-height:1.6}
 @media(max-width:440px){.cap-fields{grid-template-columns:1fr}.cap-card-head{align-items:flex-start;flex-direction:column}}
 @media(max-width:600px){.resource-grid{grid-template-columns:1fr}}
 @media(max-width:760px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hero{display:block}header{align-items:flex-start}.status{white-space:normal}}
-@media(max-width:440px){.shell{padding:22px 14px}.grid{gap:9px}.kpi{padding:14px}.kpi strong{font-size:23px}.panel{padding:14px}}
+@media(max-width:440px){.shell{padding:22px 14px}.grid{gap:9px}.kpi{padding:14px}.kpi strong{font-size:23px}.panel{padding:14px}.experiment-fields{grid-template-columns:1fr}}
 </style></head>
 <body><main class="shell">
 <header><div class="brand"><div class="mark">M</div><div><h1>Mia</h1><div class="sub">Evolution Observatory</div></div></div><div class="status" id="status">Local telemetry · awaiting baseline</div></header>
@@ -40,6 +40,18 @@ footer{margin-top:24px;color:#6f8580;font-size:11px;line-height:1.6}
 <article class="kpi"><label>Metric samples</label><strong id="samples">—</strong><small>Actual benchmark / runtime data</small></article>
 <article class="kpi"><label>Latest experiment day</label><strong id="day">—</strong><small>Day index, not elapsed uptime</small></article>
 <article class="kpi"><label>Experiment status</label><strong id="experiment">Not started</strong><small>Baseline required before Day 1</small></article>
+</section>
+<section class="panel" id="experimentControl">
+<div class="panelhead"><div><h3>30-day experiment · Day 0</h3><div class="muted">Capture a verified baseline on this computer. Starting the experiment is a separate action.</div></div><span class="tag" id="experimentControlState">Not prepared</span></div>
+<form id="experimentForm" class="experiment-form">
+ <div class="experiment-fields">
+  <div class="experiment-field"><label for="experimentName">Experiment name</label><input id="experimentName" value="Mia 30-day experiment" maxlength="120" required></div>
+  <div class="experiment-field"><label for="plannedDays">Planned days</label><input id="plannedDays" type="number" min="1" max="365" value="30" required></div>
+ </div>
+ <div class="experiment-actions"><button class="send" id="captureBaseline" type="submit">Capture & freeze Day 0</button><button class="send" id="startExperiment" type="button" disabled style="background:#263535;color:#d8e2dd">Start experiment</button></div>
+</form>
+<div class="experiment-notice" id="experimentNotice" role="status" aria-live="polite">No Day 0 baseline has been captured on this computer.</div>
+<div class="experiment-details" id="experimentDetails"></div>
 </section>
 <section class="panel"><div class="panelhead"><div><h3>Measured growth over time</h3><div class="muted">Select one metric to preserve its original unit and scale.</div></div><select id="metric" aria-label="Select metric"><option value="">No metrics yet</option></select></div>
 <div id="chartEmpty" class="empty">No benchmark or metric samples have been recorded yet.<br>Complete and freeze the Day 0 baseline to begin the experiment.</div><canvas id="chart" hidden></canvas></section>
@@ -114,6 +126,79 @@ async function load(){
   select.onchange=()=>draw(select.value);renderEvents(e.items||[]);
  }catch(error){el('status').textContent='API unavailable · start Mia server';}
 }
+let activeExperiment=null;
+function setExperimentNotice(message,isError=false){
+ const box=el('experimentNotice');box.textContent=message;box.classList.toggle('error',isError);
+}
+async function loadExperimentControl(){
+ const capture=el('captureBaseline'),start=el('startExperiment');
+ try{
+  const response=await fetch('/api/experiments');
+  const data=await response.json();if(!response.ok)throw new Error(data.detail||'Experiment status unavailable');
+  const items=data.items||[];
+  activeExperiment=items.find(item=>item.status==='running')||items.find(item=>item.status==='prepared')||null;
+  if(!activeExperiment){
+   el('experimentControlState').textContent='Not prepared';
+   capture.disabled=false;start.disabled=true;
+   el('experimentDetails').textContent='No verified Day 0 baseline exists yet. Capture it on the local machine after committing the source and installing Mia development dependencies.';
+   setExperimentNotice('Day 0 is not captured. Capture runs Ruff and the full local pytest suite; no sample data is created.');
+   return;
+  }
+  const baselineResponse=await fetch('/api/experiments/'+encodeURIComponent(activeExperiment.experiment_id)+'/baseline');
+  const baseline=await baselineResponse.json();if(!baselineResponse.ok)throw new Error(baseline.detail||'Stored baseline unavailable');
+  const manifest=baseline.manifest||{},results=manifest.baseline_results||{};
+  const running=activeExperiment.status==='running';
+  el('experimentControlState').textContent=running?'Running':'Baseline frozen';
+  capture.disabled=true;start.disabled=running;
+  el('experimentName').value=activeExperiment.name||'Mia 30-day experiment';
+  el('plannedDays').value=String(activeExperiment.planned_days||30);
+  el('experimentDetails').replaceChildren();
+  const line=document.createElement('div');
+  const source=document.createElement('code');source.textContent=manifest.source_commit||'unknown';
+  const hash=document.createElement('code');hash.textContent=baseline.baseline_sha256||'unknown';
+  line.append('Source commit: ',source,' · Day 0 SHA-256: ',hash);
+  const resultsLine=document.createElement('div');
+  resultsLine.textContent='Tests: '+String(results.passed??0)+' / '+String(results.tests??0)+' passed · Ruff: '+(results.ruff_passed?'passed':'not passed')+' · Captured: '+String(baseline.captured_at||'');
+  const environment=document.createElement('div');
+  environment.textContent='Machine: '+String(manifest.environment?.os||'')+' · Python '+String(manifest.environment?.python||'')+' · '+String(manifest.environment?.machine||'');
+  el('experimentDetails').append(line,resultsLine,environment);
+  setExperimentNotice(running?'Experiment is running. Day 0 remains immutable.':'Day 0 is verified and frozen. Click Start experiment separately to begin Day 1.');
+ }catch(error){
+  activeExperiment=null;capture.disabled=false;start.disabled=true;
+  setExperimentNotice(error.message,true);
+ }
+}
+el('experimentForm').addEventListener('submit',async event=>{
+ event.preventDefault();
+ const button=el('captureBaseline');
+ if(activeExperiment){setExperimentNotice('An experiment is already prepared or running.',true);return;}
+ const name=el('experimentName').value.trim(),planned_days=Number(el('plannedDays').value);
+ if(!name||!Number.isInteger(planned_days)||planned_days<1||planned_days>365){
+  setExperimentNotice('Enter a valid experiment name and planned duration.',true);return;
+ }
+ button.disabled=true;setExperimentNotice('Capturing Day 0 on this computer: checking Git status, running Ruff, and running all tests…');
+ el('experimentDetails').textContent='';
+ try{
+  const response=await fetch('/api/experiments/prepare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,planned_days})});
+  const result=await response.json();
+  if(!response.ok)throw new Error(typeof result.detail==='string'?result.detail:JSON.stringify(result.detail||'Day 0 capture failed'));
+  activeExperiment={experiment_id:result.experiment_id,status:'prepared',name,planned_days};
+  await loadExperimentControl();
+  setExperimentNotice('Day 0 captured and frozen. Review the source hash and baseline checks, then start separately.');
+ }catch(error){setExperimentNotice(error.message,true);}
+ finally{button.disabled=false;}
+});
+el('startExperiment').addEventListener('click',async()=>{
+ if(!activeExperiment||activeExperiment.status!=='prepared')return;
+ const button=el('startExperiment');button.disabled=true;
+ setExperimentNotice('Starting the experiment…');
+ try{
+  const response=await fetch('/api/experiments/'+encodeURIComponent(activeExperiment.experiment_id)+'/start',{method:'POST'});
+  const result=await response.json();if(!response.ok)throw new Error(result.detail||'Experiment could not start');
+  await Promise.all([loadExperimentControl(),load()]);
+  setExperimentNotice('Experiment started. Day 0 remains frozen.');
+ }catch(error){setExperimentNotice(error.message,true);button.disabled=false;}
+});
 function draw(name){
  const rows=metricItems.filter(x=>x.metric_name===name).sort((a,b)=>a.day_index-b.day_index);
  const canvas=el('chart'),ctx=canvas.getContext('2d'),rect=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;
@@ -391,4 +476,5 @@ loadTasks();
 loadCapabilities();
 loadSystemResources();
 window.setInterval(loadSystemResources,15000);
+loadExperimentControl();
 </script></body></html>
