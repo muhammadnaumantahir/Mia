@@ -15,7 +15,7 @@
 | 3. Voice | In progress | Push-to-talk, local Faster-Whisper STT and browser TTS; target-PC benchmark and verified feminine voice remain |
 | 4. Computer intelligence | In progress | Scoped filesystem, approval-bound writes, allowlisted app launch, browser and Windows visible-window/text-control adapter; stronger OS sandbox and target-PC verification remain |
 | 5. Memory and knowledge | In progress | Persistent conversations, FTS5 memory, provenance labels and document parsers; parser integration/export/retention tests remain |
-| 6. Autonomous agent | Runtime primitive added | Explicit-start single-worker scheduler, pause/resume, emergency stop, resource-gated dispatch and approval-wait preservation. Production planner, governed executor and API lifecycle wiring remain |
+| 6. Autonomous agent | Planning proposals + runtime primitive | Free-first model-assisted planner exposed at POST /api/planning/propose; it creates reviewable proposals only, rejects tool calls and never auto-approves. Explicit-start scheduler, pause/resume, emergency stop and resource-gated dispatch exist; governed executor and background API lifecycle remain |
 | 7. Self-programming | Foundation in progress | Candidate source, lineage, validation/registration APIs; isolated worker, activation and rollback remain |
 | 8. 30-day experiment | Planned | No Day 0 baseline captured. Start only after sandbox, fixed benchmarks and reproducible environment manifest are ready |
 
@@ -23,7 +23,7 @@
 
 - Last known fully green CI commit: 19c3fde9d110611a648c9a168b7841a0d035db75 on Windows and Ubuntu with Python 3.13.
 - Recent Actions failures returned runner ID 0 with no steps/logs. These are inconclusive and do not prove code failure or success.
-- The newly added scheduler tests have not yet been confirmed by a successful CI run.
+- The planner and scheduler regression tests have not yet been confirmed by a successful CI run.
 - Windows UI adapter has mocked contract tests but has not been exercised against real desktop apps on the owner's PC.
 
 ## Not complete

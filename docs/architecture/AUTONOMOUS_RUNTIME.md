@@ -15,11 +15,12 @@ AutonomyPolicy and call start().
 - pause() prevents future cycles. It does not forcibly terminate an in-flight
   executor call; executors must enforce their own operation timeouts.
 - Emergency stop blocks new claims immediately. It is not a substitute for
-- operating-system process isolation or a killable worker.
+  operating-system process isolation or a killable worker.
 
 ## Current limitation
 
-This module is a scheduler primitive, not yet a complete autonomous planner.
-The API does not start it automatically and the production governed executor
-has not yet been connected. Do not enable background autonomy until that
+The scheduler is a runtime primitive, not yet a complete autonomous executor.
+The local API exposes AI-assisted task proposal generation separately; those
+proposals remain in the proposed state and require owner approval. The scheduler
+is not started by the API, and the production governed executor has not yet been connected. Do not enable background autonomy until that
 executor, OS sandbox, authentication boundary, and Windows/Linux tests are ready.
