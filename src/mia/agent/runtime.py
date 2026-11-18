@@ -75,7 +75,16 @@ class AutonomyRuntime:
             with self._state_lock:
                 self._last_result = result
             if self.on_cycle is not None:
-                self.on_cycle(result)
+                try:
+                    self.on_cycle(result)
+                except Exception as exc:
+                    # Observability must never terminate task scheduling.
+                    result = {
+                        **result,
+                        "observability_error": type(exc).__name__,
+                    }
+                    with self._state_lock:
+                        self._last_result = result
             return result
         finally:
             self._cycle_lock.release()

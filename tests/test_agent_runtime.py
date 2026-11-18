@@ -63,3 +63,25 @@ def test_runtime_resource_failure_pauses_without_claiming(tmp_path):
     assert result["status"] == "paused"
     assert result["reason"] == "resource_or_policy_error"
     assert tasks.get_task(task_id)["status"] == "approved"
+
+    
+def test_observability_callback_failure_does_not_fail_completed_task(tmp_path):
+    tasks = TaskStore(tmp_path / "tasks.sqlite3")
+    task_id = tasks.create_task(
+        title="Complete despite telemetry issue",
+        goal="Finish the approved bounded task.",
+        source="internal_test",
+    )
+    tasks.transition(task_id, "approved", reason="Owner approved")
+    runtime = AutonomyRuntime(
+        tasks=tasks,
+        monitor=ResourceMonitor(psutil_module=FakePsutil()),
+        policy=AutonomyPolicy(enabled=True),
+        executor=lambda task: {"ok": True},
+        on_cycle=lambda result: (_ for _ in ()).throw(RuntimeError("storage offline")),
+    )
+
+    result = runtime.run_cycle()
+    assert result["status"] == "completed"
+    assert result["observability_error"] == "RuntimeError"
+    assert tasks.get_task(task_id)["status"] == "completed"
