@@ -17,6 +17,7 @@ async def test_ollama_lists_models_and_completes_locally():
             json={"models": [{"name": "qwen-small:latest"}]},
         )
     )
+    respx.post("http://127.0.0.1:11434/api/show").mock(return_value=httpx.Response(404))
     respx.post("http://127.0.0.1:11434/api/chat").mock(
         return_value=httpx.Response(
             200,
@@ -25,6 +26,7 @@ async def test_ollama_lists_models_and_completes_locally():
     )
     provider = OllamaProvider()
     models = await provider.list_models()
+    assert models[0].context_window == 8192  # /api/show unavailable: conservative default
     response = await provider.complete(
         models[0],
         ModelRequest(task_type="chat", prompt="Say hello"),
@@ -175,3 +177,44 @@ async def test_openai_compatible_adapter_returns_structured_tool_calls():
     request_json = httpx.Response(200, content=route.calls[0].request.content).json()
     assert request_json["tool_choice"] == "auto"
     assert request_json["tools"][0]["function"]["name"] == "filesystem.list_directory"
+
+
+def _show(models):
+    def handler(request):
+        import json as _json
+
+        name = _json.loads(request.content)["model"]
+        return httpx.Response(200, json=models[name]) if name in models else httpx.Response(500)
+
+    return handler
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_ollama_discovers_context_length_and_capabilities():
+    respx.get("http://127.0.0.1:11434/api/tags").mock(return_value=httpx.Response(
+        200, json={"models": [{"name": "big"}, {"name": "vis"}, {"name": "broken"}]}))
+    respx.post("http://127.0.0.1:11434/api/show").mock(side_effect=_show({
+        "big": {"model_info": {"llama.context_length": 131072},
+                "capabilities": ["completion", "tools"]},
+        "vis": {"model_info": {"general.architecture": "x", "x.context_length": 4096},
+                "capabilities": ["completion", "vision"]},
+    }))
+    models = {m.model_id: m for m in await OllamaProvider(supports_tools=True).list_models()}
+    assert models["big"].context_window == 131072 and "tools" in models["big"].capabilities
+    assert models["vis"].context_window == 4096
+    assert "vision" in models["vis"].capabilities and "tools" not in models["vis"].capabilities
+    assert models["broken"].context_window == 8192  # one failing /api/show does not hide the model
+    assert "tools" in models["broken"].capabilities  # no report: owner opt-in decides
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_ollama_tool_capability_stays_owner_gated_and_rejects_bad_context():
+    respx.get("http://127.0.0.1:11434/api/tags").mock(
+        return_value=httpx.Response(200, json={"models": [{"name": "m"}]}))
+    respx.post("http://127.0.0.1:11434/api/show").mock(return_value=httpx.Response(
+        200, json={"model_info": {"llama.context_length": -5}, "capabilities": ["tools"]}))
+    (model,) = await OllamaProvider(supports_tools=False).list_models()
+    assert "tools" not in model.capabilities  # model supports it, owner has not enabled it
+    assert model.context_window == 8192  # negative value ignored

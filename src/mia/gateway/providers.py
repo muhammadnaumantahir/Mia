@@ -17,6 +17,9 @@ from .contracts import (
     TransientProviderError,
 )
 
+_DEFAULT_CONTEXT = 8192
+_MAX_DETAIL_MODELS = 30
+
 
 def _count(value: Any) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
@@ -91,27 +94,60 @@ class OllamaProvider:
             raise PermanentProviderError("Ollama returned invalid model metadata") from exc
 
         candidates = []
-        for item in payload.get("models", []):
-            model_name = item.get("name") or item.get("model")
-            if not model_name:
-                continue
-            candidates.append(
-                ModelCandidate(
-                    provider_id=self.provider_id,
-                    model_id=str(model_name),
-                    capabilities=frozenset(
-                        {"chat", "tools"} if self.supports_tools else {"chat"}
-                    ),
-                    context_window=8192,
-                    free_tier=True,
-                    data_local=True,
-                    healthy=True,
-                    enabled=True,
-                    reliability_score=0.5,
-                    latency_ms=10_000.0,
+        async with httpx.AsyncClient(timeout=10.0) as detail_client:
+            for item in list(payload.get("models", []))[:_MAX_DETAIL_MODELS]:
+                model_name = item.get("name") or item.get("model")
+                if not model_name:
+                    continue
+                context_window, reported = await self._model_details(
+                    detail_client, str(model_name)
                 )
-            )
+                capabilities = {"chat"}
+                # Tool calling stays owner-gated; when Ollama reports a capability
+                # list, the model must also advertise tools.
+                if self.supports_tools and (reported is None or "tools" in reported):
+                    capabilities.add("tools")
+                if reported and "vision" in reported:
+                    capabilities.add("vision")
+                candidates.append(
+                    ModelCandidate(
+                        provider_id=self.provider_id,
+                        model_id=str(model_name),
+                        capabilities=frozenset(capabilities),
+                        context_window=context_window,
+                        free_tier=True,
+                        data_local=True,
+                        healthy=True,
+                        enabled=True,
+                        reliability_score=0.5,
+                        latency_ms=10_000.0,
+                    )
+                )
         return candidates
+
+    async def _model_details(self, client: Any, model_name: str) -> tuple[int, set[str] | None]:
+        """Read real context length and capabilities; fall back to conservative defaults."""
+        default = (_DEFAULT_CONTEXT, None)
+        try:
+            response = await client.post(f"{self.base_url}/api/show", json={"model": model_name})
+            response.raise_for_status()
+            info = response.json()
+        except (self._httpx().HTTPError, ValueError):
+            return default
+        if not isinstance(info, dict):
+            return default
+        context = _DEFAULT_CONTEXT
+        model_info = info.get("model_info")
+        if isinstance(model_info, dict):
+            for key, value in model_info.items():
+                if str(key).endswith(".context_length"):
+                    count = _count(value)
+                    if count and count >= 512:
+                        context = count
+                    break
+        caps = info.get("capabilities")
+        reported = {str(c) for c in caps} if isinstance(caps, list) else None
+        return context, reported
 
     async def complete(
         self,

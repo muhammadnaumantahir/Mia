@@ -478,6 +478,13 @@ async function refreshProviders(){
   $('providerState').textContent=online.length?'Available: '+online.join(', '):'No AI provider online';
  }catch(e){$('providerState').textContent='AI status unavailable';}
  try{
+  const r=await fetch('/api/gateway/usage?days=30');const u=await r.json();
+  if(r.ok){
+   $('providerState').textContent+=' · spent today $'+u.spent_today_utc_usd.toFixed(4);
+   $('providerState').title='Last '+u.window_days+' days: '+u.total_requests+' requests, '+u.total_input_tokens+' in / '+u.total_output_tokens+' out tokens, $'+u.total_cost_usd.toFixed(4)+'\n'+(u.items||[]).map(i=>i.provider_id+'/'+i.model_id+': '+i.requests+' req, $'+i.cost_usd.toFixed(4)+(i.estimated_token_rows?' ('+i.estimated_token_rows+' estimated)':'')).join('\n');
+  }
+ }catch(e){}
+ try{
   const r=await fetch('/api/voice/status');const data=await r.json();
   $('mic').title=data.speech_to_text==='ready'?'Local speech recognition ready':'Install the optional voice extra: pip install -e ".[voice]"';
  }catch(e){}

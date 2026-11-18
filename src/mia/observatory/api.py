@@ -2585,6 +2585,7 @@ def create_app(
                     "capabilities": sorted(item.capabilities),
                     "context_window": item.context_window,
                     "free_tier": item.free_tier,
+                    "data_local": item.data_local,
                     "healthy": item.healthy,
                 }
                 for item in items
