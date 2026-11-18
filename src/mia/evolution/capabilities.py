@@ -92,6 +92,8 @@ class CapabilityStore:
                     permissions_json TEXT NOT NULL,
                     source_sha256 TEXT NOT NULL,
                     source_path TEXT NOT NULL,
+                    test_sha256 TEXT,
+                    test_source_path TEXT,
                     status TEXT NOT NULL,
                     validation_json TEXT,
                     created_at TEXT NOT NULL,
@@ -118,6 +120,14 @@ class CapabilityStore:
                 CREATE INDEX IF NOT EXISTS idx_capability_events_lineage
                 ON capability_events(capability_id, version, occurred_at);
             """)
+            columns = {
+                row["name"]
+                for row in db.execute("PRAGMA table_info(capability_versions)").fetchall()
+            }
+            if "test_sha256" not in columns:
+                db.execute("ALTER TABLE capability_versions ADD COLUMN test_sha256 TEXT")
+            if "test_source_path" not in columns:
+                db.execute("ALTER TABLE capability_versions ADD COLUMN test_source_path TEXT")
 
     def record_candidate(
         self,
@@ -133,6 +143,7 @@ class CapabilityStore:
         upstream_uri: str | None = None,
         license_id: str | None = None,
         permissions: list[str] | None = None,
+        test_source_code: str | None = None,
     ) -> dict[str, Any]:
         cap_id = capability_id.strip().lower()
         if not _CAPABILITY_ID.fullmatch(cap_id):
@@ -155,6 +166,12 @@ class CapabilityStore:
         if any(not item or len(item) > 100 for item in safe_permissions):
             raise ValueError("permissions must be non-empty strings of at most 100 characters")
         source_hash = hashlib.sha256(encoded).hexdigest()
+        test_encoded = test_source_code.encode("utf-8") if test_source_code is not None else None
+        if test_encoded is not None and (
+            not test_encoded or len(test_encoded) > self.MAX_SOURCE_BYTES
+        ):
+            raise ValueError("test source must be 1-512 KB")
+        test_hash = hashlib.sha256(test_encoded).hexdigest() if test_encoded else None
 
         if (parent_id is None) != (parent_version is None):
             raise ValueError("parent_id and parent_version must be supplied together")
@@ -177,6 +194,10 @@ class CapabilityStore:
         target_path.relative_to(self.workspace)
         if target_path.exists():
             raise FileExistsError("capability version source already exists and is immutable")
+        test_target_path = (target_dir / f"{version}.test.py").resolve()
+        test_target_path.relative_to(self.workspace)
+        if test_target_path.exists():
+            raise FileExistsError("capability test source already exists and is immutable")
 
         with tempfile.NamedTemporaryFile(
             mode="wb",
@@ -188,10 +209,28 @@ class CapabilityStore:
             temp_file.write(encoded)
             temp_path = Path(temp_file.name)
 
+        test_temp_path: Path | None = None
         try:
             os.replace(temp_path, target_path)
+            if test_encoded is not None:
+                with tempfile.NamedTemporaryFile(
+                    mode="wb",
+                    dir=target_dir,
+                    prefix=".candidate-test-",
+                    suffix=".tmp",
+                    delete=False,
+                ) as test_temp_file:
+                    test_temp_file.write(test_encoded)
+                    test_temp_path = Path(test_temp_file.name)
+                os.replace(test_temp_path, test_target_path)
+        except Exception:
+            target_path.unlink(missing_ok=True)
+            test_target_path.unlink(missing_ok=True)
+            raise
         finally:
             temp_path.unlink(missing_ok=True)
+            if test_temp_path is not None:
+                test_temp_path.unlink(missing_ok=True)
 
         now = _now()
         permissions_json = json.dumps(safe_permissions)
@@ -211,9 +250,10 @@ class CapabilityStore:
                 INSERT INTO capability_versions (
                     capability_id, version, name, parent_id, parent_version,
                     rationale, source_kind, upstream_uri, license_id,
-                    permissions_json, source_sha256, source_path, status,
-                    validation_json, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', NULL, ?, ?)
+                    permissions_json, source_sha256, source_path,
+                    test_sha256, test_source_path, status, validation_json,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', NULL, ?, ?)
                 """,
                 (
                     cap_id,
@@ -228,6 +268,8 @@ class CapabilityStore:
                     permissions_json,
                     source_hash,
                     str(target_path),
+                    test_hash,
+                    str(test_target_path) if test_hash else None,
                     now,
                     now,
                 ),
@@ -239,7 +281,11 @@ class CapabilityStore:
                 from_status=None,
                 to_status="proposed",
                 reason="Candidate source persisted without execution",
-                payload={"source_sha256": source_hash, "source_kind": source_kind},
+                payload={
+                    "source_sha256": source_hash,
+                    "test_sha256": test_hash,
+                    "source_kind": source_kind,
+                },
             )
         return self.get(cap_id, version) or {}
 
@@ -264,18 +310,22 @@ class CapabilityStore:
                 "report must contain boolean static_checks, unit_tests, "
                 "security_checks and regression_tests"
             )
-        passed = all(report[key] for key in _VALIDATION_KEYS)
-        new_status = "validated" if passed else "rejected"
-        report_copy = dict(report)
-        report_copy["passed"] = passed
-        report_copy["recorded_at"] = _now()
-        report_json = _canonical(report_copy)
+
+        evidence = report.get("evidence")
+        if not isinstance(evidence, dict):
+            raise ValueError("validation report must include sandbox evidence")
+        if evidence.get("runner") != "docker-isolated-v1":
+            raise ValueError("validation report must originate from the Docker sandbox")
+        image_id = evidence.get("image_id")
+        if not isinstance(image_id, str) or not image_id.startswith("sha256:"):
+            raise ValueError("validation report must include an immutable sandbox image ID")
 
         with self._connection() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute(
                 """
-                SELECT status FROM capability_versions
+                SELECT status, source_sha256, test_sha256
+                FROM capability_versions
                 WHERE capability_id = ? AND version = ?
                 """,
                 (capability_id, version),
@@ -284,6 +334,19 @@ class CapabilityStore:
                 raise CapabilityLifecycleError("capability version not found")
             if row["status"] != "validating":
                 raise CapabilityLifecycleError("capability is not awaiting validation")
+            if evidence.get("source_sha256") != row["source_sha256"]:
+                raise ValueError("validation evidence source hash does not match the stored candidate")
+            if evidence.get("test_sha256") != row["test_sha256"]:
+                raise ValueError("validation evidence test hash does not match the stored tests")
+            if report["unit_tests"] and not row["test_sha256"]:
+                raise ValueError("unit_tests cannot pass without immutable candidate test source")
+
+            passed = all(report[key] for key in _VALIDATION_KEYS)
+            new_status = "validated" if passed else "rejected"
+            report_copy = dict(report)
+            report_copy["passed"] = passed
+            report_copy["recorded_at"] = _now()
+            report_json = _canonical(report_copy)
             now = _now()
             db.execute(
                 """
@@ -299,7 +362,7 @@ class CapabilityStore:
                 version=version,
                 from_status="validating",
                 to_status=new_status,
-                reason="Validation report recorded",
+                reason="Docker sandbox validation report recorded",
                 payload=report_copy,
             )
         return self.get(capability_id, version) or {}
@@ -380,6 +443,19 @@ class CapabilityStore:
         source = path.read_text(encoding="utf-8")
         if hashlib.sha256(source.encode("utf-8")).hexdigest() != item["source_sha256"]:
             raise CapabilityLifecycleError("persisted source hash does not match registry")
+        return source
+
+    def read_test_source(self, capability_id: str, version: str) -> str:
+        item = self.get(capability_id, version)
+        if item is None:
+            raise CapabilityLifecycleError("capability version not found")
+        if not item["test_source_path"] or not item["test_sha256"]:
+            raise CapabilityLifecycleError("candidate has no immutable test source")
+        path = Path(item["test_source_path"]).resolve()
+        path.relative_to(self.workspace)
+        source = path.read_text(encoding="utf-8")
+        if hashlib.sha256(source.encode("utf-8")).hexdigest() != item["test_sha256"]:
+            raise CapabilityLifecycleError("persisted test source hash does not match registry")
         return source
 
     def _transition(
