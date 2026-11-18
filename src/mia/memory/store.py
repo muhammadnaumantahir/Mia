@@ -9,7 +9,7 @@ import sqlite3
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -373,6 +373,67 @@ class MemoryStore:
             db.execute("DELETE FROM memory_fts WHERE item_id = ?", (item_id,))
             db.execute("DELETE FROM memory_items WHERE item_id = ?", (item_id,))
         return True
+
+    def purge_older_than(
+        self,
+        days: int,
+        *,
+        conversations: bool = True,
+        items: bool = True,
+        dry_run: bool = True,
+    ) -> dict[str, Any]:
+        """Owner-triggered retention. Selects by last update older than `days`.
+
+        Defaults to a dry run that deletes nothing. Real deletion is one
+        transaction covering messages, items and their search index rows.
+        """
+        if isinstance(days, bool) or not isinstance(days, int) or days < 1:
+            raise ValueError("days must be an integer of at least 1")
+        cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
+        result: dict[str, Any] = {
+            "cutoff": cutoff,
+            "dry_run": dry_run,
+            "conversations": {"count": 0, "sample": []},
+            "items": {"count": 0, "sample": []},
+        }
+        with self._connection() as db:
+            if conversations:
+                rows = db.execute(
+                    "SELECT conversation_id, title FROM conversations WHERE updated_at < ?"
+                    " ORDER BY updated_at",
+                    (cutoff,),
+                ).fetchall()
+                result["conversations"] = {
+                    "count": len(rows),
+                    "sample": [
+                        {"id": r["conversation_id"], "title": r["title"]} for r in rows[:20]
+                    ],
+                }
+                if not dry_run:
+                    for row in rows:
+                        db.execute(
+                            "DELETE FROM conversation_messages WHERE conversation_id = ?",
+                            (row["conversation_id"],),
+                        )
+                        db.execute(
+                            "DELETE FROM conversations WHERE conversation_id = ?",
+                            (row["conversation_id"],),
+                        )
+            if items:
+                rows = db.execute(
+                    "SELECT item_id, title FROM memory_items WHERE updated_at < ?"
+                    " ORDER BY updated_at",
+                    (cutoff,),
+                ).fetchall()
+                result["items"] = {
+                    "count": len(rows),
+                    "sample": [{"id": r["item_id"], "title": r["title"]} for r in rows[:20]],
+                }
+                if not dry_run:
+                    for row in rows:
+                        db.execute("DELETE FROM memory_fts WHERE item_id = ?", (row["item_id"],))
+                        db.execute("DELETE FROM memory_items WHERE item_id = ?", (row["item_id"],))
+        return result
 
     @staticmethod
     def _decode_item(row: sqlite3.Row) -> dict[str, Any]:

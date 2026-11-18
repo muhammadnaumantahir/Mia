@@ -55,3 +55,8 @@ SQLite FTS5 provides local full-text search. The database does not require a clo
 ## Office document parser boundary
 
 DOCX, XLSX and PPTX are ZIP-based containers. Before an optional parser is loaded, Mia inspects the archive directory and rejects encrypted entries, malformed ZIP containers, excessive entry counts, individual members above 64 MB, total expanded content above 128 MB, and compression ratios above 200:1 for members larger than 1 MB. These limits reduce archive-expansion risk but do not replace parser sandboxing or target-device security testing. Imported document content remains untrusted regardless of parser validation.
+
+## Retention and bulk deletion
+
+`POST /api/memory/purge` lets the owner remove conversations and/or knowledge items whose last update is older than `older_than_days` (minimum 1). It never runs automatically. The default is `dry_run: true`, which returns counts and up to 20 sample titles per kind without deleting anything; deletion requires an explicit `dry_run: false`. A real purge runs in one transaction (messages, items and their full-text index rows) and records a `retention_purge` Observatory event with counts only. There is no automatic expiry, and the Observatory event log and usage ledger are not touched. A UI for this control is not built yet.
+

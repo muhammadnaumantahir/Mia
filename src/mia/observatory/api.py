@@ -222,6 +222,14 @@ class ChatInput(BaseModel):
     use_tools: bool = True
 
 
+class MemoryPurgeInput(BaseModel):
+    older_than_days: int = Field(ge=1, le=36500)
+    include_conversations: bool = True
+    include_knowledge: bool = True
+    # Deletion needs an explicit dry_run=false; the default only previews.
+    dry_run: bool = True
+
+
 class MemoryItemInput(BaseModel):
     kind: str = Field(default="note", min_length=1, max_length=40)
     title: str = Field(min_length=1, max_length=200)
@@ -2294,6 +2302,32 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"item_id": item_id}
+
+    @app.post("/api/memory/purge")
+    def purge_memory(item: MemoryPurgeInput) -> dict[str, Any]:
+        result = memory_store.purge_older_than(
+            item.older_than_days,
+            conversations=item.include_conversations,
+            items=item.include_knowledge,
+            dry_run=item.dry_run,
+        )
+        if not item.dry_run:
+            observatory.record_event(
+                category="memory",
+                event_type="retention_purge",
+                summary=(
+                    f"Owner purged {result['conversations']['count']} conversations and "
+                    f"{result['items']['count']} knowledge items older than "
+                    f"{item.older_than_days} days"
+                ),
+                outcome="success",
+                payload={
+                    "older_than_days": item.older_than_days,
+                    "conversations": result["conversations"]["count"],
+                    "items": result["items"]["count"],
+                },
+            )
+        return result
 
     @app.delete("/api/memory/items/{item_id}")
     def delete_memory_item(item_id: str) -> dict[str, bool]:
