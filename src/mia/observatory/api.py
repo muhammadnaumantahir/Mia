@@ -1128,6 +1128,22 @@ def create_app(
     def delete_memory_item(item_id: str) -> dict[str, bool]:
         return {"deleted": memory_store.delete_item(item_id)}
 
+    @app.post("/api/approvals/{approval_id}/reject")
+    def reject_action_approval(approval_id: str) -> dict[str, str]:
+        try:
+            result = approval_store.reject(approval_id)
+        except ApprovalError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        observatory.record_event(
+            category="computer",
+            event_type="action_rejected",
+            summary=f"Rejected proposed action: {result['summary']}",
+            outcome="rejected",
+            layer_id="SPS-02",
+            payload={"approval_id": approval_id},
+        )
+        return result
+
     @app.post("/api/approvals/{approval_id}/execute")
     async def execute_approved_action(
         approval_id: str,
