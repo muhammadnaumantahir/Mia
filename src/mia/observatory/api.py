@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -51,6 +52,7 @@ from mia.gateway.factory import build_default_registry, paid_route_policy
 from mia.gateway.service import ModelGateway
 from mia.knowledge.document_ingestion import DocumentIngestor, DocumentIngestionError
 from mia.memory.store import MemoryStore
+from .baseline import BaselineCaptureError, capture_baseline_manifest
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider
 
 from .store import ObservatoryStore
@@ -139,7 +141,6 @@ class MetricInput(BaseModel):
 class ExperimentPreparation(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     planned_days: int = Field(default=30, ge=1, le=365)
-    baseline_manifest: dict[str, Any]
 
 
 class DailySnapshotInput(BaseModel):
@@ -219,6 +220,7 @@ def create_app(
     resource_monitor: ResourceMonitor | None = None,
     windows_ui: WindowsUIAdapter | None = None,
     sandbox_runner: DockerSandboxRunner | None = None,
+    baseline_capture: Callable[[str | Path], dict[str, Any]] | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -229,6 +231,8 @@ def create_app(
         description="Local-first, evidence-backed evolution telemetry and AI gateway.",
     )
     app.state.observatory = observatory
+    baseline_capture_service = baseline_capture or capture_baseline_manifest
+    app.state.baseline_capture = baseline_capture_service
     app.state.gateway = model_gateway
     speech_to_text = transcriber or FasterWhisperTranscriber(data_dir=data_dir)
     app.state.transcriber = speech_to_text
@@ -694,15 +698,35 @@ def create_app(
         return {"items": observatory.list_snapshots(experiment_id)}
 
     @app.post("/api/experiments/prepare", status_code=201)
-    def prepare_experiment(item: ExperimentPreparation) -> dict[str, str]:
+    async def prepare_experiment(item: ExperimentPreparation) -> dict[str, Any]:
+        repo_root = Path(__file__).resolve().parents[3]
         try:
-            return observatory.prepare_experiment(
+            manifest = await run_in_threadpool(baseline_capture_service, repo_root)
+        except BaselineCaptureError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        if manifest.get("verification_passed") is not True:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": "Local Day 0 benchmark suite did not pass; no experiment was prepared",
+                    "baseline_results": manifest.get("baseline_results", {}),
+                },
+            )
+        try:
+            prepared = observatory.prepare_experiment(
                 name=item.name,
-                baseline_manifest=item.baseline_manifest,
+                baseline_manifest=manifest,
                 planned_days=item.planned_days,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {
+            **prepared,
+            "source_commit": manifest["source_commit"],
+            "benchmark_suite_id": manifest["benchmark_suite_id"],
+            "baseline_results": manifest["baseline_results"],
+            "environment": manifest["environment"],
+        }
 
     @app.post("/api/experiments/{experiment_id}/start")
     def start_experiment(experiment_id: str) -> dict[str, str]:

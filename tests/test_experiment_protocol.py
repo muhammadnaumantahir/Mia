@@ -8,10 +8,24 @@ from mia.observatory.store import ObservatoryStore
 def baseline_manifest():
     return {
         "source_commit": "0123456789abcdef0123456789abcdef01234567",
-        "configuration_hash": "sha256:configuration-baseline",
+        "configuration_hash": "sha256:" + "a" * 64,
         "benchmark_suite_id": "mia-foundation-v1",
-        "environment": {"os": "Windows", "python": "3.13"},
-        "baseline_results": {"checks": 12, "passed": 12, "failed": 0},
+        "environment": {
+            "os": "Windows",
+            "python": "3.13",
+            "platform": "Windows-test-platform",
+            "machine": "AMD64",
+        },
+        "baseline_results": {
+            "tests": 6,
+            "passed": 6,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0,
+            "pytest_exit_code": 0,
+            "capture_method": "local-host-pytest-v1",
+            "capture_host": "test-machine",
+        },
         "verification_passed": True,
     }
 
@@ -78,3 +92,25 @@ def test_only_one_experiment_can_be_prepared_or_running(tmp_path):
             name="Second",
             baseline_manifest=baseline_manifest(),
         )
+
+
+def test_experiment_rejects_client_claim_without_local_benchmark_evidence(tmp_path):
+    store = ObservatoryStore(tmp_path / "experiment.sqlite3")
+    invalid = baseline_manifest()
+    invalid["baseline_results"] = {
+        "checks": 12,
+        "passed": 12,
+        "failed": 0,
+    }
+    with pytest.raises(ValueError, match="local pytest evidence"):
+        store.prepare_experiment(name="No fake baseline", baseline_manifest=invalid)
+
+
+def test_experiment_rejects_skipped_local_baseline_checks(tmp_path):
+    store = ObservatoryStore(tmp_path / "experiment.sqlite3")
+    invalid = baseline_manifest()
+    invalid["baseline_results"]["skipped"] = 1
+    invalid["baseline_results"]["passed"] = 5
+    invalid["baseline_results"]["tests"] = 6
+    with pytest.raises(ValueError, match="fully passing"):
+        store.prepare_experiment(name="Skipped baseline", baseline_manifest=invalid)

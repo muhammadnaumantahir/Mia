@@ -158,8 +158,49 @@ class ObservatoryStore:
             raise ValueError(f"baseline manifest is missing: {', '.join(missing)}")
         if baseline_manifest["verification_passed"] is not True:
             raise ValueError("baseline verification must pass before preparation")
-        if not isinstance(baseline_manifest["baseline_results"], (dict, list)):
-            raise ValueError("baseline_results must contain recorded test results")
+        source_commit = baseline_manifest["source_commit"]
+        if (
+            not isinstance(source_commit, str)
+            or len(source_commit) not in {40, 64}
+            or any(char not in "0123456789abcdef" for char in source_commit)
+        ):
+            raise ValueError("source_commit must be a full lowercase Git commit hash")
+        configuration_hash = baseline_manifest["configuration_hash"]
+        if (
+            not isinstance(configuration_hash, str)
+            or not configuration_hash.startswith("sha256:")
+            or len(configuration_hash) != 71
+            or any(char not in "0123456789abcdef" for char in configuration_hash[7:])
+        ):
+            raise ValueError("configuration_hash must be a SHA-256 digest")
+        if baseline_manifest["benchmark_suite_id"] != "mia-foundation-v1":
+            raise ValueError("baseline must use the fixed mia-foundation-v1 suite")
+        environment = baseline_manifest["environment"]
+        if not isinstance(environment, dict) or not all(
+            isinstance(environment.get(key), str) and environment[key]
+            for key in ("os", "python", "platform", "machine")
+        ):
+            raise ValueError("environment must record local OS, Python, platform and machine")
+        results = baseline_manifest["baseline_results"]
+        result_keys = {
+            "tests", "passed", "failures", "errors", "skipped",
+            "pytest_exit_code", "capture_method", "capture_host",
+        }
+        if not isinstance(results, dict) or not result_keys.issubset(results):
+            raise ValueError("baseline_results must include the local pytest evidence")
+        if (
+            not isinstance(results["tests"], int)
+            or results["tests"] < 1
+            or results["passed"] != results["tests"]
+            or results["failures"] != 0
+            or results["errors"] != 0
+            or results["skipped"] != 0
+            or results["pytest_exit_code"] != 0
+            or results["capture_method"] != "local-host-pytest-v1"
+            or not isinstance(results["capture_host"], str)
+            or not results["capture_host"]
+        ):
+            raise ValueError("baseline must contain a fully passing local-host benchmark run")
 
         experiment_id = uuid.uuid4().hex
         captured_at = utc_now()
