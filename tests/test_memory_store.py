@@ -76,3 +76,18 @@ def test_memory_export_includes_conversations_provenance_and_checksum(tmp_path):
         digest_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")
     assert exported["sha256"] == hashlib.sha256(canonical).hexdigest()
+
+
+
+def test_memory_export_rejects_payload_over_configured_size_limit(tmp_path, monkeypatch):
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    store.add_item(
+        kind="note",
+        title="Oversized export test",
+        content="This export must be rejected when the cap is smaller than its payload.",
+    )
+    monkeypatch.setattr(MemoryStore, "MAX_EXPORT_BYTES", 32)
+
+    import pytest
+    with pytest.raises(ValueError, match="25 MB safety limit"):
+        store.export_data()
