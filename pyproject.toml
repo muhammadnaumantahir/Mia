@@ -35,9 +35,6 @@ voice = [
 voice-wake = [
   "openwakeword>=0.6,<1",
 ]
-voice-wake = [
-  "openwakeword>=0.6,<1",
-]
 computer = [
   "playwright>=1.48,<2",
   'pywinauto>=0.6.9,<1; platform_system == "Windows"',
