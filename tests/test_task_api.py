@@ -1,3 +1,5 @@
+import pytest
+
 from fastapi.testclient import TestClient
 
 from mia.agent.tasks import TaskStore
@@ -215,3 +217,59 @@ def test_manual_task_execution_respects_global_emergency_stop(tmp_path, monkeypa
     assert response.status_code == 503
     assert response.json()["detail"] == "Emergency stop is active"
     assert tasks.get_task(task_id)["status"] == "approved"
+
+
+@pytest.mark.asyncio
+async def test_cancelled_execution_request_marks_running_task_cancelled(tmp_path):
+    import asyncio
+    import httpx
+
+    from mia.agent.resources import ResourceMonitor
+
+    tasks = TaskStore(tmp_path / "tasks.sqlite3")
+    app = create_app(
+        store=ObservatoryStore(tmp_path / "observatory.sqlite3"),
+        task_store=tasks,
+        resource_monitor=ResourceMonitor(psutil_module=FakePsutil()),
+    )
+
+    class BlockingExecutor:
+        def validate(self, task):
+            assert task["status"] == "approved"
+
+        async def execute(self, task):
+            await asyncio.Event().wait()
+
+    app.state.task_tool_executor = BlockingExecutor()
+    task_id = tasks.create_task(
+        title="Cancelable read task",
+        goal="Wait for a cancellation signal.",
+        source="interactive",
+        metadata={
+            "execution": {
+                "tool_name": "system.read_resources",
+                "arguments": {},
+            }
+        },
+    )
+    tasks.transition(task_id, "approved", reason="Owner approved the task")
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://mia.test") as client:
+        request = asyncio.create_task(client.post(f"/api/tasks/{task_id}/execute"))
+        for _ in range(100):
+            if tasks.get_task(task_id)["status"] == "running":
+                break
+            await asyncio.sleep(0.01)
+        assert tasks.get_task(task_id)["status"] == "running"
+        request.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await request
+
+    assert tasks.get_task(task_id)["status"] == "cancelled"
+    assert [event["to_status"] for event in tasks.list_events(task_id)] == [
+        "proposed",
+        "approved",
+        "running",
+        "cancelled",
+    ]

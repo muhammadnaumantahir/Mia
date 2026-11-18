@@ -5,6 +5,7 @@ Authentication must be implemented before any remote network binding.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from pathlib import Path
@@ -1235,7 +1236,7 @@ def create_app(
             raise HTTPException(status_code=409, detail="Task must be approved before execution")
 
         try:
-            task_tool_executor.validate(task)
+            app.state.task_tool_executor.validate(task)
         except TaskExecutionError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -1269,7 +1270,28 @@ def create_app(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
         try:
-            outcome = await task_tool_executor.execute(claimed)
+            outcome = await app.state.task_tool_executor.execute(claimed)
+        except asyncio.CancelledError:
+            try:
+                durable_tasks.transition(
+                    task_id,
+                    "cancelled",
+                    reason="Execution request was cancelled",
+                    actor="task-executor",
+                    payload={"cancelled_by": "request"},
+                )
+            except TaskTransitionError:
+                # A concurrent owner cancellation or terminal transition wins.
+                pass
+            observatory.record_event(
+                category="agent",
+                event_type="task_execution_cancelled",
+                summary=f"Task execution request cancelled: {task_id}",
+                outcome="cancelled",
+                layer_id="SPS-10",
+                payload={"task_id": task_id},
+            )
+            raise
         except Exception as exc:
             try:
                 failed = durable_tasks.transition(
