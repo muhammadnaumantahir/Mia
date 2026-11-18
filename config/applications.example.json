@@ -1,0 +1,25 @@
+{
+  "applications": [
+    {
+      "app_id": "notepad",
+      "display_name": "Notepad",
+      "executable": "notepad.exe",
+      "arguments": [],
+      "description": "Open the Windows text editor."
+    },
+    {
+      "app_id": "calculator",
+      "display_name": "Calculator",
+      "executable": "calc.exe",
+      "arguments": [],
+      "description": "Open the Windows calculator."
+    },
+    {
+      "app_id": "file-explorer",
+      "display_name": "File Explorer",
+      "executable": "explorer.exe",
+      "arguments": [],
+      "description": "Open Windows File Explorer."
+    }
+  ]
+}
