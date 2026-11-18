@@ -92,12 +92,12 @@ Recent conversations are stored locally and can be restored from the sidebar. Lo
 |---|---|---|
 | 0. Research and reuse audit | Source audit, license matrix, architecture and integration decisions | In progress |
 | 1. Foundation | Project skeleton, SPS registry, event store, observatory API, tests | Bootstrap committed |
-| 2. AI gateway | Provider adapters, model registry, cost-aware routing, fallback and key safety | Planned |
-| 3. Voice | Wake word, speech-to-text, female TTS voice and conversation loop | Planned |
-| 4. Computer intelligence | Browser, desktop, files, documents and permissioned workflows | Planned |
-| 5. Memory and knowledge | Long-term memory, document ingestion, retrieval and provenance | Planned |
-| 6. Autonomous agent | Planner, scheduler, monitoring, task lifecycle and recovery | Planned |
-| 7. Self-programming | Capability contracts, isolated generation, validation, persistence and hot activation | Planned |
+| 2. AI gateway | Ollama/OpenAI-compatible adapters, free-first routing and price guard | In progress |
+| 3. Voice | Push-to-talk, local STT and installed browser/OS speech voices | In progress |
+| 4. Computer intelligence | Scoped filesystem, approved app launch and isolated public-web browser | In progress |
+| 5. Memory and knowledge | Persistent conversations, FTS5 knowledge and source-aware document ingestion | In progress |
+| 6. Autonomous agent | Task lifecycle and opt-in resource-gated dispatcher foundation | Foundation in progress |
+| 7. Self-programming | Versioned candidate persistence and validation lifecycle; activation blocked | Foundation in progress |
 | 8. 30-day experiment | Immutable baseline, daily snapshots, fixed benchmarks and final evaluation | Planned |
 
 Phases are quality gates, not calendar promises. A phase is not complete until its documented exit criteria and tests pass. See [the complete roadmap](docs/ROADMAP.md).
