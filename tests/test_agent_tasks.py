@@ -123,3 +123,22 @@ def test_dispatcher_rejects_non_object_executor_result(tmp_path):
 
     assert result["status"] == "failed"
     assert store.get_task(task_id)["status"] == "failed"
+
+
+def test_runtime_load_rejects_non_finite_or_out_of_range_values():
+    import math
+    import pytest
+
+    with pytest.raises(ValueError, match="cpu_percent"):
+        RuntimeLoad(math.nan, 20)
+    with pytest.raises(ValueError, match="memory_percent"):
+        RuntimeLoad(20, 101)
+
+
+def test_autonomy_policy_rejects_unsafe_thresholds():
+    import pytest
+
+    with pytest.raises(ValueError, match="max_cpu_percent"):
+        AutonomyPolicy(enabled=True, max_cpu_percent=0)
+    with pytest.raises(ValueError, match="max_tasks_per_cycle"):
+        AutonomyPolicy(enabled=True, max_tasks_per_cycle=11)
