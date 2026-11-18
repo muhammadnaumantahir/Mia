@@ -30,8 +30,8 @@
 
 - Last fully verified green run remains commit 19c3fde9d110611a648c9a168b7841a0d035db75 on Windows and Ubuntu with Python 3.13.
 - Newer GitHub Actions runs, including c058b38118bab2fca6f0b7c8db2f26fe3fba533b, returned failed jobs with runner ID 0, no steps and no downloadable logs. Those results do not establish whether the code passed or failed.
-- The current repository head must be re-run on actual Windows and Linux runners before release claims are made. The Windows UI adapter has mocked contract tests but has not yet been exercised against real desktop applications on the owner's Windows machine.
-- Latest observed Actions jobs still fail before runner assignment (runner ID 0, no steps/logs); this is an infrastructure observation, not passing test evidence.
+- Task lifecycle regression coverage now includes approval-wait preservation and invalid resource telemetry/policy values; these new tests have not yet been confirmed by a successful CI run. The current repository head must be re-run on actual Windows and Linux runners before release claims are made. The Windows UI adapter has mocked contract tests but has not yet been exercised against real desktop applications on the owner's Windows machine.
+- Latest observed run 44315275251 for the current head also failed on both Windows and Ubuntu, but the connector returned no job steps or log URLs. The preceding runs show the same failure pattern. This is not passing test evidence and the exact runner-side cause remains unverified.
 
 ## Explicitly not complete
 
