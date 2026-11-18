@@ -14,9 +14,10 @@ from mia.observatory.store import ObservatoryStore
 class ToolCallingProvider:
     provider_id = "tool-test"
 
-    def __init__(self, tool_name, arguments):
+    def __init__(self, tool_name, arguments, *, data_local=True):
         self.tool_name = tool_name
         self.arguments = arguments
+        self.data_local = data_local
         self.calls = 0
         self.tool_output = None
 
@@ -31,7 +32,7 @@ class ToolCallingProvider:
                 capabilities=frozenset({"chat", "tools"}),
                 context_window=8192,
                 free_tier=True,
-                data_local=True,
+                data_local=self.data_local,
                 healthy=True,
                 enabled=True,
             )
@@ -191,6 +192,7 @@ def test_remote_provider_does_not_receive_local_file_contents_by_default(
     provider = ToolCallingProvider(
         "filesystem.read_text",
         {"root_id": "root_1", "relative_path": "notes.txt"},
+        data_local=False,
     )
     client = build_client(tmp_path, monkeypatch, provider, filesystem, approvals)
 
