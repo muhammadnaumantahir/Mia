@@ -22,7 +22,7 @@
 ## Verification
 
 - Last known fully green CI commit: 19c3fde9d110611a648c9a168b7841a0d035db75 on Windows and Ubuntu with Python 3.13.
-- Recent push-triggered Actions runs, including 44365793438, 44365825105, 44365937960, 44365966310, 44366076182 and 44366187428, terminate both Windows and Ubuntu matrix jobs within seconds with `runner_id: 0`, an empty `runner_name`, and no step records. Re-running the latest failed jobs did not change this. The test/lint outcomes are therefore inconclusive; they must not be described as code failures or passing tests. The current development container cannot resolve github.com for a local checkout, so no local test result is claimed.
+- Recent push-triggered Actions runs, including 44365793438, 44365825105, 44365937960, 44365966310, 44366076182, 44366187428 and 44367900741, terminate both Windows and Ubuntu matrix jobs within seconds with `runner_id: 0`, an empty `runner_name`, and no step records. Re-running the latest failed jobs did not change this. The test/lint outcomes are therefore inconclusive; they must not be described as code failures or passing tests. The current development container cannot resolve github.com for a local checkout, so no local test result is claimed.
 - Planner, scheduler, read-only task-executor, Task Desk, Capability Lab, capability lifecycle, Docker sandbox, document-ingestion hardening and Day 0 capture tests have not yet been confirmed by a successful CI run. The latest inspected Actions jobs have `steps: null`; runner allocation/execution cannot be verified from available logs.
 - New regression coverage was committed for autonomy stop races, cancellation between read-only task steps, hostile Office ZIP containers, and memory export integrity/API behavior. The Office archive guard's lint formatting was corrected in `be37487`; all changes remain unverified until a successful Windows and Ubuntu workflow completes.
 - Windows UI adapter has mocked contract tests but has not been exercised against real desktop apps on the owner's PC.
@@ -30,7 +30,7 @@
 
 - 2026-11-18 commits `6b0ed88`, `734a258`, `bb7c37d` and `90dfe03` add between-step cancellation checks to the shared read-only executor and wire them into both background and manually executed task flows. These changes are committed but await CI verification.
 
-- 2026-11-18 commits `677f70b`, `db40760`, `d31bf66` and `fa720f4` add a 25 MB capped export for conversations/messages and knowledge items, with a SHA-256 digest, plus store/API regression coverage. This is committed but awaits CI verification.
+- 2026-11-18 commits `677f70b`, `db40760`, `d31bf66` and `fa720f4` add a 25 MB capped export for conversations/messages and knowledge items, with a SHA-256 digest, plus store/API regression coverage; `90e2a30` adds an API regression test proving owner cancellation prevents the next sequence step. This is committed but awaits CI verification.
 
 ## Not complete
 
