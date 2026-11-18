@@ -602,7 +602,8 @@ async function loadTasks(){
   const autonomy=await autonomyResponse.json();
   $('autonomyState').textContent=autonomy.emergency_stop?'Emergency stop':
    autonomy.automatic_dispatch?'Automatic read-only dispatch active':
-   autonomy.enabled?'Autonomy enabled · paused':'Autonomy off';
+   autonomy.paused?'Autonomy paused · saved':
+   autonomy.enabled?'Autonomy enabled · waiting':'Autonomy off';
   $('autonomyResume').disabled=!autonomy.enabled||autonomy.emergency_stop||autonomy.automatic_dispatch;
   $('autonomyPause').disabled=!autonomy.automatic_dispatch;
   const box=$('taskList');box.innerHTML='';

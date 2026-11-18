@@ -25,8 +25,10 @@ The default in .env.example is false.
 - Each cycle dispatches at most one task. The default interval is 30 seconds;
   MIA_AUTONOMY_INTERVAL_SECONDS can set an interval from 1 to 3600 seconds.
 - Task Desk exposes pause/resume controls. API routes are
-  POST /api/autonomy/pause and POST /api/autonomy/resume. Resume is rejected
-  unless environment policy enables autonomy and emergency stop is off.
+  POST /api/autonomy/pause and POST /api/autonomy/resume. The owner pause flag
+  is stored in the local task database and survives Mia restarts. A saved pause
+  prevents startup dispatch even when MIA_AUTONOMY_ENABLED=true. Resume is
+  rejected unless environment policy enables autonomy and emergency stop is off.
 - Completed/failed background runs append a minimal Observatory event. Full
   task lifecycle transitions remain in the task ledger.
 - pause() prevents future cycles but does not kill an in-flight call.
@@ -65,3 +67,13 @@ silently replay it: the Task Desk offers an explicit **Re-approve retry**
 action. Tasks waiting for an owner decision and tasks still approved are left
 unchanged. Run a single local Mia server process against the task database;
 multi-process lease coordination is not implemented.
+
+
+## Persistent owner pause
+
+Pause is an owner control, not just an in-memory stop signal. The state is
+stored in the local task database. After Mia restarts, a saved pause prevents
+the background dispatcher from starting even when environment policy remains
+enabled. The owner must press **Resume** in Task Desk or call the resume API.
+Changing `MIA_AUTONOMY_ENABLED` to false still disables dispatch regardless of
+the saved pause state.
