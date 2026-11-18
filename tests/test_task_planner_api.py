@@ -142,3 +142,54 @@ def test_planner_api_validates_registry_tool_and_keeps_proposal_unapproved(tmp_p
     }
     assert "system.read_resources" in gateway.prompt
     assert "filesystem.preview_write" not in gateway.prompt
+
+
+class MultiStepProposalGateway:
+    async def discover_models(self):
+        return [object()]
+
+    async def complete(self, request, candidates, policy):
+        return CompletionResult(
+            provider_id="local",
+            model_id="fake",
+            content=(
+                '{"tasks":[{"title":"Inspect system health",'
+                '"goal":"Read resource pressure then a bounded process inventory.",'
+                '"risk_level":"low","priority":65,'
+                '"evidence_summary":"The owner requested a read-only local health check.",'
+                '"execution":{"steps":['
+                '{"tool_name":"system.read_resources","arguments":{}},'
+                '{"tool_name":"system.list_processes","arguments":{"limit":5}}'
+                ']}}]}'
+            ),
+            attempted_candidates=("local/fake",),
+            data_local=True,
+        )
+
+
+def test_planner_api_persists_bounded_multistep_read_only_contract(tmp_path):
+    from mia.agent.tasks import TaskStore
+
+    tasks = TaskStore(tmp_path / "multi-plan-tasks.sqlite3")
+    app = create_app(
+        store=ObservatoryStore(tmp_path / "multi-plan-observatory.sqlite3"),
+        gateway=MultiStepProposalGateway(),
+        task_store=tasks,
+    )
+
+    response = TestClient(app).post(
+        "/api/planning/propose",
+        json={"objective": "Inspect local machine health."},
+    )
+
+    assert response.status_code == 201, response.text
+    proposal = response.json()["items"][0]
+    saved = tasks.get_task(proposal["task_id"])
+    assert saved is not None
+    assert saved["status"] == "proposed"
+    assert saved["metadata"]["execution"] == {
+        "steps": [
+            {"tool_name": "system.read_resources", "arguments": {}},
+            {"tool_name": "system.list_processes", "arguments": {"limit": 5}},
+        ]
+    }

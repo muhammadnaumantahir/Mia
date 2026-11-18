@@ -1,6 +1,7 @@
-import pytest
+import json
 
 from fastapi.testclient import TestClient
+import pytest
 
 from mia.agent.tasks import TaskStore
 from mia.observatory.api import create_app
@@ -500,3 +501,106 @@ def test_autonomy_resume_cannot_clear_pause_when_policy_blocks_dispatch(
         state = client.get("/api/autonomy/status").json()
         assert state["paused"] is True
         assert state["automatic_dispatch"] is False
+
+
+def test_manual_task_execution_runs_approved_read_only_sequence_in_order(tmp_path):
+    from mia.agent.resources import ResourceMonitor
+
+    tasks = TaskStore(tmp_path / "multi-step-tasks.sqlite3")
+    client = TestClient(
+        create_app(
+            store=ObservatoryStore(tmp_path / "multi-step-observatory.sqlite3"),
+            task_store=tasks,
+            resource_monitor=ResourceMonitor(psutil_module=FakePsutil()),
+        )
+    )
+    created = client.post(
+        "/api/tasks",
+        json={
+            "title": "Inspect local machine health",
+            "goal": "Read resource pressure, then list a small set of process metadata.",
+            "source": "interactive",
+            "metadata": {
+                "execution": {
+                    "steps": [
+                        {"tool_name": "system.read_resources", "arguments": {}},
+                        {"tool_name": "system.list_processes", "arguments": {"limit": 5}},
+                    ]
+                }
+            },
+        },
+    )
+    assert created.status_code == 201
+    task_id = created.json()["task_id"]
+    assert client.post(f"/api/tasks/{task_id}/execute").status_code == 409
+
+    approved = client.post(
+        f"/api/tasks/{task_id}/approve",
+        json={"reason": "Approved the two read-only inspections in the displayed order."},
+    )
+    assert approved.status_code == 200
+
+    executed = client.post(f"/api/tasks/{task_id}/execute")
+    assert executed.status_code == 200, executed.text
+    body = executed.json()
+    assert body["status"] == "completed"
+    assert body["outcome"]["step_count"] == 2
+    assert body["outcome"]["tool_names"] == [
+        "system.read_resources",
+        "system.list_processes",
+    ]
+    assert body["outcome"]["steps"][0]["result"]["cpu_percent"] == 10
+    assert body["outcome"]["steps"][1]["result"]["items"] == []
+    final_event = tasks.list_events(task_id)[-1]
+    assert json.loads(final_event["payload_json"]) == {
+        "tool_names": ["system.read_resources", "system.list_processes"],
+        "step_count": 2,
+    }
+
+
+def test_manual_task_execution_rejects_sequence_with_preview_step_before_claim(tmp_path):
+    tasks = TaskStore(tmp_path / "multi-step-unsafe-tasks.sqlite3")
+    client = TestClient(
+        create_app(
+            store=ObservatoryStore(tmp_path / "multi-step-unsafe-observatory.sqlite3"),
+            task_store=tasks,
+        )
+    )
+    created = client.post(
+        "/api/tasks",
+        json={
+            "title": "Unsafe mixed plan",
+            "goal": "Try to mix a read and a preview write.",
+            "source": "interactive",
+            "metadata": {
+                "execution": {
+                    "steps": [
+                        {"tool_name": "system.read_resources", "arguments": {}},
+                        {
+                            "tool_name": "filesystem.preview_write",
+                            "arguments": {
+                                "root_id": "workspace",
+                                "relative_path": "not-written.txt",
+                                "content": "not written",
+                            },
+                        },
+                    ]
+                }
+            },
+        },
+    )
+    task_id = created.json()["task_id"]
+    client.post(
+        f"/api/tasks/{task_id}/approve",
+        json={"reason": "Approval is for validation coverage only."},
+    )
+
+    response = client.post(f"/api/tasks/{task_id}/execute")
+
+    assert response.status_code == 422
+    assert "step 2" in response.json()["detail"]
+    assert tasks.get_task(task_id)["status"] == "approved"
+    assert [event["to_status"] for event in tasks.list_events(task_id)] == [
+        "proposed",
+        "approved",
+    ]

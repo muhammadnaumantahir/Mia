@@ -105,17 +105,26 @@ function renderTaskList(items){
   meta.textContent=(task.source||'task')+' · Priority '+String(task.priority??50);
   card.append(meta);
   const execution=task.metadata?.execution;
-  const readTool=execution&&typeof execution.tool_name==='string'
-   ? registeredTools.find(tool=>tool.name===execution.tool_name&&tool.mode==='read')
-   : null;
-  if(readTool){
+  const executionSteps=execution&&typeof execution.tool_name==='string'
+   ? [execution]
+   : execution&&Array.isArray(execution.steps)?execution.steps:null;
+  const readSteps=Array.isArray(executionSteps)&&executionSteps.length>=1&&executionSteps.length<=5&&
+   executionSteps.every(step=>step&&typeof step.tool_name==='string'&&step.arguments&&
+    typeof step.arguments==='object'&&!Array.isArray(step.arguments)&&
+    registeredTools.some(tool=>tool.name===step.tool_name&&tool.mode==='read'));
+  const readTools=readSteps
+   ? executionSteps.map(step=>registeredTools.find(tool=>tool.name===step.tool_name&&tool.mode==='read'))
+   : [];
+  if(readSteps){
    const toolMeta=document.createElement('div');toolMeta.className='task-meta';toolMeta.style.marginTop='5px';
-   toolMeta.textContent='Read-only action: '+readTool.name+' · '+readTool.permission;card.append(toolMeta);
+   toolMeta.textContent='Read-only plan · '+executionSteps.length+' step(s): '+readTools.map(tool=>tool.name).join(' → ');
+   card.append(toolMeta);
    const details=document.createElement('details');details.style.marginTop='7px';
-   const summary=document.createElement('summary');summary.style.cssText='font-size:10px;color:#9fbdad;cursor:pointer';summary.textContent='Review exact tool arguments';
-   const pre=document.createElement('pre');pre.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;max-height:130px;overflow:auto;background:#101916;padding:8px;border-radius:8px;color:#cbded2;font-size:10px';
-   const argumentText=JSON.stringify(execution.arguments,null,2)||'{}';
-   pre.textContent=argumentText.length>5000?argumentText.slice(0,5000)+'\n… preview truncated':argumentText;
+   const summary=document.createElement('summary');summary.style.cssText='font-size:10px;color:#9fbdad;cursor:pointer';
+   summary.textContent='Review ordered steps and exact arguments';
+   const pre=document.createElement('pre');pre.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto;background:#101916;padding:8px;border-radius:8px;color:#cbded2;font-size:10px';
+   const argumentText=JSON.stringify(executionSteps,null,2)||'[]';
+   pre.textContent=argumentText.length>9000?argumentText.slice(0,9000)+'\n… preview truncated':argumentText;
    details.append(summary,pre);card.append(details);
   }
   if(task.status==='proposed'){
@@ -126,7 +135,11 @@ function renderTaskList(items){
    );card.append(actions);
   }else if(task.status==='approved'){
    const actions=document.createElement('div');actions.className='task-actions';
-   if(readTool)actions.append(makeTaskAction('Run read-only check','',()=>runTaskAction(task,'execute')));
+   if(readSteps)actions.append(makeTaskAction(
+    executionSteps.length>1?'Run read-only plan':'Run read-only check',
+    '',
+    ()=>runTaskAction(task,'execute')
+   ));
    else{
     const warning=document.createElement('p');warning.className='task-warning';
     warning.textContent='Not executable here: no registered read-only action is attached. Mia will not convert task text into a command.';

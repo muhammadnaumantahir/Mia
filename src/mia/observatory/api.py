@@ -705,10 +705,12 @@ def create_app(
         if durable_tasks.is_autonomy_paused():
             return False
         try:
-            tool_name, _ = task_tool_executor.validate(task)
+            steps = task_tool_executor.validate_steps(task)
         except TaskExecutionError:
             return False
-        return tool_name in automatic_read_tools
+        return bool(steps) and all(
+            tool_name in automatic_read_tools for tool_name, _ in steps
+        )
 
     def execute_automatic_task(task: dict[str, Any]) -> dict[str, Any]:
         return asyncio.run(task_tool_executor.execute(task))
@@ -1814,7 +1816,7 @@ def create_app(
             raise HTTPException(status_code=409, detail="Task must be approved before execution")
 
         try:
-            app.state.task_tool_executor.validate(task)
+            app.state.task_tool_executor.validate_steps(task)
         except TaskExecutionError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -1904,13 +1906,21 @@ def create_app(
                 detail=f"Read-only task execution failed ({type(exc).__name__})",
             ) from exc
 
+        execution_trace = (
+            {"tool_name": outcome["tool_name"]}
+            if "tool_name" in outcome
+            else {
+                "tool_names": outcome["tool_names"],
+                "step_count": outcome["step_count"],
+            }
+        )
         try:
             completed = durable_tasks.transition(
                 task_id,
                 "completed",
-                reason="Read-only task tool returned successfully",
+                reason="Read-only task sequence returned successfully",
                 actor="task-executor",
-                payload={"tool_name": outcome["tool_name"]},
+                payload=execution_trace,
             )
         except TaskTransitionError as exc:
             current = durable_tasks.get_task(task_id)
@@ -1931,7 +1941,7 @@ def create_app(
             summary=f"Read-only task completed: {task_id}",
             outcome="success",
             layer_id="SPS-10",
-            payload={"task_id": task_id, "tool_name": outcome["tool_name"]},
+            payload={"task_id": task_id, **execution_trace},
         )
         return {"status": "completed", "task": completed, "outcome": outcome}
 
