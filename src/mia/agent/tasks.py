@@ -414,6 +414,24 @@ class TaskCoordinator:
 
         try:
             outcome = executor(task) or {}
+            if not isinstance(outcome, dict):
+                raise TypeError("task executor must return a result object")
+            if outcome.get("status") == "waiting":
+                waiting = self.store.transition(
+                    task["task_id"],
+                    "waiting",
+                    reason=str(outcome.get("reason") or "Task is waiting for an external approval"),
+                    actor="task-coordinator",
+                    payload={
+                        "outcome": outcome,
+                        "approval_required": True,
+                    },
+                )
+                return {
+                    "status": "waiting",
+                    "task": waiting,
+                    "outcome": outcome,
+                }
             finished = self.store.transition(
                 task["task_id"],
                 "completed",
