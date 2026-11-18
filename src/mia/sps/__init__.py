@@ -1,0 +1,1 @@
+"""Canonical SPS framework definitions."""
