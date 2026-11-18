@@ -36,6 +36,7 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 .approval-card pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto;background:#141813;padding:8px;border-radius:8px;color:#d7dfc8;font-size:10px}
 .nav button{color:#9fb4ad;text-decoration:none;padding:11px 12px;border-radius:11px;font-size:13px;display:flex;align-items:center;gap:10px;background:transparent;border:0;text-align:left;cursor:pointer;width:100%}.nav button:hover,.nav button.active{color:#d8f5e9;background:#183229}
 .task-panel{border:1px solid #294a3d;background:linear-gradient(145deg,#10201d,#0e1819);border-radius:18px;padding:16px;margin:0 0 22px;max-height:48vh;overflow:auto;box-shadow:0 14px 36px #0002}
+.task-plan-form{display:grid;gap:6px;margin:14px 0 8px}.task-plan-form label{font-size:10px;color:#9cb5a8;font-weight:650}.task-plan-form textarea{min-height:48px;max-height:110px;border:1px solid #2a473d;border-radius:9px;background:#0b1717;padding:9px 10px;font-size:11px;color:#e0eee7}.task-plan-form textarea:focus{border-color:#55a984}.task-plan-form .task-tools{margin:4px 0 0}
 .task-panel[hidden]{display:none!important}.task-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.task-head h2{font-size:16px;letter-spacing:-.25px;margin:0}.task-head p{font-size:11px;color:#8ea79b;line-height:1.5;margin:5px 0 0}.task-tools{display:flex;gap:8px;flex-wrap:wrap;margin:13px 0}
 .task-button{border:1px solid #35594a;background:#18352b;color:#c7f0dc;border-radius:9px;padding:8px 11px;font-size:11px;font-weight:700;cursor:pointer}.task-button.secondary{background:#172321;color:#adbfba;border-color:#344640}.task-button.danger{background:#322724;color:#edc4b6;border-color:#684c43}.task-button:disabled{opacity:.5;cursor:wait}
 .task-status{font-size:11px;line-height:1.5;color:#9bb7aa;min-height:18px;margin:4px 0 9px}.task-status.error{color:#f0b7a8}.task-list{display:grid;gap:9px}.task-empty{border:1px dashed #345047;border-radius:12px;padding:16px;text-align:center;color:#8fa99e;font-size:12px}
@@ -58,7 +59,13 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 <div class="messages" id="messages" aria-live="polite"></div>
 <section class="task-panel" id="taskPanel" hidden aria-label="Task Desk">
  <div class="task-head"><div><h2>Task Desk</h2><p>Review Mia's proposals. Only explicitly approved, registered read-only tools can run here.</p></div><button class="task-button secondary" id="refreshTasks" type="button">↻ Refresh</button></div>
- <div class="task-tools"><button class="task-button" id="createResourceCheck" type="button">＋ Create safe CPU/RAM check</button></div>
+ <form class="task-plan-form" id="planTaskForm">
+  <label for="planObjective">What should Mia plan?</label>
+  <textarea id="planObjective" rows="2" maxlength="4000" placeholder="Example: Review the project for reliability and documentation gaps…"></textarea>
+  <label for="planEvidence">Optional evidence or context</label>
+  <textarea id="planEvidence" rows="2" maxlength="8000" placeholder="Add relevant findings, constraints or local context…"></textarea>
+  <div class="task-tools"><button class="task-button" id="proposeTasks" type="submit">✦ Generate task proposals</button><button class="task-button secondary" id="createResourceCheck" type="button">＋ Safe CPU/RAM check</button></div>
+ </form>
  <div class="task-status" id="taskStatus" role="status" aria-live="polite">Loading task controls…</div>
  <div class="task-list" id="taskList"><div class="task-empty">Loading tasks…</div></div>
 </section>
@@ -148,10 +155,26 @@ async function runTaskAction(task,action){
   const response=await fetch('/api/tasks/'+encodeURIComponent(task.task_id)+'/'+action,options);
   const result=await response.json();
   if(!response.ok)throw new Error(result.detail||'Task action failed');
-  if(action==='execute')setTaskStatus('Read-only task completed.');
-  else setTaskStatus('Task '+action+'d.');
+  const actionLabels={approve:'approved',reject:'rejected',cancel:'cancelled',execute:'completed'};
+  setTaskStatus('Task '+(actionLabels[action]||'updated')+'.');
   await refreshTaskList();
  }catch(error){setTaskStatus(error.message,true);await refreshTaskList();}
+}
+async function proposeTaskPlan(event){
+ event.preventDefault();
+ const objective=$('planObjective').value.trim();
+ const evidence=$('planEvidence').value.trim();
+ if(!objective){setTaskStatus('Enter an objective for Mia to plan.',true);$('planObjective').focus();return;}
+ const button=$('proposeTasks');button.disabled=true;setTaskStatus('Mia is preparing reviewable proposals…');
+ try{
+  const response=await fetch('/api/planning/propose',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({objective,evidence,max_tasks:5})});
+  const result=await response.json();if(!response.ok)throw new Error(result.detail||'Planning request failed');
+  $('planObjective').value='';
+  $('planEvidence').value='';
+  await refreshTaskList();
+  setTaskStatus((result.items||[]).length+' proposal(s) created. Review and approve each task; proposals are never auto-approved.');
+ }catch(error){setTaskStatus(error.message,true);}
+ finally{button.disabled=false;}
 }
 async function createResourceCheck(){
  const button=$('createResourceCheck');button.disabled=true;setTaskStatus('Creating a read-only CPU/RAM check…');
@@ -175,6 +198,7 @@ $('toggleTasks').addEventListener('click',async()=>{
 });
 $('refreshTasks').addEventListener('click',refreshTaskList);
 $('createResourceCheck').addEventListener('click',createResourceCheck);
+$('planTaskForm').addEventListener('submit',proposeTaskPlan);
 function renderApprovalCards(actions){
  (actions||[]).forEach(action=>{
   const card=document.createElement('div');card.className='approval-card';
