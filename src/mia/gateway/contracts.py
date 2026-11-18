@@ -25,8 +25,8 @@ class ModelCandidate:
     reliability_score: float = 0.5
     latency_ms: float = 10_000.0
     quota_remaining: float | None = None
-    input_cost_per_million_usd: float = 0.0
-    output_cost_per_million_usd: float = 0.0
+    input_cost_per_million_usd: float | None = None
+    output_cost_per_million_usd: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
