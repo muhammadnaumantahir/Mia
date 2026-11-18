@@ -48,7 +48,7 @@ async function load(){
   ]);
   el('events').textContent=fmt(s.event_count);el('samples').textContent=fmt(s.metric_sample_count);
   el('day').textContent=s.latest_day_index===null?'—':'Day '+s.latest_day_index;
-  el('experiment').textContent=s.data_status==='recorded'?'Recording':'Not started';
+  el('experiment').textContent='Baseline required';
   el('status').textContent=s.data_status==='recorded'?'Local telemetry · data recorded':'Local telemetry · awaiting baseline';
   metricItems=m.items||[];const names=[...new Set(metricItems.map(x=>x.metric_name))];const select=el('metric');select.innerHTML='';
   names.forEach(name=>{const option=document.createElement('option');option.value=name;option.textContent=name;select.appendChild(option);});
