@@ -64,12 +64,15 @@ To enable local voice recognition, install the optional model runtime separately
 python -m pip install -e ".[voice]"
 ~~~
 
+For PDF, DOCX, XLSX and PPTX extraction, install the optional document parsers:
+
+~~~powershell
+python -m pip install -e ".[documents]"
+~~~
+
 The first transcription downloads the selected Faster-Whisper model into the local Mia data directory. The default is the multilingual `base` model, CPU int8, and two worker threads. Voice recognition is push-to-talk; no background microphone listener is started.
 
-Computer file access defaults to Mia's own `workspace` folder. To grant additional roots, add a semicolon-separated list to `.env`, for example `MIA_COMPUTER_ROOTS=D:/Projects;D:/Documents`. File writes require a preview, explicit approval and an exact payload match. See [Computer Access](docs/architecture/COMPUTER_ACCESS.md).
-
-
-~~~
+Computer file access defaults to Mia's own `workspace` folder. To grant additional roots, add a semicolon-separated list to `.env`, for example `MIA_COMPUTER_ROOTS=D:/Projects;D:/Documents`. File writes require a preview, explicit approval and an exact payload match. Copy `config/applications.example.json` to `config/applications.json` to enable the Notepad/Calculator/File Explorer allowlist. Browser navigation uses an isolated profile; clicks need approval. See [Computer Access](docs/architecture/COMPUTER_ACCESS.md).
 
 Open Mia at http://127.0.0.1:8765/assistant and the Evolution Observatory at http://127.0.0.1:8765/.
 
