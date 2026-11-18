@@ -3,9 +3,28 @@
 from .contracts import ModelCandidate, ModelRequest, RoutePolicy
 
 
-def estimate_cost_usd(candidate: ModelCandidate, request: ModelRequest) -> float:
-    input_cost = request.estimated_input_tokens * candidate.input_cost_per_million_usd / 1_000_000
-    output_cost = request.max_output_tokens * candidate.output_cost_per_million_usd / 1_000_000
+def estimate_cost_usd(
+    candidate: ModelCandidate,
+    request: ModelRequest,
+) -> float | None:
+    """Estimate cost only when both input and output prices are known."""
+    if (
+        candidate.input_cost_per_million_usd is None
+        or candidate.output_cost_per_million_usd is None
+    ):
+        return None
+
+    input_tokens = request.estimated_input_tokens or max(
+        1, len(request.prompt) // 4
+    )
+    input_cost = (
+        input_tokens * candidate.input_cost_per_million_usd / 1_000_000
+    )
+    output_cost = (
+        request.max_output_tokens
+        * candidate.output_cost_per_million_usd
+        / 1_000_000
+    )
     return input_cost + output_cost
 
 
@@ -17,10 +36,14 @@ def rank_candidates(
     """Return eligible candidates, cheapest and most reliable first.
 
     Free-tier status must be rechecked against current provider terms and quota
-    at dispatch. This policy does not make requests or rotate credentials.
+    at dispatch. Unknown prices are never treated as zero for paid routes.
+    This function does not make requests or rotate credentials.
     """
     eligible: list[tuple[tuple[float, float, float], ModelCandidate]] = []
-    needed_tokens = request.estimated_input_tokens + request.max_output_tokens
+    input_tokens = request.estimated_input_tokens or max(
+        1, len(request.prompt) // 4
+    )
+    needed_tokens = input_tokens + request.max_output_tokens
 
     for candidate in candidates:
         if not candidate.enabled or not candidate.healthy:
@@ -38,6 +61,8 @@ def rank_candidates(
             if not policy.allow_paid:
                 continue
             estimated_cost = estimate_cost_usd(candidate, request)
+            if estimated_cost is None:
+                continue
             if estimated_cost > policy.max_request_cost_usd:
                 continue
 
