@@ -244,6 +244,7 @@ class CapabilityStore:
             ).fetchone()
             if exists:
                 target_path.unlink(missing_ok=True)
+                test_target_path.unlink(missing_ok=True)
                 raise CapabilityLifecycleError("capability version is already registered")
             db.execute(
                 """
@@ -290,6 +291,9 @@ class CapabilityStore:
         return self.get(cap_id, version) or {}
 
     def begin_validation(self, capability_id: str, version: str) -> dict[str, Any]:
+        current = self.get(capability_id, version)
+        if current is not None and current["status"] == "validating":
+            return current
         return self._transition(
             capability_id,
             version,

@@ -66,6 +66,7 @@ def test_failed_validation_blocks_registration(tmp_path):
         version="0.1.0",
         name="Risky tool",
         source_code="print('candidate')",
+        test_source_code="def test_candidate_source_exists():\n    assert True\n",
         rationale="Check rejection path.",
     )
     store.begin_validation("risky-tool", "0.1.0")
@@ -88,10 +89,11 @@ def test_capability_lineage_is_versioned_and_immutable(tmp_path):
         version="1.0.0",
         name="Report tool",
         source_code="def run(): return 1",
+        test_source_code="from candidate import run\n\ndef test_run(): assert run() == 1\n",
         rationale="Initial version.",
     )
     store.begin_validation("report-tool", "1.0.0")
-    store.record_validation("report-tool", "1.0.0", passing_report())
+    store.record_validation("report-tool", "1.0.0", passing_report(candidate))
     store.register("report-tool", "1.0.0")
 
     child = store.record_candidate(
