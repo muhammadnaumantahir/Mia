@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from mia.computer.approvals import ApprovalError, ApprovalStore
 from mia.computer.filesystem import FilesystemAccessError, FilesystemAdapter
 from mia.computer.applications import ApplicationLaunchError, ApplicationLauncher
+from mia.computer.browser import BrowserAccessError, BrowserController
 from mia.gateway.contracts import ModelRequest, PermanentProviderError, TransientProviderError
 from mia.gateway.factory import build_default_registry, paid_route_policy
 from mia.gateway.service import ModelGateway
@@ -59,6 +60,18 @@ class DailySnapshotInput(BaseModel):
     day_index: int = Field(ge=1)
     source_commit: str = Field(min_length=7, max_length=64)
     snapshot: dict[str, Any]
+
+
+class BrowserNavigateInput(BaseModel):
+    url: str = Field(min_length=8, max_length=2000)
+
+
+class BrowserClickPreview(BaseModel):
+    selector: str = Field(min_length=1, max_length=500)
+
+
+class BrowserClickExecution(BrowserClickPreview):
+    approval_id: str = Field(min_length=32, max_length=32)
 
 
 class ApplicationLaunchPreview(BaseModel):
@@ -106,6 +119,7 @@ def create_app(
     approvals: ApprovalStore | None = None,
     application_launcher: ApplicationLauncher | None = None,
     memory: MemoryStore | None = None,
+    browser: BrowserController | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -138,6 +152,8 @@ def create_app(
     app.state.memory = memory_store
     document_ingestor = DocumentIngestor(computer_files, memory_store)
     app.state.document_ingestor = document_ingestor
+    browser_controller = browser or BrowserController(headless=True)
+    app.state.browser = browser_controller
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -224,6 +240,73 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return {"snapshot_id": snapshot_id}
+
+    @app.get("/api/browser/status")
+    def browser_status() -> dict[str, Any]:
+        return {
+            "running": browser_controller.is_running,
+            "current_url": browser_controller.current_url,
+            "profile": "isolated-temporary",
+            "downloads_enabled": False,
+        }
+
+    @app.post("/api/browser/navigate")
+    async def browser_navigate(item: BrowserNavigateInput) -> dict[str, Any]:
+        try:
+            return await browser_controller.navigate(item.url)
+        except BrowserAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail="Browser navigation failed") from exc
+
+    @app.post("/api/browser/click/preview", status_code=201)
+    def browser_click_preview(item: BrowserClickPreview) -> dict[str, str]:
+        current_url = browser_controller.current_url
+        if not current_url:
+            raise HTTPException(status_code=409, detail="Browser has no active page")
+        try:
+            return approval_store.request(
+                action_id="browser.click",
+                payload={"url": current_url, "selector": item.selector},
+                summary=f"Click selector on {current_url}",
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/browser/click/execute")
+    async def browser_click_execute(item: BrowserClickExecution) -> dict[str, str]:
+        current_url = browser_controller.current_url
+        if not current_url:
+            raise HTTPException(status_code=409, detail="Browser has no active page")
+        try:
+            approval_store.consume(
+                approval_id=item.approval_id,
+                action_id="browser.click",
+                payload={"url": current_url, "selector": item.selector},
+            )
+            result = await browser_controller.click(item.selector)
+        except ApprovalError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except BrowserAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail="Browser click failed") from exc
+        observatory.record_event(
+            category="computer",
+            event_type="browser_click",
+            summary=f"Approved browser interaction on {current_url}",
+            outcome="success",
+            layer_id="SPS-10",
+            payload={"approval_id": item.approval_id, "selector": item.selector},
+        )
+        return result
+
+    @app.post("/api/browser/close")
+    async def browser_close() -> dict[str, str]:
+        await browser_controller.close()
+        return {"status": "closed"}
 
     @app.get("/api/computer/apps")
     def computer_apps() -> dict[str, Any]:
