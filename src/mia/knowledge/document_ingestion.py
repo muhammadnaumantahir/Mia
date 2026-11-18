@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import zipfile
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
@@ -18,6 +19,10 @@ class DocumentIngestionError(RuntimeError):
 class DocumentIngestor:
     MAX_EXTRACTED_CHARS = 1_000_000
     MAX_PDF_PAGES = 200
+    MAX_OFFICE_ARCHIVE_ENTRIES = 10_000
+    MAX_OFFICE_MEMBER_BYTES = 64 * 1024 * 1024
+    MAX_OFFICE_TOTAL_BYTES = 128 * 1024 * 1024
+    MAX_OFFICE_COMPRESSION_RATIO = 200
 
     def __init__(
         self,
@@ -69,6 +74,35 @@ class DocumentIngestor:
             "trust_level": "untrusted",
         }
 
+    def _validate_office_archive(self, raw: bytes) -> None:
+        """Reject malformed or expansion-heavy Office ZIP containers before parsing."""
+        try:
+            with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+                entries = archive.infolist()
+                if len(entries) > self.MAX_OFFICE_ARCHIVE_ENTRIES:
+                    raise DocumentIngestionError("Office document contains too many archive entries")
+                total_uncompressed = 0
+                for entry in entries:
+                    if entry.flag_bits & 0x1:
+                        raise DocumentIngestionError("Encrypted Office archive entries are not supported")
+                    if entry.file_size > self.MAX_OFFICE_MEMBER_BYTES:
+                        raise DocumentIngestionError("Office archive entry exceeds the 64 MB limit")
+                    total_uncompressed += entry.file_size
+                    if total_uncompressed > self.MAX_OFFICE_TOTAL_BYTES:
+                        raise DocumentIngestionError("Office archive expands beyond the 128 MB limit")
+                    if entry.file_size > 1024 * 1024:
+                        if entry.compress_size == 0 or (
+                            entry.file_size / entry.compress_size
+                            > self.MAX_OFFICE_COMPRESSION_RATIO
+                        ):
+                            raise DocumentIngestionError(
+                                "Office archive contains an excessive compression ratio"
+                            )
+        except zipfile.BadZipFile as exc:
+            raise DocumentIngestionError("Office document is not a valid ZIP archive") from exc
+        except OSError as exc:
+            raise DocumentIngestionError("Office document archive could not be inspected") from exc
+
     def _extract(self, suffix: str, raw: bytes) -> tuple[str, str]:
         if suffix in {".txt", ".md", ".markdown", ".rst", ".csv", ".json", ".log"}:
             try:
@@ -101,6 +135,9 @@ class DocumentIngestor:
                 raise
             except Exception as exc:
                 raise DocumentIngestionError("PDF extraction failed") from exc
+
+        if suffix in {".docx", ".xlsx", ".pptx"}:
+            self._validate_office_archive(raw)
 
         if suffix == ".docx":
             try:
