@@ -48,3 +48,8 @@ SQLite FTS5 provides local full-text search. The database does not require a clo
 - No conversation history is sent to a different provider except the current selected provider, as part of the conversation prompt.
 - Do not store passwords, API keys, session cookies, recovery phrases or other secrets as memory.
 - Back up the database only to a location controlled by the user.
+
+
+## Office document parser boundary
+
+DOCX, XLSX and PPTX are ZIP-based containers. Before an optional parser is loaded, Mia inspects the archive directory and rejects encrypted entries, malformed ZIP containers, excessive entry counts, individual members above 64 MB, total expanded content above 128 MB, and compression ratios above 200:1 for members larger than 1 MB. These limits reduce archive-expansion risk but do not replace parser sandboxing or target-device security testing. Imported document content remains untrusted regardless of parser validation.
