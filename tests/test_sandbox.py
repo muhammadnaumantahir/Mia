@@ -206,7 +206,7 @@ def test_docker_sandbox_executes_capability_in_a_separate_restricted_container()
 
     docker = CapabilityDocker()
     runner = DockerSandboxRunner(subprocess_run=docker)
-    source = "def run(input_data):\n    return {'answer': input_data['value'] + 1}\n"
+    source = "def run(input_data):\n    return {}\n"
     source_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()
 
     result = runner.execute_capability(
@@ -252,7 +252,7 @@ def test_capability_execution_rejects_input_over_limit_and_hash_mismatch():
 def test_capability_docker_timeout_removes_container():
     docker = FakeDocker(timeout=True)
     runner = DockerSandboxRunner(subprocess_run=docker)
-    source = "def run(input_data):\\n    return {}\\n"
+    source = "def run(input_data):\n    return {}\n"
     source_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()
 
     with pytest.raises(SandboxExecutionError, match="60-second"):
@@ -266,7 +266,7 @@ def test_capability_docker_timeout_removes_container():
 
 def test_capability_docker_rejects_non_worker_json_result():
     runner = DockerSandboxRunner(subprocess_run=FakeDocker())
-    source = "def run(input_data):\\n    return {}\\n"
+    source = "def run(input_data):\n    return {}\n"
     source_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()
 
     with pytest.raises(SandboxExecutionError, match="invalid result contract"):
