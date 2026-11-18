@@ -1,3 +1,4 @@
+import pytest
 import sqlite3
 from datetime import UTC, datetime, timedelta
 
@@ -14,6 +15,7 @@ def passing_manifest():
         "environment": {
             "os": "Windows",
             "python": "3.13",
+            "platform": "Windows scheduler test host",
             "machine": "AMD64",
         },
         "baseline_results": {

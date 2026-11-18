@@ -82,8 +82,10 @@ always-on scheduler and missed-day notifications remain future work.
 
 ## Automatic daily capture scheduler
 
-By default, the local scheduler is disabled. Copy the supplied `.env.example`
-to `.env` and keep `MIA_EXPERIMENT_AUTO_CAPTURE=true` to enable it. After the
+The runtime default is disabled when the variable is absent. The supplied
+`.env.example` opts in with `MIA_EXPERIMENT_AUTO_CAPTURE=true`; copy it to
+`.env` to enable automatic capture. Install the optional `monitoring` extra
+for CPU/RAM telemetry. After the
 owner explicitly starts an experiment, Mia checks every 60 seconds for a due
 snapshot. Before the full local verification suite it checks CPU/RAM against
 the configured autonomy thresholds; under pressure it defers and retries

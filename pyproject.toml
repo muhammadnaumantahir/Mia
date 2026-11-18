@@ -35,6 +35,9 @@ voice = [
 voice-wake = [
   "openwakeword>=0.6,<1",
 ]
+monitoring = [
+  "psutil>=6,<8",
+]
 computer = [
   "playwright>=1.48,<2",
   "psutil>=6,<8",

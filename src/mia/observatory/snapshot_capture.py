@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
+from .baseline import BaselineCaptureError
 from .store import ObservatoryStore
 
 
@@ -54,12 +56,8 @@ class ExperimentSnapshotCapturer:
 
         try:
             manifest = self.baseline_capture(self.repo_root)
-        except Exception as exc:
-            from .baseline import BaselineCaptureError
-
-            if isinstance(exc, BaselineCaptureError):
-                raise SnapshotCaptureError(503, str(exc)) from exc
-            raise
+        except BaselineCaptureError as exc:
+            raise SnapshotCaptureError(503, str(exc)) from exc
 
         if manifest.get("verification_passed") is not True:
             results = manifest.get("baseline_results", {})
