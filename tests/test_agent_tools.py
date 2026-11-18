@@ -103,3 +103,55 @@ def test_registry_exposes_only_read_contracts_and_validates_without_running_hand
     assert "read-only" in registry.validate_read_only_call("unsafe.preview", {})
     assert "maximum" in registry.validate_read_only_call("safe.list", {"limit": 6})
     assert called == []
+
+
+@pytest.mark.asyncio
+async def test_sync_tool_handler_runs_off_the_event_loop_thread():
+    import threading
+
+    registry = ToolRegistry()
+    loop_thread_id = threading.get_ident()
+    observed = []
+    registry.register(
+        name="thread.inspect",
+        description="Record the executing thread.",
+        parameters={"type": "object", "properties": {}, "required": []},
+        permission="thread.inspect",
+        mode="read",
+        handler=lambda args: observed.append(threading.get_ident()) or {"ok": True},
+    )
+
+    result = await registry.execute("thread.inspect", {})
+
+    assert result.output["ok"] is True
+    assert len(observed) == 1
+    assert observed[0] != loop_thread_id
+
+
+@pytest.mark.asyncio
+async def test_async_tool_handler_is_awaited_after_threaded_invocation():
+    import asyncio
+    import threading
+
+    registry = ToolRegistry()
+    loop_thread_id = threading.get_ident()
+    observed = []
+
+    async def async_handler(args):
+        observed.append(threading.get_ident())
+        await asyncio.sleep(0)
+        return {"ok": True}
+
+    registry.register(
+        name="async.inspect",
+        description="Return an async result.",
+        parameters={"type": "object", "properties": {}, "required": []},
+        permission="async.inspect",
+        mode="read",
+        handler=async_handler,
+    )
+
+    result = await registry.execute("async.inspect", {})
+
+    assert result.output["ok"] is True
+    assert observed == [loop_thread_id]

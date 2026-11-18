@@ -29,3 +29,13 @@ The local API exposes AI-assisted task proposal generation separately; those
 proposals remain in the proposed state and require owner approval. The scheduler
 is not started by the API, and the production governed executor has not yet been connected. Do not enable background autonomy until that
 executor, OS sandbox, authentication boundary, and Windows/Linux tests are ready.
+
+## Tool handler scheduling
+
+The registry invokes synchronous tool handlers through `asyncio.to_thread` so
+bounded filesystem, desktop metadata and resource reads do not block the
+FastAPI event loop. Awaitable results are awaited on the event loop. Cancelling
+an awaiting request cannot forcibly terminate a synchronous function already
+running in its worker thread; read handlers must therefore remain read-only,
+bounded and internally timeout-aware. The Docker sandbox remains the only
+execution path for untrusted generated code.

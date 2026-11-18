@@ -6,6 +6,7 @@ or preview-only operations; this registry has no shell or direct-mutation tool.
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
 from dataclasses import dataclass
@@ -187,7 +188,10 @@ class ToolRegistry:
             return ToolResult({"ok": False, "error": validation_error})
 
         try:
-            result = tool.handler(arguments)
+            # Invoke the handler in a worker thread so synchronous local I/O
+            # cannot block FastAPI's event loop. If it returns an awaitable,
+            # await that result on the current event loop.
+            result = await asyncio.to_thread(tool.handler, arguments)
             if inspect.isawaitable(result):
                 result = await result
             if isinstance(result, ToolResult):
