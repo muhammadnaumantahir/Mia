@@ -28,7 +28,7 @@ class TaskToolExecutor:
         self.timeout_seconds = timeout_seconds
 
     def validate(self, task: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-        if task.get("status") != "approved":
+        if task.get("status") not in {"approved", "running"}:
             raise TaskExecutionError("Task must be approved before execution")
 
         metadata = task.get("metadata")
