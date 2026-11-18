@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from mia.agent.discovery import DiscoveryFinding, WorkloadDiscovery
 from mia.agent.resources import ResourceMonitor
+from mia.agent.planner import PlanningError, TaskPlanner
 from mia.agent.tasks import AutonomyPolicy, TaskCoordinator, TaskStore, TaskTransitionError
 from mia.agent.tools import ToolRegistry, ToolResult
 from mia.computer.approvals import ApprovalError, ApprovalStore
@@ -64,6 +65,12 @@ class DiscoveryFindingInput(BaseModel):
 
 class DiscoveryBatchInput(BaseModel):
     findings: list[DiscoveryFindingInput] = Field(max_length=50)
+
+
+class TaskPlanningInput(BaseModel):
+    objective: str = Field(min_length=1, max_length=4000)
+    evidence: str = Field(default="", max_length=8000)
+    max_tasks: int = Field(default=5, ge=1, le=10)
 
 
 class CapabilityCandidateInput(BaseModel):
@@ -236,8 +243,10 @@ def create_app(
     )
     task_coordinator = TaskCoordinator(durable_tasks, autonomy_policy)
     workload_discovery = WorkloadDiscovery(durable_tasks)
+    task_planner = TaskPlanner(model_gateway, workload_discovery)
     app.state.tasks = durable_tasks
     app.state.workload_discovery = workload_discovery
+    app.state.task_planner = task_planner
     app.state.task_coordinator = task_coordinator
     capability_versions = capability_store or CapabilityStore(
         data_dir / "mia-capabilities.sqlite3",
@@ -1119,6 +1128,31 @@ def create_app(
             "items": proposals,
             "approved_automatically": False,
         }
+
+    @app.post("/api/planning/propose", status_code=201)
+    async def propose_plan(item: TaskPlanningInput) -> dict[str, Any]:
+        try:
+            proposals = await task_planner.propose(
+                objective=item.objective,
+                evidence=item.evidence,
+                max_tasks=item.max_tasks,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except PlanningError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        observatory.record_event(
+            category="agent",
+            event_type="ai_plan_proposed",
+            summary=f"Mia proposed {len(proposals)} reviewable tasks",
+            outcome="proposed",
+            layer_id="SPS-03",
+            payload={
+                "task_ids": [proposal["task_id"] for proposal in proposals],
+                "approved_automatically": False,
+            },
+        )
+        return {"items": proposals, "approved_automatically": False}
 
     @app.get("/api/tasks")
     def tasks(limit: int = 100) -> dict[str, Any]:
