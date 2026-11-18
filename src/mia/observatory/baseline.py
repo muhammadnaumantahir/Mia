@@ -168,8 +168,8 @@ def _runtime_configuration(repo_root: Path) -> dict[str, Any]:
             raise BaselineCaptureError(f"{name} must be a valid number") from exc
         if not math.isfinite(value):
             raise BaselineCaptureError(f"{name} must be finite")
-        if name in {"MIA_MAX_CPU_PERCENT", "MIA_MAX_RAM_PERCENT"} and not 0 <= value <= 100:
-            raise BaselineCaptureError(f"{name} must be between 0 and 100")
+        if name in {"MIA_MAX_CPU_PERCENT", "MIA_MAX_RAM_PERCENT"} and not 1 <= value <= 100:
+            raise BaselineCaptureError(f"{name} must be between 1 and 100")
         if name == "MIA_AUTONOMY_INTERVAL_SECONDS" and not 1 <= value <= 3600:
             raise BaselineCaptureError(f"{name} must be between 1 and 3600")
         if name in {"MIA_MAX_MONTHLY_SPEND_USD", "MIA_MAX_REQUEST_SPEND_USD"} and value < 0:

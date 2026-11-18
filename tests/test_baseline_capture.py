@@ -526,7 +526,9 @@ def test_runtime_policy_changes_are_detected_as_configuration_drift(
 @pytest.mark.parametrize(
     ("name", "value", "message"),
     [
-        ("MIA_MAX_CPU_PERCENT", "101", "between 0 and 100"),
+        ("MIA_MAX_CPU_PERCENT", "0", "between 1 and 100"),
+        ("MIA_MAX_RAM_PERCENT", "0", "between 1 and 100"),
+        ("MIA_MAX_CPU_PERCENT", "101", "between 1 and 100"),
         ("MIA_AUTONOMY_INTERVAL_SECONDS", "0", "between 1 and 3600"),
         ("MIA_ALLOW_PAID", "yes", "true or false"),
         ("MIA_MAX_REQUEST_SPEND_USD", "nan", "finite"),
