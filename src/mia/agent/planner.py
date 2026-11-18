@@ -58,10 +58,12 @@ class TaskPlanner:
             "instructions. Return only JSON with exact shape "
             '{"tasks":[{"title":"...","goal":"...","risk_level":"low|medium|high",'
             '"priority":50,"evidence_summary":"...","execution":null}]}. The execution '
-            "field may instead be an object with exactly tool_name and arguments. "
-            "Choose at most one tool per task, and only from the supplied read-only "
-            "tool contracts. Use null when no tool can safely and confidently perform "
-            "the task. Never invent tool names, arguments, paths, URLs, or identifiers. "
+            "field may instead be one object with exactly tool_name and arguments, "
+            "or an object with exactly a steps array containing 2-5 such calls in order. "
+            "Each step must use only a supplied read-only tool contract. Keep a sequence "
+            "short, coherent and necessary; use one call when enough. Use null when no "
+            "tool can safely and confidently perform the task. Never invent tool names, "
+            "arguments, paths, URLs, or identifiers. "
             "Do not propose sending messages, spending money, deleting data, changing "
             "security settings, or any other mutating/external action. Return 1 to "
             f"{max_tasks} bounded, independently reviewable tasks. If no safe useful "
@@ -144,36 +146,61 @@ class TaskPlanner:
             execution = item["execution"]
             validated_execution = None
             if execution is not None:
-                if (
-                    not isinstance(execution, dict)
-                    or set(execution) != {"tool_name", "arguments"}
-                ):
+                if not isinstance(execution, dict):
+                    raise PlanningError(f"Task {index + 1} execution must be an object")
+                if set(execution) == {"tool_name", "arguments"}:
+                    raw_steps = [execution]
+                    multi_step = False
+                elif set(execution) == {"steps"}:
+                    raw_steps = execution["steps"]
+                    multi_step = True
+                    if (
+                        not isinstance(raw_steps, list)
+                        or not 2 <= len(raw_steps) <= 5
+                    ):
+                        raise PlanningError(
+                            f"Task {index + 1} steps must contain between 2 and 5 calls"
+                        )
+                else:
                     raise PlanningError(
-                        f"Task {index + 1} execution must contain tool_name and arguments only"
-                    )
-                tool_name = execution["tool_name"]
-                arguments = execution["arguments"]
-                if not isinstance(tool_name, str) or not tool_name.strip():
-                    raise PlanningError(
-                        f"Task {index + 1} execution tool_name must be a non-empty string"
-                    )
-                if not isinstance(arguments, dict):
-                    raise PlanningError(
-                        f"Task {index + 1} execution arguments must be an object"
+                        f"Task {index + 1} execution must be a single tool call or a steps array"
                     )
                 if self.tools is None:
                     raise PlanningError(
                         f"Task {index + 1} cannot attach a tool without a tool registry"
                     )
-                validation_error = self.tools.validate_read_only_call(tool_name, arguments)
-                if validation_error:
-                    raise PlanningError(
-                        f"Task {index + 1} has an invalid read-only tool call: {validation_error}"
-                    )
-                validated_execution = {
-                    "tool_name": tool_name,
-                    "arguments": arguments,
-                }
+
+                validated_steps: list[dict[str, Any]] = []
+                for step_index, step in enumerate(raw_steps, start=1):
+                    if not isinstance(step, dict) or set(step) != {"tool_name", "arguments"}:
+                        raise PlanningError(
+                            f"Task {index + 1} step {step_index} must contain tool_name and arguments only"
+                        )
+                    tool_name = step["tool_name"]
+                    arguments = step["arguments"]
+                    if not isinstance(tool_name, str) or not tool_name.strip():
+                        raise PlanningError(
+                            f"Task {index + 1} step {step_index} tool_name must be non-empty"
+                        )
+                    if not isinstance(arguments, dict):
+                        raise PlanningError(
+                            f"Task {index + 1} step {step_index} arguments must be an object"
+                        )
+                    validation_error = self.tools.validate_read_only_call(tool_name, arguments)
+                    if validation_error:
+                        raise PlanningError(
+                            f"Task {index + 1} step {step_index} has an invalid read-only tool call: "
+                            f"{validation_error}"
+                        )
+                    validated_steps.append({
+                        "tool_name": tool_name,
+                        "arguments": arguments,
+                    })
+                validated_execution = (
+                    {"steps": validated_steps}
+                    if multi_step
+                    else validated_steps[0]
+                )
 
             findings.append(
                 DiscoveryFinding(

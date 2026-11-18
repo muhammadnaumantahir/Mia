@@ -178,3 +178,77 @@ async def test_planner_rejects_unregistered_or_preview_execution_tools(tmp_path)
         )
         with pytest.raises(PlanningError, match="tool|registry"):
             await planner.propose(objective="Try tool selection")
+
+
+@pytest.mark.asyncio
+async def test_planner_accepts_short_sequence_of_registered_read_tools(tmp_path):
+    registry = make_read_registry()
+    from mia.agent.tools import ToolRegistry
+
+    registry.register(
+        name="system.list_processes",
+        description="List bounded process metadata.",
+        parameters={
+            "type": "object",
+            "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 10}},
+            "required": [],
+            "additionalProperties": False,
+        },
+        permission="process.inspect",
+        mode="read",
+        handler=lambda args: {"items": []},
+    )
+    planned_steps = [
+        {"tool_name": "system.read_resources", "arguments": {}},
+        {"tool_name": "system.list_processes", "arguments": {"limit": 5}},
+    ]
+    gateway = FakeGateway(json.dumps({
+        "tasks": [{
+            "title": "Inspect local health",
+            "goal": "Read resources, then inspect a bounded process list.",
+            "risk_level": "low",
+            "priority": 60,
+            "evidence_summary": "The owner asked for a local health check.",
+            "execution": {"steps": planned_steps},
+        }]
+    }))
+    tasks = TaskStore(tmp_path / "multi-plan.sqlite3")
+    planner = TaskPlanner(gateway, WorkloadDiscovery(tasks), tools=registry)
+
+    proposals = await planner.propose(objective="Check my local health")
+
+    saved = tasks.get_task(proposals[0]["task_id"])
+    assert saved["status"] == "proposed"
+    assert saved["metadata"]["execution"] == {"steps": planned_steps}
+
+
+@pytest.mark.asyncio
+async def test_planner_rejects_multistep_sequence_with_unsafe_tool(tmp_path):
+    registry = make_read_registry()
+    content = {
+        "tasks": [{
+            "title": "Unsafe sequence",
+            "goal": "Mix a safe read and a preview action.",
+            "risk_level": "low",
+            "priority": 50,
+            "evidence_summary": "The sequence must be rejected as a whole.",
+            "execution": {
+                "steps": [
+                    {"tool_name": "system.read_resources", "arguments": {}},
+                    {"tool_name": "filesystem.preview_write", "arguments": {
+                        "root_id": "workspace",
+                        "relative_path": "unsafe.txt",
+                        "content": "do not write",
+                    }},
+                ]
+            },
+        }]
+    }
+    planner = TaskPlanner(
+        FakeGateway(json.dumps(content)),
+        WorkloadDiscovery(TaskStore(tmp_path / "unsafe-multistep.sqlite3")),
+        tools=registry,
+    )
+
+    with pytest.raises(PlanningError, match="step 2"):
+        await planner.propose(objective="Try to mix a read with an unsafe action")

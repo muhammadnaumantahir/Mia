@@ -65,3 +65,15 @@ OS sandbox and does not make arbitrary third-party tool handlers safe. Its async
 timeout can cancel cooperative async handlers, but it cannot forcibly terminate
 a blocking synchronous handler; a killable isolated worker remains a release
 requirement.
+
+
+## Bounded multi-step read-only execution
+
+A proposal may attach either one exact read-only tool call or a sequence of
+2-5 explicit calls. Every step is validated against the live tool registry
+before persistence and again before execution. The Task Desk shows the whole
+ordered sequence and its exact arguments before owner approval. Execution is
+sequential, fails closed at the first error, and shares one overall timeout.
+A task is marked completed only if every step succeeds. Preview and mutation
+tools are rejected if they appear anywhere in the sequence. Background
+autonomy applies its narrower system-inspection allowlist to every step.
