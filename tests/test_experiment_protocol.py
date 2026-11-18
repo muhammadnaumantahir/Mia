@@ -212,3 +212,41 @@ def test_experiment_requires_fixed_benchmark_evidence(tmp_path):
 
     with pytest.raises(ValueError, match="fixed_benchmark_results"):
         store.prepare_experiment(name="No fixed benchmark", baseline_manifest=invalid)
+
+
+def test_report_request_closes_expired_run_as_incomplete_without_status_poll(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    database = tmp_path / "expired-report.sqlite3"
+    store = ObservatoryStore(database)
+    prepared = store.prepare_experiment(
+        name="Expired report",
+        baseline_manifest=baseline_manifest(),
+        planned_days=2,
+    )
+    experiment_id = prepared["experiment_id"]
+    store.start_experiment(experiment_id)
+
+    started_at = (datetime.now(UTC) - timedelta(days=3)).isoformat()
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE experiments SET started_at = ? WHERE experiment_id = ?",
+            (started_at, experiment_id),
+        )
+        connection.commit()
+
+    report = store.build_experiment_report(experiment_id)
+
+    assert report is not None
+    assert report["experiment"]["status"] == "incomplete"
+    assert report["experiment"]["conclusion"] == "incomplete"
+    assert report["experiment"]["completed_at"]
+    assert report["report_ready"] is True
+    assert report["days"]["recorded"] == [0]
+    assert report["days"]["missing"] == [1, 2]
+    assert report["comparison"]["comparison_is_final"] is False
+    assert report["comparison"]["compared_day"] is None
+    assert len([
+        event for event in report["events"]
+        if event["event_type"] == "experiment_incomplete"
+    ]) == 1

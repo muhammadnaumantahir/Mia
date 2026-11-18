@@ -446,10 +446,11 @@ class ObservatoryStore:
             if elapsed_day > planned_days:
                 cursor = db.execute(
                     """
-                    UPDATE experiments SET status = 'incomplete'
+                    UPDATE experiments
+                    SET status = 'incomplete', completed_at = ?
                     WHERE experiment_id = ? AND status = 'running'
                     """,
-                    (experiment_id,),
+                    (instant.isoformat(), experiment_id),
                 )
                 if cursor.rowcount == 1:
                     db.execute(
@@ -537,6 +538,9 @@ class ObservatoryStore:
 
     def build_experiment_report(self, experiment_id: str) -> dict[str, Any] | None:
         """Build an integrity-checked report from evidence tied to one experiment."""
+        # Close an expired run even when no dashboard status poll or scheduler
+        # cycle has happened since its final daily capture window elapsed.
+        self.get_snapshot_status(experiment_id)
         with self._connection() as db:
             experiment = db.execute(
                 "SELECT * FROM experiments WHERE experiment_id = ?",
