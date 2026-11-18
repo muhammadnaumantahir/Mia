@@ -2,9 +2,24 @@ import hashlib
 
 from fastapi.testclient import TestClient
 
+from mia.agent.resources import ResourceMonitor
 from mia.evolution.capabilities import CapabilityStore
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
+
+
+
+
+class FakePsutil:
+    def cpu_percent(self, interval):
+        return 10
+
+    def virtual_memory(self):
+        from types import SimpleNamespace
+        return SimpleNamespace(percent=20, available=800, total=1000)
+
+    def process_iter(self, attrs):
+        return iter([])
 
 
 class FakeSandboxRunner:
@@ -272,6 +287,7 @@ def test_registered_permission_free_capability_executes_through_isolated_runner(
             store=ObservatoryStore(tmp_path / "observatory.sqlite3"),
             capability_store=store,
             sandbox_runner=runner,
+            resource_monitor=ResourceMonitor(psutil_module=FakePsutil()),
         )
     )
     source = (
@@ -364,4 +380,57 @@ def test_capability_execution_requires_registration_and_empty_permissions(tmp_pa
         json={"input_data": {}},
     )
     assert blocked.status_code == 403
+    assert runner.execution_calls == []
+
+
+def test_capability_execution_respects_emergency_stop_and_resource_pressure(
+    tmp_path,
+    monkeypatch,
+):
+    store = CapabilityStore(tmp_path / "capabilities.sqlite3", tmp_path / "generated")
+    runner = FakeSandboxRunner()
+    monkeypatch.setenv("MIA_EMERGENCY_STOP", "true")
+    client = TestClient(
+        create_app(
+            store=ObservatoryStore(tmp_path / "observatory.sqlite3"),
+            capability_store=store,
+            sandbox_runner=runner,
+            resource_monitor=ResourceMonitor(psutil_module=FakePsutil()),
+        )
+    )
+    source = "def run(input_data):\n    return {'ok': True}\n"
+    tests = "from candidate import run\ndef test_run(): assert run({}) == {'ok': True}\n"
+    created = _create_candidate(client, "stop-capability", source, tests)
+    assert created.status_code == 201
+    client.post("/api/capabilities/stop-capability/0.1.0/validate/start")
+    client.post("/api/capabilities/stop-capability/0.1.0/validate")
+    client.post("/api/capabilities/stop-capability/0.1.0/register")
+
+    stopped = client.post(
+        "/api/capabilities/stop-capability/0.1.0/execute",
+        json={"input_data": {}},
+    )
+    assert stopped.status_code == 503
+    assert stopped.json()["detail"] == "Emergency stop is active"
+    assert runner.execution_calls == []
+
+    monkeypatch.setenv("MIA_EMERGENCY_STOP", "false")
+
+    class HotPsutil(FakePsutil):
+        def cpu_percent(self, interval):
+            return 95
+
+    hot_client = TestClient(create_app(
+        store=ObservatoryStore(tmp_path / "hot-observatory.sqlite3"),
+        capability_store=store,
+        sandbox_runner=runner,
+        resource_monitor=ResourceMonitor(psutil_module=HotPsutil()),
+    ))
+    with hot_client:
+        hot = hot_client.post(
+            "/api/capabilities/stop-capability/0.1.0/execute",
+            json={"input_data": {}},
+        )
+    assert hot.status_code == 503
+    assert "CPU or memory" in hot.json()["detail"]
     assert runner.execution_calls == []

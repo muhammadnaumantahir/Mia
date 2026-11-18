@@ -312,6 +312,7 @@ def create_app(
     )
     app.state.sandbox_runner = sandbox_validation
     app.state.capability_executor = sandbox_validation
+    capability_execution_lock = asyncio.Lock()
     resource_monitor_service = resource_monitor or ResourceMonitor()
     app.state.resource_monitor = resource_monitor_service
     experiment_snapshot_capturer = ExperimentSnapshotCapturer(
@@ -1801,19 +1802,69 @@ def create_app(
                 detail="Capability source violates the restricted pure-Python execution policy",
             )
 
+        if autonomy_policy.emergency_stop:
+            raise HTTPException(status_code=503, detail="Emergency stop is active")
+
         try:
-            execution = await run_in_threadpool(
-                app.state.capability_executor.execute_capability,
-                source_code=source_code,
-                source_sha256=candidate["source_sha256"],
-                input_data=item.input_data,
-            )
+            async with capability_execution_lock:
+                snapshot = resource_monitor_service.snapshot()
+                load = RuntimeLoad(
+                    cpu_percent=float(snapshot["cpu_percent"]),
+                    memory_percent=float(snapshot["memory_percent"]),
+                )
+                if (
+                    load.cpu_percent >= autonomy_policy.max_cpu_percent
+                    or load.memory_percent >= autonomy_policy.max_memory_percent
+                ):
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Capability execution paused because CPU or memory usage is above policy",
+                    )
+                execution = await run_in_threadpool(
+                    app.state.capability_executor.execute_capability,
+                    source_code=source_code,
+                    source_sha256=candidate["source_sha256"],
+                    input_data=item.input_data,
+                )
+        except HTTPException:
+            raise
+        except (RuntimeError, OSError, ValueError, KeyError, TypeError) as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Runtime resource telemetry is unavailable",
+            ) from exc
         except SandboxUnavailableError as exc:
+            observatory.record_event(
+                category="evolution",
+                event_type="capability_execution_failed",
+                summary=f"Isolated capability runner unavailable: {capability_id} {version}",
+                outcome="unavailable",
+                layer_id="SPS-09",
+                payload={
+                    "capability_id": capability_id,
+                    "version": version,
+                    "source_sha256": candidate["source_sha256"],
+                    "input_sha256": hashlib.sha256(input_bytes).hexdigest(),
+                    "error_type": type(exc).__name__,
+                },
+            )
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except SandboxExecutionError as exc:
+            observatory.record_event(
+                category="evolution",
+                event_type="capability_execution_failed",
+                summary=f"Isolated capability execution failed: {capability_id} {version}",
+                outcome="failed",
+                layer_id="SPS-09",
+                payload={
+                    "capability_id": capability_id,
+                    "version": version,
+                    "source_sha256": candidate["source_sha256"],
+                    "input_sha256": hashlib.sha256(input_bytes).hexdigest(),
+                    "error_type": type(exc).__name__,
+                },
+            )
             raise HTTPException(status_code=502, detail=str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
         observatory.record_event(
             category="evolution",
@@ -1834,6 +1885,7 @@ def create_app(
                 ).encode("utf-8")),
                 "runner": execution["runner"],
                 "image_id": execution["image_id"],
+                "execution_policy": "permission-free-single-call",
                 "activated": False,
             },
         )
@@ -1844,6 +1896,7 @@ def create_app(
             "source_sha256": candidate["source_sha256"],
             "runner": execution["runner"],
             "image_id": execution["image_id"],
+            "execution_policy": "permission-free-single-call",
             "activated": False,
         }
 
