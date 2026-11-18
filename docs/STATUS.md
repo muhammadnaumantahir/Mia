@@ -23,7 +23,7 @@
 
 - Last known fully green CI commit: 19c3fde9d110611a648c9a168b7841a0d035db75 on Windows and Ubuntu with Python 3.13.
 - Recent Actions failures returned runner ID 0 with no steps/logs. GitHub ended both matrix jobs before assigning runners; test/lint results remain unknown and neither success nor code failure is established.
-- Planner, scheduler, read-only task-executor, Task Desk, Capability Lab, capability lifecycle, Docker sandbox and Day 0 capture tests have not yet been confirmed by a successful CI run. The latest workflow (run 44329574531) failed both matrix jobs with runner ID 0, zero steps and no downloadable logs; test/lint outcomes remain unknown.
+- Planner, scheduler, read-only task-executor, Task Desk, Capability Lab, capability lifecycle, Docker sandbox and Day 0 capture tests have not yet been confirmed by a successful CI run. The latest workflow (run 44332049350) failed both matrix jobs with runner ID 0, zero steps and no downloadable logs; test/lint outcomes remain unknown.
 - Windows UI adapter has mocked contract tests but has not been exercised against real desktop apps on the owner's PC.
 
 ## Not complete

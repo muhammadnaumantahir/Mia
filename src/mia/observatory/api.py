@@ -52,9 +52,9 @@ from mia.gateway.factory import build_default_registry, paid_route_policy
 from mia.gateway.service import ModelGateway
 from mia.knowledge.document_ingestion import DocumentIngestor, DocumentIngestionError
 from mia.memory.store import MemoryStore
-from .baseline import BaselineCaptureError, capture_baseline_manifest
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider
 
+from .baseline import BaselineCaptureError, capture_baseline_manifest
 from .store import ObservatoryStore
 
 
@@ -709,6 +709,8 @@ def create_app(
 
     @app.post("/api/experiments/prepare", status_code=201)
     async def prepare_experiment(item: ExperimentPreparation) -> dict[str, Any]:
+        if not item.name.strip():
+            raise HTTPException(status_code=422, detail="Experiment name cannot be blank")
         repo_root = Path(__file__).resolve().parents[3]
         try:
             manifest = await run_in_threadpool(baseline_capture_service, repo_root)
