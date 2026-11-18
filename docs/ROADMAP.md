@@ -122,7 +122,7 @@ Exit criteria:
 Work:
 - Task state machine: proposed, approved, running, waiting, completed, failed, cancelled.
 - Planner, tool dispatcher, task queue, scheduler and retry policy.
-- Task Desk UI for proposal generation/review, plus explicit manual execution of one owner-approved registered read-only tool after CPU/RAM checks; model-generated task descriptions are never interpreted as commands.
+- Task Desk UI for proposal generation/review, plus explicit manual execution of one registered read-only tool or a bounded 2-5 step read-only sequence after owner approval and CPU/RAM checks; model-generated task descriptions are never interpreted as commands.
 - Workload sources: self-assessment, internal tests, benchmarks, research discoveries, authorized environment signals and experience analysis.
 - Resource-aware scheduling and sleep/idle policies.
 - Resume, cancellation, timeout, rate limit and recovery.
@@ -132,7 +132,7 @@ Exit criteria:
 - Tasks left running by a process restart are atomically marked failed with an append-only recovery event; no task is silently replayed, and retry requires owner re-approval.
 - Automatic continuation across restart requires a future durable lease/heartbeat design and remains a separate exit gate.
 - The system can explain why a task was selected and what evidence changed its state.
-- A manually invoked read-only execution has an append-only lifecycle trace; background scheduler execution, restart recovery and cancellable isolated workers remain separate exit gates.
+- A manually invoked read-only execution sequence validates every step, stops on first failure, shares one overall timeout and records an append-only lifecycle trace; background scheduler execution, automatic continuation across restart, durable worker leases and cancellable isolated workers remain separate exit gates.
 - Background workload pauses under resource pressure.
 - The autonomy switch and emergency stop are reliable.
 

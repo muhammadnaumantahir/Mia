@@ -11,8 +11,11 @@ The default in .env.example is false.
 - Every cycle samples local CPU and RAM before any task is claimed.
 - Missing or invalid telemetry pauses the cycle and leaves tasks untouched.
 - A task must already be in the owner-approved approved state.
-- The automatic claim filter validates the stored metadata.execution contract
+- The automatic claim filter validates every stored metadata.execution step
   before claiming a task. Unsupported tasks remain approved and queued.
+- A task may contain one read-only call or a bounded 2-5 step sequence. Every
+  step in a background sequence must belong to the automatic allowlist.
+- One task sequence is dispatched per cycle under a shared executor timeout.
 - The current automatic allowlist is deliberately narrow:
   system.read_resources, system.list_processes and applications.list.
   These are registered read-only system/application inventory tools.

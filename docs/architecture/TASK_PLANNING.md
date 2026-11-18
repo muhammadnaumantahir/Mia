@@ -38,9 +38,10 @@ Open the **Task Desk** from the assistant sidebar. Enter an objective and option
 evidence to create model-generated proposals, or create the built-in CPU/RAM
 read-only check. Proposals remain in the proposed state until the owner approves
 or rejects them. The planner receives only registered read-only tool contracts
-and may attach one exact tool name with structured arguments to a proposal.
-The server validates the descriptor against the live registry before saving it;
-invalid, unregistered or preview-only tool calls reject the plan.
+and may attach one exact tool call or a bounded sequence of 2-5 calls with
+structured arguments to a proposal. The server validates every descriptor
+against the live registry before saving it; invalid, unregistered or
+preview-only tool calls reject the whole plan.
 
 The Task Desk displays the exact proposed arguments before approval and shows
 an Execute action only when the saved descriptor still matches a registered
