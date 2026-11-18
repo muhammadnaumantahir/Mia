@@ -1,4 +1,4 @@
-"""Capture a real, local Day 0 baseline by running Mia's fixed benchmark suite."""
+"""Capture a real, local Day 0 baseline by running Mia's fixed verification suite."""
 
 from __future__ import annotations
 
@@ -11,22 +11,23 @@ import sys
 import tempfile
 import time
 import xml.etree.ElementTree as ET
-from pathlib import Path
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 
-BENCHMARK_SUITE_ID = "mia-foundation-v1"
-BENCHMARK_PATH = Path("tests/benchmarks/test_foundation.py")
+BENCHMARK_SUITE_ID = "mia-foundation-v2"
 CONFIG_PATHS = (
     Path("pyproject.toml"),
+    Path(".env.example"),
+    Path("config/applications.example.json"),
     Path("src/mia/sps/layers.py"),
-    BENCHMARK_PATH,
+    Path("tests/benchmarks/test_foundation.py"),
 )
 
 
 class BaselineCaptureError(RuntimeError):
-    """The local Day 0 benchmark capture could not be verified."""
+    """The local Day 0 baseline capture could not be verified."""
 
 
 def _sha256(data: bytes) -> str:
@@ -68,6 +69,56 @@ def _parse_junit(path: Path) -> dict[str, int | float]:
     return totals
 
 
+def _safe_child_environment(repo_root: Path) -> dict[str, str]:
+    """Keep OS runtime variables but remove common credential-bearing variables."""
+    secret_markers = (
+        "API_KEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD",
+        "CREDENTIAL", "AUTH", "COOKIE", "PRIVATE_KEY", "PROXY",
+    )
+    always_remove = {
+        "PYTHONHOME", "PYTHONPATH", "PYTHONSTARTUP",
+        "PYTEST_ADDOPTS", "PYTEST_PLUGINS",
+    }
+    child = {
+        key: value
+        for key, value in os.environ.items()
+        if key.upper() not in always_remove
+        and not any(marker in key.upper() for marker in secret_markers)
+    }
+    child.update({
+        "PYTHONPATH": str(repo_root / "src"),
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONHASHSEED": "0",
+        "PYTHONIOENCODING": "utf-8",
+    })
+    return child
+
+
+def _git_output(
+    runner: Callable[..., Any],
+    command: list[str],
+    *,
+    root: Path,
+    env: dict[str, str],
+) -> str:
+    try:
+        result = runner(
+            command,
+            cwd=str(root),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
+        raise BaselineCaptureError("Git is required to capture the local source baseline") from exc
+    if result.returncode != 0:
+        raise BaselineCaptureError("Could not inspect the local Git checkout")
+    return (result.stdout or "").strip()
+
+
 def _environment() -> dict[str, Any]:
     memory_total = None
     try:
@@ -94,12 +145,12 @@ def capture_baseline_manifest(
     repo_root: str | Path,
     *,
     subprocess_run: Callable[..., Any] | None = None,
-    timeout_seconds: int = 360,
+    timeout_seconds: int = 600,
 ) -> dict[str, Any]:
-    """Run the fixed benchmark suite on the Mia host and return a verified manifest.
+    """Run Ruff and all repository tests on the Mia host and return a manifest.
 
-    This operation never runs on GitHub Actions. The caller must invoke it from
-    the locally running Mia service on the machine whose Day 0 is being captured.
+    The working tree must be clean so the source commit identifies exactly the
+    code that was tested. Child processes receive a sanitized environment.
     """
     root = Path(repo_root).resolve()
     if not 30 <= timeout_seconds <= 900:
@@ -114,39 +165,27 @@ def capture_baseline_manifest(
         if not (root / relative).is_file():
             raise BaselineCaptureError(f"Required baseline file is missing: {relative}")
 
-    try:
-        git = runner(
-            ["git", "rev-parse", "HEAD"],
-            cwd=str(root),
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=False,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
-        raise BaselineCaptureError("Git is required to capture the local source commit") from exc
-    source_commit = (git.stdout or "").strip().lower()
-    if git.returncode != 0 or len(source_commit) not in {40, 64} or any(
+    child_env = _safe_child_environment(root)
+    source_commit = _git_output(
+        runner,
+        ["git", "rev-parse", "HEAD"],
+        root=root,
+        env=child_env,
+    ).lower()
+    if len(source_commit) not in {40, 64} or any(
         char not in "0123456789abcdef" for char in source_commit
     ):
         raise BaselineCaptureError("Could not identify the exact local source commit")
 
-    try:
-        worktree = runner(
-            ["git", "status", "--porcelain", "--untracked-files=no"],
-            cwd=str(root),
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=False,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
-        raise BaselineCaptureError("Could not verify the local Git worktree") from exc
-    if worktree.returncode != 0:
-        raise BaselineCaptureError("Could not verify the local Git worktree")
-    if (worktree.stdout or "").strip():
+    worktree = _git_output(
+        runner,
+        ["git", "status", "--porcelain", "--untracked-files=normal"],
+        root=root,
+        env=child_env,
+    )
+    if worktree:
         raise BaselineCaptureError(
-            "Commit or discard tracked changes before capturing Day 0"
+            "Commit or discard tracked changes and untracked source files before capturing Day 0"
         )
 
     config_parts = []
@@ -161,50 +200,55 @@ def capture_baseline_manifest(
     )
 
     started = time.monotonic()
+    try:
+        ruff_result = runner(
+            [
+                sys.executable, "-m", "ruff", "check",
+                "--output-format=json", "src", "tests",
+            ],
+            cwd=str(root),
+            env=child_env,
+            capture_output=True,
+            text=True,
+            timeout=min(timeout_seconds, 120),
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise BaselineCaptureError("Ruff exceeded its Day 0 lint time limit") from exc
+    except (FileNotFoundError, OSError) as exc:
+        raise BaselineCaptureError("Could not start Ruff; install Mia's dev dependencies") from exc
+
     with tempfile.TemporaryDirectory(prefix="mia-day0-") as temporary:
         report_path = Path(temporary) / "junit.xml"
         command = [
-            sys.executable,
-            "-m",
-            "pytest",
-            "-q",
-            "-p",
-            "no:cacheprovider",
-            str(BENCHMARK_PATH.as_posix()),
-            "--junitxml",
-            str(report_path),
+            sys.executable, "-m", "pytest", "-q",
+            "-p", "no:cacheprovider",
+            "-p", "pytest_asyncio.plugin",
+            "tests",
+            "--junitxml", str(report_path),
         ]
         try:
-            environment = os.environ.copy()
-            source_path = str(root / "src")
-            existing_pythonpath = environment.get("PYTHONPATH", "")
-            environment["PYTHONPATH"] = os.pathsep.join(
-                value for value in (source_path, existing_pythonpath) if value
-            )
-            environment["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
-            environment["PYTHONHASHSEED"] = "0"
-            environment["PYTHONDONTWRITEBYTECODE"] = "1"
-            result = runner(
+            pytest_result = runner(
                 command,
                 cwd=str(root),
+                env=child_env,
                 capture_output=True,
                 text=True,
                 timeout=timeout_seconds,
                 check=False,
-                env=environment,
             )
         except subprocess.TimeoutExpired as exc:
             raise BaselineCaptureError(
-                f"Local baseline suite exceeded {timeout_seconds} seconds"
+                f"Local Day 0 test suite exceeded {timeout_seconds} seconds"
             ) from exc
         except (FileNotFoundError, OSError) as exc:
-            raise BaselineCaptureError("Could not start local pytest baseline suite") from exc
-
+            raise BaselineCaptureError("Could not start the local Day 0 test suite") from exc
         results = _parse_junit(report_path)
 
     elapsed = round(time.monotonic() - started, 3)
-    passed = (
-        result.returncode == 0
+    ruff_passed = ruff_result.returncode == 0
+    pytest_passed = (
+        pytest_result.returncode == 0
         and results["tests"] > 0
         and results["failures"] == 0
         and results["errors"] == 0
@@ -218,14 +262,16 @@ def capture_baseline_manifest(
         "environment": _environment(),
         "baseline_results": {
             **results,
-            "pytest_exit_code": result.returncode,
+            "ruff_passed": ruff_passed,
+            "ruff_exit_code": ruff_result.returncode,
+            "ruff_stdout_sha256": _sha256((ruff_result.stdout or "").encode("utf-8")),
+            "ruff_stderr_sha256": _sha256((ruff_result.stderr or "").encode("utf-8")),
+            "pytest_exit_code": pytest_result.returncode,
+            "pytest_stdout_sha256": _sha256((pytest_result.stdout or "").encode("utf-8")),
+            "pytest_stderr_sha256": _sha256((pytest_result.stderr or "").encode("utf-8")),
             "elapsed_seconds": elapsed,
-            "stdout_sha256": _sha256((result.stdout or "").encode("utf-8")),
-            "stderr_sha256": _sha256((result.stderr or "").encode("utf-8")),
-            "stdout_tail": (result.stdout or "")[-4000:],
-            "stderr_tail": (result.stderr or "")[-4000:],
-            "capture_host": platform.node(),
-            "capture_method": "local-host-pytest-v1",
+            "capture_host": platform.node() or "unknown-local-host",
+            "capture_method": "local-host-ruff-pytest-v2",
         },
-        "verification_passed": passed,
+        "verification_passed": ruff_passed and pytest_passed,
     }

@@ -16,6 +16,8 @@ COMMIT = "0123456789abcdef0123456789abcdef01234567"
 def _write_baseline_files(root: Path):
     for relative in (
         "pyproject.toml",
+        ".env.example",
+        "config/applications.example.json",
         "src/mia/sps/layers.py",
         "tests/benchmarks/test_foundation.py",
     ):
@@ -33,6 +35,7 @@ class FakeSubprocess:
         skipped=0,
         produce_report=True,
         dirty=False,
+        ruff_return_code=0,
     ):
         self.calls = []
         self.dirty = dirty
@@ -40,6 +43,7 @@ class FakeSubprocess:
         self.failures = failures
         self.skipped = skipped
         self.produce_report = produce_report
+        self.ruff_return_code = ruff_return_code
 
     def __call__(self, command, **kwargs):
         self.calls.append((command, kwargs))
@@ -48,11 +52,18 @@ class FakeSubprocess:
         if command[:2] == ["git", "status"]:
             output = " M src/mia/api.py" if self.dirty else ""
             return subprocess.CompletedProcess(command, 0, stdout=output, stderr="")
+        if command[1:3] == ["-m", "ruff"]:
+            return subprocess.CompletedProcess(
+                command,
+                self.ruff_return_code,
+                stdout="[]" if self.ruff_return_code == 0 else '[{"code":"E999"}]',
+                stderr="",
+            )
         report_path = Path(command[command.index("--junitxml") + 1])
         if self.produce_report:
             report_path.write_text(
                 (
-                    '<testsuites><testsuite name="mia-foundation-v1" tests="6" '
+                    '<testsuites><testsuite name="mia-foundation-v2" tests="6" '
                     f'failures="{self.failures}" errors="0" skipped="{self.skipped}" time="1.25">'
                     '</testsuite></testsuites>'
                 ),
@@ -74,26 +85,30 @@ def test_local_baseline_capture_runs_git_and_fixed_suite_on_host(tmp_path, monke
 
     assert manifest["verification_passed"] is True
     assert manifest["source_commit"] == COMMIT
-    assert manifest["benchmark_suite_id"] == "mia-foundation-v1"
+    assert manifest["benchmark_suite_id"] == "mia-foundation-v2"
     assert manifest["configuration_hash"].startswith("sha256:")
     assert manifest["baseline_results"]["tests"] == 6
     assert manifest["baseline_results"]["passed"] == 6
-    assert manifest["baseline_results"]["capture_method"] == "local-host-pytest-v1"
+    assert manifest["baseline_results"]["capture_method"] == "local-host-ruff-pytest-v2"
+    assert manifest["baseline_results"]["ruff_passed"] is True
     assert manifest["environment"]["os"]
     assert runner.calls[0][0] == ["git", "rev-parse", "HEAD"]
-    assert runner.calls[1][0] == ["git", "status", "--porcelain", "--untracked-files=no"]
-    assert runner.calls[2][0][0] == sys.executable
-    assert "tests/benchmarks/test_foundation.py" in runner.calls[2][0]
+    assert runner.calls[1][0] == ["git", "status", "--porcelain", "--untracked-files=normal"]
+    assert runner.calls[2][0][0:3] == [sys.executable, "-m", "ruff"]
+    assert runner.calls[3][0][0:3] == [sys.executable, "-m", "pytest"]
+    assert "tests" in runner.calls[3][0]
     assert str(tmp_path / "src") in runner.calls[2][1]["env"]["PYTHONPATH"]
+    assert str(tmp_path / "src") in runner.calls[3][1]["env"]["PYTHONPATH"]
 
 
 @pytest.mark.parametrize(
-    ("return_code", "failures", "skipped"),
-    [(1, 1, 0), (0, 0, 1)],
+    ("return_code", "ruff_return_code", "failures", "skipped"),
+    [(1, 0, 1, 0), (0, 0, 0, 1), (0, 1, 0, 0)],
 )
 def test_local_baseline_capture_fails_closed_on_failure_or_skip(
     tmp_path,
     return_code,
+    ruff_return_code,
     failures,
     skipped,
     monkeypatch,
@@ -104,6 +119,7 @@ def test_local_baseline_capture_fails_closed_on_failure_or_skip(
         tmp_path,
         subprocess_run=FakeSubprocess(
             return_code=return_code,
+            ruff_return_code=ruff_return_code,
             failures=failures,
             skipped=skipped,
         ),
@@ -125,7 +141,7 @@ def _baseline_manifest(passed=True):
     return {
         "source_commit": COMMIT,
         "configuration_hash": "sha256:" + "a" * 64,
-        "benchmark_suite_id": "mia-foundation-v1",
+        "benchmark_suite_id": "mia-foundation-v2",
         "environment": {
             "os": "Windows",
             "python": "3.13",
@@ -138,8 +154,10 @@ def _baseline_manifest(passed=True):
             "failures": 0 if passed else 1,
             "errors": 0,
             "skipped": 0,
+            "ruff_passed": passed,
+            "ruff_exit_code": 0 if passed else 1,
             "pytest_exit_code": 0 if passed else 1,
-            "capture_method": "local-host-pytest-v1",
+            "capture_method": "local-host-ruff-pytest-v2",
             "capture_host": "test-host",
         },
         "verification_passed": passed,
@@ -218,3 +236,12 @@ def test_local_baseline_capture_rejects_github_actions_environment(tmp_path, mon
         capture_baseline_manifest(tmp_path, subprocess_run=runner)
 
     assert runner.calls == []
+
+
+def test_local_baseline_capture_strips_secret_environment_values(tmp_path, monkeypatch):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.setenv("MIA_TEST_TOKEN", "do-not-pass-to-tools")
+    _write_baseline_files(tmp_path)
+    runner = FakeSubprocess()
+    capture_baseline_manifest(tmp_path, subprocess_run=runner)
+    assert all("MIA_TEST_TOKEN" not in call[1]["env"] for call in runner.calls[2:])

@@ -173,8 +173,8 @@ class ObservatoryStore:
             or any(char not in "0123456789abcdef" for char in configuration_hash[7:])
         ):
             raise ValueError("configuration_hash must be a SHA-256 digest")
-        if baseline_manifest["benchmark_suite_id"] != "mia-foundation-v1":
-            raise ValueError("baseline must use the fixed mia-foundation-v1 suite")
+        if baseline_manifest["benchmark_suite_id"] != "mia-foundation-v2":
+            raise ValueError("baseline must use the fixed mia-foundation-v2 suite")
         environment = baseline_manifest["environment"]
         if not isinstance(environment, dict) or not all(
             isinstance(environment.get(key), str) and environment[key]
@@ -184,7 +184,8 @@ class ObservatoryStore:
         results = baseline_manifest["baseline_results"]
         result_keys = {
             "tests", "passed", "failures", "errors", "skipped",
-            "pytest_exit_code", "capture_method", "capture_host",
+            "ruff_passed", "ruff_exit_code", "pytest_exit_code",
+            "capture_method", "capture_host",
         }
         if not isinstance(results, dict) or not result_keys.issubset(results):
             raise ValueError("baseline_results must include the local pytest evidence")
@@ -195,8 +196,10 @@ class ObservatoryStore:
             or results["failures"] != 0
             or results["errors"] != 0
             or results["skipped"] != 0
+            or results["ruff_passed"] is not True
+            or results["ruff_exit_code"] != 0
             or results["pytest_exit_code"] != 0
-            or results["capture_method"] != "local-host-pytest-v1"
+            or results["capture_method"] != "local-host-ruff-pytest-v2"
             or not isinstance(results["capture_host"], str)
             or not results["capture_host"]
         ):

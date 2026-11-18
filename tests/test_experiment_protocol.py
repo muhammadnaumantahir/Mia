@@ -9,7 +9,7 @@ def baseline_manifest():
     return {
         "source_commit": "0123456789abcdef0123456789abcdef01234567",
         "configuration_hash": "sha256:" + "a" * 64,
-        "benchmark_suite_id": "mia-foundation-v1",
+        "benchmark_suite_id": "mia-foundation-v2",
         "environment": {
             "os": "Windows",
             "python": "3.13",
@@ -22,8 +22,10 @@ def baseline_manifest():
             "failures": 0,
             "errors": 0,
             "skipped": 0,
+            "ruff_passed": True,
+            "ruff_exit_code": 0,
             "pytest_exit_code": 0,
-            "capture_method": "local-host-pytest-v1",
+            "capture_method": "local-host-ruff-pytest-v2",
             "capture_host": "test-machine",
         },
         "verification_passed": True,
@@ -114,3 +116,15 @@ def test_experiment_rejects_skipped_local_baseline_checks(tmp_path):
     invalid["baseline_results"]["tests"] = 6
     with pytest.raises(ValueError, match="fully passing"):
         store.prepare_experiment(name="Skipped baseline", baseline_manifest=invalid)
+
+
+def test_experiment_baseline_can_be_reloaded_and_hash_verified(tmp_path):
+    store = ObservatoryStore(tmp_path / "baseline.sqlite3")
+    prepared = store.prepare_experiment(
+        name="Day 0 reload",
+        baseline_manifest=baseline_manifest(),
+    )
+    baseline = store.get_baseline(prepared["experiment_id"])
+    assert baseline is not None
+    assert baseline["baseline_sha256"] == prepared["baseline_sha256"]
+    assert baseline["manifest"]["benchmark_suite_id"] == "mia-foundation-v2"
