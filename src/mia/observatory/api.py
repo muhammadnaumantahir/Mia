@@ -18,6 +18,8 @@ from mia.gateway.contracts import ModelRequest, PermanentProviderError, Transien
 from mia.gateway.factory import build_default_registry, paid_route_policy
 from mia.gateway.service import ModelGateway
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider
+from mia.computer.approvals import ApprovalError, ApprovalStore
+from mia.computer.filesystem import FilesystemAccessError, FilesystemAdapter
 
 from .store import ObservatoryStore
 
@@ -56,6 +58,16 @@ class DailySnapshotInput(BaseModel):
     snapshot: dict[str, Any]
 
 
+class FileWritePreview(BaseModel):
+    root_id: str = Field(min_length=1, max_length=40)
+    relative_path: str = Field(min_length=1, max_length=1000)
+    content: str = Field(max_length=2_000_000)
+
+
+class FileWriteExecution(FileWritePreview):
+    approval_id: str = Field(min_length=32, max_length=32)
+
+
 class ChatInput(BaseModel):
     prompt: str = Field(min_length=1, max_length=100_000)
     task_type: str = Field(default="chat", min_length=1, max_length=40)
@@ -67,6 +79,8 @@ def create_app(
     store: ObservatoryStore | None = None,
     gateway: ModelGateway | None = None,
     transcriber: SpeechToTextProvider | None = None,
+    filesystem: FilesystemAdapter | None = None,
+    approvals: ApprovalStore | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -80,6 +94,13 @@ def create_app(
     app.state.gateway = model_gateway
     speech_to_text = transcriber or FasterWhisperTranscriber(data_dir=data_dir)
     app.state.transcriber = speech_to_text
+    approval_store = approvals or ApprovalStore(data_dir / "computer-approvals.sqlite3")
+    computer_files = filesystem or FilesystemAdapter.from_environment(
+        approval_store,
+        workspace=Path.cwd() / "workspace",
+    )
+    app.state.computer_files = computer_files
+    app.state.approvals = approval_store
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -166,6 +187,106 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return {"snapshot_id": snapshot_id}
+
+    @app.get("/api/computer/roots")
+    def computer_roots() -> dict[str, Any]:
+        return {"items": computer_files.list_roots()}
+
+    @app.get("/api/computer/files")
+    def computer_files_list(
+        root_id: str,
+        relative_path: str = ".",
+    ) -> dict[str, Any]:
+        try:
+            return {
+                "root_id": root_id,
+                "relative_path": relative_path,
+                "items": computer_files.list_directory(root_id, relative_path),
+            }
+        except FilesystemAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/computer/file")
+    def computer_file_read(root_id: str, relative_path: str) -> dict[str, str]:
+        try:
+            content = computer_files.read_text(root_id, relative_path)
+        except FilesystemAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {"root_id": root_id, "relative_path": relative_path, "content": content}
+
+    @app.get("/api/computer/search")
+    def computer_search(
+        root_id: str,
+        query: str,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        try:
+            items = computer_files.search_filenames(root_id, query, limit=limit)
+        except FilesystemAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"root_id": root_id, "query": query, "items": items}
+
+    @app.post("/api/computer/files/write/preview", status_code=201)
+    def computer_write_preview(item: FileWritePreview) -> dict[str, Any]:
+        try:
+            return computer_files.preview_write(
+                item.root_id,
+                item.relative_path,
+                item.content,
+            )
+        except FilesystemAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/computer/approvals")
+    def computer_pending_approvals() -> dict[str, Any]:
+        return {"items": approval_store.list_pending()}
+
+    @app.post("/api/computer/approvals/{approval_id}/approve")
+    def computer_approve(approval_id: str) -> dict[str, str]:
+        try:
+            return approval_store.approve(approval_id)
+        except ApprovalError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/computer/files/write/execute")
+    def computer_write_execute(item: FileWriteExecution) -> dict[str, Any]:
+        try:
+            result = computer_files.execute_write(
+                approval_id=item.approval_id,
+                root_id=item.root_id,
+                relative_path=item.relative_path,
+                content=item.content,
+            )
+        except ApprovalError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except FilesystemAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        observatory.record_event(
+            category="computer",
+            event_type="filesystem_write",
+            summary=f"Approved write to {result['relative_path']}",
+            outcome="success",
+            layer_id="SPS-10",
+            payload={
+                "root_id": item.root_id,
+                "sha256": result["sha256"],
+                "size_bytes": result["size_bytes"],
+                "approval_id": item.approval_id,
+            },
+        )
+        return result
 
     @app.get("/api/voice/status")
     def voice_status() -> dict[str, Any]:
