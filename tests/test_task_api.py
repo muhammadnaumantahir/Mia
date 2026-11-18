@@ -615,3 +615,69 @@ def test_task_desk_renders_ordered_execution_preview_and_manual_execute_control(
     assert "JSON.stringify(step.arguments??{},null,2)" in dashboard
     assert "Execute approved read-only plan" in dashboard
     assert "task.metadata&&task.metadata.execution" in dashboard
+
+
+
+def test_manual_task_sequence_stops_before_next_step_after_owner_cancellation(tmp_path):
+    from mia.agent.resources import ResourceMonitor
+
+    tasks = TaskStore(tmp_path / "cancel-between-steps.sqlite3")
+    app = create_app(
+        store=ObservatoryStore(tmp_path / "cancel-between-steps-observatory.sqlite3"),
+        task_store=tasks,
+        resource_monitor=ResourceMonitor(psutil_module=FakePsutil()),
+    )
+    calls = []
+
+    def cancel_task(arguments):
+        calls.append("cancel")
+        tasks.transition(
+            task_id,
+            "cancelled",
+            reason="Owner cancelled between sequence steps",
+            actor="local-user",
+        )
+        return {"ok": True}
+
+    app.state.tool_registry.register(
+        name="demo.cancel_task",
+        description="Test-only handler that simulates owner cancellation.",
+        parameters={"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+        permission="demo.test",
+        mode="read",
+        handler=cancel_task,
+    )
+    client = TestClient(app)
+    created = client.post(
+        "/api/tasks",
+        json={
+            "title": "Cancel a two-step sequence",
+            "goal": "Stop before the second read operation.",
+            "source": "interactive",
+            "metadata": {
+                "execution": {
+                    "steps": [
+                        {"tool_name": "demo.cancel_task", "arguments": {}},
+                        {"tool_name": "system.read_resources", "arguments": {}},
+                    ]
+                }
+            },
+        },
+    )
+    assert created.status_code == 201
+    task_id = created.json()["task_id"]
+    approved = client.post(
+        f"/api/tasks/{task_id}/approve",
+        json={"reason": "Approve the test sequence."},
+    )
+    assert approved.status_code == 200
+
+    response = client.post(f"/api/tasks/{task_id}/execute")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelled"
+    assert tasks.get_task(task_id)["status"] == "cancelled"
+    assert calls == ["cancel"]
+    assert [event["to_status"] for event in tasks.list_events(task_id)] == [
+        "proposed", "approved", "running", "cancelled"
+    ]
