@@ -16,7 +16,7 @@
 | 4. Computer intelligence | In progress | Scoped filesystem, approval-bound writes, allowlisted app launch, browser and Windows visible-window/text-control adapter; stronger OS sandbox and target-PC verification remain |
 | 5. Memory and knowledge | In progress | Persistent conversations, FTS5 memory, provenance labels and document parsers; parser integration/export/retention tests remain |
 | 6. Autonomous agent | Task Desk + manual read-only execution | Task Desk submits model-assisted plans, lists proposals, and supports approve/reject/cancel. A safe CPU/RAM task demonstrates explicit approval and one registered read-only tool through POST /api/tasks/{task_id}/execute; preview and mutation tools remain excluded. Background scheduler still has no production executor/API lifecycle, and target-device checks remain open |
-| 7. Self-programming | Foundation in progress | Candidate source, lineage, validation/registration APIs; isolated worker, activation and rollback remain |
+| 7. Self-programming | Docker validation runner groundwork added | Disposable Docker runner/worker now has no-network, read-only mount, non-root, capability-drop, resource and timeout controls plus candidate unit-test/regression reporting. API integration, validation evidence binding, activation and rollback remain |
 | 8. 30-day experiment | Planned | No Day 0 baseline captured. Start only after sandbox, fixed benchmarks and reproducible environment manifest are ready |
 
 ## Verification
