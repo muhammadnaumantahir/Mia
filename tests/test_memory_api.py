@@ -62,7 +62,13 @@ class ConversationProvider:
         ]
 
     async def complete(self, candidate, request):
-        assert [message["role"] for message in request.messages] == ["user", "user"]
+        if request.prompt == "What project did I mention?":
+            assert [message["role"] for message in request.messages] == [
+                "user",
+                "assistant",
+                "user",
+            ]
+            assert request.messages[0]["content"] == "My project is Mia."
         return "I will keep the context in this conversation."
 
 
