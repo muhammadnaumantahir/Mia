@@ -604,3 +604,14 @@ def test_manual_task_execution_rejects_sequence_with_preview_step_before_claim(t
         "proposed",
         "approved",
     ]
+
+
+def test_task_desk_renders_ordered_execution_preview_and_manual_execute_control():
+    from pathlib import Path
+
+    dashboard = Path("src/mia/observatory/dashboard.html").read_text(encoding="utf-8")
+
+    assert "Review exact execution" in dashboard
+    assert "JSON.stringify(step.arguments??{},null,2)" in dashboard
+    assert "Execute approved read-only plan" in dashboard
+    assert "task.metadata&&task.metadata.execution" in dashboard

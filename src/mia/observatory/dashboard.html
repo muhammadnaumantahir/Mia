@@ -78,6 +78,7 @@ footer{margin-top:24px;color:#6f8580;font-size:11px;line-height:1.6}
 <button class="send" type="submit">Propose</button>
 </form>
 <div class="events" id="taskList"><div class="muted">Loading tasks…</div></div>
+<div class="experiment-details" id="taskExecutionResult" hidden></div>
 </section>
 <section class="panel" id="capabilityLab">
  <div class="panelhead"><div><h3>Capability Lab</h3><div class="muted">Version and validate new code in the isolated Docker sandbox. Registered capabilities remain inactive.</div></div><button class="send" type="button" id="refreshCapabilities">↻ Refresh</button></div>
@@ -616,6 +617,28 @@ async function loadTasks(){
    const detail=document.createElement('small');detail.textContent=task.status+' · '+task.source+' · priority '+task.priority;
    const goal=document.createElement('small');goal.textContent=task.goal;goal.style.color='#9db2aa';
    left.append(title,detail,goal);
+   const execution=task.metadata&&task.metadata.execution;
+   const executionSteps=execution&&Array.isArray(execution.steps)?execution.steps:
+    (execution&&typeof execution.tool_name==='string'?[execution]:[]);
+   if(executionSteps.length){
+    const preview=document.createElement('details');preview.style.marginTop='8px';
+    const summary=document.createElement('summary');
+    summary.textContent='Review exact execution · '+executionSteps.length+' step(s)';
+    summary.style.cursor='pointer';summary.style.color='#b9d3c8';
+    preview.append(summary);
+    executionSteps.forEach((step,index)=>{
+     const call=document.createElement('pre');
+     call.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto;margin:6px 0;padding:8px;border:1px solid #35514a;border-radius:8px;background:#10191b;color:#dce9e4;font-size:11px';
+     call.textContent=(index+1)+'. '+String(step.tool_name||'Unknown tool')+'\n'+
+      JSON.stringify(step.arguments??{},null,2);
+     preview.append(call);
+    });
+    left.append(preview);
+   }else if(task.status==='proposed'){
+    const noPlan=document.createElement('small');
+    noPlan.textContent='No structured execution plan is attached. Approval alone will not run this task.';
+    noPlan.style.color='#a9b9b3';left.append(noPlan);
+   }
    const actions=document.createElement('div');actions.style.display='flex';actions.style.gap='6px';actions.style.flexWrap='wrap';
    if(task.status==='proposed'){
     const approve=document.createElement('button');approve.className='send';approve.textContent='Approve';
@@ -629,7 +652,16 @@ async function loadTasks(){
     const cancel=document.createElement('button');cancel.className='send';cancel.textContent='Dismiss';cancel.style.background='#30393a';cancel.style.color='#d8e2dd';
     cancel.addEventListener('click',()=>changeTask(task.task_id,'cancel','Dismissed failed task in task control'));
     actions.append(retry,cancel);
-   }else if(['approved','running','waiting'].includes(task.status)){
+   }else if(task.status==='approved'){
+    if(executionSteps.length){
+     const execute=document.createElement('button');execute.className='send';execute.textContent='Execute approved read-only plan';
+     execute.addEventListener('click',()=>executeTask(task.task_id,task.title,execute));
+     actions.append(execute);
+    }
+    const cancel=document.createElement('button');cancel.className='send';cancel.textContent='Cancel';cancel.style.background='#30393a';cancel.style.color='#d8e2dd';
+    cancel.addEventListener('click',()=>changeTask(task.task_id,'cancel','Cancelled in task control'));
+    actions.append(cancel);
+   }else if(['running','waiting'].includes(task.status)){
     const cancel=document.createElement('button');cancel.className='send';cancel.textContent='Cancel';cancel.style.background='#30393a';cancel.style.color='#d8e2dd';
     cancel.addEventListener('click',()=>changeTask(task.task_id,'cancel','Cancelled in task control'));
     actions.append(cancel);
@@ -638,6 +670,21 @@ async function loadTasks(){
    actions.append(badge);row.append(left,actions);box.append(row);
   });
  }catch(error){$('taskList').textContent='Task control unavailable.';}
+}
+async function executeTask(taskId,title,button){
+ const resultBox=$('taskExecutionResult');
+ resultBox.hidden=false;resultBox.textContent='Running approved read-only steps for '+title+'…';
+ button.disabled=true;
+ try{
+  const response=await fetch('/api/tasks/'+encodeURIComponent(taskId)+'/execute',{method:'POST'});
+  const result=await response.json();
+  if(!response.ok)throw new Error(result.detail||'Task execution failed');
+  resultBox.textContent='Task '+result.status+': '+title+'\n'+JSON.stringify(result.outcome||{},null,2);
+  await loadTasks();
+ }catch(error){
+  resultBox.textContent='Execution did not complete: '+error.message;
+  button.disabled=false;
+ }
 }
 async function controlAutonomy(action){
  const button=$('autonomy'+(action==='pause'?'Pause':'Resume'));

@@ -18,7 +18,7 @@ The default in .env.example is false.
 - One task sequence is dispatched per cycle under a shared executor timeout.
 - The current automatic allowlist is deliberately narrow:
   system.read_resources, system.list_processes and applications.list.
-  These are registered read-only system/application inventory tools.
+  These are registered read-only system/application inventory tools. The manual Task Desk supports a separate owner-approved sequence of 2–5 registered read-only calls: it displays each ordered tool name and exact JSON arguments before approval, then exposes an explicit Execute action after approval. Multi-step sequences are never eligible for background dispatch.
 - Filesystem reads, browser navigation/search, desktop inspection, application
   launch, text entry, previews and all mutations remain outside automatic
   dispatch. They use their separate manual/approval-bound flows.

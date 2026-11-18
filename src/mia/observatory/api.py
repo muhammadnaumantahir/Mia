@@ -1157,11 +1157,29 @@ def create_app(
             stt_installed = True
         except ImportError:
             stt_installed = False
-        local_tts_ready = bool(getattr(speech_synthesizer, "available", False))
+        tts_installed = bool(getattr(speech_synthesizer, "available", False))
+        tts_voice_count = 0
+        tts_error = None
+        if tts_installed:
+            try:
+                tts_voice_count = len(speech_synthesizer.list_voices())
+            except Exception:
+                tts_error = "system_speech_engine_unavailable"
+        if not tts_installed:
+            local_tts_status = "install_tts_extra"
+        elif tts_error:
+            local_tts_status = "unavailable"
+        elif tts_voice_count == 0:
+            local_tts_status = "no_system_voices"
+        else:
+            local_tts_status = "ready"
+        local_tts_ready = local_tts_status == "ready"
         return {
             "speech_to_text": "ready" if stt_installed else "install_voice_extra",
             "model": getattr(speech_to_text, "model_size", "custom"),
-            "local_text_to_speech": "ready" if local_tts_ready else "install_tts_extra",
+            "local_text_to_speech": local_tts_status,
+            "local_tts_voice_count": tts_voice_count,
+            "local_tts_error": tts_error,
             "text_to_speech": (
                 "local_and_browser_speech_synthesis"
                 if local_tts_ready else "browser_speech_synthesis"

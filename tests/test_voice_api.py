@@ -151,6 +151,7 @@ def test_voice_status_reports_local_tts_capability(tmp_path):
 
     assert response.status_code == 200
     assert response.json()["local_text_to_speech"] == "ready"
+    assert response.json()["local_tts_voice_count"] == 2
     assert response.json()["always_listening"] is False
 
 
@@ -179,3 +180,27 @@ def test_local_tts_engine_startup_failure_is_reported_as_unavailable(tmp_path):
 
     assert voices.status_code == 503
     assert "speech engine unavailable" in voices.json()["detail"]
+
+    status = client.get("/api/voice/status")
+    assert status.status_code == 200
+    assert status.json()["local_text_to_speech"] == "install_tts_extra"
+
+
+
+def test_voice_status_distinguishes_missing_system_voices(tmp_path):
+    class EmptyVoiceSynthesizer(FakeSynthesizer):
+        def list_voices(self):
+            return []
+
+    client = TestClient(
+        create_app(
+            store=ObservatoryStore(tmp_path / "no-system-voices.sqlite3"),
+            transcriber=FakeTranscriber(),
+            tts_synthesizer=EmptyVoiceSynthesizer(),
+        )
+    )
+    response = client.get("/api/voice/status")
+
+    assert response.status_code == 200
+    assert response.json()["local_text_to_speech"] == "no_system_voices"
+    assert response.json()["text_to_speech"] == "browser_speech_synthesis"
