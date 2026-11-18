@@ -21,7 +21,7 @@
 
 ## Verification
 
-- Last known fully green CI commit: 19c3fde9d110611a648c9a168b7841a0d035db75 on Windows and Ubuntu with Python 3.13.
+- Last known fully green CI commit: 19c3fde9d110611a648c9a168b7841a0d035db75 on Windows and Ubuntu with Python 3.13. FastAPI lifespan/test repair branch `a2f8ae0` was merged to `main` as `7d82302`; its PR-triggered Windows/Ubuntu Python 3.13 checks were queued at merge time and must be confirmed after completion.
 - Recent push-triggered Actions runs, including 44365793438, 44365825105, 44365937960, 44365966310, 44366076182, 44366187428, 44367900741, 44367988365 and 44368054819, terminate both Windows and Ubuntu matrix jobs within seconds with `runner_id: 0`, an empty `runner_name`, and no step records. Re-running the latest failed jobs did not change this. The test/lint outcomes are therefore inconclusive; they must not be described as code failures or passing tests. The current development container cannot resolve github.com for a local checkout, so no local test result is claimed.
 - Planner, scheduler, read-only task-executor, Task Desk, Capability Lab, capability lifecycle, Docker sandbox, document-ingestion hardening and Day 0 capture tests have not yet been confirmed by a successful CI run. The latest inspected Actions jobs have `steps: null`; runner allocation/execution cannot be verified from available logs.
 - New regression coverage was committed for autonomy stop races, cancellation between read-only task steps, hostile Office ZIP containers, and memory export integrity/API behavior. The Office archive guard's lint formatting was corrected in `be37487`; all changes remain unverified until a successful Windows and Ubuntu workflow completes.
@@ -34,6 +34,8 @@
 
 - 2026-11-18 local verification (Linux, Python 3.12.3, fastapi 0.164.0, starlette 1.10.0, pytest 9.2.0, ruff 0.17.5; no Docker, no Windows): `ruff check src tests` passed and `pytest` reported 242 passed. This is a local run only; it is not the Python 3.13 Windows/Ubuntu CI matrix, and Docker sandbox, Windows UI and TTS paths were exercised through test doubles, not real Docker, desktop apps or speech engines.
 - Fixes made during that run: (1) `create_app` used `FastAPI.add_event_handler`, which current Starlette no longer provides, so every API test failed at collection; startup/shutdown hooks now run through a lifespan context (`tests/test_app_lifespan.py` covers interrupted-task recovery on startup). (2) `ExperimentSnapshotScheduler` defaulted the last-attempt time to `0.0` against `time.monotonic()`, so a host up for less than `retry_seconds` skipped its first capture; it now treats "never attempted" as `None`. (3) Stale tests were aligned with current behavior: chat system prompt, executor `validate_steps`/`should_continue` interface, immutable-baseline triggers in the tamper tests, a real minimal WAV fixture, a double-escaped sandbox source string, Docker fake call recording and the Windows UI API fake control metadata. (4) Ruff import-order, unused-import and `collections.abc` findings were cleaned up.
+
+- 2026-11-18 commits `97f4c55`, `0e39c8b`, `112d66b` and `2ecf068` harden paid inference routing: non-finite/negative budgets and price metadata, invalid price calculations and malformed spend-cap environment values now fail closed. Regression coverage added for NaN, infinities, negative and malformed budget inputs. CI verification pending.
 
 ## Not complete
 
