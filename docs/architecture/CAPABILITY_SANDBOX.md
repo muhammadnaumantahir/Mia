@@ -7,7 +7,10 @@ runtime; it never imports a candidate into the running Mia process.
 ## Build the sandbox image
 
 From the repository root, after installing Docker Desktop and starting its
-Linux container engine:
+Linux container engine. The initial image build needs network access to pull
+the base image and download the Python development dependencies from PyPI.
+This is a build-time requirement only; candidate execution uses
+`--network=none`.
 
 \`\`\`sh
 docker build --pull -f sandbox/Dockerfile -t mia-sandbox:py313-v1 .
@@ -56,7 +59,9 @@ tested rollback controller exist.
 
 The default image is \`mia-sandbox:py313-v1\`. Override it with
 \`MIA_SANDBOX_IMAGE\`; override the executable with \`MIA_DOCKER_EXECUTABLE\`.
-No automatic image build or Docker daemon startup occurs.
+No automatic image build or Docker daemon startup occurs. The Docker image ID
+is recorded in each validation report so a later image-tag update cannot
+silently change the provenance of an earlier result.
 
 
 ## Capability API integration
