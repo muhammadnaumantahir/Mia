@@ -214,3 +214,18 @@ def test_approved_text_cannot_be_redirected_to_reused_window_handle(tmp_path):
             window_class="Notepad",
         )
     assert window.control.text is None
+
+
+def test_password_controls_are_never_returned_or_targetable(tmp_path):
+    adapter, _, window = build_adapter(tmp_path)
+    window.control.element_info.is_password = True
+    inspected = adapter.inspect_window(123)
+    assert inspected["controls"] == []
+    with pytest.raises(DesktopAccessError, match="Password controls"):
+        adapter.preview_type_text(
+            window_handle=123,
+            window_title="Notepad",
+            automation_id="editor",
+            control_type="Edit",
+            text="secret",
+        )
