@@ -312,6 +312,14 @@ def create_app(
             "items": desktop_adapter.list_windows(limit=args.get("limit", 50))
         })
 
+    def tool_desktop_inspect_window(args: dict[str, Any]) -> ToolResult:
+        return ToolResult(
+            desktop_adapter.inspect_window(
+                int(args["window_handle"]),
+                limit=args.get("limit", 200),
+            )
+        )
+
     def tool_desktop_preview_type_text(args: dict[str, Any]) -> ToolResult:
         preview = desktop_adapter.preview_type_text(
             window_handle=args["window_handle"],
@@ -492,6 +500,18 @@ def create_app(
         "desktop.inspect",
         "read",
         tool_desktop_list_windows,
+    )
+    register_tool(
+        "desktop.inspect_window",
+        "Inspect visible, enabled text-control metadata in a specific window. Never returns the contents of text controls.",
+        {
+            "window_handle": {"type": "integer", "minimum": 1},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 200},
+        },
+        ["window_handle"],
+        "desktop.inspect",
+        "read",
+        tool_desktop_inspect_window,
     )
     register_tool(
         "desktop.preview_type_text",
@@ -1323,6 +1343,17 @@ def create_app(
             payload={"approval_id": approval_id, "kind": item.kind},
         )
         return {"status": "completed", "kind": item.kind, "result": result}
+
+    @app.get("/api/desktop/windows/{window_handle}/controls")
+    def desktop_window_controls(window_handle: int, limit: int = 200) -> dict[str, Any]:
+        try:
+            return desktop_adapter.inspect_window(window_handle, limit=limit)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except DesktopAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get("/api/desktop/windows")
     def desktop_windows(limit: int = 50) -> dict[str, Any]:
