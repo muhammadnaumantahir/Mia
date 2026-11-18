@@ -51,8 +51,9 @@ The service remains bound to localhost. Remote access must not be enabled until 
 1. Windows application catalog and launch adapter with explicit allowlist.
 2. Browser adapter using Playwright with a dedicated browser context and download policy.
 3. Document adapters for PDF, DOCX, XLSX and PPTX, with read/write previews.
-4. Task orchestrator to combine actions and resume safely after failures.
-5. Restricted worker process for approved scripts; no arbitrary code in the privileged process.
+4. Expand Windows UI Automation to carefully scoped browser/app interactions with per-action approvals.
+5. Task orchestrator to combine actions and resume safely after failures.
+6. Restricted worker process for approved scripts; no arbitrary code in the privileged process.
 
 ## Non-negotiable safety boundaries
 
@@ -88,3 +89,16 @@ Install the optional browser adapter with `python -m pip install -e ".[computer]
 - The current browser context has no authenticated user session unless a later explicit login flow is added.
 
 The URL filter is a defense-in-depth control, not a complete network sandbox. DNS rebinding and browser-engine vulnerabilities require OS-level/network isolation before exposing the browser to untrusted automated workloads.
+
+
+## Windows desktop UI Automation
+
+The optional Windows adapter uses pywinauto's UI Automation backend:
+- It can enumerate visible windows and expose only title, handle, process ID and window class.
+- Text entry is limited to visible, enabled controls with a stable AutomationId and one of the supported text-control types.
+- The preview is bound to the exact window handle/title, control ID/type and text SHA-256.
+- The approval card displays the proposed text and its hash; no typing occurs before approval.
+- Execution re-resolves the same window/control and consumes the one-time approval before replacing text.
+- Arbitrary keystrokes, mouse clicks, menu selection, button activation, password controls, shell access and process termination are not implemented.
+
+Install on Windows with `python -m pip install -e ".[computer]"`. This adapter is Windows-only; the other core tests remain cross-platform. UI Automation support varies by application, and elevated/admin windows may not be accessible to a non-elevated Mia process.

@@ -77,6 +77,12 @@ function renderApprovalCards(actions){
   if(display.new_sha256)parts.push('SHA-256: '+display.new_sha256);
   detail.textContent=parts.join(' · ')||'Review the action before approving.';
   card.append(title,detail);
+  if(action.kind==='desktop.type_text' && typeof action.payload?.text==='string'){
+   const details=document.createElement('details');
+   const summary=document.createElement('summary');summary.textContent='Review exact text to be entered';
+   const pre=document.createElement('pre');pre.textContent=action.payload.text.slice(0,20000);
+   details.append(summary,pre);card.append(details);
+  }
   if(action.kind==='filesystem.write' && typeof action.payload?.content==='string'){
    const details=document.createElement('details');
    const summary=document.createElement('summary');summary.textContent='Review proposed file content';
