@@ -248,3 +248,9 @@ def test_assistant_page_uses_stream_endpoint_when_tools_are_off(tmp_path):
     client = make_client(tmp_path, StreamingProvider("a", []))
     page = client.get("/assistant").text
     assert "/api/gateway/chat/stream" in page and "streamReply" in page
+
+
+def test_assistant_page_has_memory_cleanup_with_preview_before_delete(tmp_path):
+    page = make_client(tmp_path, StreamingProvider("a", [])).get("/assistant").text
+    assert "/api/memory/purge" in page and "purgePreview" in page and "purgeConfirm" in page
+    assert "dry_run:dry" in page and "window.confirm" in page

@@ -50,6 +50,7 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 <div class="brand"><div class="logo">M</div><div><strong>Mia</strong><small>Your personal AI</small></div></div>
 <nav class="nav"><a class="active" href="/assistant">✳ <span>New conversation</span></a><button class="nav-button" id="toggleTasks" type="button" aria-controls="taskPanel" aria-expanded="false">☷ <span>Task Desk</span></button><a href="/"><span>◷</span><span>Evolution Observatory</span></a></nav>
 <div class="recent-title">Recent conversations</div><div class="recent-list" id="recentList"><div class="sub">No conversations yet</div></div>
+<div class="sidecard"><b>Memory cleanup</b><p>Preview, then delete, conversations and saved knowledge not updated for a number of days.</p><div style="display:flex;gap:6px;align-items:center;margin-top:8px"><input id="purgeDays" type="number" min="1" max="36500" value="90" aria-label="Older than days" style="width:64px"><span style="font-size:11px">days</span><button id="purgePreview" type="button" class="send" style="padding:4px 10px">Preview</button></div><div id="purgeResult" style="font-size:11px;margin-top:8px"></div><button id="purgeConfirm" type="button" class="send" hidden style="margin-top:6px;padding:4px 10px;background:#5a2a2a;color:#ffd2d2">Delete previewed items</button></div>
 <div class="sidecard"><b>Local-first by design</b><p>Mia tries local models first. Cloud providers are optional, and paid routing remains disabled unless you explicitly configure it.</p></div>
 </aside>
 <main>
@@ -518,6 +519,29 @@ $('composer').addEventListener('submit',async event=>{
 });
 $('prompt').addEventListener('keydown',event=>{
  if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();$('composer').requestSubmit();}
+});
+
+let purgeDays=null;
+async function purgeRequest(days,dry){
+ const r=await fetch('/api/memory/purge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({older_than_days:days,dry_run:dry})});
+ const data=await r.json();if(!r.ok)throw new Error(typeof data.detail==='string'?data.detail:'Enter a whole number of days from 1 to 36500.');return data;
+}
+$('purgePreview').addEventListener('click',async()=>{
+ const days=parseInt($('purgeDays').value,10);$('purgeConfirm').hidden=true;purgeDays=null;
+ try{
+  const d=await purgeRequest(days,true);const c=d.conversations.count,k=d.items.count;
+  $('purgeResult').textContent=(c||k)?('Would delete '+c+' conversation(s) and '+k+' knowledge item(s) not updated in '+days+' days.'):'Nothing is older than '+days+' days.';
+  if(c||k){purgeDays=days;$('purgeConfirm').hidden=false;}
+ }catch(e){$('purgeResult').textContent=e.message;}
+});
+$('purgeConfirm').addEventListener('click',async()=>{
+ if(purgeDays===null)return;
+ if(!window.confirm('Permanently delete the previewed conversations and knowledge items? This cannot be undone.'))return;
+ try{
+  const d=await purgeRequest(purgeDays,false);
+  $('purgeResult').textContent='Deleted '+d.conversations.count+' conversation(s) and '+d.items.count+' knowledge item(s).';
+  $('purgeConfirm').hidden=true;purgeDays=null;loadConversationList();
+ }catch(e){$('purgeResult').textContent=e.message;}
 });
 refreshVoices();
 if('speechSynthesis' in window)window.speechSynthesis.onvoiceschanged=refreshVoices;
