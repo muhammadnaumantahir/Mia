@@ -235,9 +235,11 @@ class MemoryStore:
             sort_keys=True,
             separators=(",", ":"),
         ).encode("utf-8")
-        if len(canonical) > self.MAX_EXPORT_BYTES:
+        digest = hashlib.sha256(canonical).hexdigest()
+        digest_field = json.dumps({"sha256": digest}, separators=(",", ":")).encode("utf-8")
+        if len(canonical) + len(digest_field) > self.MAX_EXPORT_BYTES:
             raise ValueError("Memory export exceeds the 25 MB safety limit")
-        payload["sha256"] = hashlib.sha256(canonical).hexdigest()
+        payload["sha256"] = digest
         return payload
 
     def get_conversation(self, conversation_id: str) -> dict[str, Any] | None:
