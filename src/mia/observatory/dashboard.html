@@ -48,8 +48,8 @@ async function load(){
   ]);
   el('events').textContent=fmt(s.event_count);el('samples').textContent=fmt(s.metric_sample_count);
   el('day').textContent=s.latest_day_index===null?'—':'Day '+s.latest_day_index;
-  el('experiment').textContent='Baseline required';
-  el('status').textContent=s.data_status==='recorded'?'Local telemetry · data recorded':'Local telemetry · awaiting baseline';
+  el('experiment').textContent=s.experiment_status==='running'?'Running':s.experiment_status==='prepared'?'Prepared':'Not started';
+  el('status').textContent=s.experiment_status==='running'?'Experiment running · local telemetry':s.experiment_status==='prepared'?'Baseline prepared · awaiting explicit start':s.data_status==='recorded'?'Local telemetry · data recorded':'Local telemetry · awaiting baseline';
   metricItems=m.items||[];const names=[...new Set(metricItems.map(x=>x.metric_name))];const select=el('metric');select.innerHTML='';
   names.forEach(name=>{const option=document.createElement('option');option.value=name;option.textContent=name;select.appendChild(option);});
   if(names.length){el('chartEmpty').hidden=true;el('chart').hidden=false;draw(names[0]);}
