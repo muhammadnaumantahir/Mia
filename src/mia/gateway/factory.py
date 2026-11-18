@@ -13,7 +13,12 @@ def build_default_registry() -> ProviderRegistry:
     """Register Ollama by default and FreeLLMAPI only when explicitly enabled."""
     registry = ProviderRegistry()
     ollama_url = os.getenv("MIA_OLLAMA_BASE_URL", "http://127.0.0.1:11434")
-    registry.register(OllamaProvider(base_url=ollama_url))
+    ollama_tools = (
+        os.getenv("MIA_OLLAMA_ENABLE_TOOL_CALLING", "false").strip().lower() == "true"
+    )
+    registry.register(
+        OllamaProvider(base_url=ollama_url, supports_tools=ollama_tools)
+    )
 
     if os.getenv("MIA_FREELLMAPI_ENABLED", "false").strip().lower() == "true":
         base_url = os.getenv(
@@ -38,6 +43,12 @@ def build_default_registry() -> ProviderRegistry:
                 base_url,
                 api_key=secret,
                 free_tier=route_is_free,
+                supports_tools=(
+                    os.getenv(
+                        "MIA_FREELLMAPI_ENABLE_TOOL_CALLING",
+                        "false",
+                    ).strip().lower() == "true"
+                ),
             )
         )
 

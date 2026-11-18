@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
+import uuid
 from typing import Any
 
 from .contracts import (
     ModelCandidate,
     ModelRequest,
     PermanentProviderError,
+    ProviderResponse,
     TransientProviderError,
 )
 
@@ -17,9 +20,15 @@ class OllamaProvider:
 
     provider_id = "ollama"
 
-    def __init__(self, base_url: str = "http://127.0.0.1:11434", timeout: float = 90.0):
+    def __init__(
+        self,
+        base_url: str = "http://127.0.0.1:11434",
+        timeout: float = 90.0,
+        supports_tools: bool = False,
+    ):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.supports_tools = supports_tools
 
     @staticmethod
     def _httpx():
@@ -63,7 +72,9 @@ class OllamaProvider:
                 ModelCandidate(
                     provider_id=self.provider_id,
                     model_id=str(model_name),
-                    capabilities=frozenset({"chat"}),
+                    capabilities=frozenset(
+                        {"chat", "tools"} if self.supports_tools else {"chat"}
+                    ),
                     context_window=8192,
                     free_tier=True,
                     healthy=True,
@@ -74,7 +85,11 @@ class OllamaProvider:
             )
         return candidates
 
-    async def complete(self, candidate: ModelCandidate, request: ModelRequest) -> str:
+    async def complete(
+        self,
+        candidate: ModelCandidate,
+        request: ModelRequest,
+    ) -> ProviderResponse:
         httpx = self._httpx()
         body = {
             "model": candidate.model_id,
@@ -82,6 +97,8 @@ class OllamaProvider:
             "stream": False,
             "options": {"num_predict": request.max_output_tokens},
         }
+        if request.tools and self.supports_tools:
+            body["tools"] = list(request.tools)
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(f"{self.base_url}/api/chat", json=body)
@@ -102,10 +119,19 @@ class OllamaProvider:
         except ValueError as exc:
             raise PermanentProviderError("Ollama returned invalid JSON") from exc
 
-        content = payload.get("message", {}).get("content")
+        message = payload.get("message", {})
+        content = message.get("content")
+        raw_calls = message.get("tool_calls") or []
+        tool_calls = _normalise_tool_calls(raw_calls)
         if not isinstance(content, str):
-            raise PermanentProviderError("Ollama response did not contain message content")
-        return content
+            content = ""
+        if not content and not tool_calls:
+            raise PermanentProviderError("Ollama response did not contain text or tool calls")
+        return ProviderResponse(
+            content=content,
+            tool_calls=tool_calls,
+            finish_reason=payload.get("done_reason"),
+        )
 
 
 class OpenAICompatibleProvider:
@@ -125,6 +151,7 @@ class OpenAICompatibleProvider:
         timeout: float = 90.0,
         free_tier: bool = False,
         model_context_window: int = 8192,
+        supports_tools: bool = False,
     ):
         if not provider_id.strip():
             raise ValueError("provider_id is required")
@@ -136,6 +163,7 @@ class OpenAICompatibleProvider:
         self.timeout = timeout
         self.free_tier = free_tier
         self.model_context_window = model_context_window
+        self.supports_tools = supports_tools
 
     @staticmethod
     def _httpx():
@@ -197,7 +225,9 @@ class OpenAICompatibleProvider:
                 ModelCandidate(
                     provider_id=self.provider_id,
                     model_id=str(model_name),
-                    capabilities=frozenset({"chat"}),
+                    capabilities=frozenset(
+                        {"chat", "tools"} if self.supports_tools else {"chat"}
+                    ),
                     context_window=self.model_context_window,
                     free_tier=self.free_tier,
                     healthy=True,
@@ -206,14 +236,21 @@ class OpenAICompatibleProvider:
             )
         return candidates
 
-    async def complete(self, candidate: ModelCandidate, request: ModelRequest) -> str:
+    async def complete(
+        self,
+        candidate: ModelCandidate,
+        request: ModelRequest,
+    ) -> ProviderResponse:
         httpx = self._httpx()
         body = {
             "model": candidate.model_id,
-            "messages": [{"role": "user", "content": request.prompt}],
+            "messages": list(request.messages) or [{"role": "user", "content": request.prompt}],
             "max_tokens": request.max_output_tokens,
             "stream": False,
         }
+        if request.tools and self.supports_tools:
+            body["tools"] = list(request.tools)
+            body["tool_choice"] = "auto"
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
@@ -244,13 +281,46 @@ class OpenAICompatibleProvider:
             ) from exc
 
         try:
-            content = payload["choices"][0]["message"]["content"]
+            choice = payload["choices"][0]
+            message = choice["message"]
         except (KeyError, IndexError, TypeError) as exc:
             raise PermanentProviderError(
-                f"{self.provider_id} response did not contain message content"
+                f"{self.provider_id} response did not contain a message"
             ) from exc
-        if not isinstance(content, str):
+
+        content = message.get("content")
+        tool_calls = _normalise_tool_calls(message.get("tool_calls") or [])
+        if content is None:
+            content = ""
+        if not isinstance(content, str) or (not content and not tool_calls):
             raise PermanentProviderError(
-                f"{self.provider_id} returned a non-text message"
+                f"{self.provider_id} returned neither text nor structured tool calls"
             )
-        return content
+        return ProviderResponse(
+            content=content,
+            tool_calls=tool_calls,
+            finish_reason=choice.get("finish_reason"),
+        )
+
+
+
+def _normalise_tool_calls(calls: list[dict[str, Any]]) -> tuple[dict[str, Any], ...]:
+    """Normalize Ollama/OpenAI tool calls to the OpenAI chat-completions shape."""
+    normalized = []
+    for call in calls[:8]:
+        function = call.get("function") or {}
+        name = function.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+        arguments = function.get("arguments", {})
+        if not isinstance(arguments, str):
+            arguments = json.dumps(arguments, ensure_ascii=False)
+        normalized.append({
+            "id": call.get("id") or f"call_{uuid.uuid4().hex}",
+            "type": "function",
+            "function": {
+                "name": name,
+                "arguments": arguments,
+            },
+        })
+    return tuple(normalized)

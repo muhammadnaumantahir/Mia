@@ -9,6 +9,7 @@ from .contracts import (
     ModelRequest,
     PermanentProviderError,
     RoutePolicy,
+    ProviderResponse,
     TransientProviderError,
 )
 from .registry import ProviderRegistry
@@ -21,6 +22,7 @@ class CompletionResult:
     model_id: str
     content: str
     attempted_candidates: tuple[str, ...]
+    tool_calls: tuple[dict[str, Any], ...] = ()
 
 
 class ModelGateway:
@@ -51,12 +53,17 @@ class ModelGateway:
             attempted.append(f"{candidate.provider_id}/{candidate.model_id}")
             provider = self.providers.get(candidate.provider_id)
             try:
-                content = await provider.complete(candidate, request)
+                response = await provider.complete(candidate, request)
+                if isinstance(response, str):
+                    response = ProviderResponse(content=response)
+                if not response.content and not response.tool_calls:
+                    raise PermanentProviderError("Provider returned an empty response")
                 return CompletionResult(
                     provider_id=candidate.provider_id,
                     model_id=candidate.model_id,
-                    content=content,
+                    content=response.content or "",
                     attempted_candidates=tuple(attempted),
+                    tool_calls=response.tool_calls,
                 )
             except TransientProviderError as exc:
                 last_error = exc

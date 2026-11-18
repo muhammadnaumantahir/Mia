@@ -31,7 +31,7 @@ async def test_ollama_lists_models_and_completes_locally():
     )
     assert models[0].model_id == "qwen-small:latest"
     assert models[0].free_tier is True
-    assert response == "Hello from local Mia model"
+    assert response.content == "Hello from local Mia model"
 
 
 @pytest.mark.asyncio
@@ -60,7 +60,7 @@ async def test_openai_compatible_adapter_supports_local_freellmapi_endpoint():
         ModelRequest(task_type="chat", prompt="Hello"),
     )
     assert models[0].free_tier is False
-    assert answer == "Gateway response"
+    assert answer.content == "Gateway response"
     assert request_route.calls[0].request.headers["Authorization"] == "Bearer test-only-key"
 
 
@@ -106,3 +106,62 @@ async def test_gateway_falls_back_after_transient_provider_failure():
         "provider-a/model",
         "provider-b/model",
     )
+
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_openai_compatible_adapter_returns_structured_tool_calls():
+    respx.post("http://tools.test/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "choices": [{
+                    "finish_reason": "tool_calls",
+                    "message": {
+                        "content": None,
+                        "tool_calls": [{
+                            "id": "call-1",
+                            "type": "function",
+                            "function": {
+                                "name": "filesystem.list_directory",
+                                "arguments": "{\\"root_id\\":\\"root_1\\"}",
+                            },
+                        }],
+                    },
+                }]
+            },
+        )
+    )
+    provider = OpenAICompatibleProvider(
+        "tools-test",
+        "http://tools.test/v1",
+        free_tier=True,
+        supports_tools=True,
+    )
+    candidate = ModelCandidate(
+        provider_id="tools-test",
+        model_id="tools-model",
+        capabilities=frozenset({"chat", "tools"}),
+        context_window=8192,
+        free_tier=True,
+        healthy=True,
+        enabled=True,
+    )
+    response = await provider.complete(
+        candidate,
+        ModelRequest(
+            task_type="chat",
+            prompt="List files",
+            tools=({
+                "type": "function",
+                "function": {
+                    "name": "filesystem.list_directory",
+                    "description": "List an allowed folder",
+                    "parameters": {"type": "object", "properties": {"root_id": {"type": "string"}}},
+                },
+            },),
+        ),
+    )
+    assert response.tool_calls[0]["id"] == "call-1"
+    assert response.tool_calls[0]["function"]["name"] == "filesystem.list_directory"
