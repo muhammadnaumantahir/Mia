@@ -39,6 +39,12 @@ computer = [
   "playwright>=1.48,<2",
   'pywinauto>=0.6.9,<1; platform_system == "Windows"',
 ]
+documents = [
+  "pypdf>=5,<7",
+  "python-docx>=1.1,<2",
+  "openpyxl>=3.1,<4",
+  "python-pptx>=1.0,<2",
+]
 
 [project.scripts]
 mia = "mia.__main__:main"
