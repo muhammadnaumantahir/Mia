@@ -1,6 +1,7 @@
-import pytest
 import sqlite3
 from datetime import UTC, datetime, timedelta
+
+import pytest
 
 from mia.observatory.snapshot_capture import ExperimentSnapshotCapturer
 from mia.observatory.snapshot_scheduler import ExperimentSnapshotScheduler

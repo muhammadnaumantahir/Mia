@@ -432,13 +432,11 @@ def test_daily_snapshot_blocks_configuration_drift_from_day_zero(tmp_path):
 
 
 def test_experiment_snapshot_scheduler_is_opt_in_by_environment(tmp_path, monkeypatch):
-    from mia.agent.resources import ResourceMonitor
-
     monkeypatch.setenv("MIA_EXPERIMENT_AUTO_CAPTURE", "true")
     app = create_app(
         store=ObservatoryStore(tmp_path / "scheduler.sqlite3"),
         baseline_capture=lambda root: _baseline_manifest(),
-        resource_monitor=ResourceMonitor(psutil_module=FakePsutil()),
+        resource_monitor=FakeDailyResources(),
     )
     client = TestClient(app)
     status = client.get("/api/experiments/scheduler/status")
