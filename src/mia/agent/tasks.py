@@ -4,19 +4,27 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import sqlite3
 import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+DEFAULT_LEASE_SECONDS = 300
+
+
+def _lease_expiry(seconds: int) -> str:
+    return (datetime.now(UTC) + timedelta(seconds=seconds)).isoformat()
 
 
 TASK_SOURCES = frozenset({
@@ -52,6 +60,9 @@ class TaskStore:
     def __init__(self, database_path: str | Path) -> None:
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        # "<pid>:<random>" identifies this store instance as a lease holder.
+        self.lease_owner = f"{os.getpid()}:{uuid.uuid4().hex}"
+        self.lease_seconds = DEFAULT_LEASE_SECONDS
         self._initialize()
 
     @contextmanager
@@ -115,6 +126,14 @@ class TaskStore:
                     updated_at TEXT NOT NULL
                 );
             """)
+            self._migrate_leases(db)
+
+    def _migrate_leases(self, db: sqlite3.Connection) -> None:
+        columns = {row[1] for row in db.execute("PRAGMA table_info(tasks)").fetchall()}
+        if "lease_owner" not in columns:
+            db.execute("ALTER TABLE tasks ADD COLUMN lease_owner TEXT")
+        if "lease_expires_at" not in columns:
+            db.execute("ALTER TABLE tasks ADD COLUMN lease_expires_at TEXT")
 
     def is_autonomy_paused(self) -> bool:
         """Return the owner pause flag, which persists across Mia restarts."""
@@ -254,7 +273,8 @@ class TaskStore:
                 """
                 UPDATE tasks
                 SET status = ?, updated_at = ?, approved_at = ?,
-                    started_at = ?, completed_at = ?, last_error = ?
+                    started_at = ?, completed_at = ?, last_error = ?,
+                    lease_owner = ?, lease_expires_at = ?
                 WHERE task_id = ? AND status = ?
                 """,
                 (
@@ -264,6 +284,8 @@ class TaskStore:
                     started_at,
                     completed_at,
                     last_error,
+                    self.lease_owner if new_status == "running" else None,
+                    _lease_expiry(self.lease_seconds) if new_status == "running" else None,
                     task_id,
                     old_status,
                 ),
@@ -283,33 +305,76 @@ class TaskStore:
             ).fetchone()
         return self._decode_task(updated)
 
-    def recover_interrupted_tasks(self) -> list[str]:
-        """Mark tasks left running by a previous process as failed.
+    def renew_lease(self, task_id: str) -> bool:
+        """Extend this store's lease on a running task; False if it no longer holds it."""
+        with self._connection() as db:
+            cursor = db.execute(
+                """
+                UPDATE tasks SET lease_expires_at = ?
+                WHERE task_id = ? AND status = 'running' AND lease_owner = ?
+                """,
+                (_lease_expiry(self.lease_seconds), task_id, self.lease_owner),
+            )
+        return cursor.rowcount == 1
 
-        Recovery is deliberately not an automatic retry. An owner must review
-        and explicitly re-approve a failed task before it can run again.
+    def recover_interrupted_tasks(self) -> list[str]:
+        """Mark running tasks without a live lease as failed (startup recovery).
+
+        A task is left alone only when another Mia process (different pid)
+        still holds an unexpired lease. Legacy rows without a lease, expired
+        leases and leases from an earlier store instance in this process are
+        recovered. Recovery is never an automatic retry: the owner must review
+        and explicitly re-approve a failed task.
         """
+        return self._recover_running(startup=True)
+
+    def recover_expired_leases(self) -> list[str]:
+        """Fail running tasks whose lease expired and is not held by this store.
+
+        Cheap enough to call every dispatch cycle; it catches a worker that
+        crashed while another process stayed up.
+        """
+        return self._recover_running(startup=False)
+
+    def _recover_running(self, *, startup: bool) -> list[str]:
         now = _now()
         recovered: list[str] = []
         with self._connection() as db:
             db.execute("BEGIN IMMEDIATE")
             rows = db.execute(
                 """
-                SELECT task_id FROM tasks
+                SELECT task_id, lease_owner, lease_expires_at FROM tasks
                 WHERE status = 'running'
                 ORDER BY started_at, created_at
                 """
             ).fetchall()
             for row in rows:
                 task_id = str(row["task_id"])
+                owner = row["lease_owner"]
+                expires = row["lease_expires_at"]
+                live = expires is not None and expires > now
+                if owner == self.lease_owner:
+                    if not startup:
+                        continue  # never reap our own running work mid-session
+                elif live and not str(owner).startswith(f"{os.getpid()}:"):
+                    continue  # another live process holds the lease
+                elif not startup and expires is None:
+                    continue  # legacy row: only startup recovery may judge it
+                elif not startup and live:
+                    continue
                 updated = db.execute(
                     """
                     UPDATE tasks
                     SET status = 'failed', updated_at = ?, completed_at = ?,
-                        last_error = 'interrupted_on_restart'
+                        last_error = ?, lease_owner = NULL, lease_expires_at = NULL
                     WHERE task_id = ? AND status = 'running'
                     """,
-                    (now, now, task_id),
+                    (
+                        now,
+                        now,
+                        "interrupted_on_restart" if startup else "lease_expired",
+                        task_id,
+                    ),
                 )
                 if updated.rowcount != 1:
                     continue
@@ -321,10 +386,15 @@ class TaskStore:
                     reason=(
                         "The previous Mia process stopped before recording a task result; "
                         "owner review is required before retry"
+                        if startup
+                        else "The worker lease expired without a recorded result; "
+                        "owner review is required before retry"
                     ),
-                    actor="startup-recovery",
+                    actor="startup-recovery" if startup else "lease-recovery",
                     payload={
-                        "recovery": "interrupted_on_restart",
+                        "recovery": "interrupted_on_restart" if startup else "lease_expired",
+                        "previous_lease_owner": owner,
+                        "previous_lease_expires_at": expires,
                         "retry_requires_owner_approval": True,
                     },
                 )
@@ -364,10 +434,17 @@ class TaskStore:
                 """
                 UPDATE tasks
                 SET status = 'running', updated_at = ?,
-                    started_at = COALESCE(started_at, ?)
+                    started_at = COALESCE(started_at, ?),
+                    lease_owner = ?, lease_expires_at = ?
                 WHERE task_id = ? AND status = 'approved'
                 """,
-                (now, now, row["task_id"]),
+                (
+                    now,
+                    now,
+                    self.lease_owner,
+                    _lease_expiry(self.lease_seconds),
+                    row["task_id"],
+                ),
             )
             if updated.rowcount != 1:
                 return None
@@ -408,10 +485,11 @@ class TaskStore:
                 """
                 UPDATE tasks
                 SET status = 'running', updated_at = ?,
-                    started_at = COALESCE(started_at, ?)
+                    started_at = COALESCE(started_at, ?),
+                    lease_owner = ?, lease_expires_at = ?
                 WHERE task_id = ? AND status = 'approved'
                 """,
-                (now, now, task_id),
+                (now, now, self.lease_owner, _lease_expiry(self.lease_seconds), task_id),
             )
             if updated.rowcount != 1:
                 raise TaskTransitionError("task is no longer available to execute")
@@ -594,6 +672,7 @@ class TaskCoordinator:
         ):
             return {"status": "paused", "reason": "resource_limit"}
 
+        self.store.recover_expired_leases()
         task = self.store.claim_next(validator=validator)
         if task is None:
             return {"status": "idle", "reason": "no_approved_tasks"}

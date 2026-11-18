@@ -81,3 +81,13 @@ the background dispatcher from starting even when environment policy remains
 enabled. The owner must press **Resume** in Task Desk or call the resume API.
 Changing `MIA_AUTONOMY_ENABLED` to false still disables dispatch regardless of
 the saved pause state.
+
+## Durable task leases
+
+Claiming a task (background dispatcher, manual execution, or a `waiting` -> `running` transition) records `lease_owner` (`<pid>:<random>` per `TaskStore` instance) and `lease_expires_at` (300 s by default). The executor renews the lease at every step boundary, the same point where owner cancellation and pause are checked. Leaving `running` clears the lease.
+
+- Startup recovery (`recover_interrupted_tasks`) fails running tasks unless a *different* process holds an unexpired lease. Legacy rows with no lease, expired leases, and leases from an earlier store instance in the same process are recovered.
+- Each dispatch cycle calls `recover_expired_leases`, which fails only tasks whose lease has expired and is not held by this store, so a crashed worker is noticed while another process keeps running. It never touches this store's own running tasks or legacy rows without a lease.
+- Recovery is never an automatic retry: the task becomes `failed` with `interrupted_on_restart` or `lease_expired`, the event records the previous lease, and the owner must re-approve it.
+- Limit: a single step that runs longer than the lease without returning can be judged expired by another process. Liveness is not probed (no PID checks), so a crashed process's task is recovered only after its lease expires or the next startup. Automatic continuation of interrupted tasks across restart is still not implemented.
+

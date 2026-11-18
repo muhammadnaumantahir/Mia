@@ -770,6 +770,7 @@ def create_app(
         task_id = str(task["task_id"])
 
         def should_continue() -> bool:
+            durable_tasks.renew_lease(task_id)
             current = durable_tasks.get_task(task_id)
             return (
                 current is not None
@@ -2131,6 +2132,7 @@ def create_app(
 
         try:
             def should_continue() -> bool:
+                durable_tasks.renew_lease(task_id)
                 current = durable_tasks.get_task(task_id)
                 return current is not None and current["status"] == "running"
 

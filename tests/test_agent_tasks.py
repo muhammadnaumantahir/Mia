@@ -282,10 +282,11 @@ def test_restart_recovery_marks_running_tasks_failed_until_owner_reapproves(tmp_
     events = store.list_events(task_id)
     assert events[-1]["actor"] == "startup-recovery"
     assert events[-1]["to_status"] == "failed"
-    assert json.loads(events[-1]["payload_json"]) == {
-        "recovery": "interrupted_on_restart",
-        "retry_requires_owner_approval": True,
-    }
+    payload = json.loads(events[-1]["payload_json"])
+    assert payload["recovery"] == "interrupted_on_restart"
+    assert payload["retry_requires_owner_approval"] is True
+    assert payload["previous_lease_owner"] == store.lease_owner
+    assert failed["lease_owner"] is None and failed["lease_expires_at"] is None
 
     assert store.recover_interrupted_tasks() == []
     store.transition(
