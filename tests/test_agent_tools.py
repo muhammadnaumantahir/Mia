@@ -68,3 +68,37 @@ async def test_tool_registry_enforces_integer_bounds_and_string_lengths():
     assert too_long.output["ok"] is False
     assert valid.output["ok"] is True
     assert len(called) == 1
+
+
+def test_registry_exposes_only_read_contracts_and_validates_without_running_handler():
+    registry = ToolRegistry()
+    called = []
+    schema = {
+        "type": "object",
+        "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 5}},
+        "required": ["limit"],
+        "additionalProperties": False,
+    }
+    registry.register(
+        name="safe.list",
+        description="List bounded records.",
+        parameters=schema,
+        permission="records.read",
+        mode="read",
+        handler=lambda args: called.append(args) or {"items": []},
+    )
+    registry.register(
+        name="unsafe.preview",
+        description="Prepare a write preview.",
+        parameters={"type": "object", "properties": {}, "required": []},
+        permission="records.write",
+        mode="preview",
+        handler=lambda args: called.append(args) or {"ok": True},
+    )
+
+    contracts = registry.read_only_contracts()
+    assert [item["name"] for item in contracts] == ["safe.list"]
+    assert registry.validate_read_only_call("safe.list", {"limit": 3}) is None
+    assert "read-only" in registry.validate_read_only_call("unsafe.preview", {})
+    assert "maximum" in registry.validate_read_only_call("safe.list", {"limit": 6})
+    assert called == []

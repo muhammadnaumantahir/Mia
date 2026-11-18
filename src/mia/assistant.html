@@ -111,6 +111,12 @@ function renderTaskList(items){
   if(readTool){
    const toolMeta=document.createElement('div');toolMeta.className='task-meta';toolMeta.style.marginTop='5px';
    toolMeta.textContent='Read-only action: '+readTool.name;card.append(toolMeta);
+   const details=document.createElement('details');details.style.marginTop='7px';
+   const summary=document.createElement('summary');summary.style.cssText='font-size:10px;color:#9fbdad;cursor:pointer';summary.textContent='Review exact tool arguments';
+   const pre=document.createElement('pre');pre.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;max-height:130px;overflow:auto;background:#101916;padding:8px;border-radius:8px;color:#cbded2;font-size:10px';
+   const argumentText=JSON.stringify(execution.arguments,null,2)||'{}';
+   pre.textContent=argumentText.length>5000?argumentText.slice(0,5000)+'\n… preview truncated':argumentText;
+   details.append(summary,pre);card.append(details);
   }
   if(task.status==='proposed'){
    const actions=document.createElement('div');actions.className='task-actions';

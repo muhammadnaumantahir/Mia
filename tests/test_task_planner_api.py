@@ -89,3 +89,56 @@ def test_planning_api_persists_proposal_but_never_approves_it(tmp_path):
     assert proposal["status"] == "proposed"
     assert proposal["requires_governance_review"] is True
     assert tasks.get_task(proposal["task_id"])["status"] == "proposed"
+
+
+class ExecutableProposalGateway:
+    def __init__(self):
+        self.prompt = ""
+
+    async def discover_models(self):
+        return [object()]
+
+    async def complete(self, request, candidates, policy):
+        self.prompt = request.prompt
+        return CompletionResult(
+            provider_id="local",
+            model_id="fake",
+            content=(
+                '{"tasks":[{"title":"Check local resources",'
+                '"goal":"Read current CPU and memory usage.",'
+                '"risk_level":"low","priority":60,'
+                '"evidence_summary":"The owner asked for a local health check.",'
+                '"execution":{"tool_name":"system.read_resources","arguments":{}}}]}'
+            ),
+            attempted_candidates=("local/fake",),
+            data_local=True,
+        )
+
+
+def test_planner_api_validates_registry_tool_and_keeps_proposal_unapproved(tmp_path):
+    from mia.agent.tasks import TaskStore
+
+    tasks = TaskStore(tmp_path / "tasks.sqlite3")
+    gateway = ExecutableProposalGateway()
+    app = create_app(
+        store=ObservatoryStore(tmp_path / "obs.sqlite3"),
+        gateway=gateway,
+        task_store=tasks,
+    )
+
+    response = TestClient(app).post(
+        "/api/planning/propose",
+        json={"objective": "Check local resource pressure."},
+    )
+
+    assert response.status_code == 201
+    proposal = response.json()["items"][0]
+    saved = tasks.get_task(proposal["task_id"])
+    assert saved["status"] == "proposed"
+    assert proposal["status"] == "proposed"
+    assert saved["metadata"]["execution"] == {
+        "tool_name": "system.read_resources",
+        "arguments": {},
+    }
+    assert "system.read_resources" in gateway.prompt
+    assert "filesystem.preview_write" not in gateway.prompt

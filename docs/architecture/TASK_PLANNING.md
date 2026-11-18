@@ -37,12 +37,15 @@ and cross-platform verification are in place.
 Open the **Task Desk** from the assistant sidebar. Enter an objective and optional
 evidence to create model-generated proposals, or create the built-in CPU/RAM
 read-only check. Proposals remain in the proposed state until the owner approves
-or rejects them. The planner does not assign executable tool contracts to its
-generated task descriptions.
+or rejects them. The planner receives only registered read-only tool contracts
+and may attach one exact tool name with structured arguments to a proposal.
+The server validates the descriptor against the live registry before saving it;
+invalid, unregistered or preview-only tool calls reject the plan.
 
-The Task Desk displays only an Execute action when task metadata explicitly
-names a currently registered tool whose mode is read. Other approved proposals
-remain reviewable backlog items and are not converted into commands.
+The Task Desk displays the exact proposed arguments before approval and shows
+an Execute action only when the saved descriptor still matches a registered
+read-only tool. Proposals without a validated descriptor remain reviewable
+backlog items and are never converted from free-form text into commands.
 
 ## Manual approved-task execution
 
@@ -57,8 +60,8 @@ The endpoint checks CPU/RAM policy before claiming the named task, executes one
 tool only, and records the result in the task event history and observatory.
 It is a manually invoked, local API operation; it does not start the background
 scheduler. The global emergency-stop flag blocks it as well. Preview and
-mutation actions continue through the separate payload-bound approval flow. This in-process read-only boundary is not an OS
-sandbox and does not make arbitrary third-party tool handlers safe. Its async
+mutation actions continue through the separate payload-bound approval flow. This in-process read-only boundary is not an
+OS sandbox and does not make arbitrary third-party tool handlers safe. Its async
 timeout can cancel cooperative async handlers, but it cannot forcibly terminate
 a blocking synchronous handler; a killable isolated worker remains a release
 requirement.
