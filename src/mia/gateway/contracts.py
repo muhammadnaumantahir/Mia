@@ -11,6 +11,7 @@ class ModelRequest:
     estimated_input_tokens: int = 0
     max_output_tokens: int = 1024
     required_capabilities: frozenset[str] = frozenset()
+    messages: tuple[dict[str, str], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
