@@ -151,3 +151,21 @@ def test_sandbox_accepts_large_but_bounded_json_reports():
 
     assert result["unit_tests"] is True
     assert len(result["evidence"]["large_detail"]) == 20_000
+
+
+def test_candidate_tests_are_skipped_after_security_findings():
+    from pathlib import Path
+
+    from mia.evolution.sandbox_worker import _candidate_tests_allowed
+
+    test_path = Path("/candidate/test_candidate.py")
+    assert _candidate_tests_allowed(test_path, {"candidate": [], "tests": []}) is True
+    assert _candidate_tests_allowed(
+        test_path,
+        {"candidate": ["forbidden import: subprocess"], "tests": []},
+    ) is False
+    assert _candidate_tests_allowed(
+        test_path,
+        {"candidate": [], "tests": ["forbidden import: socket"]},
+    ) is False
+    assert _candidate_tests_allowed(None, {"candidate": [], "tests": []}) is False

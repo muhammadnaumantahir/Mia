@@ -122,6 +122,14 @@ def _all_security_findings(source: str, test_source: str | None) -> dict[str, li
     }
 
 
+def _candidate_tests_allowed(
+    test_path: Path | None,
+    security_findings: dict[str, list[str]],
+) -> bool:
+    """Never execute candidate tests if either untrusted source file was flagged."""
+    return test_path is not None and not any(security_findings.values())
+
+
 def main() -> int:
     source_path = Path(os.environ["MIA_SANDBOX_SOURCE"])
     test_value = os.environ.get("MIA_SANDBOX_TEST", "")
@@ -152,7 +160,7 @@ def main() -> int:
     security_findings = _all_security_findings(source, test_source)
     security_passed = not any(security_findings.values())
 
-    if test_path is not None:
+    if _candidate_tests_allowed(test_path, security_findings):
         unit_result = _run(
             [
                 "python",
@@ -170,11 +178,16 @@ def main() -> int:
         )
         unit_passed = unit_result["passed"]
     else:
+        reason = (
+            "No candidate test source was supplied"
+            if test_path is None
+            else "Candidate tests were skipped because the security scan reported findings"
+        )
         unit_result = {
             "passed": False,
             "exit_code": None,
             "stdout": "",
-            "stderr": "No candidate test source was supplied",
+            "stderr": reason,
         }
         unit_passed = False
 
