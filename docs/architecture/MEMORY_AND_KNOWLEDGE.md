@@ -1,0 +1,50 @@
+# Mia local memory and knowledge architecture
+
+## Separate stores for separate purposes
+
+### Conversation memory
+
+- Stores user and assistant turns locally in SQLite.
+- The assistant sends the latest 12 turns with each new message.
+- Conversations are identified by a random ID and can be listed, restored and deleted.
+- The current web UI carries the conversation ID in its URL and displays recent conversations.
+- Raw voice audio is not stored; only the text transcription is eligible for conversation history after the user sends it.
+
+### Long-term knowledge
+
+A knowledge item contains:
+- kind: fact, note, document, experience, preference or research;
+- title and text content;
+- source URI/title and SHA-256 hash;
+- trust level: user, trusted or untrusted;
+- tags and structured metadata;
+- created and updated timestamps.
+
+SQLite FTS5 provides local full-text search. The database does not require a cloud vector service.
+
+## Trust model
+
+- External webpages, repositories, documents and tool outputs are saved as untrusted by default.
+- The trust label is metadata, not an instruction.
+- Search returns provenance so the caller can cite the source.
+- The current gateway does not automatically inject arbitrary retrieved knowledge into a model prompt. Retrieval augmentation must later add source quoting, conflict handling, prompt-injection resistance and policy enforcement.
+- Only explicitly user-authored preferences or facts should be marked as user/trusted.
+
+## API
+
+- `GET /api/conversations`
+- `GET /api/conversations/{conversation_id}`
+- `DELETE /api/conversations/{conversation_id}`
+- `GET /api/memory/items`
+- `GET /api/memory/search?q=...`
+- `POST /api/memory/items`
+- `DELETE /api/memory/items/{item_id}`
+
+## Retention and privacy
+
+- The database is local under `MIA_DATA_DIR`.
+- Chat messages are persisted so the conversation can continue after a restart.
+- User can delete an individual conversation or knowledge item.
+- No conversation history is sent to a different provider except the current selected provider, as part of the conversation prompt.
+- Do not store passwords, API keys, session cookies, recovery phrases or other secrets as memory.
+- Back up the database only to a location controlled by the user.
