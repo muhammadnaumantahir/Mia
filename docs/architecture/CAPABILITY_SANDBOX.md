@@ -64,6 +64,15 @@ is recorded in each validation report so a later image-tag update cannot
 silently change the provenance of an earlier result.
 
 
+## Capability Lab
+
+The Evolution Observatory exposes a Capability Lab form. It stores candidate
+source and a dedicated test file as immutable versioned artifacts, shows their
+hashes, and loads stored source through a hash-verifying read-only endpoint.
+Use a new semantic version for any change; an existing version is never
+overwritten. The interface can start sandbox validation and register versions
+whose four validation gates all pass. It deliberately has no activation button.
+
 ## Capability API integration
 
 Create a candidate with both `source_code` and `test_source_code`. The owner

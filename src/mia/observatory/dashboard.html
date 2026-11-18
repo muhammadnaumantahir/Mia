@@ -25,6 +25,9 @@ footer{margin-top:24px;color:#6f8580;font-size:11px;line-height:1.6}
 .resource-card small{color:#829890;font-size:11px}
 .resource-track{height:7px;border-radius:8px;background:#263733;overflow:hidden;margin-top:10px}
 .resource-fill{height:100%;width:0;border-radius:8px;background:linear-gradient(90deg,#31ba87,#f0bb65);transition:width .3s ease}
+.cap-form{display:grid;gap:12px;margin:4px 0 18px}.cap-fields{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}.cap-field{display:grid;gap:5px;min-width:0}.cap-field label,.cap-code-label{font-size:11px;color:#9db2aa;font-weight:650}.cap-field input,.cap-field textarea,.cap-form textarea{width:100%;min-width:0;background:#10191b;color:#dce9e4;border:1px solid #35514a;border-radius:9px;padding:10px;font:inherit;font-size:12px;outline:none}.cap-field input:focus,.cap-field textarea:focus,.cap-form textarea:focus{border-color:#4b9d7b;box-shadow:0 0 0 2px #1d65462a}.cap-code{min-height:150px;max-height:360px;resize:vertical;font-family:Consolas,Monaco,monospace!important;font-size:11px!important;line-height:1.5}.cap-rationale{min-height:70px;resize:vertical}.cap-form-foot{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.cap-notice{font-size:11px;color:#9acbb3;min-height:18px;line-height:1.5}.cap-notice.error{color:#f0b7a8}.cap-list{display:grid;gap:10px}.cap-card{border:1px solid #2b4540;border-radius:13px;padding:13px;background:#10191b}.cap-card-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.cap-card-title{font-size:13px;font-weight:700;color:#e2eee8;overflow-wrap:anywhere}.cap-card-meta{font-size:10px;color:#839b91;margin-top:5px;line-height:1.5;overflow-wrap:anywhere}.cap-status{flex:0 0 auto;font-size:10px;color:#a8e2c4;border:1px solid #315b4d;background:#122820;border-radius:999px;padding:5px 9px}.cap-card-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.cap-card details{margin-top:10px;border-top:1px solid #263936;padding-top:9px}.cap-card summary{font-size:11px;color:#9fc8b3;cursor:pointer}.cap-card pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto;background:#0a1213;border:1px solid #263936;padding:10px;border-radius:9px;color:#cbded2;font:11px/1.5 Consolas,Monaco,monospace}.cap-blocked{font-size:10px;color:#d8bd86;margin-top:9px;line-height:1.5}
+@media(max-width:760px){.cap-fields{grid-template-columns:1fr 1fr}}
+@media(max-width:440px){.cap-fields{grid-template-columns:1fr}.cap-card-head{align-items:flex-start;flex-direction:column}}
 @media(max-width:600px){.resource-grid{grid-template-columns:1fr}}
 @media(max-width:760px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hero{display:block}header{align-items:flex-start}.status{white-space:normal}}
 @media(max-width:440px){.shell{padding:22px 14px}.grid{gap:9px}.kpi{padding:14px}.kpi strong{font-size:23px}.panel{padding:14px}}
@@ -60,6 +63,27 @@ footer{margin-top:24px;color:#6f8580;font-size:11px;line-height:1.6}
 <button class="send" type="submit">Propose</button>
 </form>
 <div class="events" id="taskList"><div class="muted">Loading tasks…</div></div>
+</section>
+<section class="panel" id="capabilityLab">
+ <div class="panelhead"><div><h3>Capability Lab</h3><div class="muted">Version and validate new code in the isolated Docker sandbox. Registered capabilities remain inactive.</div></div><button class="send" type="button" id="refreshCapabilities">↻ Refresh</button></div>
+ <div class="empty" style="height:auto;display:block;text-align:left;margin-bottom:14px">
+  <strong style="color:#b7e8d0">Sandbox required</strong><br>
+  Build the local image from the repository root: <code>docker build --pull -f sandbox/Dockerfile -t mia-sandbox:py313-v1 .</code>.
+  Validation runs without network access and does not activate or load the candidate into Mia.
+ </div>
+ <form class="cap-form" id="capabilityForm">
+  <div class="cap-fields">
+   <div class="cap-field"><label for="capId">Capability ID</label><input id="capId" required minlength="2" maxlength="64" pattern="[a-z][a-z0-9._-]{1,63}" placeholder="example-tool"></div>
+   <div class="cap-field"><label for="capVersion">Version</label><input id="capVersion" required maxlength="80" pattern="[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?" placeholder="0.1.0"></div>
+   <div class="cap-field"><label for="capName">Display name</label><input id="capName" required maxlength="120" placeholder="Example capability"></div>
+  </div>
+  <div class="cap-field"><label for="capRationale">Why should Mia have this capability?</label><textarea class="cap-rationale" id="capRationale" required maxlength="4000" placeholder="Describe the gap, expected behavior, and boundaries."></textarea></div>
+  <div class="cap-field"><label class="cap-code-label" for="capSource">Candidate Python source</label><textarea class="cap-code" id="capSource" required maxlength="524288" spellcheck="false" placeholder="def run(...):&#10;    ..."></textarea></div>
+  <div class="cap-field"><label class="cap-code-label" for="capTests">Candidate tests (required)</label><textarea class="cap-code" id="capTests" required maxlength="524288" spellcheck="false" placeholder="from candidate import run&#10;&#10;def test_run():&#10;    ..."></textarea></div>
+  <div class="cap-form-foot"><button class="send" id="saveCapability" type="submit">Save immutable candidate</button><span class="cap-notice" id="capNotice" role="status" aria-live="polite"></span></div>
+ </form>
+ <div class="panelhead"><div><h3>Capability versions</h3><div class="muted">Proposed → validating → validated → registered. Activation is intentionally blocked.</div></div></div>
+ <div class="cap-list" id="capabilityList"><div class="muted">Loading capability versions…</div></div>
 </section>
 <footer>Local preview · no cloud analytics · no sample growth data. Keep this service bound to 127.0.0.1 until authentication and remote-access controls are implemented.</footer>
 </main>
@@ -121,6 +145,135 @@ async function loadSystemResources(){
  }
 }
 
+function setCapabilityNotice(message,isError=false){
+ const notice=el('capNotice');notice.textContent=message;notice.classList.toggle('error',isError);
+}
+function capabilityButton(label,callback,secondary=false){
+ const button=document.createElement('button');button.type='button';button.className='send';
+ button.textContent=label;
+ if(secondary){button.style.background='#263535';button.style.color='#d8e2dd';}
+ button.addEventListener('click',callback);return button;
+}
+function showCapabilitySource(details,capability){
+ const summary=document.createElement('summary');summary.textContent='Inspect immutable source and tests';
+ const content=document.createElement('div');content.className='cap-source-content';
+ const sourceTitle=document.createElement('div');sourceTitle.className='cap-card-meta';sourceTitle.textContent='Candidate source';
+ const source=document.createElement('pre');source.textContent='Open this section to load the hash-verified source.';
+ const testsTitle=document.createElement('div');testsTitle.className='cap-card-meta';testsTitle.textContent='Candidate tests';
+ const tests=document.createElement('pre');tests.textContent='Test source will load with the candidate.';
+ content.append(sourceTitle,source,testsTitle,tests);details.append(summary,content);
+ details.addEventListener('toggle',async()=>{
+  if(!details.open||details.dataset.loaded==='true'||details.dataset.loaded==='loading')return;
+  details.dataset.loaded='loading';source.textContent='Loading…';tests.textContent='Loading…';
+  try{
+   const response=await fetch('/api/capabilities/'+encodeURIComponent(capability.capability_id)+'/'+encodeURIComponent(capability.version)+'/source');
+   const data=await response.json();if(!response.ok)throw new Error(data.detail||'Stored source unavailable');
+   source.textContent=data.source_code;
+   tests.textContent=data.test_source_code;
+   details.dataset.loaded='true';
+  }catch(error){
+   source.textContent=error.message;tests.textContent='';details.dataset.loaded='false';
+  }
+ });
+}
+async function loadCapabilities(){
+ const box=el('capabilityList');box.replaceChildren();
+ try{
+  const response=await fetch('/api/capabilities');const data=await response.json();
+  if(!response.ok)throw new Error(data.detail||'Capability list unavailable');
+  const items=data.items||[];
+  if(!items.length){const empty=document.createElement('div');empty.className='empty';empty.style.height='auto';empty.textContent='No capability candidates yet. Save source code and tests above to create an immutable candidate.';box.append(empty);return;}
+  items.forEach(cap=>{
+   const card=document.createElement('article');card.className='cap-card';
+   const head=document.createElement('div');head.className='cap-card-head';
+   const left=document.createElement('div');
+   const title=document.createElement('div');title.className='cap-card-title';title.textContent=cap.name+' · '+cap.version;
+   const meta=document.createElement('div');meta.className='cap-card-meta';
+   meta.textContent=cap.capability_id+' · '+cap.source_kind+' · source '+String(cap.source_sha256||'').slice(0,16)+'… · tests '+String(cap.test_sha256||'missing').slice(0,16);
+   left.append(title,meta);
+   const state=document.createElement('span');state.className='cap-status';state.textContent=cap.status;
+   head.append(left,state);card.append(head);
+   if(cap.validation){
+    const validation=document.createElement('div');validation.className='cap-card-meta';
+    validation.textContent='Validation: static '+(cap.validation.static_checks?'pass':'fail')+
+     ' · unit '+(cap.validation.unit_tests?'pass':'fail')+
+     ' · security '+(cap.validation.security_checks?'pass':'fail')+
+     ' · regression '+(cap.validation.regression_tests?'pass':'fail');
+    card.append(validation);
+   }
+   if(cap.status==='proposed'||cap.status==='validating'){
+    const actions=document.createElement('div');actions.className='cap-card-actions';
+    actions.append(capabilityButton(cap.status==='validating'?'Retry sandbox validation':'Run sandbox validation',()=>runCapabilityValidation(cap)));
+    card.append(actions);
+   }else if(cap.status==='validated'){
+    const actions=document.createElement('div');actions.className='cap-card-actions';
+    actions.append(capabilityButton('Register validated version',()=>registerCapability(cap)));
+    card.append(actions);
+   }else if(cap.status==='registered'){
+    const blocked=document.createElement('div');blocked.className='cap-blocked';
+    blocked.textContent='Registered, not active. Runtime activation and rollback remain disabled.';
+    card.append(blocked);
+   }else if(cap.status==='rejected'){
+    const blocked=document.createElement('div');blocked.className='cap-blocked';
+    blocked.textContent='Validation rejected this version. Source is immutable; create a new version for changes.';
+    card.append(blocked);
+   }
+   const details=document.createElement('details');showCapabilitySource(details,cap);card.append(details);
+   box.append(card);
+  });
+ }catch(error){
+  const message=document.createElement('div');message.className='muted';message.textContent=error.message;box.append(message);
+ }
+}
+async function runCapabilityValidation(cap){
+ setCapabilityNotice('Checking the Docker sandbox and running isolated validation…');
+ const buttons=el('capabilityList').querySelectorAll('button');buttons.forEach(button=>button.disabled=true);
+ try{
+  const start=await fetch('/api/capabilities/'+encodeURIComponent(cap.capability_id)+'/'+encodeURIComponent(cap.version)+'/validate/start',{method:'POST'});
+  const startData=await start.json();if(!start.ok)throw new Error(startData.detail||'Could not start sandbox validation');
+  const response=await fetch('/api/capabilities/'+encodeURIComponent(cap.capability_id)+'/'+encodeURIComponent(cap.version)+'/validate',{method:'POST'});
+  const result=await response.json();if(!response.ok)throw new Error(result.detail||'Sandbox validation failed');
+  setCapabilityNotice('Sandbox result: '+result.status+'. Review the stored evidence before registering.');
+  await loadCapabilities();
+ }catch(error){
+  setCapabilityNotice(error.message,true);
+  await loadCapabilities();
+ }
+}
+async function registerCapability(cap){
+ setCapabilityNotice('Registering the validated immutable version…');
+ try{
+  const response=await fetch('/api/capabilities/'+encodeURIComponent(cap.capability_id)+'/'+encodeURIComponent(cap.version)+'/register',{method:'POST'});
+  const result=await response.json();if(!response.ok)throw new Error(result.detail||'Registration failed');
+  setCapabilityNotice('Registered '+result.capability_id+' '+result.version+'. It remains inactive.');
+  await loadCapabilities();
+ }catch(error){setCapabilityNotice(error.message,true);}
+}
+el('capabilityForm').addEventListener('submit',async event=>{
+ event.preventDefault();
+ const source=el('capSource').value,testSource=el('capTests').value;
+ if(!source.trim()||!testSource.trim()){setCapabilityNotice('Both source and test source are required.',true);return;}
+ const button=el('saveCapability');button.disabled=true;setCapabilityNotice('Saving immutable candidate source and tests…');
+ const payload={
+  capability_id:el('capId').value.trim(),
+  version:el('capVersion').value.trim(),
+  name:el('capName').value.trim(),
+  source_code:source,
+  test_source_code:testSource,
+  rationale:el('capRationale').value.trim(),
+  source_kind:'generated',
+  permissions:[]
+ };
+ try{
+  const response=await fetch('/api/capabilities',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const result=await response.json();if(!response.ok)throw new Error(result.detail||'Candidate could not be saved');
+  setCapabilityNotice('Saved '+result.capability_id+' '+result.version+'. It is immutable and has not been executed.');
+  el('capabilityForm').reset();
+  await loadCapabilities();
+ }catch(error){setCapabilityNotice(error.message,true);}
+ finally{button.disabled=false;}
+});
+el('refreshCapabilities').addEventListener('click',loadCapabilities);
 async function loadTasks(){
  try{
   const [tasksResponse, autonomyResponse]=await Promise.all([
@@ -192,6 +345,7 @@ function renderEvents(items){
 }
 window.addEventListener('resize',()=>{const selected=el('metric').value;if(selected)draw(selected);});load();
 loadTasks();
+loadCapabilities();
 loadSystemResources();
 window.setInterval(loadSystemResources,15000);
 </script></body></html>
