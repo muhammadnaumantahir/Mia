@@ -52,13 +52,22 @@ Requirements: Python 3.11 or newer. Python 3.13 is supported by this starter fou
 py -3.13 -m venv .venv
 .venv\Scripts\activate
 python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev,gateway,credentials]"
+copy .env.example .env
 python -m mia
 ~~~
 
-Open the local dashboard at http://127.0.0.1:8765.
+Open Mia at http://127.0.0.1:8765/assistant and the Evolution Observatory at http://127.0.0.1:8765/.
 
-The initial dashboard is an observatory shell. It shows actual SQLite events and metric samples; it does not generate sample growth data. The server binds to localhost by default.
+For local AI, start Ollama and make sure a model is installed. Mia discovers local models through Ollama's native API. The optional gateway extra enables HTTP adapters; no cloud key is needed for the local path.
+
+To connect an already-running **self-hosted** FreeLLMAPI at its default localhost endpoint:
+1. Save its unified key in the Windows credential manager: `mia-credentials set freellmapi`.
+2. Set `MIA_FREELLMAPI_ENABLED=true` in `.env`.
+3. Keep `MIA_FREELLMAPI_ROUTE_FREE=false` until you have checked the gateway's active model chain and confirmed all enabled routes are free tiers you are allowed to use.
+4. Restart Mia. Its key is retrieved from the OS credential store and is never put in SQLite or logged.
+
+The observatory displays actual SQLite events and metric samples; it does not generate sample growth data. The server binds to localhost by default.
 
 ## Development roadmap
 
