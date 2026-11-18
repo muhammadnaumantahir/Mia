@@ -19,7 +19,8 @@ class AutonomyRuntime:
                  policy: AutonomyPolicy,
                  executor: Callable[[dict[str, Any]], dict[str, Any] | None],
                  interval_seconds: float = 30.0,
-                 on_cycle: Callable[[dict[str, Any]], None] | None = None) -> None:
+                 on_cycle: Callable[[dict[str, Any]], None] | None = None,
+                 task_validator: Callable[[dict[str, Any]], bool] | None = None) -> None:
         if not 1.0 <= interval_seconds <= 3600.0:
             raise ValueError("interval_seconds must be between 1 and 3600")
         self.tasks = tasks
@@ -28,6 +29,7 @@ class AutonomyRuntime:
         self.executor = executor
         self.interval_seconds = interval_seconds
         self.on_cycle = on_cycle
+        self.task_validator = task_validator
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._cycle_lock = threading.Lock()
@@ -68,7 +70,10 @@ class AutonomyRuntime:
                     load = RuntimeLoad(cpu_percent=float(snapshot["cpu_percent"]),
                                        memory_percent=float(snapshot["memory_percent"]))
                     result = TaskCoordinator(self.tasks, policy).dispatch_one(
-                        load=load, executor=self.executor)
+                        load=load,
+                        executor=self.executor,
+                        validator=self.task_validator,
+                    )
                 except (RuntimeError, ValueError, KeyError, TypeError) as exc:
                     result = {"status": "paused", "reason": "resource_or_policy_error",
                               "error_type": type(exc).__name__}

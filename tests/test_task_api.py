@@ -311,3 +311,78 @@ def test_manual_task_execution_rejects_invalid_arguments_before_claiming(tmp_pat
         "proposed",
         "approved",
     ]
+
+
+def test_background_autonomy_dispatch_is_opt_in_and_read_only(tmp_path, monkeypatch):
+    import time
+
+    from mia.agent.resources import ResourceMonitor
+
+    monkeypatch.setenv("MIA_AUTONOMY_ENABLED", "true")
+    monkeypatch.setenv("MIA_EMERGENCY_STOP", "false")
+    tasks = TaskStore(tmp_path / "background-tasks.sqlite3")
+
+    invalid_id = tasks.create_task(
+        title="Keep preview task queued",
+        goal="This preview must never be dispatched automatically.",
+        source="interactive",
+        priority=90,
+        metadata={
+            "execution": {
+                "tool_name": "filesystem.preview_write",
+                "arguments": {
+                    "root_id": "workspace",
+                    "relative_path": "not-created.txt",
+                    "content": "must not execute",
+                },
+            }
+        },
+    )
+    valid_id = tasks.create_task(
+        title="Automatic system inspection",
+        goal="Read the CPU and memory usage only.",
+        source="interactive",
+        priority=50,
+        metadata={
+            "execution": {
+                "tool_name": "system.read_resources",
+                "arguments": {},
+            }
+        },
+    )
+    tasks.transition(invalid_id, "approved", reason="Owner approved preview for manual review")
+    tasks.transition(valid_id, "approved", reason="Owner approved read-only system inspection")
+
+    app = create_app(
+        store=ObservatoryStore(tmp_path / "background-observatory.sqlite3"),
+        task_store=tasks,
+        resource_monitor=ResourceMonitor(psutil_module=FakePsutil()),
+    )
+    with TestClient(app) as client:
+        status = client.get("/api/autonomy/status").json()
+        assert status["enabled"] is True
+        assert status["automatic_dispatch"] is True
+        assert status["automatic_tools"] == [
+            "applications.list",
+            "system.list_processes",
+            "system.read_resources",
+        ]
+
+        for _ in range(100):
+            if tasks.get_task(valid_id)["status"] == "completed":
+                break
+            time.sleep(0.02)
+
+        assert tasks.get_task(valid_id)["status"] == "completed"
+        assert tasks.get_task(invalid_id)["status"] == "approved"
+        assert client.post("/api/autonomy/pause").status_code == 200
+        for _ in range(100):
+            if not client.get("/api/autonomy/status").json()["automatic_dispatch"]:
+                break
+            time.sleep(0.01)
+        assert client.get("/api/autonomy/status").json()["automatic_dispatch"] is False
+
+    assert any(
+        event["event_type"] == "background_task_completed"
+        for event in app.state.observatory.list_events(limit=30)
+    )

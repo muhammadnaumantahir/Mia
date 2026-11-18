@@ -213,3 +213,37 @@ def test_dispatcher_does_not_mark_cancelled_task_failed_after_executor_error(tmp
         "running",
         "cancelled",
     ]
+
+
+def test_claim_next_skips_approved_tasks_outside_validator_scope(tmp_path):
+    store = TaskStore(tmp_path / "tasks.sqlite3")
+    unsupported = store.create_task(
+        title="Unsupported automatic task",
+        goal="This task has no automatic execution contract.",
+        source="interactive",
+        priority=90,
+    )
+    supported = store.create_task(
+        title="Approved system inspection",
+        goal="Read local CPU and memory usage.",
+        source="interactive",
+        priority=50,
+        metadata={
+            "execution": {
+                "tool_name": "system.read_resources",
+                "arguments": {},
+            }
+        },
+    )
+    store.transition(unsupported, "approved", reason="Owner approved manually")
+    store.transition(supported, "approved", reason="Owner approved system inspection")
+
+    claimed = store.claim_next(
+        validator=lambda task: isinstance(task["metadata"].get("execution"), dict)
+        and task["metadata"]["execution"].get("tool_name") == "system.read_resources"
+    )
+
+    assert claimed is not None
+    assert claimed["task_id"] == supported
+    assert claimed["status"] == "running"
+    assert store.get_task(unsupported)["status"] == "approved"

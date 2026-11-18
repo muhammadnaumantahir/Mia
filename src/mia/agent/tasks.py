@@ -248,22 +248,36 @@ class TaskStore:
             ).fetchone()
         return self._decode_task(updated)
 
-    def claim_next(self, *, actor: str = "autonomy-runtime") -> dict[str, Any] | None:
-        """Atomically claim the highest-priority approved task."""
+    def claim_next(
+        self,
+        *,
+        actor: str = "autonomy-runtime",
+        validator: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> dict[str, Any] | None:
+        """Atomically claim the highest-priority approved task accepted by validator.
+
+        A rejected candidate remains approved and queued; it is never marked
+        failed merely because it is outside the automatic executor's scope.
+        """
         now = _now()
         with self._connection() as db:
             db.execute("BEGIN IMMEDIATE")
-            row = db.execute(
+            candidates = db.execute(
                 """
                 SELECT * FROM tasks
                 WHERE status = 'approved'
                 ORDER BY priority DESC, created_at ASC
-                LIMIT 1
                 """
-            ).fetchone()
+            ).fetchall()
+            row = None
+            for candidate in candidates:
+                decoded = self._decode_task(candidate)
+                if validator is None or validator(decoded):
+                    row = candidate
+                    break
             if row is None:
                 return None
-            db.execute(
+            updated = db.execute(
                 """
                 UPDATE tasks
                 SET status = 'running', updated_at = ?,
@@ -272,6 +286,8 @@ class TaskStore:
                 """,
                 (now, now, row["task_id"]),
             )
+            if updated.rowcount != 1:
+                return None
             self._insert_event(
                 db,
                 task_id=row["task_id"],
@@ -480,6 +496,7 @@ class TaskCoordinator:
         *,
         load: RuntimeLoad | None,
         executor: Callable[[dict[str, Any]], dict[str, Any] | None],
+        validator: Callable[[dict[str, Any]], bool] | None = None,
     ) -> dict[str, Any]:
         policy = self.policy
         if not policy.enabled:
@@ -494,7 +511,7 @@ class TaskCoordinator:
         ):
             return {"status": "paused", "reason": "resource_limit"}
 
-        task = self.store.claim_next()
+        task = self.store.claim_next(validator=validator)
         if task is None:
             return {"status": "idle", "reason": "no_approved_tasks"}
 

@@ -24,6 +24,7 @@ from mia.agent.discovery import DiscoveryFinding, WorkloadDiscovery
 from mia.agent.executor import TaskExecutionError, TaskToolExecutor
 from mia.agent.planner import PlanningError, TaskPlanner
 from mia.agent.resources import ResourceMonitor
+from mia.agent.runtime import AutonomyRuntime
 from mia.agent.tasks import (
     AutonomyPolicy,
     RuntimeLoad,
@@ -668,6 +669,69 @@ def create_app(
     task_tool_executor = TaskToolExecutor(tool_registry)
     app.state.task_tool_executor = task_tool_executor
 
+    automatic_read_tools = frozenset({
+        "system.read_resources",
+        "system.list_processes",
+        "applications.list",
+    })
+
+    def validate_automatic_task(task: dict[str, Any]) -> bool:
+        try:
+            tool_name, _ = task_tool_executor.validate(task)
+        except TaskExecutionError:
+            return False
+        return tool_name in automatic_read_tools
+
+    def execute_automatic_task(task: dict[str, Any]) -> dict[str, Any]:
+        return asyncio.run(task_tool_executor.execute(task))
+
+    def record_automatic_task_cycle(result: dict[str, Any]) -> None:
+        if result.get("status") not in {"completed", "failed"}:
+            return
+        task = result.get("task") or {}
+        outcome = result.get("outcome") or {}
+        observatory.record_event(
+            category="autonomy",
+            event_type=f"background_task_{result['status']}",
+            summary=f"Background approved read-only task {result['status']}",
+            outcome=result["status"],
+            layer_id="SPS-10",
+            payload={
+                "task_id": task.get("task_id"),
+                "tool_name": outcome.get("tool_name"),
+                "error_type": result.get("error_type"),
+            },
+        )
+
+    autonomy_runtime = AutonomyRuntime(
+        tasks=durable_tasks,
+        monitor=resource_monitor_service,
+        policy=autonomy_policy,
+        executor=execute_automatic_task,
+        interval_seconds=float(os.getenv("MIA_AUTONOMY_INTERVAL_SECONDS", "30")),
+        on_cycle=record_automatic_task_cycle,
+        task_validator=validate_automatic_task,
+    )
+    app.state.autonomy_runtime = autonomy_runtime
+
+    async def start_autonomy_runtime() -> None:
+        if autonomy_policy.enabled and not autonomy_policy.emergency_stop:
+            autonomy_runtime.start()
+
+    async def stop_autonomy_runtime() -> None:
+        stopped = await run_in_threadpool(autonomy_runtime.shutdown, 35.0)
+        if not stopped:
+            observatory.record_event(
+                category="autonomy",
+                event_type="background_runtime_shutdown_timeout",
+                summary="Background task runtime did not stop within its shutdown window",
+                outcome="warning",
+                layer_id="SPS-10",
+            )
+
+    app.add_event_handler("startup", start_autonomy_runtime)
+    app.add_event_handler("shutdown", stop_autonomy_runtime)
+
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok", "service": "mia"}
@@ -1111,11 +1175,35 @@ def create_app(
         return {
             "enabled": autonomy_policy.enabled,
             "emergency_stop": autonomy_policy.emergency_stop,
-            "automatic_dispatch": False,
-            "dispatcher": "single_cycle_library_only",
+            "automatic_dispatch": autonomy_runtime.running,
+            "dispatcher": "background_read_only_task_runtime",
+            "automatic_tools": sorted(automatic_read_tools),
             "cpu_limit_percent": autonomy_policy.max_cpu_percent,
             "memory_limit_percent": autonomy_policy.max_memory_percent,
-            "reason": "Planner and governed tool executor are not yet connected",
+            "reason": (
+                "Only explicitly approved tasks with validated read-only system tools are eligible"
+                if autonomy_runtime.running
+                else "Automatic dispatch is off or paused; manual approved read-only execution remains available"
+            ),
+        }
+
+    @app.post("/api/autonomy/pause")
+    def pause_autonomy() -> dict[str, Any]:
+        autonomy_runtime.pause()
+        return {
+            "status": "pause_requested",
+            "automatic_dispatch": autonomy_runtime.running,
+        }
+
+    @app.post("/api/autonomy/resume")
+    def resume_autonomy() -> dict[str, Any]:
+        try:
+            autonomy_runtime.start()
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {
+            "status": "running",
+            "automatic_dispatch": autonomy_runtime.running,
         }
 
     @app.post("/api/capabilities/draft", status_code=200)
