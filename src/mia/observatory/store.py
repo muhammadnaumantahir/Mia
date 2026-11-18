@@ -151,6 +151,7 @@ class ObservatoryStore:
             "benchmark_suite_id",
             "environment",
             "baseline_results",
+            "fixed_benchmark_results",
             "verification_passed",
         }
         missing = sorted(required.difference(baseline_manifest))
@@ -205,6 +206,25 @@ class ObservatoryStore:
         ):
             raise ValueError("baseline must contain a fully passing local-host benchmark run")
 
+        fixed = baseline_manifest["fixed_benchmark_results"]
+        fixed_keys = {
+            "tests", "passed", "failures", "errors", "skipped",
+            "duration_seconds", "pytest_exit_code", "suite_id",
+        }
+        if not isinstance(fixed, dict) or not fixed_keys.issubset(fixed):
+            raise ValueError("fixed_benchmark_results must include versioned JUnit evidence")
+        if (
+            fixed["suite_id"] != baseline_manifest["benchmark_suite_id"]
+            or fixed["suite_id"] != "mia-foundation-v2"
+            or not isinstance(fixed["tests"], int)
+            or fixed["tests"] < 1
+            or fixed["passed"] != fixed["tests"]
+            or fixed["failures"] != 0
+            or fixed["errors"] != 0
+            or fixed["skipped"] != 0
+            or fixed["pytest_exit_code"] != 0
+        ):
+            raise ValueError("fixed benchmark must pass every local benchmark check")
         experiment_id = uuid.uuid4().hex
         captured_at = utc_now()
         manifest_json = canonical_json(baseline_manifest)
@@ -665,8 +685,9 @@ class ObservatoryStore:
             )
         )
         baseline_results = baseline_manifest.get("baseline_results", {})
+        baseline_benchmark = baseline_manifest.get("fixed_benchmark_results", {})
         comparison_results = (
-            comparison_snapshot["evidence"].get("verification", {})
+            comparison_snapshot["evidence"].get("fixed_benchmark_results", {})
             if comparison_snapshot else {}
         )
 
@@ -677,7 +698,7 @@ class ObservatoryStore:
                 return None
             return passed / total * 100.0
 
-        baseline_rate = pass_rate(baseline_results)
+        baseline_rate = pass_rate(baseline_benchmark)
         comparison_rate = pass_rate(comparison_results)
         delta_rate = (
             comparison_rate - baseline_rate
@@ -721,7 +742,14 @@ class ObservatoryStore:
             },
             "comparison": {
                 "compared_day": comparison_snapshot["day_index"] if comparison_snapshot else None,
-                "baseline_tests": baseline_results,
+                                "benchmark_suite_id": baseline_manifest.get("benchmark_suite_id"),
+                "baseline_fixed_benchmark": baseline_benchmark,
+                "latest_or_final_fixed_benchmark": comparison_results,
+                "baseline_full_regression": baseline_results,
+                "latest_or_final_full_regression": (
+                    comparison_snapshot["evidence"].get("verification", {})
+                    if comparison_snapshot else {}
+                ),
                 "latest_or_final_tests": comparison_results,
                 "baseline_test_pass_rate": baseline_rate,
                 "latest_or_final_test_pass_rate": comparison_rate,

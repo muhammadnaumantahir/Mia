@@ -79,6 +79,24 @@ class ExperimentSnapshotCapturer:
                 },
             )
 
+        fixed_benchmark = manifest.get("fixed_benchmark_results")
+        baseline_fixed = baseline_manifest.get("fixed_benchmark_results")
+        if not isinstance(fixed_benchmark, dict) or not isinstance(baseline_fixed, dict):
+            raise SnapshotCaptureError(
+                422, "Fixed benchmark evidence is missing; no daily snapshot was stored"
+            )
+        if (
+            fixed_benchmark.get("suite_id") != baseline_fixed.get("suite_id")
+            or fixed_benchmark.get("pytest_exit_code") != 0
+            or fixed_benchmark.get("tests", 0) <= 0
+            or fixed_benchmark.get("passed") != fixed_benchmark.get("tests")
+            or fixed_benchmark.get("failures") != 0
+            or fixed_benchmark.get("errors") != 0
+            or fixed_benchmark.get("skipped") != 0
+        ):
+            raise SnapshotCaptureError(
+                422, "Fixed benchmark suite did not pass; no daily snapshot was stored"
+            )
         if (
             manifest.get("benchmark_suite_id") != baseline_manifest.get("benchmark_suite_id")
             or manifest.get("configuration_hash") != baseline_manifest.get("configuration_hash")
@@ -132,6 +150,7 @@ class ExperimentSnapshotCapturer:
             "benchmark_suite_id": manifest["benchmark_suite_id"],
             "environment": manifest["environment"],
             "verification": manifest["baseline_results"],
+            "fixed_benchmark_results": manifest["fixed_benchmark_results"],
             "resources": resources,
             "verification_passed": True,
             "missing_day_indices": due["days_missed"],
@@ -170,6 +189,8 @@ class ExperimentSnapshotCapturer:
                 "source_commit": manifest["source_commit"],
                 "tests": manifest["baseline_results"]["tests"],
                 "passed": manifest["baseline_results"]["passed"],
+                "fixed_benchmark_tests": manifest["fixed_benchmark_results"]["tests"],
+                "fixed_benchmark_duration_seconds": manifest["fixed_benchmark_results"]["duration_seconds"],
                 "ruff_passed": manifest["baseline_results"]["ruff_passed"],
                 "cpu_percent": cpu,
                 "memory_percent": memory,
@@ -179,10 +200,15 @@ class ExperimentSnapshotCapturer:
         total_tests = int(manifest["baseline_results"]["tests"])
         passed_tests = int(manifest["baseline_results"]["passed"])
         test_pass_rate = (passed_tests / total_tests * 100.0) if total_tests else 0.0
+        fixed_tests = int(manifest["fixed_benchmark_results"]["tests"])
+        fixed_passed = int(manifest["fixed_benchmark_results"]["passed"])
+        fixed_pass_rate = fixed_passed / fixed_tests * 100.0 if fixed_tests else 0.0
         for metric_name, value in (
             ("cpu_percent", cpu),
             ("memory_percent", memory),
             ("test_pass_rate", test_pass_rate),
+            ("fixed_benchmark_pass_rate", fixed_pass_rate),
+            ("fixed_benchmark_duration_seconds", float(manifest["fixed_benchmark_results"]["duration_seconds"])),
         ):
             self.observatory.record_metric(
                 day_index=day_index,

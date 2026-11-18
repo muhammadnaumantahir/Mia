@@ -219,31 +219,44 @@ def capture_baseline_manifest(
         raise BaselineCaptureError("Could not start Ruff; install Mia's dev dependencies") from exc
 
     with tempfile.TemporaryDirectory(prefix="mia-day0-") as temporary:
-        report_path = Path(temporary) / "junit.xml"
-        command = [
+        temporary_path = Path(temporary)
+        benchmark_report = temporary_path / "fixed-benchmark.xml"
+        regression_report = temporary_path / "full-regression.xml"
+        fixed_command = [
             sys.executable, "-m", "pytest", "-q",
-            "-p", "no:cacheprovider",
-            "-p", "pytest_asyncio.plugin",
-            "tests",
-            "--junitxml", str(report_path),
+            "-p", "no:cacheprovider", "-p", "pytest_asyncio.plugin",
+            "tests/benchmarks/test_foundation.py",
+            "--junitxml", str(benchmark_report),
+        ]
+        regression_command = [
+            sys.executable, "-m", "pytest", "-q",
+            "-p", "no:cacheprovider", "-p", "pytest_asyncio.plugin",
+            "tests", "--ignore=tests/benchmarks",
+            "--junitxml", str(regression_report),
         ]
         try:
-            pytest_result = runner(
-                command,
-                cwd=str(root),
-                env=child_env,
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds,
-                check=False,
+            fixed_result = runner(
+                fixed_command, cwd=str(root), env=child_env,
+                capture_output=True, text=True,
+                timeout=min(timeout_seconds, 120), check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise BaselineCaptureError("Fixed benchmark suite exceeded its time limit") from exc
+        except (FileNotFoundError, OSError) as exc:
+            raise BaselineCaptureError("Could not start the fixed benchmark suite") from exc
+        try:
+            regression_result = runner(
+                regression_command, cwd=str(root), env=child_env,
+                capture_output=True, text=True, timeout=timeout_seconds, check=False,
             )
         except subprocess.TimeoutExpired as exc:
             raise BaselineCaptureError(
-                f"Local Day 0 test suite exceeded {timeout_seconds} seconds"
+                f"Full regression suite exceeded {timeout_seconds} seconds"
             ) from exc
         except (FileNotFoundError, OSError) as exc:
-            raise BaselineCaptureError("Could not start the local Day 0 test suite") from exc
-        results = _parse_junit(report_path)
+            raise BaselineCaptureError("Could not start the full regression suite") from exc
+        fixed_benchmark_results = _parse_junit(benchmark_report)
+        regression_results = _parse_junit(regression_report)
 
     post_test_worktree = _git_output(
         runner,
@@ -258,13 +271,21 @@ def capture_baseline_manifest(
 
     elapsed = round(time.monotonic() - started, 3)
     ruff_passed = ruff_result.returncode == 0
-    pytest_passed = (
-        pytest_result.returncode == 0
-        and results["tests"] > 0
-        and results["failures"] == 0
-        and results["errors"] == 0
-        and results["skipped"] == 0
-        and results["passed"] == results["tests"]
+    fixed_benchmark_passed = (
+        fixed_result.returncode == 0
+        and fixed_benchmark_results["tests"] > 0
+        and fixed_benchmark_results["failures"] == 0
+        and fixed_benchmark_results["errors"] == 0
+        and fixed_benchmark_results["skipped"] == 0
+        and fixed_benchmark_results["passed"] == fixed_benchmark_results["tests"]
+    )
+    regression_passed = (
+        regression_result.returncode == 0
+        and regression_results["tests"] > 0
+        and regression_results["failures"] == 0
+        and regression_results["errors"] == 0
+        and regression_results["skipped"] == 0
+        and regression_results["passed"] == regression_results["tests"]
     )
     return {
         "source_commit": source_commit,
@@ -272,17 +293,24 @@ def capture_baseline_manifest(
         "benchmark_suite_id": BENCHMARK_SUITE_ID,
         "environment": _environment(),
         "baseline_results": {
-            **results,
+            **regression_results,
             "ruff_passed": ruff_passed,
             "ruff_exit_code": ruff_result.returncode,
             "ruff_stdout_sha256": _sha256((ruff_result.stdout or "").encode("utf-8")),
             "ruff_stderr_sha256": _sha256((ruff_result.stderr or "").encode("utf-8")),
-            "pytest_exit_code": pytest_result.returncode,
-            "pytest_stdout_sha256": _sha256((pytest_result.stdout or "").encode("utf-8")),
-            "pytest_stderr_sha256": _sha256((pytest_result.stderr or "").encode("utf-8")),
+            "pytest_exit_code": regression_result.returncode,
+            "pytest_stdout_sha256": _sha256((regression_result.stdout or "").encode("utf-8")),
+            "pytest_stderr_sha256": _sha256((regression_result.stderr or "").encode("utf-8")),
             "elapsed_seconds": elapsed,
             "capture_host": platform.node() or "unknown-local-host",
             "capture_method": "local-host-ruff-pytest-v2",
         },
-        "verification_passed": ruff_passed and pytest_passed,
+                "fixed_benchmark_results": {
+            **fixed_benchmark_results,
+            "pytest_exit_code": fixed_result.returncode,
+            "stdout_sha256": _sha256((fixed_result.stdout or "").encode("utf-8")),
+            "stderr_sha256": _sha256((fixed_result.stderr or "").encode("utf-8")),
+            "suite_id": BENCHMARK_SUITE_ID,
+        },
+        "verification_passed": ruff_passed and fixed_benchmark_passed and regression_passed,
     }
