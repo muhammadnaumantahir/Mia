@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import ipaddress
 import socket
 from urllib.parse import urlsplit
@@ -102,6 +103,14 @@ class BrowserController:
             await route.abort("blockedbyclient")
             return
         await route.continue_()
+
+    async def current_state_digest(self) -> str:
+        if not self.is_running:
+            raise BrowserAccessError("Browser has no active page")
+        title = await self._page.title()
+        text = await self._page.locator("body").inner_text(timeout=5_000)
+        material = self._page.url + "\\n" + title + "\\n" + text[:30_000]
+        return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
     async def navigate(self, url: str) -> dict[str, object]:
         await self.start()
