@@ -104,6 +104,10 @@ def capture_baseline_manifest(
     if not 30 <= timeout_seconds <= 900:
         raise ValueError("timeout_seconds must be between 30 and 900")
     runner = subprocess_run or _run_default
+    if os.getenv("GITHUB_ACTIONS", "").lower() == "true":
+        raise BaselineCaptureError(
+            "Day 0 must be captured on the Mia host, not a GitHub Actions runner"
+        )
 
     for relative in CONFIG_PATHS:
         if not (root / relative).is_file():
@@ -125,6 +129,24 @@ def capture_baseline_manifest(
         char not in "0123456789abcdef" for char in source_commit
     ):
         raise BaselineCaptureError("Could not identify the exact local source commit")
+
+    try:
+        worktree = runner(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
+        raise BaselineCaptureError("Could not verify the local Git worktree") from exc
+    if worktree.returncode != 0:
+        raise BaselineCaptureError("Could not verify the local Git worktree")
+    if (worktree.stdout or "").strip():
+        raise BaselineCaptureError(
+            "Commit or discard tracked changes before capturing Day 0"
+        )
 
     config_parts = []
     for relative in CONFIG_PATHS:
@@ -152,6 +174,12 @@ def capture_baseline_manifest(
             str(report_path),
         ]
         try:
+            environment = os.environ.copy()
+            source_path = str(root / "src")
+            existing_pythonpath = environment.get("PYTHONPATH", "")
+            environment["PYTHONPATH"] = os.pathsep.join(
+                value for value in (source_path, existing_pythonpath) if value
+            )
             result = runner(
                 command,
                 cwd=str(root),
@@ -159,6 +187,7 @@ def capture_baseline_manifest(
                 text=True,
                 timeout=timeout_seconds,
                 check=False,
+                env=environment,
             )
         except subprocess.TimeoutExpired as exc:
             raise BaselineCaptureError(

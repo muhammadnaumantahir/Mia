@@ -6,7 +6,11 @@ the current Git commit, fingerprint the fixed benchmark/configuration files,
 record the local OS/Python/hardware description, and execute
 \`tests/benchmarks/test_foundation.py\` on the host running Mia.
 
-The endpoint prepares an experiment only when every test in
+Capture is refused when the process detects the GitHub Actions environment,
+when Git is unavailable, or when tracked changes are uncommitted. Untracked
+files are not included in the commit identity; the benchmark and configuration
+files themselves are fingerprinted. The endpoint prepares an experiment only
+when every test in
 \`mia-foundation-v1\` passes, with zero failures, errors or skips. It records the
 pytest exit status, counts, duration, output hashes and a bounded output tail
 with the immutable baseline manifest. A Git checkout, Git executable and the

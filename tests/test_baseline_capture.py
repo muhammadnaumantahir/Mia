@@ -26,8 +26,17 @@ def _write_baseline_files(root: Path):
 
 
 class FakeSubprocess:
-    def __init__(self, *, return_code=0, failures=0, skipped=0, produce_report=True):
+    def __init__(
+        self,
+        *,
+        return_code=0,
+        failures=0,
+        skipped=0,
+        produce_report=True,
+        dirty=False,
+    ):
         self.calls = []
+        self.dirty = dirty
         self.return_code = return_code
         self.failures = failures
         self.skipped = skipped
@@ -35,8 +44,11 @@ class FakeSubprocess:
 
     def __call__(self, command, **kwargs):
         self.calls.append((command, kwargs))
-        if command[0] == "git":
+        if command[:3] == ["git", "rev-parse", "HEAD"]:
             return subprocess.CompletedProcess(command, 0, stdout=COMMIT, stderr="")
+        if command[:2] == ["git", "status"]:
+            output = " M src/mia/api.py" if self.dirty else ""
+            return subprocess.CompletedProcess(command, 0, stdout=output, stderr="")
         report_path = Path(command[command.index("--junitxml") + 1])
         if self.produce_report:
             report_path.write_text(
@@ -69,8 +81,10 @@ def test_local_baseline_capture_runs_git_and_fixed_suite_on_host(tmp_path):
     assert manifest["baseline_results"]["capture_method"] == "local-host-pytest-v1"
     assert manifest["environment"]["os"]
     assert runner.calls[0][0] == ["git", "rev-parse", "HEAD"]
-    assert runner.calls[1][0][0] == sys.executable
-    assert "tests/benchmarks/test_foundation.py" in runner.calls[1][0]
+    assert runner.calls[1][0] == ["git", "status", "--porcelain", "--untracked-files=no"]
+    assert runner.calls[2][0][0] == sys.executable
+    assert "tests/benchmarks/test_foundation.py" in runner.calls[2][0]
+    assert str(tmp_path / "src") in runner.calls[2][1]["env"]["PYTHONPATH"]
 
 
 @pytest.mark.parametrize(
@@ -180,3 +194,23 @@ def test_experiment_prepare_api_does_not_prepare_when_local_baseline_fails(tmp_p
 
     assert response.status_code == 422
     assert store.list_experiments() == []
+
+
+def test_local_baseline_capture_rejects_dirty_tracked_worktree(tmp_path):
+    _write_baseline_files(tmp_path)
+    with pytest.raises(BaselineCaptureError, match="tracked changes"):
+        capture_baseline_manifest(
+            tmp_path,
+            subprocess_run=FakeSubprocess(dirty=True),
+        )
+
+
+def test_local_baseline_capture_rejects_github_actions_environment(tmp_path, monkeypatch):
+    _write_baseline_files(tmp_path)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    runner = FakeSubprocess()
+
+    with pytest.raises(BaselineCaptureError, match="not a GitHub Actions"):
+        capture_baseline_manifest(tmp_path, subprocess_run=runner)
+
+    assert runner.calls == []

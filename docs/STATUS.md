@@ -10,14 +10,14 @@
 | Phase | Status | Evidence / next gate |
 |---|---|---|
 | 0. Research and reuse audit | In progress | Source/license matrix and upstream pins recorded; complete SBOM and legal/dependency review remain |
-| 1. Foundation | In progress | SPS registry, FastAPI app, SQLite observatory, experiment baseline/snapshot schema and dashboard; current head needs green CI |
+| 1. Foundation | Implemented foundation; CI verification blocked | SPS registry, FastAPI app, SQLite observatory, memory/task/capability stores, approval flow and dashboards exist. Full cross-platform regression confirmation remains blocked by GitHub jobs that end before runner assignment |
 | 2. AI gateway | In progress | Ollama and OpenAI-compatible adapters, free-first router and fallback; streaming, capability metadata and cost ledger remain |
 | 3. Voice | In progress | Push-to-talk, local Faster-Whisper STT and browser TTS; target-PC benchmark and verified feminine voice remain |
 | 4. Computer intelligence | In progress | Scoped filesystem, approval-bound writes, allowlisted app launch, browser and Windows visible-window/text-control adapter; stronger OS sandbox and target-PC verification remain |
 | 5. Memory and knowledge | In progress | Persistent conversations, FTS5 memory, provenance labels and document parsers; parser integration/export/retention tests remain |
 | 6. Autonomous agent | Task Desk + manual read-only execution | Task Desk submits model-assisted plans, lists proposals, and supports approve/reject/cancel. A safe CPU/RAM task demonstrates explicit approval and one registered read-only tool through POST /api/tasks/{task_id}/execute; preview and mutation tools remain excluded. Background scheduler still has no production executor/API lifecycle, and target-device checks remain open |
 | 7. Self-programming | AI draft + Capability Lab + Docker validation | Mia can draft a pure-Python run(input_data) module and pytest file using free-only model routing; drafts are reviewed in-browser and must be explicitly saved. The Lab stores immutable source/test versions, runs Docker validation and registers only passing versions. No network, read-only candidate mount, non-root worker and bounded resources; Windows verification, activation and rollback remain |
-| 8. 30-day experiment | Planned | No Day 0 baseline captured. Start only after sandbox, fixed benchmarks and reproducible environment manifest are ready |
+| 8. 30-day experiment | Local Day 0 capture implemented; not yet run | API executes six fixed offline foundation checks on the Mia host, records commit/config hashes and local OS/Python/hardware, and prepares Day 0 only on a fully passing, clean tracked worktree. It refuses GitHub Actions capture. No baseline has been captured yet; daily snapshots and final evaluation remain |
 
 ## Verification
 
