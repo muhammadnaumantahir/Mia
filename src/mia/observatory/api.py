@@ -251,7 +251,8 @@ def create_app(
     )
     task_coordinator = TaskCoordinator(durable_tasks, autonomy_policy)
     workload_discovery = WorkloadDiscovery(durable_tasks)
-    task_planner = TaskPlanner(model_gateway, workload_discovery)
+    tool_registry = ToolRegistry()
+    task_planner = TaskPlanner(model_gateway, workload_discovery, tools=tool_registry)
     app.state.tasks = durable_tasks
     app.state.workload_discovery = workload_discovery
     app.state.task_planner = task_planner
@@ -263,8 +264,6 @@ def create_app(
     app.state.capabilities = capability_versions
     resource_monitor_service = resource_monitor or ResourceMonitor()
     app.state.resource_monitor = resource_monitor_service
-
-    tool_registry = ToolRegistry()
 
     def register_tool(name, description, properties, required, permission, mode, handler):
         tool_registry.register(

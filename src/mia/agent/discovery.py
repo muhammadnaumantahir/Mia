@@ -20,6 +20,7 @@ class DiscoveryFinding:
     risk_level: str = "low"
     priority: int = 50
     evidence_uri: str | None = None
+    execution: dict[str, Any] | None = None
 
 
 class WorkloadDiscovery:
@@ -55,6 +56,8 @@ class WorkloadDiscovery:
                 "evidence_id": finding.evidence_id,
                 "title": finding.title.strip(),
             }
+            if finding.execution is not None:
+                identity["execution"] = finding.execution
             dedupe_key = hashlib.sha256(
                 json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
             ).hexdigest()
@@ -67,6 +70,8 @@ class WorkloadDiscovery:
                 "requires_governance_review": True,
                 "auto_approval_eligible": False,
             }
+            if finding.execution is not None:
+                metadata["execution"] = finding.execution
             task_id = self.tasks.create_task(
                 title=finding.title,
                 goal=finding.goal,

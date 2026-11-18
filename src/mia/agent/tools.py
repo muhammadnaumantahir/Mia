@@ -99,21 +99,46 @@ class ToolRegistry:
         tool = self._tools.get(name)
         return tool is not None and tool.mode == "read"
 
-    async def execute(self, name: str, arguments: dict[str, Any]) -> ToolResult:
+    def read_only_contracts(self) -> list[dict[str, Any]]:
+        """Return schemas for registered read-only tools only."""
+        return [
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": tool.parameters,
+            }
+            for tool in self._tools.values()
+            if tool.mode == "read"
+        ]
+
+    def validate_read_only_call(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+    ) -> str | None:
+        """Validate a proposed read-only call without invoking its handler."""
         tool = self._tools.get(name)
         if tool is None:
-            return ToolResult({"ok": False, "error": "Tool is not registered"})
+            return "Tool is not registered"
+        if tool.mode != "read":
+            return "Only registered read-only tools may be proposed for task execution"
+        return self.validate_arguments(name, arguments)
 
+    def validate_arguments(self, name: str, arguments: dict[str, Any]) -> str | None:
+        """Validate one tool's arguments without invoking its handler."""
+        tool = self._tools.get(name)
+        if tool is None:
+            return "Tool is not registered"
         if not isinstance(arguments, dict):
-            return ToolResult({"ok": False, "error": "Tool arguments must be a JSON object"})
+            return "Tool arguments must be a JSON object"
         try:
             encoded_size = len(
                 json.dumps(arguments, ensure_ascii=False).encode("utf-8")
             )
         except (TypeError, ValueError):
-            return ToolResult({"ok": False, "error": "Tool arguments are not valid JSON data"})
+            return "Tool arguments are not valid JSON data"
         if encoded_size > self.MAX_ARGUMENT_BYTES:
-            return ToolResult({"ok": False, "error": "Tool arguments exceed the size limit"})
+            return "Tool arguments exceed the size limit"
 
         schema = tool.parameters
         properties = schema.get("properties", {})
@@ -121,36 +146,44 @@ class ToolRegistry:
         unknown = set(arguments).difference(properties)
         missing = required.difference(arguments)
         if unknown:
-            return ToolResult({
-                "ok": False,
-                "error": f"Unexpected argument(s): {', '.join(sorted(unknown))}",
-            })
+            return f"Unexpected argument(s): {', '.join(sorted(unknown))}"
         if missing:
-            return ToolResult({
-                "ok": False,
-                "error": f"Missing argument(s): {', '.join(sorted(missing))}",
-            })
+            return f"Missing argument(s): {', '.join(sorted(missing))}"
 
         for key, value in arguments.items():
             rule = properties[key]
             expected = rule.get("type")
             if expected == "string" and not isinstance(value, str):
-                return ToolResult({"ok": False, "error": f"{key} must be a string"})
-            if expected == "integer" and (not isinstance(value, int) or isinstance(value, bool)):
-                return ToolResult({"ok": False, "error": f"{key} must be an integer"})
-            if expected == "number" and not isinstance(value, (int, float)):
-                return ToolResult({"ok": False, "error": f"{key} must be a number"})
+                return f"{key} must be a string"
+            if expected == "integer" and (
+                not isinstance(value, int) or isinstance(value, bool)
+            ):
+                return f"{key} must be an integer"
+            if expected == "number" and (
+                not isinstance(value, (int, float)) or isinstance(value, bool)
+            ):
+                return f"{key} must be a number"
             if expected == "boolean" and not isinstance(value, bool):
-                return ToolResult({"ok": False, "error": f"{key} must be a boolean"})
+                return f"{key} must be a boolean"
             max_length = rule.get("maxLength")
             if max_length is not None and isinstance(value, str) and len(value) > max_length:
-                return ToolResult({"ok": False, "error": f"{key} exceeds its maximum length"})
+                return f"{key} exceeds its maximum length"
             minimum = rule.get("minimum")
             maximum = rule.get("maximum")
             if minimum is not None and isinstance(value, (int, float)) and value < minimum:
-                return ToolResult({"ok": False, "error": f"{key} is below its minimum"})
+                return f"{key} is below its minimum"
             if maximum is not None and isinstance(value, (int, float)) and value > maximum:
-                return ToolResult({"ok": False, "error": f"{key} exceeds its maximum"})
+                return f"{key} exceeds its maximum"
+        return None
+
+    async def execute(self, name: str, arguments: dict[str, Any]) -> ToolResult:
+        tool = self._tools.get(name)
+        if tool is None:
+            return ToolResult({"ok": False, "error": "Tool is not registered"})
+
+        validation_error = self.validate_arguments(name, arguments)
+        if validation_error:
+            return ToolResult({"ok": False, "error": validation_error})
 
         try:
             result = tool.handler(arguments)

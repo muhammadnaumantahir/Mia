@@ -57,7 +57,7 @@ class ProposalGateway:
                 '{"tasks":[{"title":"Inspect test coverage",'
                 '"goal":"Review test gaps and write a findings report.",'
                 '"risk_level":"low","priority":55,'
-                '"evidence_summary":"The user requested a project health review."}]}'
+                '"evidence_summary":"The user requested a project health review.","execution":null}]}'
             ),
             attempted_candidates=("local/fake",),
             data_local=True,
