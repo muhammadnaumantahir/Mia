@@ -87,11 +87,15 @@ class WindowsUIAdapter:
             automation_id,
             control_type,
         )
-        del window, control  # Inspection only; no text is entered during preview.
+        del control  # Inspection only; no text is entered during preview.
+        process_id = int(window.process_id())
+        class_name = str(window.element_info.class_name or "")[:120]
 
         payload = {
             "window_handle": int(window_handle),
             "window_title": window_title,
+            "process_id": process_id,
+            "window_class": class_name,
             "automation_id": automation_id,
             "control_type": control_type,
             "text": text,
@@ -112,6 +116,8 @@ class WindowsUIAdapter:
             "display": {
                 "window_title": window_title,
                 "window_handle": int(window_handle),
+                "process_id": process_id,
+                "window_class": class_name,
                 "control_type": control_type,
                 "automation_id": automation_id,
                 "text_length": len(text),
@@ -128,11 +134,19 @@ class WindowsUIAdapter:
         automation_id: str,
         control_type: str,
         text: str,
+        process_id: int,
+        window_class: str,
     ) -> dict[str, Any]:
         self._validate_request(window_handle, window_title, automation_id, control_type, text)
+        if isinstance(process_id, bool) or not isinstance(process_id, int) or process_id <= 0:
+            raise ValueError("process_id must be a positive integer")
+        if not isinstance(window_class, str) or len(window_class) > 120:
+            raise ValueError("window_class must be at most 120 characters")
         payload = {
             "window_handle": int(window_handle),
             "window_title": window_title,
+            "process_id": process_id,
+            "window_class": window_class,
             "automation_id": automation_id,
             "control_type": control_type,
             "text": text,
@@ -143,6 +157,8 @@ class WindowsUIAdapter:
             window_title,
             automation_id,
             control_type,
+            expected_process_id=process_id,
+            expected_window_class=window_class,
         )
         self.approvals.consume(
             approval_id=approval_id,
@@ -170,6 +186,9 @@ class WindowsUIAdapter:
         window_title: str,
         automation_id: str,
         control_type: str,
+        *,
+        expected_process_id: int | None = None,
+        expected_window_class: str | None = None,
     ):
         desktop = self._desktop()
         window = None
@@ -184,6 +203,11 @@ class WindowsUIAdapter:
             raise DesktopAccessError("The target window is no longer available")
         if str(window.window_text() or "").strip() != window_title:
             raise DesktopAccessError("The target window title has changed")
+        if expected_process_id is not None and int(window.process_id()) != expected_process_id:
+            raise DesktopAccessError("The target window process has changed")
+        current_class = str(window.element_info.class_name or "")[:120]
+        if expected_window_class is not None and current_class != expected_window_class:
+            raise DesktopAccessError("The target window class has changed")
         try:
             control = window.child_window(
                 auto_id=automation_id,
@@ -191,6 +215,11 @@ class WindowsUIAdapter:
             ).wrapper_object()
             if not control.is_visible() or not control.is_enabled():
                 raise DesktopAccessError("The target text control is not visible and enabled")
+            is_password = getattr(control, "is_password", None)
+            if callable(is_password) and is_password():
+                raise DesktopAccessError("Password controls are not available for text entry")
+            if bool(getattr(control.element_info, "is_password", False)):
+                raise DesktopAccessError("Password controls are not available for text entry")
             if not callable(getattr(control, "set_edit_text", None)):
                 raise DesktopAccessError("The target control does not support safe text replacement")
             return window, control
