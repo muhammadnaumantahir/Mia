@@ -10,7 +10,7 @@ button,input,textarea{font:inherit}.layout{max-width:1440px;min-height:100vh;mar
 aside{padding:24px 18px;border-right:1px solid #203432;background:#0b1415b8;display:flex;flex-direction:column;gap:24px}
 .brand{display:flex;align-items:center;gap:12px}.logo{width:42px;height:42px;border-radius:14px;background:linear-gradient(145deg,#4ce0a8,#0b7257);display:grid;place-items:center;color:#05251b;font-size:22px;font-weight:850;box-shadow:0 10px 26px #16a87530}
 .brand strong{font-size:19px;letter-spacing:-.3px}.brand small{display:block;color:#82a198;margin-top:2px;font-size:11px}
-.nav{display:grid;gap:8px}.nav a{color:#9fb4ad;text-decoration:none;padding:11px 12px;border-radius:11px;font-size:13px;display:flex;align-items:center;gap:10px}.nav a.active,.nav a:hover{color:#d8f5e9;background:#183229}
+.nav{display:grid;gap:8px}.recent-title{font-size:10px;letter-spacing:1.2px;color:#647e74;margin:8px 8px 0;text-transform:uppercase}.recent-list{display:grid;gap:5px;max-height:42vh;overflow:auto}.recent-list a{color:#90a89e;text-decoration:none;padding:9px 10px;border-radius:9px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.recent-list a:hover,.recent-list a.current{background:#17352c;color:#c9f0df}.nav a{color:#9fb4ad;text-decoration:none;padding:11px 12px;border-radius:11px;font-size:13px;display:flex;align-items:center;gap:10px}.nav a.active,.nav a:hover{color:#d8f5e9;background:#183229}
 .sidecard{margin-top:auto;background:#101f1d;border:1px solid #29463c;border-radius:16px;padding:14px}.sidecard b{font-size:12px}.sidecard p{font-size:11px;line-height:1.5;color:#8da79e;margin:8px 0 0}
 main{min-width:0;display:flex;flex-direction:column;min-height:100vh}.top{height:70px;padding:0 30px;border-bottom:1px solid #203432;display:flex;align-items:center;justify-content:space-between;gap:16px}
 .top .context{font-size:13px;color:#91a79f}.state{font-size:11px;color:#9ce7c4;border:1px solid #2d5b49;background:#11281e;border-radius:999px;padding:7px 11px}
@@ -31,6 +31,7 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 <aside>
 <div class="brand"><div class="logo">M</div><div><strong>Mia</strong><small>Your personal AI</small></div></div>
 <nav class="nav"><a class="active" href="/assistant">✳ <span>New conversation</span></a><a href="/"><span>◷</span><span>Evolution Observatory</span></a></nav>
+<div class="recent-title">Recent conversations</div><div class="recent-list" id="recentList"><div class="sub">No conversations yet</div></div>
 <div class="sidecard"><b>Local-first by design</b><p>Mia tries local models first. Cloud providers are optional, and paid routing remains disabled unless you explicitly configure it.</p></div>
 </aside>
 <main>
@@ -46,6 +47,7 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 </section></main></div>
 <script>
 const $=id=>document.getElementById(id);
+let conversationId=new URLSearchParams(window.location.search).get('conversation_id');
 function addMessage(role,text,meta=''){
  $('welcome').hidden=true;const row=document.createElement('div');row.className='message '+role;
  const avatar=document.createElement('div');avatar.className='avatar';avatar.textContent=role==='user'?'You':'M';
@@ -72,6 +74,31 @@ function refreshVoices(){
   select.append(option);
  });
  if(selected && browserVoices[Number(selected)])select.value=selected;
+}
+async function loadConversationList(){
+ try{
+  const response=await fetch('/api/conversations');
+  const data=await response.json();
+  const box=$('recentList');box.innerHTML='';
+  (data.items||[]).forEach(item=>{
+   const link=document.createElement('a');
+   link.href='/assistant?conversation_id='+encodeURIComponent(item.conversation_id);
+   link.textContent=item.title||'Conversation';
+   link.title=item.title||'Conversation';
+   if(item.conversation_id===conversationId)link.classList.add('current');
+   box.append(link);
+  });
+  if(!data.items?.length)box.textContent='No conversations yet';
+ }catch(error){$('recentList').textContent='Conversation history unavailable';}
+}
+async function loadCurrentConversation(){
+ if(!conversationId)return;
+ try{
+  const response=await fetch('/api/conversations/'+encodeURIComponent(conversationId));
+  if(!response.ok){conversationId=null;return;}
+  const data=await response.json();
+  (data.messages||[]).forEach(message=>addMessage(message.role,message.content));
+ }catch(error){$('hint').textContent='Could not restore previous conversation.';}
 }
 function speakReply(text){
  if(!$('speakReplies').checked || !('speechSynthesis' in window))return;
@@ -133,9 +160,12 @@ $('composer').addEventListener('submit',async event=>{
  event.preventDefault();const prompt=$('prompt').value.trim();if(!prompt)return;
  const taskType=$('taskType').value;addMessage('user',prompt);$('prompt').value='';$('send').disabled=true;$('send').textContent='Thinking…';$('hint').textContent='Mia is selecting an available model…';
  try{
-  const response=await fetch('/api/gateway/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,task_type:taskType,max_output_tokens:1024})});
+  const response=await fetch('/api/gateway/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,task_type:taskType,max_output_tokens:1024,conversation_id:conversationId})});
   const result=await response.json();if(!response.ok)throw new Error(result.detail||'The model request failed.');
+  conversationId=result.conversation_id;
+  window.history.replaceState({},'', '/assistant?conversation_id='+encodeURIComponent(conversationId));
   addMessage('assistant',result.content,result.provider_id+' · '+result.model_id);
+  loadConversationList();
   speakReply(result.content);
   $('hint').textContent='Response received';
  }catch(error){addMessage('assistant','I could not complete that request. '+error.message);$('hint').textContent='Check that Ollama or an enabled provider is running.';}
@@ -147,4 +177,6 @@ $('prompt').addEventListener('keydown',event=>{
 refreshVoices();
 if('speechSynthesis' in window)window.speechSynthesis.onvoiceschanged=refreshVoices;
 refreshProviders();
+loadCurrentConversation();
+loadConversationList();
 </script></body></html>
