@@ -57,3 +57,24 @@ def test_unhealthy_or_depleted_candidates_are_excluded():
         candidate("ready", "ready"),
     ]
     assert [item.provider_id for item in rank_candidates(options, request)] == ["ready"]
+
+
+
+def test_paid_model_with_unknown_prices_is_never_eligible():
+    request = ModelRequest(
+        task_type="chat",
+        prompt="test prompt",
+        max_output_tokens=100,
+    )
+    unknown_price = ModelCandidate(
+        provider_id="cloud",
+        model_id="unknown-price-model",
+        capabilities=frozenset({"chat"}),
+        context_window=8192,
+        free_tier=False,
+        healthy=True,
+        enabled=True,
+        reliability_score=0.9,
+    )
+    policy = RoutePolicy(allow_paid=True, max_request_cost_usd=1.0)
+    assert rank_candidates([unknown_price], request, policy) == []
