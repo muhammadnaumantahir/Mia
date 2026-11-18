@@ -218,7 +218,7 @@ class WindowsUIAdapter:
             is_password = getattr(control, "is_password", None)
             if callable(is_password) and is_password():
                 raise DesktopAccessError("Password controls are not available for text entry")
-            if bool(getattr(control.element_info, "is_password", False)):
+            if bool(getattr(getattr(control, "element_info", None), "is_password", False)):
                 raise DesktopAccessError("Password controls are not available for text entry")
             if not callable(getattr(control, "set_edit_text", None)):
                 raise DesktopAccessError("The target control does not support safe text replacement")

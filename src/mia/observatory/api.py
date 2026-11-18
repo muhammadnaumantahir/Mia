@@ -1293,6 +1293,8 @@ def create_app(
                     automation_id=str(payload["automation_id"]),
                     control_type=str(payload["control_type"]),
                     text=str(payload["text"]),
+                    process_id=int(payload["process_id"]),
+                    window_class=str(payload["window_class"]),
                 )
                 summary = f"Entered approved text in {result['window_title']}"
             else:
