@@ -88,3 +88,36 @@ async def test_task_executor_rejects_unapproved_task():
 
     with pytest.raises(TaskExecutionError, match="approved"):
         await executor.execute(task)
+
+
+@pytest.mark.asyncio
+async def test_task_executor_rejects_invalid_arguments_before_invoking_tool():
+    calls = []
+    registry = ToolRegistry()
+    registry.register(
+        name="demo.inspect",
+        description="Read one short string.",
+        parameters={
+            "type": "object",
+            "properties": {"value": {"type": "string", "maxLength": 20}},
+            "required": ["value"],
+            "additionalProperties": False,
+        },
+        permission="demo.inspect",
+        mode="read",
+        handler=lambda args: calls.append(args) or {"value": args["value"]},
+    )
+    executor = TaskToolExecutor(registry)
+    task = {
+        "status": "approved",
+        "metadata": {
+            "execution": {
+                "tool_name": "demo.inspect",
+                "arguments": {"value": 123},
+            }
+        },
+    }
+
+    with pytest.raises(TaskExecutionError, match="value must be a string"):
+        executor.validate(task)
+    assert calls == []

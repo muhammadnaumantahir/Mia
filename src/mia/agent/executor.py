@@ -46,10 +46,9 @@ class TaskToolExecutor:
             raise TaskExecutionError("Execution tool_name must be a non-empty string")
         if not isinstance(arguments, dict):
             raise TaskExecutionError("Execution arguments must be an object")
-        if not self.tools.is_read_only(tool_name):
-            raise TaskExecutionError(
-                "Only registered read-only tools may run through the task executor"
-            )
+        validation_error = self.tools.validate_read_only_call(tool_name, arguments)
+        if validation_error:
+            raise TaskExecutionError(validation_error)
         return tool_name, arguments
 
     async def execute(self, task: dict[str, Any]) -> dict[str, Any]:

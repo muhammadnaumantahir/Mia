@@ -273,3 +273,41 @@ async def test_cancelled_execution_request_marks_running_task_cancelled(tmp_path
         "running",
         "cancelled",
     ]
+
+
+def test_manual_task_execution_rejects_invalid_arguments_before_claiming(tmp_path):
+    tasks = TaskStore(tmp_path / "tasks.sqlite3")
+    client = TestClient(
+        create_app(
+            store=ObservatoryStore(tmp_path / "observatory.sqlite3"),
+            task_store=tasks,
+        )
+    )
+    created = client.post(
+        "/api/tasks",
+        json={
+            "title": "Malformed resource check",
+            "goal": "Attempt a resource check with unexpected arguments.",
+            "source": "interactive",
+            "metadata": {
+                "execution": {
+                    "tool_name": "system.read_resources",
+                    "arguments": {"unexpected": True},
+                }
+            },
+        },
+    )
+    task_id = created.json()["task_id"]
+    client.post(
+        f"/api/tasks/{task_id}/approve",
+        json={"reason": "Approve only to exercise pre-claim validation."},
+    )
+
+    response = client.post(f"/api/tasks/{task_id}/execute")
+    assert response.status_code == 422
+    assert "Unexpected argument" in response.json()["detail"]
+    assert tasks.get_task(task_id)["status"] == "approved"
+    assert [event["to_status"] for event in tasks.list_events(task_id)] == [
+        "proposed",
+        "approved",
+    ]
