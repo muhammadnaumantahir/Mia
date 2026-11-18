@@ -13,6 +13,11 @@ Status values: Candidate = researched but not integrated; Approved for prototype
 | Speech-to-text | Faster-Whisper | Optional local adapter | MIT | CPU int8 benchmark; language accuracy; memory |
 | Wake-word detection | openWakeWord | Optional local adapter | Apache-2.0 | Model license; false-positive and missed-wake test |
 | Text-to-speech | Kokoro-82M | Primary candidate for local TTS proof of concept | Apache-2.0 model weights; package metadata also Apache-2.0 | PyTorch/Transformers footprint; voice asset license; actual English/Urdu quality and CPU benchmark |\n| Text-to-speech alternative | Piper | Optional external process candidate | GPL-3.0 | Distribution obligations; each voice model license |
+| Offline system TTS | pyttsx3 | Browser/OS system-voice fallback candidate | MPL-2.0 | Target-device voice availability, female voice metadata and SAPI behavior |
+| PDF ingestion | pypdf | Optional parser | BSD-style | Encrypted files, malformed PDFs, page and extraction limits |
+| DOCX ingestion | python-docx | Optional parser | MIT | Table extraction and embedded object limitations |
+| XLSX ingestion | openpyxl | Optional parser | MIT | Formula/data-only interpretation, large sheet limits |
+| PPTX ingestion | python-pptx | Optional parser | MIT | Shapes, tables and embedded-media limitations |
 | Browser control | Playwright Python | Browser adapter candidate | Apache-2.0 | Profile isolation; download controls; domain policy |
 
 ## Initial dependency strategy
