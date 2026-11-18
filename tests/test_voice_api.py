@@ -136,3 +136,46 @@ def test_local_tts_rejects_empty_or_oversized_text(tmp_path):
 
     assert empty.status_code == 422
     assert oversized.status_code == 422
+
+
+def test_voice_status_reports_local_tts_capability(tmp_path):
+    client = TestClient(
+        create_app(
+            store=ObservatoryStore(tmp_path / "voice-status.sqlite3"),
+            transcriber=FakeTranscriber(),
+            tts_synthesizer=FakeSynthesizer(),
+        )
+    )
+
+    response = client.get("/api/voice/status")
+
+    assert response.status_code == 200
+    assert response.json()["local_text_to_speech"] == "ready"
+    assert response.json()["always_listening"] is False
+
+
+def test_local_tts_engine_startup_failure_is_reported_as_unavailable(tmp_path):
+    class UnavailableSynthesizer:
+        available = False
+
+        def list_voices(self):
+            from mia.voice.tts import SpeechSynthesisError
+
+            raise SpeechSynthesisError("speech engine unavailable")
+
+        def synthesize(self, text, *, voice_id=None, rate=175):
+            from mia.voice.tts import SpeechSynthesisError
+
+            raise SpeechSynthesisError("speech engine unavailable")
+
+    client = TestClient(
+        create_app(
+            store=ObservatoryStore(tmp_path / "unavailable-tts.sqlite3"),
+            transcriber=FakeTranscriber(),
+            tts_synthesizer=UnavailableSynthesizer(),
+        )
+    )
+    voices = client.get("/api/voice/tts/voices")
+
+    assert voices.status_code == 503
+    assert "speech engine unavailable" in voices.json()["detail"]

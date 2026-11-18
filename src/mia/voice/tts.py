@@ -62,16 +62,27 @@ class Pyttsx3SpeechSynthesizer:
 
     def _engine(self):
         if self._engine_factory is not None:
-            return self._engine_factory()
+            try:
+                return self._engine_factory()
+            except Exception as exc:
+                raise SpeechSynthesisError(
+                    "The configured speech engine could not be started"
+                ) from exc
         try:
             import pyttsx3
         except ImportError as exc:
             raise SpeechSynthesisError(
                 'Install the optional local TTS extra: pip install -e ".[tts]"'
             ) from exc
-        if os.name == "nt":
-            return pyttsx3.init(driverName="sapi5")
-        return pyttsx3.init()
+        try:
+            if os.name == "nt":
+                return pyttsx3.init(driverName="sapi5")
+            return pyttsx3.init()
+        except Exception as exc:
+            raise SpeechSynthesisError(
+                "The operating-system speech engine could not be started; "
+                "check installed voices and audio services"
+            ) from exc
 
     @staticmethod
     def _voice_metadata(voice: Any) -> dict[str, Any]:

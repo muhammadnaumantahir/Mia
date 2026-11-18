@@ -299,6 +299,7 @@ async function refreshVoices(){
     const option=document.createElement('option');
     option.value='local:'+voice.id;
     const gender=voice.gender?' · '+voice.gender:'';
+    option.dataset.gender=voice.gender||'';
     option.textContent=(voice.name||'System voice')+' ('+(voice.languages?.[0]||'unknown')+')'+gender;
     group.append(option);
    });
@@ -315,7 +316,14 @@ async function refreshVoices(){
   });
   select.append(group);
  }
- if(selected && Array.from(select.options).some(option=>option.value===selected))select.value=selected;
+ if(selected && Array.from(select.options).some(option=>option.value===selected)){
+  select.value=selected;
+ }else{
+  const femaleVoice=Array.from(select.options).find(option=>
+   option.value.startsWith('local:')&&option.dataset.gender==='female'
+  );
+  if(femaleVoice)select.value=femaleVoice.value;
+ }
 }
 async function loadConversationList(){
  try{

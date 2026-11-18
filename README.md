@@ -64,6 +64,14 @@ To enable local voice recognition, install the optional model runtime separately
 python -m pip install -e ".[voice]"
 ~~~
 
+To enable optional offline text-to-speech with installed Windows system voices:
+
+~~~powershell
+python -m pip install -e ".[tts]"
+~~~
+
+The assistant prefers an installed voice explicitly marked female by system metadata when one is available. Otherwise, choose an installed local or browser voice from the selector. This does not install voice packs or guarantee that a feminine voice is present.
+
 For PDF, DOCX, XLSX and PPTX extraction, install the optional document parsers:
 
 ~~~powershell
@@ -102,7 +110,7 @@ The Evolution Observatory includes a **Capability Lab** where Mia can draft pure
 | 0. Research and reuse audit | Source audit, license matrix, architecture and integration decisions | In progress |
 | 1. Foundation | Project skeleton, SPS registry, event store, observatory API, tests | Bootstrap committed |
 | 2. AI gateway | Ollama/OpenAI-compatible adapters, free-first routing and price guard | In progress |
-| 3. Voice | Push-to-talk, local STT and installed browser/OS speech voices | In progress |
+| 3. Voice | Push-to-talk, local STT, optional offline OS TTS and browser fallback | Partial implementation; real Windows voice metadata/latency and wake-word tests remain |
 | 4. Computer intelligence | Scoped filesystem, approved app launch and isolated public-web browser | In progress |
 | 5. Memory and knowledge | Persistent conversations, FTS5 knowledge and source-aware document ingestion | In progress |
 | 6. Autonomous agent | Task Desk, manual read-only execution and opt-in background dispatch for approved system-inspection tasks | Partial implementation; multi-step execution, automatic restart resumption, broader governed tools and target-device verification remain |

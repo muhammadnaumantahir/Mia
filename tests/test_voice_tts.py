@@ -91,3 +91,13 @@ def test_synthesizer_rejects_invalid_wav():
 
     with pytest.raises(SpeechSynthesisError, match="invalid WAV"):
         synthesizer.synthesize("Hello")
+
+
+def test_synthesizer_wraps_system_driver_startup_failures():
+    def failed_engine():
+        raise OSError("SAPI driver unavailable")
+
+    synthesizer = Pyttsx3SpeechSynthesizer(engine_factory=failed_engine)
+
+    with pytest.raises(SpeechSynthesisError, match="could not be started"):
+        synthesizer.list_voices()
