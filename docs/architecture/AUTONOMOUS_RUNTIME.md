@@ -42,8 +42,9 @@ purchases. The planner remains separate from the executor; a task needs a
 structured execution contract and must pass the automatic tool allowlist.
 
 This is an incremental Phase 6 capability, not arbitrary multi-step autonomy.
-Restart recovery, broader task workflows, independently cancellable workers,
-and target-device tests remain open quality gates.
+Interrupted-task recovery is implemented as a failed state plus owner-approved
+retry; automatic continuation across restart, broader task workflows,
+independently cancellable workers, and target-device tests remain open gates.
 
 ## Tool handler scheduling
 

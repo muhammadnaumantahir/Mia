@@ -22,8 +22,8 @@
 ## Verification
 
 - Last known fully green CI commit: 19c3fde9d110611a648c9a168b7841a0d035db75 on Windows and Ubuntu with Python 3.13.
-- Recent Actions runs, including 44341571602, ended both Windows and Ubuntu matrix jobs before any steps were recorded. Test/lint outcomes remain inconclusive, not passed or failed by code evidence. The current development container cannot resolve github.com for a local checkout, so no local test result is claimed.
-- Planner, scheduler, read-only task-executor, Task Desk, Capability Lab, capability lifecycle, Docker sandbox and Day 0 capture tests have not yet been confirmed by a successful CI run. Recent run 44340294869 failed both matrix jobs before any steps were recorded; runner allocation/test outcomes remain inconclusive. The current development container cannot resolve github.com for a local checkout, so no local test result is claimed.
+- Recent Actions runs, including 44344843830, ended both Windows and Ubuntu matrix jobs before any steps were recorded. Test/lint outcomes remain inconclusive, not passed or failed by code evidence. The current development container cannot resolve github.com for a local checkout, so no local test result is claimed.
+- Planner, scheduler, read-only task-executor, Task Desk, Capability Lab, capability lifecycle, Docker sandbox and Day 0 capture tests have not yet been confirmed by a successful CI run. Latest inspected run 44344843830 failed both matrix jobs before any steps were recorded; runner allocation/test outcomes remain inconclusive. The current development container cannot resolve github.com for a local checkout, so no local test result is claimed.
 - Windows UI adapter has mocked contract tests but has not been exercised against real desktop apps on the owner's PC.
 
 ## Not complete
