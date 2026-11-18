@@ -386,3 +386,39 @@ def test_background_autonomy_dispatch_is_opt_in_and_read_only(tmp_path, monkeypa
         event["event_type"] == "background_task_completed"
         for event in app.state.observatory.list_events(limit=30)
     )
+
+
+def test_application_startup_recovers_interrupted_tasks_without_auto_retry(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setenv("MIA_AUTONOMY_ENABLED", "false")
+    tasks = TaskStore(tmp_path / "recovery-tasks.sqlite3")
+    task_id = tasks.create_task(
+        title="Interrupted before restart",
+        goal="Read a bounded local resource snapshot.",
+        source="interactive",
+        metadata={
+            "execution": {
+                "tool_name": "system.read_resources",
+                "arguments": {},
+            }
+        },
+    )
+    tasks.transition(task_id, "approved", reason="Owner approved before simulated restart")
+    tasks.claim_next()
+
+    app = create_app(
+        store=ObservatoryStore(tmp_path / "recovery-observatory.sqlite3"),
+        task_store=tasks,
+    )
+    with TestClient(app) as client:
+        task = client.get(f"/api/tasks/{task_id}").json()["task"]
+        assert task["status"] == "failed"
+        assert tasks.list_events(task_id)[-1]["actor"] == "startup-recovery"
+
+    assert tasks.get_task(task_id)["status"] == "failed"
+    assert any(
+        event["event_type"] == "interrupted_tasks_recovered"
+        for event in app.state.observatory.list_events(limit=20)
+    )

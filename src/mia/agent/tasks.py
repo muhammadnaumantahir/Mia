@@ -248,6 +248,54 @@ class TaskStore:
             ).fetchone()
         return self._decode_task(updated)
 
+    def recover_interrupted_tasks(self) -> list[str]:
+        """Mark tasks left running by a previous process as failed.
+
+        Recovery is deliberately not an automatic retry. An owner must review
+        and explicitly re-approve a failed task before it can run again.
+        """
+        now = _now()
+        recovered: list[str] = []
+        with self._connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            rows = db.execute(
+                """
+                SELECT task_id FROM tasks
+                WHERE status = 'running'
+                ORDER BY started_at, created_at
+                """
+            ).fetchall()
+            for row in rows:
+                task_id = str(row["task_id"])
+                updated = db.execute(
+                    """
+                    UPDATE tasks
+                    SET status = 'failed', updated_at = ?, completed_at = ?,
+                        last_error = 'interrupted_on_restart'
+                    WHERE task_id = ? AND status = 'running'
+                    """,
+                    (now, now, task_id),
+                )
+                if updated.rowcount != 1:
+                    continue
+                self._insert_event(
+                    db,
+                    task_id=task_id,
+                    from_status="running",
+                    to_status="failed",
+                    reason=(
+                        "The previous Mia process stopped before recording a task result; "
+                        "owner review is required before retry"
+                    ),
+                    actor="startup-recovery",
+                    payload={
+                        "recovery": "interrupted_on_restart",
+                        "retry_requires_owner_approval": True,
+                    },
+                )
+                recovered.append(task_id)
+        return recovered
+
     def claim_next(
         self,
         *,

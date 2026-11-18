@@ -1,3 +1,4 @@
+import json
 from mia.agent.tasks import (
     AutonomyPolicy,
     RuntimeLoad,
@@ -247,3 +248,47 @@ def test_claim_next_skips_approved_tasks_outside_validator_scope(tmp_path):
     assert claimed["task_id"] == supported
     assert claimed["status"] == "running"
     assert store.get_task(unsupported)["status"] == "approved"
+
+
+def test_restart_recovery_marks_running_tasks_failed_until_owner_reapproves(tmp_path):
+    store = TaskStore(tmp_path / "tasks.sqlite3")
+    task_id = store.create_task(
+        title="Interrupted read-only check",
+        goal="Read a bounded system status.",
+        source="interactive",
+        metadata={
+            "execution": {
+                "tool_name": "system.read_resources",
+                "arguments": {},
+            }
+        },
+    )
+    store.transition(task_id, "approved", reason="Owner approved the check")
+    claimed = store.claim_next()
+    assert claimed is not None
+    assert claimed["task_id"] == task_id
+    assert claimed["status"] == "running"
+
+    recovered = store.recover_interrupted_tasks()
+
+    assert recovered == [task_id]
+    failed = store.get_task(task_id)
+    assert failed is not None
+    assert failed["status"] == "failed"
+    assert failed["last_error"] == "interrupted_on_restart"
+    assert failed["completed_at"]
+    events = store.list_events(task_id)
+    assert events[-1]["actor"] == "startup-recovery"
+    assert events[-1]["to_status"] == "failed"
+    assert json.loads(events[-1]["payload_json"]) == {
+        "recovery": "interrupted_on_restart",
+        "retry_requires_owner_approval": True,
+    }
+
+    assert store.recover_interrupted_tasks() == []
+    store.transition(
+        task_id,
+        "approved",
+        reason="Owner reviewed the interrupted task and approved retry",
+    )
+    assert store.get_task(task_id)["status"] == "approved"

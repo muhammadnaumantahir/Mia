@@ -272,6 +272,21 @@ def create_app(
     app.state.workload_discovery = workload_discovery
     app.state.task_planner = task_planner
     app.state.task_coordinator = task_coordinator
+
+    def recover_interrupted_task_runs() -> None:
+        recovered = durable_tasks.recover_interrupted_tasks()
+        if recovered:
+            observatory.record_event(
+                category="autonomy",
+                event_type="interrupted_tasks_recovered",
+                summary=f"Marked {len(recovered)} interrupted task(s) as failed for owner review",
+                outcome="recovered",
+                layer_id="SPS-10",
+                payload={"task_count": len(recovered)},
+            )
+
+    app.add_event_handler("startup", recover_interrupted_task_runs)
+
     capability_versions = capability_store or CapabilityStore(
         data_dir / "mia-capabilities.sqlite3",
         data_dir / "workspace" / "generated_code",
