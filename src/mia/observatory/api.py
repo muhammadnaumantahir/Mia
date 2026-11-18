@@ -719,7 +719,20 @@ def create_app(
         )
 
     def execute_automatic_task(task: dict[str, Any]) -> dict[str, Any]:
-        return asyncio.run(task_tool_executor.execute(task))
+        task_id = str(task["task_id"])
+
+        def should_continue() -> bool:
+            current = durable_tasks.get_task(task_id)
+            return (
+                current is not None
+                and current["status"] == "running"
+                and not durable_tasks.is_autonomy_paused()
+                and autonomy_runtime._permits_dispatch()
+            )
+
+        return asyncio.run(
+            task_tool_executor.execute(task, should_continue=should_continue)
+        )
 
     def record_automatic_task_cycle(result: dict[str, Any]) -> None:
         if result.get("status") not in {"completed", "failed"}:
