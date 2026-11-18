@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+from threading import Lock
 from pathlib import Path
 from typing import Protocol
 
@@ -40,26 +41,29 @@ class FasterWhisperTranscriber:
             1, min(2, os.cpu_count() or 1)
         )
         self._model = None
+        self._model_lock = Lock()
 
     def _get_model(self):
         if self._model is None:
-            try:
-                from faster_whisper import WhisperModel
-            except ImportError as exc:
-                raise RuntimeError(
-                    'Install Mia with the "voice" extra to enable speech recognition.'
-                ) from exc
+            with self._model_lock:
+                if self._model is None:
+                    try:
+                        from faster_whisper import WhisperModel
+                    except ImportError as exc:
+                        raise RuntimeError(
+                            'Install Mia with the "voice" extra to enable speech recognition.'
+                        ) from exc
 
-            model_dir = self.data_dir / "models" / "faster-whisper"
-            model_dir.mkdir(parents=True, exist_ok=True)
-            self._model = WhisperModel(
-                self.model_size,
-                device="cpu",
-                compute_type="int8",
-                cpu_threads=self.cpu_threads,
-                num_workers=1,
-                download_root=str(model_dir),
-            )
+                    model_dir = self.data_dir / "models" / "faster-whisper"
+                    model_dir.mkdir(parents=True, exist_ok=True)
+                    self._model = WhisperModel(
+                        self.model_size,
+                        device="cpu",
+                        compute_type="int8",
+                        cpu_threads=self.cpu_threads,
+                        num_workers=1,
+                        download_root=str(model_dir),
+                    )
         return self._model
 
     def transcribe(
