@@ -1805,66 +1805,69 @@ def create_app(
         if autonomy_policy.emergency_stop:
             raise HTTPException(status_code=503, detail="Emergency stop is active")
 
-        try:
-            async with capability_execution_lock:
+        async with capability_execution_lock:
+            try:
                 snapshot = resource_monitor_service.snapshot()
                 load = RuntimeLoad(
                     cpu_percent=float(snapshot["cpu_percent"]),
                     memory_percent=float(snapshot["memory_percent"]),
                 )
-                if (
-                    load.cpu_percent >= autonomy_policy.max_cpu_percent
-                    or load.memory_percent >= autonomy_policy.max_memory_percent
-                ):
-                    raise HTTPException(
-                        status_code=503,
-                        detail="Capability execution paused because CPU or memory usage is above policy",
-                    )
+            except (RuntimeError, OSError, ValueError, KeyError, TypeError) as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Runtime resource telemetry is unavailable",
+                ) from exc
+
+            if (
+                load.cpu_percent >= autonomy_policy.max_cpu_percent
+                or load.memory_percent >= autonomy_policy.max_memory_percent
+            ):
+                raise HTTPException(
+                    status_code=503,
+                    detail="Capability execution paused because CPU or memory usage is above policy",
+                )
+
+            try:
                 execution = await run_in_threadpool(
                     app.state.capability_executor.execute_capability,
                     source_code=source_code,
                     source_sha256=candidate["source_sha256"],
                     input_data=item.input_data,
                 )
-        except HTTPException:
-            raise
-        except (RuntimeError, OSError, ValueError, KeyError, TypeError) as exc:
-            raise HTTPException(
-                status_code=503,
-                detail="Runtime resource telemetry is unavailable",
-            ) from exc
-        except SandboxUnavailableError as exc:
-            observatory.record_event(
-                category="evolution",
-                event_type="capability_execution_failed",
-                summary=f"Isolated capability runner unavailable: {capability_id} {version}",
-                outcome="unavailable",
-                layer_id="SPS-09",
-                payload={
-                    "capability_id": capability_id,
-                    "version": version,
-                    "source_sha256": candidate["source_sha256"],
-                    "input_sha256": hashlib.sha256(input_bytes).hexdigest(),
-                    "error_type": type(exc).__name__,
-                },
-            )
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
-        except SandboxExecutionError as exc:
-            observatory.record_event(
-                category="evolution",
-                event_type="capability_execution_failed",
-                summary=f"Isolated capability execution failed: {capability_id} {version}",
-                outcome="failed",
-                layer_id="SPS-09",
-                payload={
-                    "capability_id": capability_id,
-                    "version": version,
-                    "source_sha256": candidate["source_sha256"],
-                    "input_sha256": hashlib.sha256(input_bytes).hexdigest(),
-                    "error_type": type(exc).__name__,
-                },
-            )
-            raise HTTPException(status_code=502, detail=str(exc)) from exc
+            except SandboxUnavailableError as exc:
+                observatory.record_event(
+                    category="evolution",
+                    event_type="capability_execution_failed",
+                    summary=f"Isolated capability runner unavailable: {capability_id} {version}",
+                    outcome="unavailable",
+                    layer_id="SPS-09",
+                    payload={
+                        "capability_id": capability_id,
+                        "version": version,
+                        "source_sha256": candidate["source_sha256"],
+                        "input_sha256": hashlib.sha256(input_bytes).hexdigest(),
+                        "error_type": type(exc).__name__,
+                    },
+                )
+                raise HTTPException(status_code=503, detail=str(exc)) from exc
+            except SandboxExecutionError as exc:
+                observatory.record_event(
+                    category="evolution",
+                    event_type="capability_execution_failed",
+                    summary=f"Isolated capability execution failed: {capability_id} {version}",
+                    outcome="failed",
+                    layer_id="SPS-09",
+                    payload={
+                        "capability_id": capability_id,
+                        "version": version,
+                        "source_sha256": candidate["source_sha256"],
+                        "input_sha256": hashlib.sha256(input_bytes).hexdigest(),
+                        "error_type": type(exc).__name__,
+                    },
+                )
+                raise HTTPException(status_code=502, detail=str(exc)) from exc
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
 
         observatory.record_event(
             category="evolution",
