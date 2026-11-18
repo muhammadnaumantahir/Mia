@@ -305,7 +305,7 @@ def capture_baseline_manifest(
             "capture_host": platform.node() or "unknown-local-host",
             "capture_method": "local-host-fixed-benchmark-and-regression-v3",
         },
-                "fixed_benchmark_results": {
+        "fixed_benchmark_results": {
             **fixed_benchmark_results,
             "pytest_exit_code": fixed_result.returncode,
             "stdout_sha256": _sha256((fixed_result.stdout or "").encode("utf-8")),

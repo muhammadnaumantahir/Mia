@@ -313,12 +313,21 @@ async function showExperimentReport(){
   days.textContent='Recorded days: '+report.days.recorded.join(', ')+' · Missing: '+(report.days.missing.join(', ')||'None')+' · Explicitly unavailable: '+(report.days.unavailable.join(', ')||'None')+' · Unaccounted: '+(report.days.unaccounted.join(', ')||'None');
   const comparison=document.createElement('div');
   const rate=report.comparison;
-  comparison.textContent='Day 0 test pass rate: '+(rate.baseline_test_pass_rate===null?'not available':rate.baseline_test_pass_rate.toFixed(2)+'%')+
-   ' · '+(rate.comparison_is_final?'Final':'Latest recorded')+' rate: '+(rate.latest_or_final_test_pass_rate===null?'not available':rate.latest_or_final_test_pass_rate.toFixed(2)+'%')+
+  comparison.textContent='Fixed benchmark pass rate · Day 0: '+(rate.baseline_test_pass_rate===null?'not available':rate.baseline_test_pass_rate.toFixed(2)+'%')+
+   ' · '+(rate.comparison_is_final?'Final':'Latest recorded')+': '+(rate.latest_or_final_test_pass_rate===null?'not available':rate.latest_or_final_test_pass_rate.toFixed(2)+'%')+
    ' · Change: '+(rate.test_pass_rate_change_points===null?'not available':(rate.test_pass_rate_change_points>0?'+':'')+rate.test_pass_rate_change_points.toFixed(2)+' points');
+  const regression=document.createElement('div');
+  const baseRegression=rate.baseline_full_regression||{};
+  const latestRegression=rate.latest_or_final_full_regression||{};
+  regression.textContent='Full regression suite · Day 0: '+(baseRegression.passed??'—')+'/'+(baseRegression.tests??'—')+
+   ' · '+(rate.comparison_is_final?'Final':'Latest recorded')+': '+(latestRegression.passed??'—')+'/'+(latestRegression.tests??'—');
+  const duration=document.createElement('div');
+  duration.textContent='Fixed benchmark duration · Day 0: '+(rate.baseline_fixed_benchmark_duration_seconds===null?'not available':Number(rate.baseline_fixed_benchmark_duration_seconds).toFixed(3)+'s')+
+   ' · '+(rate.comparison_is_final?'Final':'Latest recorded')+': '+(rate.latest_or_final_fixed_benchmark_duration_seconds===null?'not available':Number(rate.latest_or_final_fixed_benchmark_duration_seconds).toFixed(3)+'s')+
+   ' · Change: '+(rate.fixed_benchmark_duration_change_seconds===null?'not available':(rate.fixed_benchmark_duration_change_seconds>0?'+':'')+Number(rate.fixed_benchmark_duration_change_seconds).toFixed(3)+'s');
   const note=document.createElement('div');
-  note.textContent=rate.comparison_is_final?'Final comparison uses the captured planned final day.':'This is not a final performance comparison; no verified final-day result exists.';
-  box.append(heading,integrity,days,comparison,note);
+  note.textContent=rate.comparison_is_final?'Final benchmark comparison uses the captured planned final day. Timing is contextual and should not be treated as an intelligence or quality score.':'This is not a final performance comparison; no verified final-day result exists.';
+  box.append(heading,integrity,days,comparison,regression,duration,note);
   if(!report.capability_attribution.available){
    const attribution=document.createElement('div');attribution.textContent=report.capability_attribution.reason;box.append(attribution);
   }

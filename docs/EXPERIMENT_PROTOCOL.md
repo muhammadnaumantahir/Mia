@@ -14,7 +14,7 @@ Capture:
 - OS, CPU, RAM, storage and runtime versions;
 - active model and provider IDs, quantization and inference settings;
 - installed capability registry and permission profile;
-- fixed benchmark and task-suite versions;
+- the separately versioned fixed benchmark suite (`tests/benchmarks/test_foundation.py`) and the evolving full regression suite;
 - baseline raw outputs, scores, failures and timing;
 - safety policy, network settings and spend limits.
 
@@ -25,7 +25,7 @@ Create a read-only baseline manifest and export it outside the mutable workspace
 At each daily cycle:
 1. Check stop conditions, resource budget and governance.
 2. Read prior event traces and the current capability registry.
-3. Run a small health and regression suite.
+3. Run the unchanged fixed benchmark suite and the evolving full regression suite as separate commands. The fixed suite is fingerprinted in Day 0; changes to it require a new benchmark-suite version.
 4. Identify evidence-backed capability gaps.
 5. Evaluate reuse, adapt, improve, compose, create, defer or reject.
 6. Generate candidate changes only when justified.
@@ -50,6 +50,7 @@ These are themes, not forced release targets. Safe no-op days are legitimate res
 Keep a fixed benchmark suite and a separate evolving workload. Report both. Where practical, run the original Day 0 build against the same fixed tasks as a control to separate Mia's code changes from changes in models, prompts, data or task difficulty.
 
 Report:
+- fixed benchmark outcomes and elapsed time separately from full regression-suite counts and results;
 - absolute score and change from baseline;
 - per-task success/failure and confidence/uncertainty;
 - regression count and severity;
@@ -65,4 +66,4 @@ Stop or pause evolution on data loss, credential exposure, policy bypass, uncont
 
 ## Final report
 
-Include methods, environment, baseline manifest hash, all daily records, capability lineage, benchmark versions, raw and aggregated results, costs, failures, limitations and reproducible steps. Never claim improvement solely from source-code size, tool count or self-assessment.
+Include methods, environment, baseline manifest hash, all daily records, capability lineage, fixed benchmark and full regression results separately, costs, failures, limitations and reproducible steps. Never claim improvement solely from source-code size, tool count or self-assessment.

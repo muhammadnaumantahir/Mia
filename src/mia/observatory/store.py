@@ -705,6 +705,14 @@ class ObservatoryStore:
             if baseline_rate is not None and comparison_rate is not None
             else None
         )
+        baseline_benchmark_duration = baseline_benchmark.get("duration_seconds")
+        comparison_benchmark_duration = comparison_results.get("duration_seconds")
+        duration_delta = (
+            float(comparison_benchmark_duration) - float(baseline_benchmark_duration)
+            if isinstance(comparison_benchmark_duration, (int, float))
+            and isinstance(baseline_benchmark_duration, (int, float))
+            else None
+        )
 
         if status == "completed":
             conclusion = "completed"
@@ -754,6 +762,9 @@ class ObservatoryStore:
                 "baseline_test_pass_rate": baseline_rate,
                 "latest_or_final_test_pass_rate": comparison_rate,
                 "test_pass_rate_change_points": delta_rate,
+                "baseline_fixed_benchmark_duration_seconds": baseline_benchmark_duration,
+                "latest_or_final_fixed_benchmark_duration_seconds": comparison_benchmark_duration,
+                "fixed_benchmark_duration_change_seconds": duration_delta,
                 "comparison_is_final": status == "completed" and final_snapshot is not None,
             },
             "snapshots": snapshots,
