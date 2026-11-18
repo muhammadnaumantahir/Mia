@@ -128,3 +128,68 @@ def test_experiment_baseline_can_be_reloaded_and_hash_verified(tmp_path):
     assert baseline is not None
     assert baseline["baseline_sha256"] == prepared["baseline_sha256"]
     assert baseline["manifest"]["benchmark_suite_id"] == "mia-foundation-v2"
+
+
+def test_snapshot_due_day_uses_actual_elapsed_utc_time_and_marks_missed_days(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    store = ObservatoryStore(tmp_path / "snapshot-due.sqlite3")
+    prepared = store.prepare_experiment(
+        name="Snapshot schedule",
+        baseline_manifest=baseline_manifest(),
+        planned_days=5,
+    )
+    experiment_id = prepared["experiment_id"]
+    before_start = store.get_snapshot_status(
+        experiment_id,
+        now=datetime.now(UTC) + timedelta(days=5),
+    )
+    assert before_start["due"] is False
+    store.start_experiment(experiment_id)
+    with sqlite3.connect(store.database_path) as connection:
+        started = (datetime.now(UTC) - timedelta(hours=25)).isoformat()
+        connection.execute(
+            "UPDATE experiments SET started_at = ? WHERE experiment_id = ?",
+            (started, experiment_id),
+        )
+        connection.commit()
+
+    day_one = store.get_snapshot_status(experiment_id)
+    assert day_one["due"] is True
+    assert day_one["day_index"] == 1
+    assert day_one["days_missed"] == []
+
+    now = datetime.fromisoformat(started) + timedelta(days=3, hours=1)
+    day_three = store.get_snapshot_status(experiment_id, now=now)
+    assert day_three["due"] is True
+    assert day_three["day_index"] == 3
+    assert day_three["days_missed"] == [1, 2]
+
+    store.record_daily_snapshot(
+        experiment_id=experiment_id,
+        day_index=3,
+        source_commit="3123456789abcdef0123456789abcdef01234567",
+        snapshot={"verification_passed": True},
+    )
+    already_captured = store.get_snapshot_status(experiment_id, now=now)
+    assert already_captured["due"] is False
+    assert already_captured["latest_day_index"] == 3
+
+
+def test_final_daily_snapshot_completes_the_experiment(tmp_path):
+    store = ObservatoryStore(tmp_path / "final-day.sqlite3")
+    prepared = store.prepare_experiment(
+        name="One-day experiment",
+        baseline_manifest=baseline_manifest(),
+        planned_days=1,
+    )
+    experiment_id = prepared["experiment_id"]
+    store.start_experiment(experiment_id)
+    store.record_daily_snapshot(
+        experiment_id=experiment_id,
+        day_index=1,
+        source_commit="4123456789abcdef0123456789abcdef01234567",
+        snapshot={"verification_passed": True},
+    )
+    experiment = store.list_experiments()[0]
+    assert experiment["status"] == "completed"

@@ -48,10 +48,11 @@ footer{margin-top:24px;color:#6f8580;font-size:11px;line-height:1.6}
   <div class="experiment-field"><label for="experimentName">Experiment name</label><input id="experimentName" value="Mia 30-day experiment" maxlength="120" required></div>
   <div class="experiment-field"><label for="plannedDays">Planned days</label><input id="plannedDays" type="number" min="1" max="365" value="30" required></div>
  </div>
- <div class="experiment-actions"><button class="send" id="captureBaseline" type="submit">Capture & freeze Day 0</button><button class="send" id="startExperiment" type="button" disabled style="background:#263535;color:#d8e2dd">Start experiment</button></div>
+ <div class="experiment-actions"><button class="send" id="captureBaseline" type="submit">Capture & freeze Day 0</button><button class="send" id="startExperiment" type="button" disabled style="background:#263535;color:#d8e2dd">Start experiment</button><button class="send" id="refreshExperiment" type="button" disabled style="background:#263535;color:#d8e2dd">↻ Refresh status</button><button class="send" id="captureDailySnapshot" type="button" disabled>Capture today's evidence</button></div>
 </form>
 <div class="experiment-notice" id="experimentNotice" role="status" aria-live="polite">No Day 0 baseline has been captured on this computer.</div>
 <div class="experiment-details" id="experimentDetails"></div>
+<div class="experiment-notice" id="dailySnapshotStatus" role="status" aria-live="polite"></div>
 </section>
 <section class="panel"><div class="panelhead"><div><h3>Measured growth over time</h3><div class="muted">Select one metric to preserve its original unit and scale.</div></div><select id="metric" aria-label="Select metric"><option value="">No metrics yet</option></select></div>
 <div id="chartEmpty" class="empty">No benchmark or metric samples have been recorded yet.<br>Complete and freeze the Day 0 baseline to begin the experiment.</div><canvas id="chart" hidden></canvas></section>
@@ -132,15 +133,21 @@ function setExperimentNotice(message,isError=false){
 }
 async function loadExperimentControl(){
  const capture=el('captureBaseline'),start=el('startExperiment');
+ const refresh=el('refreshExperiment'),daily=el('captureDailySnapshot');
+ daily.disabled=true;refresh.disabled=false;
  try{
   const response=await fetch('/api/experiments');
   const data=await response.json();if(!response.ok)throw new Error(data.detail||'Experiment status unavailable');
   const items=data.items||[];
-  activeExperiment=items.find(item=>item.status==='running')||items.find(item=>item.status==='prepared')||null;
+  activeExperiment=items.find(item=>item.status==='running')
+   ||items.find(item=>item.status==='prepared')
+   ||items.find(item=>item.status==='completed')
+   ||null;
   if(!activeExperiment){
    el('experimentControlState').textContent='Not prepared';
-   capture.disabled=false;start.disabled=true;
+   capture.disabled=false;start.disabled=true;refresh.disabled=true;daily.disabled=true;
    el('experimentDetails').textContent='No verified Day 0 baseline exists yet. Capture it on the local machine after committing the source and installing Mia development dependencies.';
+   el('dailySnapshotStatus').textContent='Daily evidence becomes available after the experiment is explicitly started.';
    setExperimentNotice('Day 0 is not captured. Capture runs Ruff and the full local pytest suite; no sample data is created.');
    return;
   }
@@ -148,8 +155,11 @@ async function loadExperimentControl(){
   const baseline=await baselineResponse.json();if(!baselineResponse.ok)throw new Error(baseline.detail||'Stored baseline unavailable');
   const manifest=baseline.manifest||{},results=manifest.baseline_results||{};
   const running=activeExperiment.status==='running';
-  el('experimentControlState').textContent=running?'Running':'Baseline frozen';
-  capture.disabled=true;start.disabled=running;
+  const prepared=activeExperiment.status==='prepared';
+  const completed=activeExperiment.status==='completed';
+  el('experimentControlState').textContent=running?'Running':completed?'Completed':'Baseline frozen';
+  capture.disabled=true;start.disabled=!prepared;
+  refresh.disabled=false;daily.disabled=true;
   el('experimentName').value=activeExperiment.name||'Mia 30-day experiment';
   el('plannedDays').value=String(activeExperiment.planned_days||30);
   el('experimentDetails').replaceChildren();
@@ -161,11 +171,35 @@ async function loadExperimentControl(){
   resultsLine.textContent='Tests: '+String(results.passed??0)+' / '+String(results.tests??0)+' passed · Ruff: '+(results.ruff_passed?'passed':'not passed')+' · Captured: '+String(baseline.captured_at||'');
   const environment=document.createElement('div');
   environment.textContent='Machine: '+String(manifest.environment?.os||'')+' · Python '+String(manifest.environment?.python||'')+' · '+String(manifest.environment?.machine||'');
-  el('experimentDetails').append(line,resultsLine,environment);
-  setExperimentNotice(running?'Experiment is running. Day 0 remains immutable.':'Day 0 is verified and frozen. Click Start experiment separately to begin Day 1.');
+  const progress=document.createElement('div');
+  progress.textContent='Latest stored day: '+String(activeExperiment.snapshot_count?activeExperiment.snapshot_count-1:0)+' · Planned days: '+String(activeExperiment.planned_days||30);
+  el('experimentDetails').append(line,resultsLine,environment,progress);
+  if(completed){
+   el('dailySnapshotStatus').textContent='The final planned day has been captured. This experiment is complete and its history remains immutable.';
+   setExperimentNotice('Experiment completed. Day 0 and all stored daily snapshots remain frozen.');
+   return;
+  }
+  if(prepared){
+   el('dailySnapshotStatus').textContent='Daily capture is unavailable until the experiment has been explicitly started.';
+   setExperimentNotice('Day 0 is verified and frozen. Click Start experiment separately to begin Day 1.');
+   return;
+  }
+  const statusResponse=await fetch('/api/experiments/'+encodeURIComponent(activeExperiment.experiment_id)+'/snapshot-status');
+  const snapshotStatus=await statusResponse.json();
+  if(!statusResponse.ok)throw new Error(snapshotStatus.detail||'Daily snapshot status unavailable');
+  if(snapshotStatus.due){
+   daily.disabled=false;
+   const missing=snapshotStatus.days_missed||[];
+   el('dailySnapshotStatus').textContent='Day '+snapshotStatus.day_index+' is due. '+(missing.length?'Days '+missing.join(', ')+' were missed while Mia was offline and will be marked unavailable.':'No previous days are missing.');
+   setExperimentNotice('The experiment is running. Capture today's verification and CPU/RAM evidence from this computer.');
+  }else{
+   daily.disabled=true;
+   el('dailySnapshotStatus').textContent=snapshotStatus.reason||'No daily snapshot is due yet.';
+   setExperimentNotice('Experiment is running. Day 0 remains immutable; next daily evidence is captured after the next 24-hour boundary.');
+  }
  }catch(error){
-  activeExperiment=null;capture.disabled=false;start.disabled=true;
-  setExperimentNotice(error.message,true);
+  activeExperiment=null;capture.disabled=false;start.disabled=true;daily.disabled=true;
+  setExperimentNotice(error.message,true);el('dailySnapshotStatus').textContent='';
  }
 }
 el('experimentForm').addEventListener('submit',async event=>{
@@ -184,9 +218,29 @@ el('experimentForm').addEventListener('submit',async event=>{
   if(!response.ok)throw new Error(typeof result.detail==='string'?result.detail:JSON.stringify(result.detail||'Day 0 capture failed'));
   activeExperiment={experiment_id:result.experiment_id,status:'prepared',name,planned_days};
   await loadExperimentControl();
+window.setInterval(loadExperimentControl,60000);
   setExperimentNotice('Day 0 captured and frozen. Review the source hash and baseline checks, then start separately.');
  }catch(error){setExperimentNotice(error.message,true);}
  finally{await loadExperimentControl();}
+});
+el('refreshExperiment').addEventListener('click',async()=>{
+ await loadExperimentControl();
+});
+el('captureDailySnapshot').addEventListener('click',async()=>{
+ if(!activeExperiment||activeExperiment.status!=='running')return;
+ const button=el('captureDailySnapshot');button.disabled=true;
+ el('dailySnapshotStatus').textContent='Running the fixed Ruff and full test suite on the Mia host, then sampling CPU/RAM…';
+ try{
+  const response=await fetch('/api/experiments/'+encodeURIComponent(activeExperiment.experiment_id)+'/snapshots/capture',{method:'POST'});
+  const result=await response.json();
+  if(!response.ok)throw new Error(typeof result.detail==='string'?result.detail:JSON.stringify(result.detail||'Daily capture failed'));
+  await Promise.all([loadExperimentControl(),load()]);
+  const missing=result.missing_day_indices||[];
+  el('dailySnapshotStatus').textContent='Day '+result.day_index+' evidence recorded. '+(missing.length?'Unavailable days (Mia was offline): '+missing.join(', ')+'.':'No missed days.')+' CPU '+result.resources.cpu_percent+'% · RAM '+result.resources.memory_percent+'%.';
+ }catch(error){
+  el('dailySnapshotStatus').textContent=error.message;
+  button.disabled=false;
+ }
 });
 el('startExperiment').addEventListener('click',async()=>{
  if(!activeExperiment||activeExperiment.status!=='prepared')return;

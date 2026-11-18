@@ -74,5 +74,7 @@ UTC start time, reruns the same clean-checkout Ruff/pytest suite, compares the
 suite/configuration and OS/Python/machine identity with Day 0, and records live
 CPU/RAM values. It never creates zero-valued placeholders. If Mia was offline,
 missing day indices are recorded as unavailable and only the current verified
-day is stored. The daily capture action is manual in this release; a local
+day is stored. The dashboard enables **Capture today's evidence** only when a daily snapshot
+is due. It refreshes due state while open and records missed offline days as
+unavailable. Capture remains a manual action in this release; a local
 always-on scheduler and missed-day notifications remain future work.
