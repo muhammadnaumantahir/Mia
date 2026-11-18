@@ -183,6 +183,18 @@ class MemoryStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def get_conversation(self, conversation_id: str) -> dict[str, Any] | None:
+        with self._connection() as db:
+            row = db.execute(
+                """
+                SELECT conversation_id, title, created_at, updated_at
+                FROM conversations
+                WHERE conversation_id = ?
+                """,
+                (conversation_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
     def delete_conversation(self, conversation_id: str) -> bool:
         with self._connection() as db:
             cursor = db.execute(
