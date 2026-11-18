@@ -62,3 +62,27 @@ The service remains bound to localhost. Remote access must not be enabled until 
 - Secrets, cookies and provider keys are not passed to tools by default.
 - File writes and other destructive actions are auditable and reversible where possible.
 - Broad roots are not inferred from the machine; the owner must configure them.
+
+## Application launching
+
+- Mia loads an owner-managed allowlist from `MIA_APPLICATIONS_FILE`.
+- Each entry defines one application ID, executable and fixed argument list.
+- Models cannot supply or modify executable arguments.
+- Shells and script hosts are blocked by the launcher.
+- Launch is previewed, approved and executed with `shell=False`.
+- Process termination and unrestricted terminal commands are not implemented.
+
+Copy `config/applications.example.json` to `config/applications.json` and edit it for the applications actually installed on the machine. The personal file is ignored by Git.
+
+## Browser automation
+
+- Uses Playwright with a temporary isolated browser context, not the user's default browser profile.
+- Runs headless by default and does not import saved passwords, cookies or extensions.
+- Downloads are disabled.
+- Navigation is limited to HTTP/HTTPS public hosts; loopback, private, link-local, reserved and local hostnames are blocked.
+- Every browser request is checked, including requests following redirects.
+- Navigation and page-text extraction are read-oriented.
+- Clicking a selector requires a preview and one-time approval bound to the current page URL and exact selector.
+- The current browser context has no authenticated user session unless a later explicit login flow is added.
+
+The URL filter is a defense-in-depth control, not a complete network sandbox. DNS rebinding and browser-engine vulnerabilities require OS-level/network isolation before exposing the browser to untrusted automated workloads.
