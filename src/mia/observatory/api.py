@@ -153,7 +153,7 @@ class FileWriteExecution(FileWritePreview):
 
 class ApprovalExecutionInput(BaseModel):
     kind: str = Field(
-        pattern=r"^(filesystem\\.write|application\\.launch|browser\\.click|desktop\\.type_text)$"
+        pattern=r"^(filesystem\.write|application\.launch|browser\.click|desktop\.type_text)$"
     )
     payload: dict[str, Any] = Field(default_factory=dict)
 
