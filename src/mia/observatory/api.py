@@ -23,6 +23,7 @@ from mia.computer.approvals import ApprovalError, ApprovalStore
 from mia.computer.applications import ApplicationLaunchError, ApplicationLauncher
 from mia.computer.browser import BrowserAccessError, BrowserController
 from mia.computer.filesystem import FilesystemAccessError, FilesystemAdapter
+from mia.computer.windows_ui import DesktopAccessError, WindowsUIAdapter
 from mia.evolution.capabilities import (
     CapabilityActivationBlocked,
     CapabilityLifecycleError,
@@ -151,7 +152,9 @@ class FileWriteExecution(FileWritePreview):
 
 
 class ApprovalExecutionInput(BaseModel):
-    kind: str = Field(pattern="^(filesystem.write|application.launch|browser.click)$")
+    kind: str = Field(
+        pattern=r"^(filesystem\\.write|application\\.launch|browser\\.click|desktop\\.type_text)$"
+    )
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -187,6 +190,7 @@ def create_app(
     task_store: TaskStore | None = None,
     capability_store: CapabilityStore | None = None,
     resource_monitor: ResourceMonitor | None = None,
+    windows_ui: WindowsUIAdapter | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -207,6 +211,8 @@ def create_app(
     )
     app.state.computer_files = computer_files
     app.state.approvals = approval_store
+    desktop_adapter = windows_ui or WindowsUIAdapter(approval_store)
+    app.state.windows_ui = desktop_adapter
     applications_file = Path(
         os.getenv("MIA_APPLICATIONS_FILE", "config/applications.json")
     )
@@ -300,6 +306,33 @@ def create_app(
                 for item in items
             ]
         })
+
+    def tool_desktop_list_windows(args: dict[str, Any]) -> ToolResult:
+        return ToolResult({
+            "items": desktop_adapter.list_windows(limit=args.get("limit", 50))
+        })
+
+    def tool_desktop_preview_type_text(args: dict[str, Any]) -> ToolResult:
+        preview = desktop_adapter.preview_type_text(
+            window_handle=args["window_handle"],
+            window_title=args["window_title"],
+            automation_id=args["automation_id"],
+            control_type=args["control_type"],
+            text=args["text"],
+        )
+        pending = {
+            "kind": preview["kind"],
+            "approval_id": preview["approval_id"],
+            "summary": preview["summary"],
+            "payload": preview["payload"],
+            "display": preview["display"],
+        }
+        return ToolResult({
+            "status": "approval_required",
+            "approval_id": preview["approval_id"],
+            "summary": preview["summary"],
+            "display": preview["display"],
+        }, pending_action=pending)
 
     def tool_applications_list(args: dict[str, Any]) -> ToolResult:
         return ToolResult({"items": app_launcher.list_applications()})
@@ -450,6 +483,30 @@ def create_app(
         "memory.read",
         "read",
         tool_memory_search,
+    )
+    register_tool(
+        "desktop.list_windows",
+        "List visible Windows application windows with handles and titles. This is read-only.",
+        {"limit": {"type": "integer", "minimum": 1, "maximum": 100}},
+        [],
+        "desktop.inspect",
+        "read",
+        tool_desktop_list_windows,
+    )
+    register_tool(
+        "desktop.preview_type_text",
+        "Prepare exact text replacement in a specific Windows UI Automation text control. It is not entered until the owner approves the card.",
+        {
+            "window_handle": {"type": "integer", "minimum": 1},
+            "window_title": {"type": "string", "maxLength": 240},
+            "automation_id": {"type": "string", "maxLength": 160},
+            "control_type": {"type": "string", "maxLength": 40},
+            "text": {"type": "string", "maxLength": 20000},
+        },
+        ["window_handle", "window_title", "automation_id", "control_type", "text"],
+        "desktop.type_text",
+        "preview",
+        tool_desktop_preview_type_text,
     )
     register_tool(
         "applications.list",
@@ -1228,6 +1285,16 @@ def create_app(
                 )
                 result = await browser_controller.click(str(payload["selector"]))
                 summary = f"Clicked approved control on {current_url}"
+            elif item.kind == "desktop.type_text":
+                result = desktop_adapter.execute_type_text(
+                    approval_id=approval_id,
+                    window_handle=int(payload["window_handle"]),
+                    window_title=str(payload["window_title"]),
+                    automation_id=str(payload["automation_id"]),
+                    control_type=str(payload["control_type"]),
+                    text=str(payload["text"]),
+                )
+                summary = f"Entered approved text in {result['window_title']}"
             else:
                 raise HTTPException(status_code=400, detail="Unsupported action kind")
         except ApprovalError as exc:
@@ -1237,6 +1304,8 @@ def create_app(
         except FilesystemAccessError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         except ApplicationLaunchError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except DesktopAccessError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         except OSError as exc:
             raise HTTPException(status_code=422, detail="Approved action could not be completed") from exc
@@ -1252,6 +1321,15 @@ def create_app(
             payload={"approval_id": approval_id, "kind": item.kind},
         )
         return {"status": "completed", "kind": item.kind, "result": result}
+
+    @app.get("/api/desktop/windows")
+    def desktop_windows(limit: int = 50) -> dict[str, Any]:
+        try:
+            return {"items": desktop_adapter.list_windows(limit=limit)}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except DesktopAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     @app.get("/api/system/resources")
     def system_resources() -> dict[str, Any]:
