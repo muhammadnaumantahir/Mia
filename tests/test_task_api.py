@@ -422,3 +422,41 @@ def test_application_startup_recovers_interrupted_tasks_without_auto_retry(
         event["event_type"] == "interrupted_tasks_recovered"
         for event in app.state.observatory.list_events(limit=20)
     )
+
+
+def test_autonomy_pause_survives_application_restart_until_explicit_resume(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setenv("MIA_AUTONOMY_ENABLED", "true")
+    monkeypatch.setenv("MIA_EMERGENCY_STOP", "false")
+    tasks = TaskStore(tmp_path / "persistent-pause-tasks.sqlite3")
+
+    first_app = create_app(
+        store=ObservatoryStore(tmp_path / "persistent-pause-observatory-1.sqlite3"),
+        task_store=tasks,
+    )
+    with TestClient(first_app) as first_client:
+        assert first_client.get("/api/autonomy/status").json()["automatic_dispatch"] is True
+        paused = first_client.post("/api/autonomy/pause")
+        assert paused.status_code == 200
+        assert paused.json()["paused"] is True
+
+    second_app = create_app(
+        store=ObservatoryStore(tmp_path / "persistent-pause-observatory-2.sqlite3"),
+        task_store=tasks,
+    )
+    with TestClient(second_app) as second_client:
+        status = second_client.get("/api/autonomy/status").json()
+        assert status["enabled"] is True
+        assert status["paused"] is True
+        assert status["automatic_dispatch"] is False
+
+        resumed = second_client.post("/api/autonomy/resume")
+        assert resumed.status_code == 200
+        assert resumed.json()["paused"] is False
+        assert resumed.json()["automatic_dispatch"] is True
+
+        paused_again = second_client.post("/api/autonomy/pause")
+        assert paused_again.status_code == 200
+        assert paused_again.json()["paused"] is True

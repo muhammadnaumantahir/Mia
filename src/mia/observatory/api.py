@@ -730,7 +730,11 @@ def create_app(
     app.state.autonomy_runtime = autonomy_runtime
 
     async def start_autonomy_runtime() -> None:
-        if autonomy_policy.enabled and not autonomy_policy.emergency_stop:
+        if (
+            autonomy_policy.enabled
+            and not autonomy_policy.emergency_stop
+            and not durable_tasks.is_autonomy_paused()
+        ):
             autonomy_runtime.start()
 
     async def stop_autonomy_runtime() -> None:
@@ -1204,6 +1208,7 @@ def create_app(
         return {
             "enabled": autonomy_policy.enabled,
             "emergency_stop": autonomy_policy.emergency_stop,
+            "paused": durable_tasks.is_autonomy_paused(),
             "automatic_dispatch": autonomy_runtime.running,
             "dispatcher": "background_read_only_task_runtime",
             "automatic_tools": sorted(automatic_read_tools),
@@ -1218,20 +1223,32 @@ def create_app(
 
     @app.post("/api/autonomy/pause")
     def pause_autonomy() -> dict[str, Any]:
+        durable_tasks.set_autonomy_paused(True)
         autonomy_runtime.pause()
         return {
             "status": "pause_requested",
+            "paused": True,
             "automatic_dispatch": autonomy_runtime.running,
         }
 
     @app.post("/api/autonomy/resume")
     def resume_autonomy() -> dict[str, Any]:
+        if not autonomy_policy.enabled:
+            raise HTTPException(
+                status_code=409,
+                detail="MIA_AUTONOMY_ENABLED must be true before background dispatch can resume",
+            )
+        if autonomy_policy.emergency_stop:
+            raise HTTPException(status_code=409, detail="Emergency stop is active")
+        durable_tasks.set_autonomy_paused(False)
         try:
             autonomy_runtime.start()
         except RuntimeError as exc:
+            durable_tasks.set_autonomy_paused(True)
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return {
             "status": "running",
+            "paused": False,
             "automatic_dispatch": autonomy_runtime.running,
         }
 

@@ -292,3 +292,18 @@ def test_restart_recovery_marks_running_tasks_failed_until_owner_reapproves(tmp_
         reason="Owner reviewed the interrupted task and approved retry",
     )
     assert store.get_task(task_id)["status"] == "approved"
+
+
+def test_autonomy_pause_setting_persists_in_task_store(tmp_path):
+    store = TaskStore(tmp_path / "tasks.sqlite3")
+
+    assert store.is_autonomy_paused() is False
+    store.set_autonomy_paused(True)
+    assert store.is_autonomy_paused() is True
+
+    # A new store instance represents a new Mia process using the same database.
+    restarted_store = TaskStore(tmp_path / "tasks.sqlite3")
+    assert restarted_store.is_autonomy_paused() is True
+
+    restarted_store.set_autonomy_paused(False)
+    assert store.is_autonomy_paused() is False

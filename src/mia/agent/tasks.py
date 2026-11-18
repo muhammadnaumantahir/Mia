@@ -109,7 +109,43 @@ class TaskStore:
 
                 CREATE INDEX IF NOT EXISTS idx_task_events_time
                 ON task_events(task_id, occurred_at ASC);
+
+                CREATE TABLE IF NOT EXISTS runtime_controls (
+                    control_key TEXT PRIMARY KEY,
+                    control_value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
             """)
+
+    def is_autonomy_paused(self) -> bool:
+        """Return the owner pause flag, which persists across Mia restarts."""
+        with self._connection() as db:
+            row = db.execute(
+                "SELECT control_value FROM runtime_controls WHERE control_key = ?",
+                ("autonomy_paused",),
+            ).fetchone()
+        if row is None:
+            return False
+        value = str(row["control_value"])
+        if value not in {"true", "false"}:
+            raise TaskTransitionError("stored autonomy pause setting is invalid")
+        return value == "true"
+
+    def set_autonomy_paused(self, paused: bool) -> None:
+        """Persist the background dispatcher pause state."""
+        if not isinstance(paused, bool):
+            raise ValueError("paused must be a boolean")
+        with self._connection() as db:
+            db.execute(
+                """
+                INSERT INTO runtime_controls (control_key, control_value, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(control_key) DO UPDATE SET
+                    control_value = excluded.control_value,
+                    updated_at = excluded.updated_at
+                """,
+                ("autonomy_paused", "true" if paused else "false", _now()),
+            )
 
     def create_task(
         self,
