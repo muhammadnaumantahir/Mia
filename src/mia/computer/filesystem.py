@@ -110,6 +110,14 @@ class FilesystemAdapter:
                 break
         return entries
 
+    def read_bytes(self, root_id: str, relative_path: str) -> bytes:
+        path = self._resolve(root_id, relative_path)
+        if not path.is_file():
+            raise FileNotFoundError("Regular file not found")
+        if path.stat().st_size > 25 * 1024 * 1024:
+            raise ValueError("File exceeds the 25 MB ingestion limit")
+        return path.read_bytes()
+
     def read_text(self, root_id: str, relative_path: str) -> str:
         path = self._resolve(root_id, relative_path)
         if path.is_symlink() or not path.is_file():
