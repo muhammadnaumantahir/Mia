@@ -269,3 +269,36 @@ def test_task_executor_rejects_oversized_sequences(tmp_path):
     }
     with pytest.raises(TaskExecutionError, match="between 2 and 5"):
         executor.validate_steps(task)
+
+
+@pytest.mark.asyncio
+async def test_task_executor_checks_cancellation_before_each_step():
+    calls = []
+    registry = ToolRegistry()
+    for name in ("demo.first", "demo.second"):
+        registry.register(
+            name=name,
+            description="Read a harmless value.",
+            parameters={"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+            permission="demo.read",
+            mode="read",
+            handler=lambda args, tool=name: calls.append(tool) or {"ok": True},
+        )
+    executor = TaskToolExecutor(registry)
+    task = {
+        "status": "approved",
+        "metadata": {
+            "execution": {
+                "steps": [
+                    {"tool_name": "demo.first", "arguments": {}},
+                    {"tool_name": "demo.second", "arguments": {}},
+                ]
+            }
+        },
+    }
+    checks = iter([True, False])
+
+    with pytest.raises(TaskExecutionError, match="cancelled or paused"):
+        await executor.execute(task, should_continue=lambda: next(checks))
+
+    assert calls == ["demo.first"]
