@@ -69,7 +69,7 @@ footer{margin-top:24px;color:#6f8580;font-size:11px;line-height:1.6}
 </section>
 <section class="panel"><div class="panelhead"><div><h3>Recent evolution events</h3><div class="muted">Decisions, validation, activation, failures and rollbacks.</div></div><span class="muted">Latest 20</span></div><div class="events" id="eventList"><div class="muted">No events recorded yet.</div></div></section>
 <section class="panel">
-<div class="panelhead"><div><h3>Task control</h3><div class="muted">Proposals need approval. Automatic dispatch is currently disabled.</div></div><span class="tag" id="autonomyState">Autonomy off</span></div>
+<div class="panelhead"><div><h3>Task control</h3><div class="muted">Only approved, validated read-only system checks may be dispatched automatically. All other tools remain manual.</div></div><div class="cap-form-foot"><span class="tag" id="autonomyState">Autonomy off</span><button class="send" id="autonomyResume" type="button" style="background:#263535;color:#d8e2dd">Resume</button><button class="send" id="autonomyPause" type="button">Pause</button></div></div>
 <form id="taskForm" style="display:grid;grid-template-columns:1fr 2fr auto;gap:8px;margin-bottom:16px">
 <input id="taskTitle" required maxlength="160" placeholder="Task title" style="min-width:0;background:#10191b;color:#dce9e4;border:1px solid #35514a;border-radius:10px;padding:10px">
 <input id="taskGoal" required maxlength="20000" placeholder="What should Mia investigate or do?" style="min-width:0;background:#10191b;color:#dce9e4;border:1px solid #35514a;border-radius:10px;padding:10px">
@@ -550,7 +550,11 @@ async function loadTasks(){
   ]);
   const tasksData=await tasksResponse.json();
   const autonomy=await autonomyResponse.json();
-  $('autonomyState').textContent=autonomy.emergency_stop?'Emergency stop':autonomy.enabled?'Autonomy enabled · no executor':'Autonomy off';
+  $('autonomyState').textContent=autonomy.emergency_stop?'Emergency stop':
+   autonomy.automatic_dispatch?'Automatic read-only dispatch active':
+   autonomy.enabled?'Autonomy enabled · paused':'Autonomy off';
+  $('autonomyResume').disabled=!autonomy.enabled||autonomy.emergency_stop||autonomy.automatic_dispatch;
+  $('autonomyPause').disabled=!autonomy.automatic_dispatch;
   const box=$('taskList');box.innerHTML='';
   const items=tasksData.items||[];
   if(!items.length){box.innerHTML='<div class="muted">No tasks proposed yet.</div>';return;}
@@ -578,6 +582,21 @@ async function loadTasks(){
   });
  }catch(error){$('taskList').textContent='Task control unavailable.';}
 }
+async function controlAutonomy(action){
+ const button=$('autonomy'+(action==='pause'?'Pause':'Resume'));
+ button.disabled=true;
+ try{
+  const response=await fetch('/api/autonomy/'+action,{method:'POST'});
+  const result=await response.json();
+  if(!response.ok)throw new Error(result.detail||'Autonomy control failed');
+  await loadTasks();
+ }catch(error){
+  $('autonomyState').textContent=error.message;
+ }
+}
+$('autonomyResume').addEventListener('click',()=>controlAutonomy('resume'));
+$('autonomyPause').addEventListener('click',()=>controlAutonomy('pause'));
+
 async function changeTask(taskId,action,reason){
  try{
   const response=await fetch('/api/tasks/'+encodeURIComponent(taskId)+'/'+action,{
