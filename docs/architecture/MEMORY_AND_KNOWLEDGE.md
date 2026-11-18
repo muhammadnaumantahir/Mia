@@ -36,6 +36,7 @@ SQLite FTS5 provides local full-text search. The database does not require a clo
 - `GET /api/conversations/{conversation_id}`
 - `DELETE /api/conversations/{conversation_id}`
 - `GET /api/memory/items`
+- `GET /api/memory/export` — bounded (25 MB) JSON export of conversations, messages and knowledge items with a SHA-256 integrity digest
 - `GET /api/memory/search?q=...`
 - `POST /api/memory/items`
 - `DELETE /api/memory/items/{item_id}`
@@ -48,6 +49,7 @@ SQLite FTS5 provides local full-text search. The database does not require a clo
 - No conversation history is sent to a different provider except the current selected provider, as part of the conversation prompt.
 - Do not store passwords, API keys, session cookies, recovery phrases or other secrets as memory.
 - Back up the database only to a location controlled by the user.
+- The export endpoint returns the full local conversation and knowledge contents; keep exported files private. Exports above 25 MB are rejected rather than silently truncated. The digest covers the canonical export payload excluding the digest field itself.
 
 
 ## Office document parser boundary
