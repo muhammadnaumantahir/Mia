@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import sys
-from pathlib import Path
 from typing import Any, Callable
 
 from mia.computer.approvals import ApprovalStore
@@ -208,11 +207,11 @@ class WindowsUIAdapter:
         control_type: str,
         text: str,
     ) -> None:
-        if isinstance(window_handle, bool) or int(window_handle) <= 0:
+        if isinstance(window_handle, bool) or not isinstance(window_handle, int) or window_handle <= 0:
             raise ValueError("window_handle must be a positive integer")
-        if not window_title.strip() or len(window_title) > 240:
+        if not isinstance(window_title, str) or not window_title.strip() or len(window_title) > 240:
             raise ValueError("window_title must be 1-240 characters")
-        if not automation_id.strip() or len(automation_id) > 160:
+        if not isinstance(automation_id, str) or not automation_id.strip() or len(automation_id) > 160:
             raise ValueError("automation_id must be 1-160 characters")
         if control_type not in _ALLOWED_TEXT_CONTROLS:
             raise DesktopAccessError("Only supported text-entry control types are allowed")

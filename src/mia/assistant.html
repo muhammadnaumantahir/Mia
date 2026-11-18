@@ -71,6 +71,9 @@ function renderApprovalCards(actions){
   if(display.application)parts.push('Application: '+display.application);
   if(display.page_url)parts.push('Page: '+display.page_url);
   if(display.selector)parts.push('Control: '+display.selector);
+  if(display.window_title)parts.push('Window: '+display.window_title+' · '+(display.control_type||'text')+' / '+(display.automation_id||'control'));
+  if(display.text_length!==undefined)parts.push('Text length: '+display.text_length+' characters');
+  if(display.text_sha256)parts.push('Text SHA-256: '+display.text_sha256);
   if(display.new_sha256)parts.push('SHA-256: '+display.new_sha256);
   detail.textContent=parts.join(' · ')||'Review the action before approving.';
   card.append(title,detail);
