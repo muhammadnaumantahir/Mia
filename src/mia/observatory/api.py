@@ -262,14 +262,19 @@ def create_app(
             raise HTTPException(status_code=502, detail="Browser navigation failed") from exc
 
     @app.post("/api/browser/click/preview", status_code=201)
-    def browser_click_preview(item: BrowserClickPreview) -> dict[str, str]:
+    async def browser_click_preview(item: BrowserClickPreview) -> dict[str, str]:
         current_url = browser_controller.current_url
         if not current_url:
             raise HTTPException(status_code=409, detail="Browser has no active page")
         try:
+            state_digest = await browser_controller.current_state_digest()
             return approval_store.request(
                 action_id="browser.click",
-                payload={"url": current_url, "selector": item.selector},
+                payload={
+                    "url": current_url,
+                    "selector": item.selector,
+                    "state_sha256": state_digest,
+                },
                 summary=f"Click selector on {current_url}",
             )
         except ValueError as exc:
@@ -281,10 +286,15 @@ def create_app(
         if not current_url:
             raise HTTPException(status_code=409, detail="Browser has no active page")
         try:
+            state_digest = await browser_controller.current_state_digest()
             approval_store.consume(
                 approval_id=item.approval_id,
                 action_id="browser.click",
-                payload={"url": current_url, "selector": item.selector},
+                payload={
+                    "url": current_url,
+                    "selector": item.selector,
+                    "state_sha256": state_digest,
+                },
             )
             result = await browser_controller.click(item.selector)
         except ApprovalError as exc:
