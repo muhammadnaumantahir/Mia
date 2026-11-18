@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, Callable
 
 from .tools import ToolRegistry
 
@@ -83,12 +83,22 @@ class TaskToolExecutor:
             )
         return steps[0]
 
-    async def execute(self, task: dict[str, Any]) -> dict[str, Any]:
+    async def execute(
+        self,
+        task: dict[str, Any],
+        *,
+        should_continue: Callable[[], bool] | None = None,
+    ) -> dict[str, Any]:
+        """Execute approved read-only steps, checking cancellation between steps."""
         steps = self.validate_steps(task)
         results: list[dict[str, Any]] = []
         try:
             async with asyncio.timeout(self.timeout_seconds):
                 for index, (tool_name, arguments) in enumerate(steps, start=1):
+                    if should_continue is not None and not should_continue():
+                        raise TaskExecutionError(
+                            "Task was cancelled or paused before the next execution step"
+                        )
                     result = await self.tools.execute(tool_name, arguments)
                     if result.pending_action is not None:
                         raise TaskExecutionError(
