@@ -146,6 +146,38 @@ class ApprovalStore:
             raise ApprovalError("Approval has expired")
         return {"approval_id": approval_id, "status": "approved", "summary": summary}
 
+    def reject(self, approval_id: str) -> dict[str, str]:
+        now = _now().isoformat()
+        with self._connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute(
+                "SELECT status, summary, expires_at FROM action_approvals WHERE approval_id = ?",
+                (approval_id,),
+            ).fetchone()
+            if not row:
+                raise ApprovalError("Approval was not found")
+            if row["status"] != "pending":
+                raise ApprovalError(f"Approval is {row['status']}, not pending")
+            if datetime.fromisoformat(row["expires_at"]) <= _now():
+                db.execute(
+                    "UPDATE action_approvals SET status = 'expired' WHERE approval_id = ?",
+                    (approval_id,),
+                )
+                expired = True
+            else:
+                db.execute(
+                    """
+                    UPDATE action_approvals
+                    SET status = 'rejected'
+                    WHERE approval_id = ? AND status = 'pending'
+                    """,
+                    (approval_id,),
+                )
+                expired = False
+        if expired:
+            raise ApprovalError("Approval has expired")
+        return {"approval_id": approval_id, "status": "rejected", "summary": row["summary"]}
+
     def consume(
         self,
         *,
