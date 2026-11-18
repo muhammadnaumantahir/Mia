@@ -131,49 +131,84 @@ let activeExperiment=null;
 function setExperimentNotice(message,isError=false){
  const box=el('experimentNotice');box.textContent=message;box.classList.toggle('error',isError);
 }
+let activeExperiment=null;
+let dailyCaptureInProgress=false;
+function setExperimentNotice(message,isError=false){
+ const box=el('experimentNotice');box.textContent=message;box.classList.toggle('error',isError);
+}
 async function loadExperimentControl(){
- const capture=el('captureBaseline'),start=el('startExperiment');
- const refresh=el('refreshExperiment'),daily=el('captureDailySnapshot');
- daily.disabled=true;refresh.disabled=false;
+ const capture=el('captureBaseline');
+ const start=el('startExperiment');
+ const refresh=el('refreshExperiment');
+ const daily=el('captureDailySnapshot');
+ daily.disabled=true;
  try{
-  const response=await fetch('/api/experiments');
-  const data=await response.json();if(!response.ok)throw new Error(data.detail||'Experiment status unavailable');
-  const items=data.items||[];
-  activeExperiment=items.find(item=>item.status==='running')
-   ||items.find(item=>item.status==='prepared')
-   ||items.find(item=>item.status==='completed')
-   ||null;
+  const listResponse=await fetch('/api/experiments');
+  const listData=await listResponse.json();
+  if(!listResponse.ok)throw new Error(listData.detail||'Experiment status unavailable');
+  const items=listData.items||[];
+  activeExperiment=items.find(item=>item.status==='running')||
+   items.find(item=>item.status==='prepared')||
+   items.find(item=>item.status==='completed')||null;
   if(!activeExperiment){
    el('experimentControlState').textContent='Not prepared';
-   capture.disabled=false;start.disabled=true;refresh.disabled=true;daily.disabled=true;
-   el('experimentDetails').textContent='No verified Day 0 baseline exists yet. Capture it on the local machine after committing the source and installing Mia development dependencies.';
+   capture.disabled=false;
+   start.disabled=true;
+   refresh.disabled=true;
+   el('experimentDetails').textContent='No verified Day 0 baseline exists yet. Capture it on the local machine after committing source and installing Mia development dependencies.';
    el('dailySnapshotStatus').textContent='Daily evidence becomes available after the experiment is explicitly started.';
    setExperimentNotice('Day 0 is not captured. Capture runs Ruff and the full local pytest suite; no sample data is created.');
    return;
   }
-  const baselineResponse=await fetch('/api/experiments/'+encodeURIComponent(activeExperiment.experiment_id)+'/baseline');
-  const baseline=await baselineResponse.json();if(!baselineResponse.ok)throw new Error(baseline.detail||'Stored baseline unavailable');
-  const manifest=baseline.manifest||{},results=manifest.baseline_results||{};
+
+  const experimentId=encodeURIComponent(activeExperiment.experiment_id);
+  const baselineResponse=await fetch('/api/experiments/'+experimentId+'/baseline');
+  const baselineData=await baselineResponse.json();
+  if(!baselineResponse.ok)throw new Error(baselineData.detail||'Stored baseline unavailable');
+  const snapshotsResponse=await fetch('/api/experiments/'+experimentId+'/snapshots');
+  const snapshotsData=await snapshotsResponse.json();
+  if(!snapshotsResponse.ok)throw new Error(snapshotsData.detail||'Snapshot history unavailable');
+
+  const manifest=baselineData.manifest||{};
+  const results=manifest.baseline_results||{};
   const running=activeExperiment.status==='running';
   const prepared=activeExperiment.status==='prepared';
   const completed=activeExperiment.status==='completed';
+  const snapshots=snapshotsData.items||[];
+  let latestDay=0;
+  snapshots.forEach(item=>{latestDay=Math.max(latestDay,Number(item.day_index)||0);});
+
   el('experimentControlState').textContent=running?'Running':completed?'Completed':'Baseline frozen';
-  capture.disabled=true;start.disabled=!prepared;
-  refresh.disabled=false;daily.disabled=true;
+  capture.disabled=true;
+  start.disabled=!prepared;
+  refresh.disabled=false;
+  daily.disabled=true;
   el('experimentName').value=activeExperiment.name||'Mia 30-day experiment';
   el('plannedDays').value=String(activeExperiment.planned_days||30);
   el('experimentDetails').replaceChildren();
-  const line=document.createElement('div');
-  const source=document.createElement('code');source.textContent=manifest.source_commit||'unknown';
-  const hash=document.createElement('code');hash.textContent=baseline.baseline_sha256||'unknown';
-  line.append('Source commit: ',source,' · Day 0 SHA-256: ',hash);
-  const resultsLine=document.createElement('div');
-  resultsLine.textContent='Tests: '+String(results.passed??0)+' / '+String(results.tests??0)+' passed · Ruff: '+(results.ruff_passed?'passed':'not passed')+' · Captured: '+String(baseline.captured_at||'');
-  const environment=document.createElement('div');
-  environment.textContent='Machine: '+String(manifest.environment?.os||'')+' · Python '+String(manifest.environment?.python||'')+' · '+String(manifest.environment?.machine||'');
-  const progress=document.createElement('div');
-  progress.textContent='Latest stored day: '+String(activeExperiment.snapshot_count?activeExperiment.snapshot_count-1:0)+' · Planned days: '+String(activeExperiment.planned_days||30);
-  el('experimentDetails').append(line,resultsLine,environment,progress);
+
+  const source=document.createElement('code');
+  source.textContent=manifest.source_commit||'unknown';
+  const hash=document.createElement('code');
+  hash.textContent=baselineData.baseline_sha256||'unknown';
+  const sourceLine=document.createElement('div');
+  sourceLine.append('Source commit: ',source,' · Day 0 SHA-256: ',hash);
+
+  const resultLine=document.createElement('div');
+  resultLine.textContent='Tests: '+String(results.passed??0)+' / '+String(results.tests??0)+
+   ' passed · Ruff: '+(results.ruff_passed?'passed':'not passed')+
+   ' · Captured: '+String(baselineData.captured_at||'');
+
+  const machineLine=document.createElement('div');
+  machineLine.textContent='Machine: '+String((manifest.environment||{}).os||'')+
+   ' · Python '+String((manifest.environment||{}).python||'')+
+   ' · '+String((manifest.environment||{}).machine||'');
+
+  const progressLine=document.createElement('div');
+  progressLine.textContent='Latest recorded day: '+latestDay+
+   ' · Planned days: '+String(activeExperiment.planned_days||30);
+  el('experimentDetails').append(sourceLine,resultLine,machineLine,progressLine);
+
   if(completed){
    el('dailySnapshotStatus').textContent='The final planned day has been captured. This experiment is complete and its history remains immutable.';
    setExperimentNotice('Experiment completed. Day 0 and all stored daily snapshots remain frozen.');
@@ -184,22 +219,34 @@ async function loadExperimentControl(){
    setExperimentNotice('Day 0 is verified and frozen. Click Start experiment separately to begin Day 1.');
    return;
   }
-  const statusResponse=await fetch('/api/experiments/'+encodeURIComponent(activeExperiment.experiment_id)+'/snapshot-status');
+
+  const statusResponse=await fetch('/api/experiments/'+experimentId+'/snapshot-status');
   const snapshotStatus=await statusResponse.json();
   if(!statusResponse.ok)throw new Error(snapshotStatus.detail||'Daily snapshot status unavailable');
+
   if(snapshotStatus.due){
-   daily.disabled=false;
+   daily.disabled=dailyCaptureInProgress;
    const missing=snapshotStatus.days_missed||[];
-   el('dailySnapshotStatus').textContent='Day '+snapshotStatus.day_index+' is due. '+(missing.length?'Days '+missing.join(', ')+' were missed while Mia was offline and will be marked unavailable.':'No previous days are missing.');
-   setExperimentNotice('The experiment is running. Capture today's verification and CPU/RAM evidence from this computer.');
+   let dueMessage='Day '+snapshotStatus.day_index+' is due.';
+   if(missing.length){
+    dueMessage+=' Days '+missing.join(', ')+' were missed while Mia was offline and will be marked unavailable.';
+   }else{
+    dueMessage+=' No previous days are missing.';
+   }
+   el('dailySnapshotStatus').textContent=dueMessage;
+   setExperimentNotice('The experiment is running. Capture today\'s verification and CPU/RAM evidence from this computer.');
   }else{
    daily.disabled=true;
    el('dailySnapshotStatus').textContent=snapshotStatus.reason||'No daily snapshot is due yet.';
-   setExperimentNotice('Experiment is running. Day 0 remains immutable; next daily evidence is captured after the next 24-hour boundary.');
+   setExperimentNotice('Experiment is running. Day 0 remains immutable; the next daily snapshot becomes due after the next 24-hour boundary.');
   }
  }catch(error){
-  activeExperiment=null;capture.disabled=false;start.disabled=true;daily.disabled=true;
-  setExperimentNotice(error.message,true);el('dailySnapshotStatus').textContent='';
+  capture.disabled=Boolean(activeExperiment);
+  start.disabled=activeExperiment?.status!=='prepared';
+  refresh.disabled=false;
+  daily.disabled=true;
+  setExperimentNotice(error.message,true);
+  el('dailySnapshotStatus').textContent='';
  }
 }
 el('experimentForm').addEventListener('submit',async event=>{
@@ -218,7 +265,6 @@ el('experimentForm').addEventListener('submit',async event=>{
   if(!response.ok)throw new Error(typeof result.detail==='string'?result.detail:JSON.stringify(result.detail||'Day 0 capture failed'));
   activeExperiment={experiment_id:result.experiment_id,status:'prepared',name,planned_days};
   await loadExperimentControl();
-window.setInterval(loadExperimentControl,60000);
   setExperimentNotice('Day 0 captured and frozen. Review the source hash and baseline checks, then start separately.');
  }catch(error){setExperimentNotice(error.message,true);}
  finally{await loadExperimentControl();}
@@ -227,8 +273,9 @@ el('refreshExperiment').addEventListener('click',async()=>{
  await loadExperimentControl();
 });
 el('captureDailySnapshot').addEventListener('click',async()=>{
- if(!activeExperiment||activeExperiment.status!=='running')return;
+ if(!activeExperiment||activeExperiment.status!=='running'||dailyCaptureInProgress)return;
  const button=el('captureDailySnapshot');button.disabled=true;
+ dailyCaptureInProgress=true;
  el('dailySnapshotStatus').textContent='Running the fixed Ruff and full test suite on the Mia host, then sampling CPU/RAM…';
  try{
   const response=await fetch('/api/experiments/'+encodeURIComponent(activeExperiment.experiment_id)+'/snapshots/capture',{method:'POST'});
@@ -239,7 +286,9 @@ el('captureDailySnapshot').addEventListener('click',async()=>{
   el('dailySnapshotStatus').textContent='Day '+result.day_index+' evidence recorded. '+(missing.length?'Unavailable days (Mia was offline): '+missing.join(', ')+'.':'No missed days.')+' CPU '+result.resources.cpu_percent+'% · RAM '+result.resources.memory_percent+'%.';
  }catch(error){
   el('dailySnapshotStatus').textContent=error.message;
-  button.disabled=false;
+ }finally{
+  dailyCaptureInProgress=false;
+  await loadExperimentControl();
  }
 });
 el('startExperiment').addEventListener('click',async()=>{
@@ -531,4 +580,5 @@ loadCapabilities();
 loadSystemResources();
 window.setInterval(loadSystemResources,15000);
 loadExperimentControl();
+window.setInterval(loadExperimentControl,60000);
 </script></body></html>
