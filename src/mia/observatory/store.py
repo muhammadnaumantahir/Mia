@@ -5,14 +5,15 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class ObservatoryStore:
@@ -62,7 +63,9 @@ class ObservatoryStore:
                     context_json TEXT NOT NULL
                 )
             """)
-            db.execute("CREATE INDEX IF NOT EXISTS idx_events_time ON events(occurred_at DESC)")
+            db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_events_time ON events(occurred_at DESC)"
+            )
             db.execute("""
                 CREATE INDEX IF NOT EXISTS idx_metrics_name_day
                 ON metric_samples(metric_name, day_index)
@@ -90,8 +93,15 @@ class ObservatoryStore:
                     category, event_type, outcome, summary, payload_json
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                event_id, utc_now(), experiment_id, day_index, layer_id,
-                category, event_type, outcome, summary,
+                event_id,
+                utc_now(),
+                experiment_id,
+                day_index,
+                layer_id,
+                category,
+                event_type,
+                outcome,
+                summary,
                 json.dumps(payload or {}, sort_keys=True),
             ))
         return event_id
@@ -119,8 +129,15 @@ class ObservatoryStore:
                     context_json
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                sample_id, utc_now(), experiment_id, day_index, metric_name,
-                float(value), unit, benchmark_id, source_event_id,
+                sample_id,
+                utc_now(),
+                experiment_id,
+                day_index,
+                metric_name,
+                float(value),
+                unit,
+                benchmark_id,
+                source_event_id,
                 json.dumps(context or {}, sort_keys=True),
             ))
         return sample_id
@@ -151,14 +168,24 @@ class ObservatoryStore:
 
     def summary(self) -> dict[str, Any]:
         with self._connection() as db:
-            event_count = db.execute("SELECT COUNT(*) FROM events").fetchone()[0]
-            metric_count = db.execute("SELECT COUNT(*) FROM metric_samples").fetchone()[0]
-            latest_day = db.execute("SELECT MAX(day_index) FROM metric_samples").fetchone()[0]
-            latest_event = db.execute("SELECT MAX(occurred_at) FROM events").fetchone()[0]
+            event_count = db.execute(
+                "SELECT COUNT(*) FROM events"
+            ).fetchone()[0]
+            metric_count = db.execute(
+                "SELECT COUNT(*) FROM metric_samples"
+            ).fetchone()[0]
+            latest_day = db.execute(
+                "SELECT MAX(day_index) FROM metric_samples"
+            ).fetchone()[0]
+            latest_event = db.execute(
+                "SELECT MAX(occurred_at) FROM events"
+            ).fetchone()[0]
         return {
             "event_count": event_count,
             "metric_sample_count": metric_count,
             "latest_day_index": latest_day,
             "latest_event_at": latest_event,
-            "data_status": "recorded" if event_count or metric_count else "awaiting_baseline",
+            "data_status": (
+                "recorded" if event_count or metric_count else "awaiting_baseline"
+            ),
         }
