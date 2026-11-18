@@ -64,6 +64,10 @@ class BrowserController:
     def is_running(self) -> bool:
         return self._page is not None
 
+    @property
+    def current_url(self) -> str | None:
+        return self._page.url if self._page is not None else None
+
     async def start(self) -> None:
         if self.is_running:
             return
