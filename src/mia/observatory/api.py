@@ -529,14 +529,11 @@ def create_app(
 
     @app.get("/api/conversations/{conversation_id}")
     def conversation(conversation_id: str) -> dict[str, Any]:
-        known = {
-            item["conversation_id"]
-            for item in memory_store.list_conversations(200)
-        }
-        if conversation_id not in known:
+        session = memory_store.get_conversation(conversation_id)
+        if session is None:
             raise HTTPException(status_code=404, detail="Conversation not found")
         return {
-            "conversation_id": conversation_id,
+            **session,
             "messages": memory_store.get_messages(conversation_id, limit=50),
         }
 
@@ -646,7 +643,10 @@ def create_app(
                 ModelRequest(
                     task_type=item.task_type,
                     prompt=item.prompt,
-                    estimated_input_tokens=max(1, len(item.prompt) // 4),
+                    estimated_input_tokens=max(
+                        1,
+                        sum(len(message["content"]) for message in conversation_messages) // 4,
+                    ),
                     max_output_tokens=item.max_output_tokens,
                     required_capabilities=frozenset(item.required_capabilities),
                     messages=tuple(conversation_messages),
