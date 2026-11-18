@@ -610,7 +610,6 @@ class ObservatoryStore:
             experiment = db.execute("""
                 SELECT experiment_id, name, status, planned_days, started_at
                 FROM experiments
-                WHERE status IN ('prepared', 'running')
                 ORDER BY created_at DESC LIMIT 1
             """).fetchone()
         return {

@@ -178,6 +178,7 @@ async def test_scheduler_marks_run_incomplete_after_final_day_window_is_missed(t
     assert status["due"] is False
     assert "final daily snapshot was not captured" in status["reason"]
     assert store.list_experiments()[0]["status"] == "incomplete"
+    assert store.summary()["experiment_status"] == "incomplete"
     incomplete_events = [
         event for event in store.list_events(limit=20)
         if event["event_type"] == "experiment_incomplete"
