@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from datetime import UTC, datetime, timedelta
 
@@ -182,7 +183,7 @@ async def test_scheduler_marks_run_incomplete_after_final_day_window_is_missed(t
         if event["event_type"] == "experiment_incomplete"
     ]
     assert len(incomplete_events) == 1
-    assert incomplete_events[0]["payload"] == {
+    assert json.loads(incomplete_events[0]["payload_json"]) == {
         "planned_days": 3,
         "latest_recorded_day": 0,
         "elapsed_day": 4,
