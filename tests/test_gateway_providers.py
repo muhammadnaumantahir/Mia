@@ -112,7 +112,7 @@ async def test_gateway_falls_back_after_transient_provider_failure():
 @pytest.mark.asyncio
 @respx.mock
 async def test_openai_compatible_adapter_returns_structured_tool_calls():
-    respx.post("http://tools.test/v1/chat/completions").mock(
+    route = respx.post("http://tools.test/v1/chat/completions").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -125,7 +125,7 @@ async def test_openai_compatible_adapter_returns_structured_tool_calls():
                             "type": "function",
                             "function": {
                                 "name": "filesystem.list_directory",
-                                "arguments": "{\\"root_id\\":\\"root_1\\"}",
+                                "arguments": '{"root_id":"root_1"}',
                             },
                         }],
                     },
@@ -158,10 +158,18 @@ async def test_openai_compatible_adapter_returns_structured_tool_calls():
                 "function": {
                     "name": "filesystem.list_directory",
                     "description": "List an allowed folder",
-                    "parameters": {"type": "object", "properties": {"root_id": {"type": "string"}}},
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"root_id": {"type": "string"}},
+                        "required": ["root_id"],
+                        "additionalProperties": False,
+                    },
                 },
             },),
         ),
     )
     assert response.tool_calls[0]["id"] == "call-1"
     assert response.tool_calls[0]["function"]["name"] == "filesystem.list_directory"
+    request_json = httpx.Response(200, content=route.calls[0].request.content).json()
+    assert request_json["tool_choice"] == "auto"
+    assert request_json["tools"][0]["function"]["name"] == "filesystem.list_directory"

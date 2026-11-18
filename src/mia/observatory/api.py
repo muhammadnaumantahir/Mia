@@ -18,15 +18,15 @@ from pydantic import BaseModel, Field
 from mia.agent.discovery import DiscoveryFinding, WorkloadDiscovery
 from mia.agent.tasks import AutonomyPolicy, TaskCoordinator, TaskStore, TaskTransitionError
 from mia.agent.tools import ToolRegistry, ToolResult
+from mia.computer.approvals import ApprovalError, ApprovalStore
+from mia.computer.applications import ApplicationLaunchError, ApplicationLauncher
+from mia.computer.browser import BrowserAccessError, BrowserController
+from mia.computer.filesystem import FilesystemAccessError, FilesystemAdapter
 from mia.evolution.capabilities import (
     CapabilityActivationBlocked,
     CapabilityLifecycleError,
     CapabilityStore,
 )
-from mia.computer.approvals import ApprovalError, ApprovalStore
-from mia.computer.applications import ApplicationLaunchError, ApplicationLauncher
-from mia.computer.browser import BrowserAccessError, BrowserController
-from mia.computer.filesystem import FilesystemAccessError, FilesystemAdapter
 from mia.gateway.contracts import ModelRequest, PermanentProviderError, TransientProviderError
 from mia.gateway.factory import build_default_registry, paid_route_policy
 from mia.gateway.service import ModelGateway

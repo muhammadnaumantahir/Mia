@@ -140,6 +140,12 @@ class ToolRegistry:
             max_length = rule.get("maxLength")
             if max_length is not None and isinstance(value, str) and len(value) > max_length:
                 return ToolResult({"ok": False, "error": f"{key} exceeds its maximum length"})
+            minimum = rule.get("minimum")
+            maximum = rule.get("maximum")
+            if minimum is not None and isinstance(value, (int, float)) and value < minimum:
+                return ToolResult({"ok": False, "error": f"{key} is below its minimum"})
+            if maximum is not None and isinstance(value, (int, float)) and value > maximum:
+                return ToolResult({"ok": False, "error": f"{key} exceeds its maximum"})
 
         try:
             result = tool.handler(arguments)
