@@ -16,6 +16,11 @@ AutonomyPolicy and call start().
   executor call; executors must enforce their own operation timeouts.
 - Emergency stop blocks new claims immediately. It is not a substitute for
   operating-system process isolation or a killable worker.
+- If an owner cancels a task while its executor is in flight, the coordinator
+  preserves the cancellation instead of overwriting it with a later completed,
+  waiting, or failed state. This is lifecycle reconciliation only: it does not
+  forcibly stop an in-flight side effect. Executors must implement cooperative
+  cancellation and bounded operation timeouts themselves.
 
 ## Current limitation
 

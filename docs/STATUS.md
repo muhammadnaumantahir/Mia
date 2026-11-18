@@ -15,7 +15,7 @@
 | 3. Voice | In progress | Push-to-talk, local Faster-Whisper STT and browser TTS; target-PC benchmark and verified feminine voice remain |
 | 4. Computer intelligence | In progress | Scoped filesystem, approval-bound writes, allowlisted app launch, browser and Windows visible-window/text-control adapter; stronger OS sandbox and target-PC verification remain |
 | 5. Memory and knowledge | In progress | Persistent conversations, FTS5 memory, provenance labels and document parsers; parser integration/export/retention tests remain |
-| 6. Autonomous agent | Planning proposals + runtime primitive | Free-first model-assisted planner exposed at POST /api/planning/propose; it creates reviewable proposals only, rejects tool calls and never auto-approves. Explicit-start scheduler, pause/resume, emergency stop and resource-gated dispatch exist; governed executor and background API lifecycle remain |
+| 6. Autonomous agent | Planning proposals + runtime primitive | Free-first model-assisted planner exposed at POST /api/planning/propose; it creates reviewable proposals only, rejects tool calls and never auto-approves. Explicit-start scheduler, pause/resume, emergency stop, resource-gated dispatch and cancellation-state reconciliation tests exist; governed executor, cooperative cancellation, and background API lifecycle remain |
 | 7. Self-programming | Foundation in progress | Candidate source, lineage, validation/registration APIs; isolated worker, activation and rollback remain |
 | 8. 30-day experiment | Planned | No Day 0 baseline captured. Start only after sandbox, fixed benchmarks and reproducible environment manifest are ready |
 

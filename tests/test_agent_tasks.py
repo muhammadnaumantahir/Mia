@@ -142,3 +142,74 @@ def test_autonomy_policy_rejects_unsafe_thresholds():
         AutonomyPolicy(enabled=True, max_cpu_percent=0)
     with pytest.raises(ValueError, match="max_tasks_per_cycle"):
         AutonomyPolicy(enabled=True, max_tasks_per_cycle=11)
+
+
+
+def test_dispatcher_preserves_owner_cancellation_during_execution(tmp_path):
+    store = TaskStore(tmp_path / "tasks.sqlite3")
+    task_id = store.create_task(
+        title="Cancelable bounded task",
+        goal="Simulate a task that is cancelled while its executor is running.",
+        source="internal_test",
+    )
+    store.transition(task_id, "approved", reason="Owner approved the bounded task")
+    coordinator = TaskCoordinator(store, AutonomyPolicy(enabled=True))
+
+    def cancel_during_execution(task):
+        store.transition(
+            task["task_id"],
+            "cancelled",
+            reason="Owner cancelled while execution was in progress",
+            actor="local-user",
+        )
+        return {"ok": True}
+
+    result = coordinator.dispatch_one(
+        load=RuntimeLoad(10, 20),
+        executor=cancel_during_execution,
+    )
+
+    assert result["status"] == "cancelled"
+    assert result["task"]["status"] == "cancelled"
+    assert result["reason"] == "task_state_changed_during_execution"
+    assert [event["to_status"] for event in store.list_events(task_id)] == [
+        "proposed",
+        "approved",
+        "running",
+        "cancelled",
+    ]
+
+
+def test_dispatcher_does_not_mark_cancelled_task_failed_after_executor_error(tmp_path):
+    store = TaskStore(tmp_path / "tasks.sqlite3")
+    task_id = store.create_task(
+        title="Cancelled task with late exception",
+        goal="Simulate an executor that errors after owner cancellation.",
+        source="internal_test",
+    )
+    store.transition(task_id, "approved", reason="Owner approved the bounded task")
+    coordinator = TaskCoordinator(store, AutonomyPolicy(enabled=True))
+
+    def cancel_then_raise(task):
+        store.transition(
+            task["task_id"],
+            "cancelled",
+            reason="Owner cancelled while execution was in progress",
+            actor="local-user",
+        )
+        raise RuntimeError("executor returned after cancellation")
+
+    result = coordinator.dispatch_one(
+        load=RuntimeLoad(10, 20),
+        executor=cancel_then_raise,
+    )
+
+    assert result["status"] == "cancelled"
+    assert result["task"]["status"] == "cancelled"
+    assert result["error_type"] == "RuntimeError"
+    assert [event["to_status"] for event in store.list_events(task_id)] == [
+        "proposed",
+        "approved",
+        "running",
+        "cancelled",
+    ]

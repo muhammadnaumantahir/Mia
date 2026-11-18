@@ -408,6 +408,29 @@ class TaskCoordinator:
         self.store = store
         self.policy = policy or AutonomyPolicy()
 
+    def _transition_after_execution(
+        self,
+        task_id: str,
+        new_status: str,
+        *,
+        reason: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Do not overwrite a state changed by an owner during execution."""
+        try:
+            return self.store.transition(
+                task_id,
+                new_status,
+                reason=reason,
+                actor="task-coordinator",
+                payload=payload,
+            )
+        except TaskTransitionError:
+            current = self.store.get_task(task_id)
+            if current is None or current["status"] == "running":
+                raise
+            return current
+
     def dispatch_one(
         self,
         *,
@@ -436,41 +459,59 @@ class TaskCoordinator:
             if not isinstance(outcome, dict):
                 raise TypeError("task executor must return a result object")
             if outcome.get("status") == "waiting":
-                waiting = self.store.transition(
+                waiting = self._transition_after_execution(
                     task["task_id"],
                     "waiting",
                     reason=str(outcome.get("reason") or "Task is waiting for an external approval"),
-                    actor="task-coordinator",
                     payload={
                         "outcome": outcome,
                         "approval_required": True,
                     },
                 )
+                if waiting["status"] != "waiting":
+                    return {
+                        "status": waiting["status"],
+                        "task": waiting,
+                        "outcome": outcome,
+                        "reason": "task_state_changed_during_execution",
+                    }
                 return {
                     "status": "waiting",
                     "task": waiting,
                     "outcome": outcome,
                 }
-            finished = self.store.transition(
+            finished = self._transition_after_execution(
                 task["task_id"],
                 "completed",
                 reason="Task executor returned successfully",
-                actor="task-coordinator",
                 payload={"outcome": outcome},
             )
+            if finished["status"] != "completed":
+                return {
+                    "status": finished["status"],
+                    "task": finished,
+                    "outcome": outcome,
+                    "reason": "task_state_changed_during_execution",
+                }
             return {
                 "status": "completed",
                 "task": finished,
                 "outcome": outcome,
             }
         except Exception as exc:
-            failed = self.store.transition(
+            failed = self._transition_after_execution(
                 task["task_id"],
                 "failed",
                 reason="Task executor raised an exception",
-                actor="task-coordinator",
                 payload={"error_type": type(exc).__name__},
             )
+            if failed["status"] != "failed":
+                return {
+                    "status": failed["status"],
+                    "task": failed,
+                    "error_type": type(exc).__name__,
+                    "reason": "task_state_changed_during_execution",
+                }
             return {
                 "status": "failed",
                 "task": failed,
