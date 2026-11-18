@@ -57,6 +57,19 @@ copy .env.example .env
 python -m mia
 ~~~
 
+To enable local voice recognition, install the optional model runtime separately:
+
+~~~powershell
+python -m pip install -e ".[voice]"
+~~~
+
+The first transcription downloads the selected Faster-Whisper model into the local Mia data directory. The default is the multilingual `base` model, CPU int8, and two worker threads. Voice recognition is push-to-talk; no background microphone listener is started.
+
+Computer file access defaults to Mia's own `workspace` folder. To grant additional roots, add a semicolon-separated list to `.env`, for example `MIA_COMPUTER_ROOTS=D:/Projects;D:/Documents`. File writes require a preview, explicit approval and an exact payload match. See [Computer Access](docs/architecture/COMPUTER_ACCESS.md).
+
+
+~~~
+
 Open Mia at http://127.0.0.1:8765/assistant and the Evolution Observatory at http://127.0.0.1:8765/.
 
 For local AI, start Ollama and make sure a model is installed. Mia discovers local models through Ollama's native API. The optional gateway extra enables HTTP adapters; no cloud key is needed for the local path.
