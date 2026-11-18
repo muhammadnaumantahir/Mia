@@ -221,3 +221,30 @@ def test_capability_source_api_rejects_tampered_source(tmp_path):
     response = client.get("/api/capabilities/tampered-source/0.1.0/source")
     assert response.status_code == 409
     assert "hash does not match" in response.json()["detail"]
+
+
+def test_capability_source_api_allows_legacy_source_without_tests(tmp_path):
+    store = CapabilityStore(tmp_path / "capabilities.sqlite3", tmp_path / "generated")
+    client = TestClient(
+        create_app(
+            store=ObservatoryStore(tmp_path / "observatory.sqlite3"),
+            capability_store=store,
+        )
+    )
+    source = "def value(): return 3\n"
+    created = client.post(
+        "/api/capabilities",
+        json={
+            "capability_id": "legacy-source",
+            "version": "0.1.0",
+            "name": "Legacy source",
+            "source_code": source,
+            "rationale": "Verify source inspection for older candidates without test files.",
+        },
+    )
+    assert created.status_code == 201
+
+    response = client.get("/api/capabilities/legacy-source/0.1.0/source")
+    assert response.status_code == 200
+    assert response.json()["source_code"] == source
+    assert response.json()["test_source_code"] is None

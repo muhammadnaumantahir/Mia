@@ -16,14 +16,14 @@
 | 4. Computer intelligence | In progress | Scoped filesystem, approval-bound writes, allowlisted app launch, browser and Windows visible-window/text-control adapter; stronger OS sandbox and target-PC verification remain |
 | 5. Memory and knowledge | In progress | Persistent conversations, FTS5 memory, provenance labels and document parsers; parser integration/export/retention tests remain |
 | 6. Autonomous agent | Task Desk + manual read-only execution | Task Desk submits model-assisted plans, lists proposals, and supports approve/reject/cancel. A safe CPU/RAM task demonstrates explicit approval and one registered read-only tool through POST /api/tasks/{task_id}/execute; preview and mutation tools remain excluded. Background scheduler still has no production executor/API lifecycle, and target-device checks remain open |
-| 7. Self-programming | Docker validation API integrated | Candidate and test source are stored immutably with separate hashes; the API runs validation server-side in the disposable Docker runner and accepts reports only when image identity plus source/test hashes match. Windows Docker Desktop verification, permission-separated workers, activation and rollback remain |
+| 7. Self-programming | Capability Lab + Docker validation workflow | Observatory UI creates immutable source/test candidates, inspects stored code by hash, runs Docker validation and registers only passing versions. The runner has no network, read-only candidate mount, non-root execution, dropped capabilities and resource/time limits. Windows Docker Desktop verification, permission-separated workers, activation and rollback remain |
 | 8. 30-day experiment | Planned | No Day 0 baseline captured. Start only after sandbox, fixed benchmarks and reproducible environment manifest are ready |
 
 ## Verification
 
 - Last known fully green CI commit: 19c3fde9d110611a648c9a168b7841a0d035db75 on Windows and Ubuntu with Python 3.13.
 - Recent Actions failures returned runner ID 0 with no steps/logs. GitHub ended both matrix jobs before assigning runners; test/lint results remain unknown and neither success nor code failure is established.
-- Planner, scheduler, read-only task-executor, Task Desk, capability lifecycle and Docker sandbox tests have not yet been confirmed by a successful CI run. Recent GitHub Actions jobs report runner ID 0, empty step lists and unavailable logs; test/lint outcomes remain unknown.
+- Planner, scheduler, read-only task-executor, Task Desk, Capability Lab, capability lifecycle and Docker sandbox tests have not yet been confirmed by a successful CI run. The latest workflow (run 44328650912) failed both matrix jobs with runner ID 0, zero steps and no downloadable logs; test/lint outcomes remain unknown.
 - Windows UI adapter has mocked contract tests but has not been exercised against real desktop apps on the owner's PC.
 
 ## Not complete

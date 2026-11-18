@@ -1050,7 +1050,11 @@ def create_app(
             raise HTTPException(status_code=404, detail="Capability version not found")
         try:
             source_code = capability_versions.read_source(capability_id, version)
-            test_source_code = capability_versions.read_test_source(capability_id, version)
+            test_source_code = (
+                capability_versions.read_test_source(capability_id, version)
+                if candidate.get("test_source_path") and candidate.get("test_sha256")
+                else None
+            )
         except (CapabilityLifecycleError, OSError, ValueError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return {
