@@ -25,6 +25,7 @@ def _safe_fts_query(query: str) -> str:
 
 class MemoryStore:
     MAX_ITEM_BYTES = 1_000_000
+    MAX_EXPORT_BYTES = 25 * 1024 * 1024
     MAX_MESSAGE_CHARS = 100_000
 
     def __init__(self, database_path: str | Path) -> None:
@@ -182,6 +183,62 @@ class MemoryStore:
                 (safe_limit,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def export_data(self) -> dict[str, Any]:
+        """Return a bounded, checksummed export of conversations and knowledge."""
+        with self._connection() as db:
+            conversations = db.execute(
+                """
+                SELECT conversation_id, title, created_at, updated_at
+                FROM conversations
+                ORDER BY created_at, conversation_id
+                """
+            ).fetchall()
+            messages = db.execute(
+                """
+                SELECT conversation_id, role, content, created_at
+                FROM conversation_messages
+                ORDER BY conversation_id, created_at, rowid
+                """
+            ).fetchall()
+            items = db.execute(
+                "SELECT * FROM memory_items ORDER BY created_at, item_id"
+            ).fetchall()
+
+        messages_by_conversation: dict[str, list[dict[str, str]]] = {}
+        for row in messages:
+            messages_by_conversation.setdefault(
+                str(row["conversation_id"]), []
+            ).append({
+                "role": str(row["role"]),
+                "content": str(row["content"]),
+                "created_at": str(row["created_at"]),
+            })
+
+        payload: dict[str, Any] = {
+            "schema_version": 1,
+            "exported_at": _now(),
+            "conversations": [
+                {
+                    **dict(row),
+                    "messages": messages_by_conversation.get(
+                        str(row["conversation_id"]), []
+                    ),
+                }
+                for row in conversations
+            ],
+            "memory_items": [self._decode_item(row) for row in items],
+        }
+        canonical = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        if len(canonical) > self.MAX_EXPORT_BYTES:
+            raise ValueError("Memory export exceeds the 25 MB safety limit")
+        payload["sha256"] = hashlib.sha256(canonical).hexdigest()
+        return payload
 
     def get_conversation(self, conversation_id: str) -> dict[str, Any] | None:
         with self._connection() as db:
