@@ -1,5 +1,7 @@
 import hashlib
 
+import pytest
+
 from fastapi.testclient import TestClient
 
 from mia.agent.resources import ResourceMonitor
@@ -23,9 +25,10 @@ class FakePsutil:
 
 
 class FakeSandboxRunner:
-    def __init__(self, *, passing=True, available=True):
+    def __init__(self, *, passing=True, available=True, execution_error=None):
         self.passing = passing
         self.available = available
+        self.execution_error = execution_error
         self.calls = []
         self.execution_calls = []
 
@@ -38,6 +41,8 @@ class FakeSandboxRunner:
             "source_sha256": source_sha256,
             "input_data": input_data,
         })
+        if self.execution_error is not None:
+            raise self.execution_error
         return {
             "result": {"echo": input_data.get("value", 0)},
             "source_sha256": source_sha256,
@@ -434,3 +439,119 @@ def test_capability_execution_respects_emergency_stop_and_resource_pressure(
     assert hot.status_code == 503
     assert "CPU or memory" in hot.json()["detail"]
     assert runner.execution_calls == []
+
+
+def _register_permission_free_capability(client, capability_id="boundary-capability"):
+    source = "def run(input_data):\\n    return {'echo': input_data.get('value', 0)}\\n"
+    tests = (
+        "from candidate import run\\n"
+        "def test_run():\\n"
+        "    assert run({'value': 3}) == {'echo': 3}\\n"
+    )
+    created = _create_candidate(client, capability_id, source, tests)
+    assert created.status_code == 201
+    started = client.post(
+        f"/api/capabilities/{capability_id}/0.1.0/validate/start"
+    )
+    assert started.status_code == 200
+    validated = client.post(f"/api/capabilities/{capability_id}/0.1.0/validate")
+    assert validated.status_code == 200
+    assert validated.json()["status"] == "validated"
+    registered = client.post(f"/api/capabilities/{capability_id}/0.1.0/register")
+    assert registered.status_code == 200
+    return source, created.json()["source_sha256"]
+
+
+def test_capability_execution_rejects_oversized_input_before_runner(tmp_path):
+    store = CapabilityStore(tmp_path / "capabilities.sqlite3", tmp_path / "generated")
+    runner = FakeSandboxRunner()
+    client = TestClient(create_app(
+        store=ObservatoryStore(tmp_path / "observatory.sqlite3"),
+        capability_store=store,
+        sandbox_runner=runner,
+        resource_monitor=ResourceMonitor(psutil_module=FakePsutil()),
+    ))
+    _register_permission_free_capability(client, "big-input-capability")
+
+    response = client.post(
+        "/api/capabilities/big-input-capability/0.1.0/execute",
+        json={"input_data": {"value": "x" * (33 * 1024)}},
+    )
+
+    assert response.status_code == 422
+    assert "32 KB" in response.json()["detail"]
+    assert runner.execution_calls == []
+
+
+def test_capability_execution_rejects_tampered_registered_source(tmp_path):
+    store = CapabilityStore(tmp_path / "capabilities.sqlite3", tmp_path / "generated")
+    runner = FakeSandboxRunner()
+    client = TestClient(create_app(
+        store=ObservatoryStore(tmp_path / "observatory.sqlite3"),
+        capability_store=store,
+        sandbox_runner=runner,
+        resource_monitor=ResourceMonitor(psutil_module=FakePsutil()),
+    ))
+    _register_permission_free_capability(client, "tampered-execution-capability")
+    candidate = store.get("tampered-execution-capability", "0.1.0")
+    with open(candidate["source_path"], "w", encoding="utf-8") as source_file:
+        source_file.write("def run(input_data): return {'tampered': True}\\n")
+
+    response = client.post(
+        "/api/capabilities/tampered-execution-capability/0.1.0/execute",
+        json={"input_data": {}},
+    )
+
+    assert response.status_code == 409
+    assert "hash does not match" in response.json()["detail"]
+    assert runner.execution_calls == []
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_status", "expected_outcome"),
+    [
+        ("unavailable", 503, "unavailable"),
+        ("execution", 502, "failed"),
+    ],
+)
+def test_capability_execution_audits_docker_failures_without_raw_payload(
+    tmp_path,
+    error,
+    expected_status,
+    expected_outcome,
+):
+    from mia.evolution.sandbox import SandboxExecutionError, SandboxUnavailableError
+
+    failure = (
+        SandboxUnavailableError("Docker image missing")
+        if error == "unavailable"
+        else SandboxExecutionError("container returned an invalid execution result")
+    )
+    observatory = ObservatoryStore(tmp_path / f"{error}-observatory.sqlite3")
+    capability_store = CapabilityStore(
+        tmp_path / f"{error}-capabilities.sqlite3",
+        tmp_path / f"{error}-generated",
+    )
+    runner = FakeSandboxRunner(execution_error=failure)
+    client = TestClient(create_app(
+        store=observatory,
+        capability_store=capability_store,
+        sandbox_runner=runner,
+        resource_monitor=ResourceMonitor(psutil_module=FakePsutil()),
+    ))
+    private_value = "private-user-input-should-not-be-logged"
+    _register_permission_free_capability(client, f"{error}-capability")
+
+    response = client.post(
+        f"/api/capabilities/{error}-capability/0.1.0/execute",
+        json={"input_data": {"value": private_value}},
+    )
+
+    assert response.status_code == expected_status
+    failed = next(
+        event for event in observatory.list_events(limit=50)
+        if event["event_type"] == "capability_execution_failed"
+    )
+    assert failed["outcome"] == expected_outcome
+    assert private_value not in failed["payload_json"]
+    assert "input_sha256" in failed["payload_json"]
