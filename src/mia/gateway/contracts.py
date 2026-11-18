@@ -1,4 +1,4 @@
-"""Provider-neutral contracts; concrete network adapters are added in Phase 2."""
+"""Provider-neutral contracts for local and cloud inference."""
 
 from dataclasses import dataclass
 from typing import Protocol
@@ -35,9 +35,25 @@ class RoutePolicy:
     max_request_cost_usd: float = 0.0
 
 
-class ModelProvider(Protocol):
-    """Interface implemented by each local or cloud provider adapter."""
+class TransientProviderError(RuntimeError):
+    """A provider failure for which trying the next eligible candidate is safe."""
 
-    async def complete(self, request: ModelRequest) -> str:
-        """Return a model response for a validated request."""
+
+class PermanentProviderError(RuntimeError):
+    """A non-transient provider failure that should not be retried automatically."""
+
+
+class ModelProvider(Protocol):
+    provider_id: str
+
+    async def health(self) -> bool:
+        """Return whether the provider endpoint is reachable and ready."""
+        ...
+
+    async def list_models(self) -> list[ModelCandidate]:
+        """Return currently available models with conservative metadata."""
+        ...
+
+    async def complete(self, candidate: ModelCandidate, request: ModelRequest) -> str:
+        """Complete a text request using the explicitly selected candidate."""
         ...
