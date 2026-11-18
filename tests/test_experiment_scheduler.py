@@ -1,7 +1,5 @@
-import asyncio
+import sqlite3
 from datetime import UTC, datetime, timedelta
-
-import pytest
 
 from mia.observatory.snapshot_capture import ExperimentSnapshotCapturer
 from mia.observatory.snapshot_scheduler import ExperimentSnapshotScheduler
@@ -25,6 +23,10 @@ def passing_manifest():
             "errors": 0,
             "skipped": 0,
             "ruff_passed": True,
+            "ruff_exit_code": 0,
+            "pytest_exit_code": 0,
+            "capture_method": "local-host-ruff-pytest-v2",
+            "capture_host": "scheduler-test-host",
         },
         "verification_passed": True,
     }
@@ -56,7 +58,6 @@ def create_due_experiment(tmp_path):
     experiment_id = baseline["experiment_id"]
     store.start_experiment(experiment_id)
     started_at = (datetime.now(UTC) - timedelta(days=1, hours=1)).isoformat()
-    import sqlite3
     with sqlite3.connect(store.database_path) as connection:
         connection.execute(
             "UPDATE experiments SET started_at = ? WHERE experiment_id = ?",
