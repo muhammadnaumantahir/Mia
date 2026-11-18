@@ -42,7 +42,7 @@ footer{margin-top:24px;color:#6f8580;font-size:11px;line-height:1.6}
 <article class="kpi"><label>Experiment status</label><strong id="experiment">Not started</strong><small>Baseline required before Day 1</small></article>
 </section>
 <section class="panel" id="experimentControl">
-<div class="panelhead"><div><h3>30-day experiment · Day 0</h3><div class="muted">Capture a verified baseline on this computer. Starting the experiment is a separate action.</div></div><span class="tag" id="experimentControlState">Not prepared</span></div>
+<div class="panelhead"><div><h3>30-day experiment · Day 0</h3><div class="muted">Capture a verified baseline on this computer. Starting the experiment is a separate action.</div></div><div style="display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end"><span class="tag" id="experimentControlState">Not prepared</span><span class="tag" id="experimentSchedulerState">Checking auto capture…</span></div></div>
 <form id="experimentForm" class="experiment-form">
  <div class="experiment-fields">
   <div class="experiment-field"><label for="experimentName">Experiment name</label><input id="experimentName" value="Mia 30-day experiment" maxlength="120" required></div>
@@ -135,6 +135,19 @@ function setExperimentNotice(message,isError=false){
 let dailyCaptureInProgress=false;
 function setExperimentNotice(message,isError=false){
  const box=el('experimentNotice');box.textContent=message;box.classList.toggle('error',isError);
+}
+async function loadExperimentSchedulerStatus(){
+ try{
+  const response=await fetch('/api/experiments/scheduler/status');
+  const data=await response.json();
+  if(!response.ok)throw new Error(data.detail||'Scheduler status unavailable');
+  const tag=el('experimentSchedulerState');
+  tag.textContent=data.enabled?'Auto capture on':'Auto capture off';
+  tag.title=data.enabled?'Mia automatically checks for due daily snapshots while the server is running.':'Set MIA_EXPERIMENT_AUTO_CAPTURE=true in .env to enable local automatic capture.';
+ }catch(error){
+  el('experimentSchedulerState').textContent='Scheduler status unavailable';
+  el('experimentSchedulerState').title=error.message;
+ }
 }
 async function loadExperimentControl(){
  const capture=el('captureBaseline');
@@ -580,5 +593,7 @@ loadCapabilities();
 loadSystemResources();
 window.setInterval(loadSystemResources,15000);
 loadExperimentControl();
+loadExperimentSchedulerStatus();
 window.setInterval(loadExperimentControl,60000);
+window.setInterval(loadExperimentSchedulerStatus,60000);
 </script></body></html>

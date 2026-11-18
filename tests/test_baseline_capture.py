@@ -429,3 +429,19 @@ def test_daily_snapshot_blocks_configuration_drift_from_day_zero(tmp_path):
     assert response.status_code == 409
     assert "configuration differs" in response.json()["detail"]
     assert [item["day_index"] for item in store.list_snapshots(experiment_id)] == [0]
+
+
+def test_experiment_snapshot_scheduler_is_opt_in_by_environment(tmp_path, monkeypatch):
+    from mia.agent.resources import ResourceMonitor
+
+    monkeypatch.setenv("MIA_EXPERIMENT_AUTO_CAPTURE", "true")
+    app = create_app(
+        store=ObservatoryStore(tmp_path / "scheduler.sqlite3"),
+        baseline_capture=lambda root: _baseline_manifest(),
+        resource_monitor=ResourceMonitor(psutil_module=FakePsutil()),
+    )
+    client = TestClient(app)
+    status = client.get("/api/experiments/scheduler/status")
+    assert status.status_code == 200
+    assert status.json()["enabled"] is True
+    assert status.json()["interval_seconds"] == 60

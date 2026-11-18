@@ -78,3 +78,15 @@ day is stored. The dashboard enables **Capture today's evidence** only when a da
 is due. It refreshes due state while open and records missed offline days as
 unavailable. Capture remains a manual action in this release; a local
 always-on scheduler and missed-day notifications remain future work.
+
+
+## Automatic daily capture scheduler
+
+By default, the local scheduler is disabled. Copy the supplied `.env.example`
+to `.env` and keep `MIA_EXPERIMENT_AUTO_CAPTURE=true` to enable it. After the
+owner explicitly starts an experiment, Mia checks every 60 seconds for a due
+snapshot. Before the full local verification suite it checks CPU/RAM against
+the configured autonomy thresholds; under pressure it defers and retries
+after 15 minutes. The scheduler never starts an experiment, never runs when
+there is no explicitly running experiment, and never fills missed days with
+invented records. The manual dashboard capture remains available.

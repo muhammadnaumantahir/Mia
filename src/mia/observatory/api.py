@@ -56,6 +56,8 @@ from mia.memory.store import MemoryStore
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider
 
 from .baseline import BaselineCaptureError, capture_baseline_manifest
+from .snapshot_capture import ExperimentSnapshotCapturer, SnapshotCaptureError
+from .snapshot_scheduler import ExperimentSnapshotScheduler
 from .store import ObservatoryStore
 
 
@@ -281,6 +283,31 @@ def create_app(
     app.state.sandbox_runner = sandbox_validation
     resource_monitor_service = resource_monitor or ResourceMonitor()
     app.state.resource_monitor = resource_monitor_service
+    experiment_snapshot_capturer = ExperimentSnapshotCapturer(
+        observatory=observatory,
+        baseline_capture=baseline_capture_service,
+        resource_monitor=resource_monitor_service,
+        repo_root=Path(__file__).resolve().parents[3],
+    )
+    experiment_snapshot_scheduler = ExperimentSnapshotScheduler(
+        observatory,
+        experiment_snapshot_capturer,
+        resource_monitor_service,
+        enabled=os.getenv("MIA_EXPERIMENT_AUTO_CAPTURE", "false").strip().lower() == "true",
+        max_cpu_percent=autonomy_policy.max_cpu_percent,
+        max_memory_percent=autonomy_policy.max_memory_percent,
+    )
+    app.state.experiment_snapshot_capturer = experiment_snapshot_capturer
+    app.state.experiment_snapshot_scheduler = experiment_snapshot_scheduler
+
+    async def start_experiment_snapshot_scheduler() -> None:
+        experiment_snapshot_scheduler.start()
+
+    async def stop_experiment_snapshot_scheduler() -> None:
+        await experiment_snapshot_scheduler.stop()
+
+    app.add_event_handler("startup", start_experiment_snapshot_scheduler)
+    app.add_event_handler("shutdown", stop_experiment_snapshot_scheduler)
 
     def register_tool(name, description, properties, required, permission, mode, handler):
         tool_registry.register(
@@ -778,169 +805,17 @@ def create_app(
 
     @app.post("/api/experiments/{experiment_id}/snapshots/capture", status_code=201)
     async def capture_experiment_snapshot(experiment_id: str) -> dict[str, Any]:
-        due = observatory.get_snapshot_status(experiment_id)
-        if due is None:
-            raise HTTPException(status_code=404, detail="Experiment not found")
-        if not due["due"]:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "message": due.get("reason") or "No daily snapshot is due",
-                    "snapshot_status": due,
-                },
-            )
-
-        baseline = observatory.get_baseline(experiment_id)
-        if baseline is None:
-            raise HTTPException(status_code=409, detail="Experiment baseline is missing")
-        baseline_manifest = baseline["manifest"]
-        repo_root = Path(__file__).resolve().parents[3]
         try:
-            manifest = await run_in_threadpool(baseline_capture_service, repo_root)
-        except BaselineCaptureError as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
-        if manifest.get("verification_passed") is not True:
-            observatory.record_event(
-                category="experiment",
-                event_type="daily_snapshot_verification_failed",
-                summary=f"Day {due['day_index']} verification failed; no snapshot stored",
-                outcome="failed",
-                day_index=due["day_index"],
-                experiment_id=experiment_id,
-                layer_id="SPS-09",
-                payload={"baseline_results": manifest.get("baseline_results", {})},
+            return await run_in_threadpool(
+                experiment_snapshot_capturer.capture,
+                experiment_id,
             )
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "message": "Daily Ruff/test verification did not pass; no snapshot was stored",
-                    "baseline_results": manifest.get("baseline_results", {}),
-                },
-            )
+        except SnapshotCaptureError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
-        if (
-            manifest.get("benchmark_suite_id") != baseline_manifest.get("benchmark_suite_id")
-            or manifest.get("configuration_hash") != baseline_manifest.get("configuration_hash")
-        ):
-            raise HTTPException(
-                status_code=409,
-                detail="Daily benchmark suite or configuration differs from immutable Day 0",
-            )
-        baseline_environment = baseline_manifest.get("environment", {})
-        current_environment = manifest.get("environment", {})
-        for key in ("os", "python", "machine"):
-            if current_environment.get(key) != baseline_environment.get(key):
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Daily environment changed from Day 0 ({key})",
-                )
-
-        try:
-            resources = await run_in_threadpool(resource_monitor_service.snapshot)
-        except (RuntimeError, OSError, ValueError) as exc:
-            raise HTTPException(
-                status_code=503,
-                detail="Local CPU/RAM telemetry is unavailable for this daily snapshot",
-            ) from exc
-
-        day_index = int(due["day_index"])
-        captured_at = datetime.now(UTC).isoformat()
-        snapshot = {
-            "captured_at": captured_at,
-            "day_index": day_index,
-            "baseline_sha256": baseline["baseline_sha256"],
-            "source_commit": manifest["source_commit"],
-            "configuration_hash": manifest["configuration_hash"],
-            "benchmark_suite_id": manifest["benchmark_suite_id"],
-            "environment": manifest["environment"],
-            "verification": manifest["baseline_results"],
-            "resources": resources,
-            "verification_passed": True,
-            "missing_day_indices": due["days_missed"],
-        }
-        try:
-            snapshot_id = observatory.record_daily_snapshot(
-                experiment_id=experiment_id,
-                day_index=day_index,
-                source_commit=manifest["source_commit"],
-                snapshot=snapshot,
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-        if due["days_missed"]:
-            observatory.record_event(
-                category="experiment",
-                event_type="daily_snapshots_unavailable",
-                summary=f"Days {due['days_missed']} were not captured while Mia was offline",
-                outcome="unavailable",
-                day_index=day_index,
-                experiment_id=experiment_id,
-                layer_id="SPS-09",
-                payload={"missing_day_indices": due["days_missed"]},
-            )
-        event_id = observatory.record_event(
-            category="experiment",
-            event_type="daily_snapshot_captured",
-            summary=f"Verified Day {day_index} evidence captured on the Mia host",
-            outcome="completed" if day_index == due["planned_days"] else "recorded",
-            day_index=day_index,
-            experiment_id=experiment_id,
-            layer_id="SPS-09",
-            payload={
-                "snapshot_id": snapshot_id,
-                "source_commit": manifest["source_commit"],
-                "tests": manifest["baseline_results"]["tests"],
-                "passed": manifest["baseline_results"]["passed"],
-                "ruff_passed": manifest["baseline_results"]["ruff_passed"],
-                "cpu_percent": resources["cpu_percent"],
-                "memory_percent": resources["memory_percent"],
-                "missing_day_indices": due["days_missed"],
-            },
-        )
-        observatory.record_metric(
-            day_index=day_index,
-            metric_name="cpu_percent",
-            value=float(resources["cpu_percent"]),
-            unit="percent",
-            benchmark_id=manifest["benchmark_suite_id"],
-            experiment_id=experiment_id,
-            source_event_id=event_id,
-            context={"source": "local_resource_monitor"},
-        )
-        observatory.record_metric(
-            day_index=day_index,
-            metric_name="memory_percent",
-            value=float(resources["memory_percent"]),
-            unit="percent",
-            benchmark_id=manifest["benchmark_suite_id"],
-            experiment_id=experiment_id,
-            source_event_id=event_id,
-            context={"source": "local_resource_monitor"},
-        )
-        observatory.record_metric(
-            day_index=day_index,
-            metric_name="test_pass_rate",
-            value=100.0,
-            unit="percent",
-            benchmark_id=manifest["benchmark_suite_id"],
-            experiment_id=experiment_id,
-            source_event_id=event_id,
-            context={
-                "passed": manifest["baseline_results"]["passed"],
-                "tests": manifest["baseline_results"]["tests"],
-            },
-        )
-        return {
-            "snapshot_id": snapshot_id,
-            "experiment_id": experiment_id,
-            "day_index": day_index,
-            "status": "completed" if day_index == due["planned_days"] else "recorded",
-            "source_commit": manifest["source_commit"],
-            "resources": resources,
-            "verification": manifest["baseline_results"],
-            "missing_day_indices": due["days_missed"],
-        }
+    @app.get("/api/experiments/scheduler/status")
+    def experiment_scheduler_status() -> dict[str, Any]:
+        return experiment_snapshot_scheduler.status()
 
     @app.post("/api/experiments/{experiment_id}/snapshots", status_code=410)
     def reject_client_supplied_snapshot(experiment_id: str) -> None:
