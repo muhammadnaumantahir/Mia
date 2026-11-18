@@ -28,7 +28,7 @@ class DockerSandboxRunner:
     """
 
     MAX_SOURCE_BYTES = 512 * 1024
-    OUTPUT_LIMIT_CHARS = 12_000
+    OUTPUT_LIMIT_CHARS = 128_000
 
     def __init__(
         self,

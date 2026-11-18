@@ -125,3 +125,29 @@ def test_worker_security_policy_scans_candidate_tests_too():
     )
     assert findings["candidate"] == []
     assert "forbidden import: subprocess" in findings["tests"]
+
+
+def test_sandbox_accepts_large_but_bounded_json_reports():
+    class LargeOutputDocker(FakeDocker):
+        def __call__(self, command, **kwargs):
+            if command[1:3] == ["image", "inspect"]:
+                return super().__call__(command, **kwargs)
+            if command[1] == "run":
+                report = _report()
+                report["evidence"]["large_detail"] = "x" * 20_000
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout=json.dumps(report),
+                    stderr="",
+                )
+            return super().__call__(command, **kwargs)
+
+    runner = DockerSandboxRunner(subprocess_run=LargeOutputDocker())
+    result = runner.validate_candidate(
+        source_code="def f(): return 1\n",
+        test_source_code="def test_f(): assert True\n",
+    )
+
+    assert result["unit_tests"] is True
+    assert len(result["evidence"]["large_detail"]) == 20_000
