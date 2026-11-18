@@ -12,7 +12,8 @@ import tempfile
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 
 BENCHMARK_SUITE_ID = "mia-foundation-v1"
@@ -180,6 +181,9 @@ def capture_baseline_manifest(
             environment["PYTHONPATH"] = os.pathsep.join(
                 value for value in (source_path, existing_pythonpath) if value
             )
+            environment["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
+            environment["PYTHONHASHSEED"] = "0"
+            environment["PYTHONDONTWRITEBYTECODE"] = "1"
             result = runner(
                 command,
                 cwd=str(root),
