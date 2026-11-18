@@ -23,7 +23,7 @@
 
 - Last known fully green CI commit: 19c3fde9d110611a648c9a168b7841a0d035db75 on Windows and Ubuntu with Python 3.13.
 - Recent Actions failures returned runner ID 0 with no steps/logs. These are inconclusive and do not prove code failure or success.
-- The planner and scheduler regression tests have not yet been confirmed by a successful CI run.
+- Planner, scheduler, read-only task-executor, API and Task Desk tests have not yet been confirmed by a successful CI run. Recent GitHub Actions jobs report failure with empty step lists and unavailable job logs; test/lint outcomes remain unknown.
 - Windows UI adapter has mocked contract tests but has not been exercised against real desktop apps on the owner's PC.
 
 ## Not complete
