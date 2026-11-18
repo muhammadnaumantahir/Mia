@@ -81,8 +81,6 @@ def test_text_entry_requires_exact_one_time_approval(tmp_path):
         automation_id="editor",
         control_type="Edit",
         text="Mia test content",
-        process_id=456,
-        window_class="Notepad",
     )
     assert preview["status"] == "pending"
     assert window.control.text is None
@@ -107,6 +105,8 @@ def test_text_entry_requires_exact_one_time_approval(tmp_path):
         automation_id="editor",
         control_type="Edit",
         text="Mia test content",
+        process_id=456,
+        window_class="Notepad",
     )
     assert result["characters_entered"] == len("Mia test content")
     assert window.focused is True
