@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import sqlite3
 import uuid
 from collections.abc import Iterator
@@ -84,6 +86,12 @@ class TaskStore:
                     last_error TEXT
                 );
 
+                CREATE TABLE IF NOT EXISTS task_discovery_keys (
+                    dedupe_key TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL REFERENCES tasks(task_id),
+                    created_at TEXT NOT NULL
+                );
+
                 CREATE TABLE IF NOT EXISTS task_events (
                     event_id TEXT PRIMARY KEY,
                     task_id TEXT NOT NULL REFERENCES tasks(task_id),
@@ -111,6 +119,7 @@ class TaskStore:
         priority: int = 50,
         metadata: dict[str, Any] | None = None,
         actor: str = "user",
+        dedupe_key: str | None = None,
     ) -> str:
         if not title.strip() or len(title) > 160:
             raise ValueError("title must be 1-160 characters")
@@ -120,11 +129,21 @@ class TaskStore:
             raise ValueError("unsupported task source")
         if not 0 <= priority <= 100:
             raise ValueError("priority must be between 0 and 100")
+        if dedupe_key is not None and not re.fullmatch(r"[a-f0-9]{64}", dedupe_key):
+            raise ValueError("dedupe_key must be a lowercase SHA-256 digest")
 
         task_id = uuid.uuid4().hex
         now = _now()
         payload = json.dumps(metadata or {}, ensure_ascii=False, sort_keys=True)
         with self._connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            if dedupe_key:
+                existing = db.execute(
+                    "SELECT task_id FROM task_discovery_keys WHERE dedupe_key = ?",
+                    (dedupe_key,),
+                ).fetchone()
+                if existing is not None:
+                    return str(existing["task_id"])
             db.execute(
                 """
                 INSERT INTO tasks (
@@ -134,6 +153,14 @@ class TaskStore:
                 """,
                 (task_id, title.strip(), goal.strip(), source, priority, now, now, payload),
             )
+            if dedupe_key:
+                db.execute(
+                    """
+                    INSERT INTO task_discovery_keys (dedupe_key, task_id, created_at)
+                    VALUES (?, ?, ?)
+                    """,
+                    (dedupe_key, task_id, now),
+                )
             self._insert_event(
                 db,
                 task_id=task_id,

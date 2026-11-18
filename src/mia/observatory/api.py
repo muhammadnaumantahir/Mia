@@ -14,6 +14,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from mia.agent.discovery import DiscoveryFinding, WorkloadDiscovery
 from mia.agent.tasks import AutonomyPolicy, TaskCoordinator, TaskStore, TaskTransitionError
 from mia.computer.approvals import ApprovalError, ApprovalStore
 from mia.computer.applications import ApplicationLaunchError, ApplicationLauncher
@@ -39,6 +40,21 @@ class TaskInput(BaseModel):
 
 class TaskTransitionInput(BaseModel):
     reason: str = Field(min_length=1, max_length=1000)
+
+
+class DiscoveryFindingInput(BaseModel):
+    source: str = Field(min_length=1, max_length=40)
+    evidence_id: str = Field(min_length=1, max_length=300)
+    title: str = Field(min_length=1, max_length=160)
+    goal: str = Field(min_length=1, max_length=20000)
+    evidence_summary: str = Field(min_length=1, max_length=2000)
+    risk_level: str = Field(default="low", pattern="^(low|medium|high)$")
+    priority: int = Field(default=50, ge=0, le=100)
+    evidence_uri: str | None = Field(default=None, max_length=2000)
+
+
+class DiscoveryBatchInput(BaseModel):
+    findings: list[DiscoveryFindingInput] = Field(max_length=50)
 
 
 class EventInput(BaseModel):
@@ -176,7 +192,9 @@ def create_app(
         max_memory_percent=float(os.getenv("MIA_MAX_RAM_PERCENT", "85")),
     )
     task_coordinator = TaskCoordinator(durable_tasks, autonomy_policy)
+    workload_discovery = WorkloadDiscovery(durable_tasks)
     app.state.tasks = durable_tasks
+    app.state.workload_discovery = workload_discovery
     app.state.task_coordinator = task_coordinator
 
     @app.get("/health")
@@ -557,6 +575,33 @@ def create_app(
             "cpu_limit_percent": autonomy_policy.max_cpu_percent,
             "memory_limit_percent": autonomy_policy.max_memory_percent,
             "reason": "Planner and governed tool executor are not yet connected",
+        }
+
+    @app.post("/api/agent/discovery/proposals", status_code=201)
+    def discover_task_proposals(item: DiscoveryBatchInput) -> dict[str, Any]:
+        try:
+            proposals = workload_discovery.propose(
+                [DiscoveryFinding(**finding.model_dump()) for finding in item.findings]
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        for finding, proposal in zip(item.findings, proposals, strict=True):
+            observatory.record_event(
+                category="agent",
+                event_type="workload_discovered",
+                summary=f"Discovery proposed: {finding.title}",
+                outcome="proposed",
+                layer_id="SPS-06",
+                payload={
+                    "task_id": proposal["task_id"],
+                    "source": finding.source,
+                    "evidence_id": finding.evidence_id,
+                    "risk_level": finding.risk_level,
+                },
+            )
+        return {
+            "items": proposals,
+            "approved_automatically": False,
         }
 
     @app.get("/api/tasks")
