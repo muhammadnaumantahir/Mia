@@ -303,7 +303,7 @@ def capture_baseline_manifest(
             "pytest_stderr_sha256": _sha256((regression_result.stderr or "").encode("utf-8")),
             "elapsed_seconds": elapsed,
             "capture_host": platform.node() or "unknown-local-host",
-            "capture_method": "local-host-ruff-pytest-v2",
+            "capture_method": "local-host-fixed-benchmark-and-regression-v3",
         },
                 "fixed_benchmark_results": {
             **fixed_benchmark_results,

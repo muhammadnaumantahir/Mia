@@ -200,7 +200,7 @@ class ObservatoryStore:
             or results["ruff_passed"] is not True
             or results["ruff_exit_code"] != 0
             or results["pytest_exit_code"] != 0
-            or results["capture_method"] != "local-host-ruff-pytest-v2"
+            or results["capture_method"] != "local-host-fixed-benchmark-and-regression-v3"
             or not isinstance(results["capture_host"], str)
             or not results["capture_host"]
         ):

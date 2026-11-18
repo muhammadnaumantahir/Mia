@@ -92,7 +92,7 @@ def test_local_baseline_capture_runs_git_and_fixed_suite_on_host(tmp_path, monke
     assert manifest["configuration_hash"].startswith("sha256:")
     assert manifest["baseline_results"]["tests"] == 12
     assert manifest["baseline_results"]["passed"] == 12
-    assert manifest["baseline_results"]["capture_method"] == "local-host-ruff-pytest-v2"
+    assert manifest["baseline_results"]["capture_method"] == "local-host-fixed-benchmark-and-regression-v3"
     assert manifest["baseline_results"]["ruff_passed"] is True
     assert manifest["fixed_benchmark_results"]["tests"] == 6
     assert manifest["fixed_benchmark_results"]["passed"] == 6
@@ -177,7 +177,7 @@ def _baseline_manifest(passed=True):
             "ruff_passed": passed,
             "ruff_exit_code": 0 if passed else 1,
             "pytest_exit_code": 0 if passed else 1,
-            "capture_method": "local-host-ruff-pytest-v2",
+            "capture_method": "local-host-fixed-benchmark-and-regression-v3",
             "capture_host": "test-host",
         },
         "verification_passed": passed,

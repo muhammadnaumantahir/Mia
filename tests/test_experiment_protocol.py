@@ -35,7 +35,7 @@ def baseline_manifest():
             "ruff_passed": True,
             "ruff_exit_code": 0,
             "pytest_exit_code": 0,
-            "capture_method": "local-host-ruff-pytest-v2",
+            "capture_method": "local-host-fixed-benchmark-and-regression-v3",
             "capture_host": "test-machine",
         },
         "verification_passed": True,
