@@ -19,6 +19,13 @@ select{background:#10191b;color:#dce9e4;border:1px solid #35514a;border-radius:1
 .events{display:grid;gap:10px}.event{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid #253436;padding:10px 0}.event:last-child{border-bottom:0}
 .event strong{display:block;font-size:13px;font-weight:600}.event small{display:block;color:#829890;margin-top:5px}.tag{font-size:11px;color:#9ce4c4;border:1px solid #315b4d;background:#122820;border-radius:999px;padding:5px 9px;height:max-content}
 footer{margin-top:24px;color:#6f8580;font-size:11px;line-height:1.6}
+.resource-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.resource-card{background:#10191b;border:1px solid #283d3a;border-radius:12px;padding:13px}
+.resource-card .resource-value{font-size:22px;font-weight:750;letter-spacing:-.6px;margin-top:5px;color:#d9ede5}
+.resource-card small{color:#829890;font-size:11px}
+.resource-track{height:7px;border-radius:8px;background:#263733;overflow:hidden;margin-top:10px}
+.resource-fill{height:100%;width:0;border-radius:8px;background:linear-gradient(90deg,#31ba87,#f0bb65);transition:width .3s ease}
+@media(max-width:600px){.resource-grid{grid-template-columns:1fr}}
 @media(max-width:760px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hero{display:block}header{align-items:flex-start}.status{white-space:normal}}
 @media(max-width:440px){.shell{padding:22px 14px}.grid{gap:9px}.kpi{padding:14px}.kpi strong{font-size:23px}.panel{padding:14px}}
 </style></head>
@@ -33,6 +40,17 @@ footer{margin-top:24px;color:#6f8580;font-size:11px;line-height:1.6}
 </section>
 <section class="panel"><div class="panelhead"><div><h3>Measured growth over time</h3><div class="muted">Select one metric to preserve its original unit and scale.</div></div><select id="metric" aria-label="Select metric"><option value="">No metrics yet</option></select></div>
 <div id="chartEmpty" class="empty">No benchmark or metric samples have been recorded yet.<br>Complete and freeze the Day 0 baseline to begin the experiment.</div><canvas id="chart" hidden></canvas></section>
+<section class="panel">
+<div class="panelhead">
+<div><h3>System health</h3><div class="muted">Live CPU and memory readings. Autonomy stays gated while disabled or resource limits are reached.</div></div>
+<span class="tag" id="resourceState">Checking system…</span>
+</div>
+<div class="resource-grid">
+<div class="resource-card"><small>CPU load</small><div class="resource-value" id="cpuValue">—</div><div class="resource-track"><div class="resource-fill" id="cpuFill"></div></div></div>
+<div class="resource-card"><small>Memory used</small><div class="resource-value" id="memoryValue">—</div><div class="resource-track"><div class="resource-fill" id="memoryFill"></div></div></div>
+<div class="resource-card"><small>Running processes</small><div class="resource-value" id="processValue">—</div><small>Names and status only</small></div>
+</div>
+</section>
 <section class="panel"><div class="panelhead"><div><h3>Recent evolution events</h3><div class="muted">Decisions, validation, activation, failures and rollbacks.</div></div><span class="muted">Latest 20</span></div><div class="events" id="eventList"><div class="muted">No events recorded yet.</div></div></section>
 <section class="panel">
 <div class="panelhead"><div><h3>Task control</h3><div class="muted">Proposals need approval. Automatic dispatch is currently disabled.</div></div><span class="tag" id="autonomyState">Autonomy off</span></div>
@@ -78,6 +96,24 @@ function draw(name){
  ctx.strokeStyle='#42d6a0';ctx.lineWidth=2.5;ctx.beginPath();rows.forEach((r,i)=>{if(i===0)ctx.moveTo(x(i),y(Number(r.value)));else ctx.lineTo(x(i),y(Number(r.value)));});ctx.stroke();
  rows.forEach((r,i)=>{ctx.fillStyle='#42d6a0';ctx.beginPath();ctx.arc(x(i),y(Number(r.value)),4,0,Math.PI*2);ctx.fill();ctx.fillStyle='#8aa09a';ctx.textAlign='center';ctx.fillText('D'+r.day_index,x(i),h-12);});
  ctx.textAlign='left';ctx.fillStyle='#d9e8e2';ctx.font='12px Segoe UI';ctx.fillText(name+' ('+rows[0].unit+')',p.l,12);
+}
+async function loadSystemResources(){
+ try{
+  const response=await fetch('/api/system/resources');
+  const data=await response.json();
+  if(!response.ok)throw new Error(data.detail||'Resource monitor unavailable');
+  const cpu=Math.max(0,Math.min(100,Number(data.cpu_percent)||0));
+  const memory=Math.max(0,Math.min(100,Number(data.memory_percent)||0));
+  $('cpuValue').textContent=cpu.toFixed(1)+'%';
+  $('memoryValue').textContent=memory.toFixed(1)+'%';
+  $('processValue').textContent=String(data.process_count??'—');
+  $('cpuFill').style.width=cpu+'%';
+  $('memoryFill').style.width=memory+'%';
+  $('resourceState').textContent=cpu>=75||memory>=85?'Near autonomy limit':'System load recorded';
+ }catch(error){
+  $('resourceState').textContent='Monitor unavailable';
+  $('cpuValue').textContent='—';$('memoryValue').textContent='—';$('processValue').textContent='—';
+ }
 }
 async function loadTasks(){
  try{
@@ -150,4 +186,6 @@ function renderEvents(items){
 }
 window.addEventListener('resize',()=>{const selected=el('metric').value;if(selected)draw(selected);});load();
 loadTasks();
+loadSystemResources();
+window.setInterval(loadSystemResources,15000);
 </script></body></html>

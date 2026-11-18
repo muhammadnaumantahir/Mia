@@ -40,7 +40,7 @@ The coordinator/runtime connects these existing layers; it is not an additional 
 | Computer operations | Browser, applications, files, documents and authorized OS workflows |
 | Research | Web research, repository inspection, PDFs, technical documentation and citations |
 | Memory | Persistent conversations, searchable local knowledge items, source provenance and trust labels |
-| Autonomous work | Planning, scheduling, monitoring, multi-step tasks and recovery |
+| Autonomous work | Evidence-backed task proposals, live resource monitoring and a governed task lifecycle; autonomous dispatch remains gated |
 | Self-programming | Discover gaps; reuse, adapt, compose, create, test, version and activate capabilities |
 | Evolution observatory | Day 0 to Day N timeline, benchmark trends, code lineage, layer health and experiment reports |
 
@@ -79,7 +79,7 @@ playwright install chromium
 
 The first transcription downloads the selected Faster-Whisper model into the local Mia data directory. The default is the multilingual `base` model, CPU int8, and two worker threads. Voice recognition is push-to-talk; no background microphone listener is started.
 
-Computer file access defaults to Mia's own `workspace` folder. To grant additional roots, add a semicolon-separated list to `.env`, for example `MIA_COMPUTER_ROOTS=D:/Projects;D:/Documents`. File writes require a preview, explicit approval and an exact payload match. Copy `config/applications.example.json` to `config/applications.json` to enable the Notepad/Calculator/File Explorer allowlist. Browser navigation uses an isolated profile; clicks need approval. See [Computer Access](docs/architecture/COMPUTER_ACCESS.md).
+Computer file access defaults to Mia's own `workspace` folder. The optional computer extra includes Playwright and psutil for browser automation and CPU/RAM inspection. To grant additional roots, add a semicolon-separated list to `.env`, for example `MIA_COMPUTER_ROOTS=D:/Projects;D:/Documents`. File writes require a preview, explicit approval and an exact payload match. Copy `config/applications.example.json` to `config/applications.json` to enable the Notepad/Calculator/File Explorer allowlist. Browser navigation uses an isolated profile; clicks need approval. See [Computer Access](docs/architecture/COMPUTER_ACCESS.md).
 
 Open Mia at http://127.0.0.1:8765/assistant and the Evolution Observatory at http://127.0.0.1:8765/.
 
