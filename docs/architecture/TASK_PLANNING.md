@@ -32,6 +32,18 @@ governed executor, operation timeouts, OS isolation, authentication boundary,
 and cross-platform verification are in place.
 
 
+## Task Desk
+
+Open the **Task Desk** from the assistant sidebar. Enter an objective and optional
+evidence to create model-generated proposals, or create the built-in CPU/RAM
+read-only check. Proposals remain in the proposed state until the owner approves
+or rejects them. The planner does not assign executable tool contracts to its
+generated task descriptions.
+
+The Task Desk displays only an Execute action when task metadata explicitly
+names a currently registered tool whose mode is read. Other approved proposals
+remain reviewable backlog items and are not converted into commands.
+
 ## Manual approved-task execution
 
 A task may be executed through POST /api/tasks/{task_id}/execute only after
