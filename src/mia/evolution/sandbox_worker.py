@@ -36,6 +36,10 @@ _FORBIDDEN_IMPORTS = {
     "tempfile",
     "urllib",
     "webbrowser",
+    "datetime",
+    "random",
+    "secrets",
+    "time",
 }
 _FORBIDDEN_CALLS = {
     "__import__",

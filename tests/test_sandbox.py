@@ -1,10 +1,11 @@
+import hashlib
 import json
 import os
 import subprocess
 
 import pytest
 
-from mia.evolution.sandbox import DockerSandboxRunner, SandboxUnavailableError
+from mia.evolution.sandbox import DockerSandboxRunner, SandboxExecutionError, SandboxUnavailableError
 from mia.evolution.sandbox_worker import _security_findings
 
 
@@ -180,3 +181,67 @@ def test_worker_security_policy_blocks_builtin_file_access_and_interpreter_refle
 
     assert "forbidden dynamic call: open" in direct_findings
     assert "forbidden interpreter reference: __builtins__" in builtin_findings
+
+
+
+def test_docker_sandbox_executes_capability_in_a_separate_restricted_container():
+    class CapabilityDocker(FakeDocker):
+        def __init__(self):
+            super().__init__()
+            self.stdin_payload = None
+
+        def __call__(self, command, **kwargs):
+            if command[1:3] == ["image", "inspect"]:
+                return super().__call__(command, **kwargs)
+            if command[1] == "run":
+                self.stdin_payload = kwargs.get("input")
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout=json.dumps({"ok": True, "result": {"answer": 42}}),
+                    stderr="",
+                )
+            return super().__call__(command, **kwargs)
+
+    docker = CapabilityDocker()
+    runner = DockerSandboxRunner(subprocess_run=docker)
+    source = "def run(input_data):\n    return {'answer': input_data['value'] + 1}\n"
+    source_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()
+
+    result = runner.execute_capability(
+        source_code=source,
+        source_sha256=source_hash,
+        input_data={"value": 41},
+    )
+
+    run_command = next(call[0] for call in docker.calls if call[0][1] == "run")
+    assert docker.stdin_payload == '{"value":41}'
+    assert "--network=none" in run_command
+    assert "--read-only" in run_command
+    assert "--cap-drop=ALL" in run_command
+    assert "--user=10001:10001" in run_command
+    assert "--entrypoint" in run_command
+    assert run_command[run_command.index("--entrypoint") + 1] == "python"
+    assert "--pids-limit=32" in run_command
+    assert "target=/candidate,readonly" in run_command[run_command.index("--mount") + 1]
+    assert result["result"] == {"answer": 42}
+    assert result["runner"] == "docker-capability-execution-v1"
+
+
+def test_capability_execution_rejects_input_over_limit_and_hash_mismatch():
+    runner = DockerSandboxRunner(subprocess_run=FakeDocker())
+    source = "def run(input_data):\n    return {}\n"
+    source_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()
+
+    with pytest.raises(ValueError, match="32 KB"):
+        runner.execute_capability(
+            source_code=source,
+            source_sha256=source_hash,
+            input_data={"value": "x" * (32 * 1024)},
+        )
+    with pytest.raises(SandboxExecutionError, match="hash changed"):
+        runner.execute_capability(
+            source_code=source,
+            source_sha256="0" * 64,
+            input_data={},
+        )

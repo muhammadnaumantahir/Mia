@@ -299,3 +299,134 @@ class DockerSandboxRunner:
             evidence["container_stderr"] = stderr
         report["evidence"] = evidence
         return report
+
+    MAX_CAPABILITY_INPUT_BYTES = 32 * 1024
+    MAX_CAPABILITY_OUTPUT_BYTES = 64 * 1024
+
+    def execute_capability(
+        self,
+        *,
+        source_code: str,
+        source_sha256: str,
+        input_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Run a registered pure-data capability once in a fresh Docker container.
+
+        Only the hash-verified candidate source is mounted. Input is JSON on
+        stdin; there are no host paths, credentials, network access or runtime
+        tool handles in the container.
+        """
+        source_bytes = source_code.encode("utf-8")
+        if not source_bytes or len(source_bytes) > self.MAX_SOURCE_BYTES:
+            raise ValueError("capability source must be 1-512 KB")
+        actual_source_hash = hashlib.sha256(source_bytes).hexdigest()
+        if actual_source_hash != source_sha256:
+            raise SandboxExecutionError("Capability source hash changed before execution")
+        if not isinstance(input_data, dict):
+            raise ValueError("capability input_data must be an object")
+        try:
+            input_json = json.dumps(
+                input_data,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError("capability input_data must contain JSON values only") from exc
+        if len(input_json.encode("utf-8")) > self.MAX_CAPABILITY_INPUT_BYTES:
+            raise ValueError("capability input_data exceeds 32 KB")
+
+        image_id = self._image_id()
+        container_name = f"mia-capability-{uuid.uuid4().hex[:16]}"
+        with tempfile.TemporaryDirectory(prefix="mia-capability-") as temporary:
+            staging = Path(temporary).resolve()
+            staging.chmod(0o755)
+            candidate_path = staging / "candidate.py"
+            candidate_path.write_bytes(source_bytes)
+            candidate_path.chmod(0o444)
+            mount_spec = (
+                f"type=bind,source={staging.as_posix()},target=/candidate,readonly"
+            )
+            command = [
+                self.docker_executable,
+                "run",
+                "--rm",
+                "--pull=never",
+                "--name",
+                container_name,
+                "--network=none",
+                "--ipc=none",
+                "--cgroupns=private",
+                "--init",
+                "--read-only",
+                "--cap-drop=ALL",
+                "--security-opt=no-new-privileges:true",
+                "--pids-limit=32",
+                f"--memory={self.memory_limit}",
+                f"--memory-swap={self.memory_limit}",
+                f"--cpus={self.cpu_limit}",
+                "--ulimit=nofile=128:128",
+                "--user=10001:10001",
+                "--tmpfs",
+                "/tmp:rw,nosuid,nodev,noexec,size=16m",
+                "--mount",
+                mount_spec,
+                "--workdir=/opt/mia",
+                "--env",
+                "HOME=/tmp",
+                "--env",
+                "PYTHONDONTWRITEBYTECODE=1",
+                "--env",
+                "PYTHONPATH=/candidate",
+                "--env",
+                "MIA_CAPABILITY_SOURCE=/candidate/candidate.py",
+                "--entrypoint",
+                "python",
+                image_id,
+                "-m",
+                "mia.evolution.capability_worker",
+            ]
+            try:
+                result = self._run(
+                    command,
+                    input=input_json,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as exc:
+                self._remove_container(container_name)
+                raise SandboxExecutionError(
+                    "Capability execution exceeded its 60-second time limit"
+                ) from exc
+            except FileNotFoundError as exc:
+                raise SandboxUnavailableError("Docker executable disappeared") from exc
+
+        stdout = result.stdout or ""
+        if len(stdout.encode("utf-8")) > self.MAX_CAPABILITY_OUTPUT_BYTES:
+            raise SandboxExecutionError("Capability output exceeded 64 KB")
+        if result.returncode != 0:
+            raise SandboxExecutionError(
+                "Isolated capability worker exited without a successful result"
+            )
+        try:
+            report = json.loads(stdout)
+        except json.JSONDecodeError as exc:
+            raise SandboxExecutionError(
+                "Capability worker did not return valid JSON"
+            ) from exc
+        if (
+            not isinstance(report, dict)
+            or set(report) != {"ok", "result"}
+            or report["ok"] is not True
+            or not isinstance(report["result"], dict)
+        ):
+            raise SandboxExecutionError("Capability worker returned an invalid result contract")
+        return {
+            "result": report["result"],
+            "source_sha256": actual_source_hash,
+            "image_id": image_id,
+            "runner": "docker-capability-execution-v1",
+        }
+
