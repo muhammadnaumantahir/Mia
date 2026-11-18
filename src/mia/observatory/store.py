@@ -512,6 +512,225 @@ class ObservatoryStore:
             """, (experiment_id,)).fetchall()
         return [dict(row) for row in rows]
 
+    def build_experiment_report(self, experiment_id: str) -> dict[str, Any] | None:
+        """Build an integrity-checked report from evidence tied to one experiment."""
+        with self._connection() as db:
+            experiment = db.execute(
+                "SELECT * FROM experiments WHERE experiment_id = ?",
+                (experiment_id,),
+            ).fetchone()
+            if experiment is None:
+                return None
+            baseline_row = db.execute(
+                """
+                SELECT captured_at, manifest_sha256, manifest_json
+                FROM experiment_baselines WHERE experiment_id = ?
+                """,
+                (experiment_id,),
+            ).fetchone()
+            snapshot_rows = db.execute(
+                """
+                SELECT * FROM daily_snapshots
+                WHERE experiment_id = ? ORDER BY day_index
+                """,
+                (experiment_id,),
+            ).fetchall()
+            event_rows = db.execute(
+                """
+                SELECT * FROM events WHERE experiment_id = ?
+                ORDER BY occurred_at, event_id
+                """,
+                (experiment_id,),
+            ).fetchall()
+            metric_rows = db.execute(
+                """
+                SELECT * FROM metric_samples WHERE experiment_id = ?
+                ORDER BY day_index, occurred_at, sample_id
+                """,
+                (experiment_id,),
+            ).fetchall()
+
+        if baseline_row is None:
+            raise ValueError("experiment baseline is missing")
+        baseline_json = str(baseline_row["manifest_json"])
+        if sha256_text(baseline_json) != baseline_row["manifest_sha256"]:
+            raise ValueError("stored Day 0 baseline hash does not match its manifest")
+        try:
+            baseline_manifest = json.loads(baseline_json)
+        except json.JSONDecodeError as exc:
+            raise ValueError("stored Day 0 baseline manifest is invalid") from exc
+
+        snapshots: list[dict[str, Any]] = []
+        for row in snapshot_rows:
+            snapshot_json = str(row["snapshot_json"])
+            if sha256_text(snapshot_json) != row["manifest_sha256"]:
+                raise ValueError(
+                    f"stored Day {row['day_index']} snapshot hash does not match its evidence"
+                )
+            try:
+                evidence = json.loads(snapshot_json)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"stored Day {row['day_index']} snapshot is invalid"
+                ) from exc
+            if (
+                evidence.get("day_index") != int(row["day_index"])
+                or evidence.get("source_commit") != row["source_commit"]
+            ):
+                raise ValueError(
+                    f"stored Day {row['day_index']} snapshot metadata is inconsistent"
+                )
+            snapshots.append({
+                "snapshot_id": row["snapshot_id"],
+                "day_index": int(row["day_index"]),
+                "captured_at": row["captured_at"],
+                "source_commit": row["source_commit"],
+                "manifest_sha256": row["manifest_sha256"],
+                "evidence": evidence,
+            })
+
+        events: list[dict[str, Any]] = []
+        unavailable_days: set[int] = set()
+        event_counts: dict[str, int] = {}
+        for row in event_rows:
+            item = dict(row)
+            try:
+                payload = json.loads(item["payload_json"])
+            except json.JSONDecodeError as exc:
+                raise ValueError("stored experiment event payload is invalid") from exc
+            item["payload"] = payload
+            events.append(item)
+            event_counts[item["event_type"]] = event_counts.get(item["event_type"], 0) + 1
+            if item["event_type"] == "daily_snapshots_unavailable":
+                days = payload.get("missing_day_indices", [])
+                if isinstance(days, list):
+                    unavailable_days.update(
+                        day for day in days
+                        if isinstance(day, int) and not isinstance(day, bool)
+                        and 1 <= day <= int(experiment["planned_days"])
+                    )
+
+        metrics: list[dict[str, Any]] = []
+        metric_series: dict[str, list[dict[str, Any]]] = {}
+        for row in metric_rows:
+            item = dict(row)
+            try:
+                item["context"] = json.loads(item.pop("context_json"))
+            except json.JSONDecodeError as exc:
+                raise ValueError("stored experiment metric context is invalid") from exc
+            metrics.append(item)
+            metric_series.setdefault(item["metric_name"], []).append({
+                "day_index": item["day_index"],
+                "value": item["value"],
+                "unit": item["unit"],
+                "benchmark_id": item["benchmark_id"],
+                "occurred_at": item["occurred_at"],
+            })
+
+        planned_days = int(experiment["planned_days"])
+        recorded_days = sorted({item["day_index"] for item in snapshots})
+        captured_daily_days = set(recorded_days).difference({0})
+        missing_days = set(range(1, planned_days + 1)).difference(captured_daily_days)
+        unavailable_days.intersection_update(missing_days)
+        unaccounted_days = sorted(missing_days.difference(unavailable_days))
+        final_snapshot = next(
+            (item for item in snapshots if item["day_index"] == planned_days),
+            None,
+        )
+        latest_snapshot = snapshots[-1] if snapshots else None
+        status = str(experiment["status"])
+        if status == "completed" and final_snapshot is None:
+            raise ValueError(
+                "experiment is marked completed but its final planned-day snapshot is missing"
+            )
+
+        comparison_snapshot = final_snapshot if status == "completed" else latest_snapshot
+        baseline_results = baseline_manifest.get("baseline_results", {})
+        comparison_results = (
+            comparison_snapshot["evidence"].get("verification", {})
+            if comparison_snapshot else {}
+        )
+
+        def pass_rate(results: dict[str, Any]) -> float | None:
+            total = results.get("tests")
+            passed = results.get("passed")
+            if not isinstance(total, int) or total <= 0 or not isinstance(passed, int):
+                return None
+            return passed / total * 100.0
+
+        baseline_rate = pass_rate(baseline_results)
+        comparison_rate = pass_rate(comparison_results)
+        delta_rate = (
+            comparison_rate - baseline_rate
+            if baseline_rate is not None and comparison_rate is not None
+            else None
+        )
+
+        if status == "completed":
+            conclusion = "completed"
+        elif status == "incomplete":
+            conclusion = "incomplete"
+        elif status == "running":
+            conclusion = "in_progress"
+        else:
+            conclusion = "not_started"
+
+        return {
+            "experiment": {
+                "experiment_id": experiment_id,
+                "name": experiment["name"],
+                "status": status,
+                "conclusion": conclusion,
+                "planned_days": planned_days,
+                "created_at": experiment["created_at"],
+                "started_at": experiment["started_at"],
+                "completed_at": experiment["completed_at"],
+            },
+            "report_ready": status in {"completed", "incomplete"},
+            "baseline": {
+                "captured_at": baseline_row["captured_at"],
+                "sha256": baseline_row["manifest_sha256"],
+                "manifest": baseline_manifest,
+            },
+            "days": {
+                "recorded": recorded_days,
+                "missing": sorted(missing_days),
+                "unavailable": sorted(unavailable_days),
+                "unaccounted": unaccounted_days,
+                "latest_recorded": latest_snapshot["day_index"] if latest_snapshot else 0,
+                "final_snapshot_present": final_snapshot is not None,
+            },
+            "comparison": {
+                "compared_day": comparison_snapshot["day_index"] if comparison_snapshot else None,
+                "baseline_tests": baseline_results,
+                "latest_or_final_tests": comparison_results,
+                "baseline_test_pass_rate": baseline_rate,
+                "latest_or_final_test_pass_rate": comparison_rate,
+                "test_pass_rate_change_points": delta_rate,
+                "comparison_is_final": status == "completed" and final_snapshot is not None,
+            },
+            "snapshots": snapshots,
+            "metrics": metrics,
+            "metric_series": metric_series,
+            "events": events,
+            "event_counts": event_counts,
+            "capability_attribution": {
+                "available": False,
+                "reason": (
+                    "Capability versions are stored in a separate registry and are not "
+                    "linked to experiment IDs; they are not attributed by time alone."
+                ),
+            },
+            "integrity": {
+                "baseline_verified": True,
+                "snapshots_verified": True,
+                "snapshot_count": len(snapshots),
+                "event_count": len(events),
+                "metric_count": len(metrics),
+            },
+        }
+
+
     def record_event(
         self,
         *,

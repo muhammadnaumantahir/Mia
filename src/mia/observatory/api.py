@@ -793,6 +793,20 @@ def create_app(
             raise HTTPException(status_code=404, detail="Experiment not found")
         return {"items": observatory.list_snapshots(experiment_id)}
 
+    @app.get("/api/experiments/{experiment_id}/report")
+    def experiment_report(experiment_id: str) -> dict[str, Any]:
+        # This also closes runs that have passed their final capture window.
+        status = observatory.get_snapshot_status(experiment_id)
+        if status is None:
+            raise HTTPException(status_code=404, detail="Experiment not found")
+        try:
+            report = observatory.build_experiment_report(experiment_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        if report is None:
+            raise HTTPException(status_code=404, detail="Experiment not found")
+        return report
+
     @app.post("/api/experiments/prepare", status_code=201)
     async def prepare_experiment(item: ExperimentPreparation) -> dict[str, Any]:
         if not item.name.strip():
