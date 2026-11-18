@@ -245,3 +245,32 @@ def test_capability_execution_rejects_input_over_limit_and_hash_mismatch():
             source_sha256="0" * 64,
             input_data={},
         )
+
+
+
+def test_capability_docker_timeout_removes_container():
+    docker = FakeDocker(timeout=True)
+    runner = DockerSandboxRunner(subprocess_run=docker)
+    source = "def run(input_data):\\n    return {}\\n"
+    source_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()
+
+    with pytest.raises(SandboxExecutionError, match="60-second"):
+        runner.execute_capability(
+            source_code=source,
+            source_sha256=source_hash,
+            input_data={},
+        )
+    assert any(call[0][1:3] == ["rm", "--force"] for call in docker.calls)
+
+
+def test_capability_docker_rejects_non_worker_json_result():
+    runner = DockerSandboxRunner(subprocess_run=FakeDocker())
+    source = "def run(input_data):\\n    return {}\\n"
+    source_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()
+
+    with pytest.raises(SandboxExecutionError, match="invalid result contract"):
+        runner.execute_capability(
+            source_code=source,
+            source_sha256=source_hash,
+            input_data={},
+        )

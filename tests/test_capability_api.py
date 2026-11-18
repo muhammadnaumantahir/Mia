@@ -442,11 +442,11 @@ def test_capability_execution_respects_emergency_stop_and_resource_pressure(
 
 
 def _register_permission_free_capability(client, capability_id="boundary-capability"):
-    source = "def run(input_data):\\n    return {'echo': input_data.get('value', 0)}\\n"
+    source = "def run(input_data):\n    return {'echo': input_data.get('value', 0)}\n"
     tests = (
-        "from candidate import run\\n"
-        "def test_run():\\n"
-        "    assert run({'value': 3}) == {'echo': 3}\\n"
+        "from candidate import run\n"
+        "def test_run():\n"
+        "    assert run({'value': 3}) == {'echo': 3}\n"
     )
     created = _create_candidate(client, capability_id, source, tests)
     assert created.status_code == 201
@@ -495,7 +495,7 @@ def test_capability_execution_rejects_tampered_registered_source(tmp_path):
     _register_permission_free_capability(client, "tampered-execution-capability")
     candidate = store.get("tampered-execution-capability", "0.1.0")
     with open(candidate["source_path"], "w", encoding="utf-8") as source_file:
-        source_file.write("def run(input_data): return {'tampered': True}\\n")
+        source_file.write("def run(input_data): return {'tampered': True}\n")
 
     response = client.post(
         "/api/capabilities/tampered-execution-capability/0.1.0/execute",
