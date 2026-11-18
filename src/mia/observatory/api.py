@@ -2082,7 +2082,14 @@ def create_app(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
         try:
-            outcome = await app.state.task_tool_executor.execute(claimed)
+            def should_continue() -> bool:
+                current = durable_tasks.get_task(task_id)
+                return current is not None and current["status"] == "running"
+
+            outcome = await app.state.task_tool_executor.execute(
+                claimed,
+                should_continue=should_continue,
+            )
         except asyncio.CancelledError:
             try:
                 durable_tasks.transition(
