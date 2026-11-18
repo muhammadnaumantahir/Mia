@@ -21,6 +21,7 @@ from mia.gateway.contracts import ModelRequest, PermanentProviderError, Transien
 from mia.gateway.factory import build_default_registry, paid_route_policy
 from mia.gateway.service import ModelGateway
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider
+from mia.memory.store import MemoryStore
 
 from .store import ObservatoryStore
 
@@ -82,6 +83,18 @@ class ChatInput(BaseModel):
     task_type: str = Field(default="chat", min_length=1, max_length=40)
     max_output_tokens: int = Field(default=1024, ge=1, le=8192)
     required_capabilities: set[str] = Field(default_factory=set)
+    conversation_id: str | None = Field(default=None, min_length=8, max_length=80)
+
+
+class MemoryItemInput(BaseModel):
+    kind: str = Field(default="note", min_length=1, max_length=40)
+    title: str = Field(min_length=1, max_length=200)
+    content: str = Field(min_length=1, max_length=1_000_000)
+    source_uri: str | None = Field(default=None, max_length=2000)
+    source_title: str | None = Field(default=None, max_length=300)
+    trust_level: str = Field(default="untrusted", max_length=20)
+    tags: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 def create_app(
@@ -91,6 +104,7 @@ def create_app(
     filesystem: FilesystemAdapter | None = None,
     approvals: ApprovalStore | None = None,
     application_launcher: ApplicationLauncher | None = None,
+    memory: MemoryStore | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -119,6 +133,8 @@ def create_app(
         approval_store,
     )
     app.state.application_launcher = app_launcher
+    memory_store = memory or MemoryStore(data_dir / "mia-memory.sqlite3")
+    app.state.memory = memory_store
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -411,6 +427,47 @@ def create_app(
             "audio_retained": False,
         }
 
+    @app.get("/api/conversations")
+    def conversations(limit: int = 50) -> dict[str, Any]:
+        return {"items": memory_store.list_conversations(limit)}
+
+    @app.get("/api/conversations/{conversation_id}")
+    def conversation(conversation_id: str) -> dict[str, Any]:
+        known = {
+            item["conversation_id"]
+            for item in memory_store.list_conversations(200)
+        }
+        if conversation_id not in known:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        return {
+            "conversation_id": conversation_id,
+            "messages": memory_store.get_messages(conversation_id, limit=50),
+        }
+
+    @app.delete("/api/conversations/{conversation_id}")
+    def delete_conversation(conversation_id: str) -> dict[str, bool]:
+        return {"deleted": memory_store.delete_conversation(conversation_id)}
+
+    @app.get("/api/memory/items")
+    def memory_items(limit: int = 100) -> dict[str, Any]:
+        return {"items": memory_store.list_items(limit)}
+
+    @app.get("/api/memory/search")
+    def memory_search(q: str, limit: int = 20) -> dict[str, Any]:
+        return {"items": memory_store.search(q, limit)}
+
+    @app.post("/api/memory/items", status_code=201)
+    def add_memory_item(item: MemoryItemInput) -> dict[str, str]:
+        try:
+            item_id = memory_store.add_item(**item.model_dump())
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"item_id": item_id}
+
+    @app.delete("/api/memory/items/{item_id}")
+    def delete_memory_item(item_id: str) -> dict[str, bool]:
+        return {"deleted": memory_store.delete_item(item_id)}
+
     @app.get("/api/gateway/providers")
     async def providers() -> dict[str, Any]:
         results = []
@@ -448,6 +505,16 @@ def create_app(
     @app.post("/api/gateway/chat")
     async def chat(item: ChatInput) -> dict[str, Any]:
         try:
+            conversation_id = memory_store.ensure_conversation(item.conversation_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        memory_store.append_message(conversation_id, "user", item.prompt)
+        conversation_messages = memory_store.get_messages(
+            conversation_id,
+            limit=12,
+        )
+        try:
             candidates = await model_gateway.discover_models()
             result = await model_gateway.complete(
                 ModelRequest(
@@ -456,6 +523,7 @@ def create_app(
                     estimated_input_tokens=max(1, len(item.prompt) // 4),
                     max_output_tokens=item.max_output_tokens,
                     required_capabilities=frozenset(item.required_capabilities),
+                    messages=tuple(conversation_messages),
                 ),
                 candidates,
                 paid_route_policy(),
@@ -469,6 +537,7 @@ def create_app(
         except KeyError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
+        memory_store.append_message(conversation_id, "assistant", result.content)
         observatory.record_event(
             category="ai_gateway",
             event_type="completion",
@@ -478,6 +547,7 @@ def create_app(
                 "provider_id": result.provider_id,
                 "model_id": result.model_id,
                 "attempted_candidates": list(result.attempted_candidates),
+                "conversation_id": conversation_id,
             },
         )
         return {
@@ -485,6 +555,7 @@ def create_app(
             "model_id": result.model_id,
             "content": result.content,
             "attempted_candidates": list(result.attempted_candidates),
+            "conversation_id": conversation_id,
         }
 
     return app
