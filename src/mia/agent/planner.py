@@ -78,6 +78,12 @@ class TaskPlanner:
             priority = item["priority"]
             if not all(isinstance(v, str) for v in (title, goal, risk, summary)):
                 raise PlanningError(f"Task {index + 1} contains invalid field types")
+            if (
+                not title.strip() or len(title) > 160
+                or not goal.strip() or len(goal) > 20000
+                or not summary.strip() or len(summary) > 1700
+            ):
+                raise PlanningError(f"Task {index + 1} contains oversized or empty text")
             if not isinstance(priority, int) or isinstance(priority, bool) or not 0 <= priority <= 100:
                 raise PlanningError(f"Task {index + 1} priority must be 0-100")
             if risk not in {"low", "medium", "high"}:

@@ -16,8 +16,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from mia.agent.discovery import DiscoveryFinding, WorkloadDiscovery
-from mia.agent.resources import ResourceMonitor
 from mia.agent.planner import PlanningError, TaskPlanner
+from mia.agent.resources import ResourceMonitor
 from mia.agent.tasks import AutonomyPolicy, TaskCoordinator, TaskStore, TaskTransitionError
 from mia.agent.tools import ToolRegistry, ToolResult
 from mia.computer.approvals import ApprovalError, ApprovalStore
