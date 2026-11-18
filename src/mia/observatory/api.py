@@ -22,6 +22,7 @@ from mia.gateway.factory import build_default_registry, paid_route_policy
 from mia.gateway.service import ModelGateway
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider
 from mia.memory.store import MemoryStore
+from mia.knowledge.document_ingestion import DocumentIngestor, DocumentIngestionError
 
 from .store import ObservatoryStore
 
@@ -135,6 +136,8 @@ def create_app(
     app.state.application_launcher = app_launcher
     memory_store = memory or MemoryStore(data_dir / "mia-memory.sqlite3")
     app.state.memory = memory_store
+    document_ingestor = DocumentIngestor(computer_files, memory_store)
+    app.state.document_ingestor = document_ingestor
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -447,6 +450,36 @@ def create_app(
     @app.delete("/api/conversations/{conversation_id}")
     def delete_conversation(conversation_id: str) -> dict[str, bool]:
         return {"deleted": memory_store.delete_conversation(conversation_id)}
+
+    @app.post("/api/knowledge/ingest", status_code=201)
+    def ingest_document(
+        root_id: str,
+        relative_path: str,
+    ) -> dict[str, Any]:
+        try:
+            result = document_ingestor.ingest(root_id, relative_path)
+        except FilesystemAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except DocumentIngestionError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        observatory.record_event(
+            category="knowledge",
+            event_type="document_ingested",
+            summary=f"Imported {result['title']} into local knowledge",
+            outcome="success",
+            layer_id="SPS-04",
+            payload={
+                "item_id": result["item_id"],
+                "file_sha256": result["file_sha256"],
+                "trust_level": "untrusted",
+            },
+        )
+        return result
 
     @app.get("/api/memory/items")
     def memory_items(limit: int = 100) -> dict[str, Any]:
