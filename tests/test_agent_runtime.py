@@ -106,3 +106,66 @@ def test_background_worker_records_unexpected_cycle_error_and_stops_cleanly(tmp_
         "reason": "unexpected_runtime_error",
         "error_type": "RuntimeError",
     }
+
+
+def test_runtime_stop_during_resource_sampling_prevents_task_claim(tmp_path):
+    tasks = TaskStore(tmp_path / "tasks.sqlite3")
+    task_id = tasks.create_task(
+        title="Stay queued during stop",
+        goal="Do not claim after the owner pauses the runtime.",
+        source="internal_test",
+    )
+    tasks.transition(task_id, "approved", reason="Owner approved task")
+    runtime_ref = {}
+
+    class PausingMonitor:
+        def snapshot(self):
+            runtime_ref["runtime"].pause()
+            return {"cpu_percent": 10, "memory_percent": 20}
+
+    runtime = AutonomyRuntime(
+        tasks=tasks,
+        monitor=PausingMonitor(),
+        policy=AutonomyPolicy(enabled=True),
+        executor=lambda task: {"unexpected": True},
+    )
+    runtime_ref["runtime"] = runtime
+
+    result = runtime.run_cycle()
+
+    assert result == {"status": "paused", "reason": "runtime_stopped"}
+    assert tasks.get_task(task_id)["status"] == "approved"
+
+
+def test_runtime_rechecks_emergency_stop_after_task_claim_before_executor(tmp_path):
+    tasks = TaskStore(tmp_path / "tasks.sqlite3")
+    task_id = tasks.create_task(
+        title="Stop before handler",
+        goal="Do not invoke the handler if emergency stop arrives during claim.",
+        source="internal_test",
+    )
+    tasks.transition(task_id, "approved", reason="Owner approved task")
+    executed = []
+    runtime_ref = {}
+
+    def stop_during_validation(task):
+        runtime_ref["runtime"].update_policy(
+            AutonomyPolicy(enabled=True, emergency_stop=True)
+        )
+        return True
+
+    runtime = AutonomyRuntime(
+        tasks=tasks,
+        monitor=ResourceMonitor(psutil_module=FakePsutil()),
+        policy=AutonomyPolicy(enabled=True),
+        executor=lambda task: executed.append(task) or {"unexpected": True},
+        task_validator=stop_during_validation,
+    )
+    runtime_ref["runtime"] = runtime
+
+    result = runtime.run_cycle()
+
+    assert result["status"] == "failed"
+    assert executed == []
+    assert tasks.get_task(task_id)["status"] == "failed"
+    assert tasks.get_task(task_id)["last_error"] == "RuntimeError"
