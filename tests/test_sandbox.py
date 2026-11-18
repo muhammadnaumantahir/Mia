@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 
 import pytest
@@ -37,12 +38,13 @@ class FakeDocker:
             mount = command[command.index("--mount") + 1]
             source_dir = mount.split("source=", 1)[1].split(",target=", 1)[0]
             staging = Path(source_dir)
-            assert staging.stat().st_mode & 0o111
-            assert (staging / "candidate.py").stat().st_mode & 0o444
-            assert not ((staging / "candidate.py").stat().st_mode & 0o222)
-            if (staging / "test_candidate.py").exists():
-                assert (staging / "test_candidate.py").stat().st_mode & 0o444
-                assert not ((staging / "test_candidate.py").stat().st_mode & 0o222)
+            if os.name != "nt":
+                assert staging.stat().st_mode & 0o111
+                assert (staging / "candidate.py").stat().st_mode & 0o444
+                assert not ((staging / "candidate.py").stat().st_mode & 0o222)
+                if (staging / "test_candidate.py").exists():
+                    assert (staging / "test_candidate.py").stat().st_mode & 0o444
+                    assert not ((staging / "test_candidate.py").stat().st_mode & 0o222)
             if self.timeout:
                 raise subprocess.TimeoutExpired(command, kwargs["timeout"])
             return subprocess.CompletedProcess(
