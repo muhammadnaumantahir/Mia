@@ -124,3 +124,17 @@ Source: https://github.com/microsoft/playwright-python
 - Model weights, datasets, TTS voices and other downloaded assets require separate license checks.
 - Avoid installing multiple full agent frameworks when a single adapter or package is sufficient.
 - Record all modified upstream files and retain mandatory notices.
+
+
+### 11. Kokoro-82M — local TTS candidate
+
+- Model card: https://huggingface.co/hexgrad/Kokoro-82M
+- License shown on the current model card: Apache-2.0 for the model weights.
+- Python package repository: https://github.com/hexgrad/kokoro
+- The current package metadata declares Python >=3.10 and <3.14, but includes PyTorch and Transformers dependencies. This is likely heavier than Mia's lightweight core.
+- Reuse decision: **Evaluate as an optional TTS adapter** and benchmark CPU latency, memory, voice quality, pronunciation and voice-asset licensing. Do not install it in the core environment by default.
+- The model's available languages/voices do not establish Urdu suitability; test the selected voice and language before promising Urdu speech.
+
+Sources:
+- https://huggingface.co/hexgrad/Kokoro-82M
+- https://github.com/hexgrad/kokoro/blob/main/pyproject.toml
