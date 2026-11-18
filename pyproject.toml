@@ -47,7 +47,7 @@ mia-credentials = "mia.credentials_cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"mia.observatory" = ["dashboard.html"]
+"mia.observatory" = ["dashboard.html", "assistant.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
