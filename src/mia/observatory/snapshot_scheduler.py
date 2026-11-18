@@ -67,8 +67,8 @@ class ExperimentSnapshotScheduler:
             if due is None or not due["due"]:
                 continue
             now = time.monotonic()
-            last_attempt = self._last_attempt.get(experiment_id, 0.0)
-            if now - last_attempt < self.retry_seconds:
+            last_attempt = self._last_attempt.get(experiment_id)
+            if last_attempt is not None and now - last_attempt < self.retry_seconds:
                 continue
             self._last_attempt[experiment_id] = now
 

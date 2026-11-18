@@ -1,6 +1,5 @@
 import json
 
-import pytest
 from fastapi.testclient import TestClient
 
 from mia.evolution.capabilities import CapabilityStore

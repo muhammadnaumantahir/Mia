@@ -6,7 +6,8 @@ an enabled policy; every cycle samples local resources before claiming a task.
 from __future__ import annotations
 
 import threading
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from .resources import ResourceMonitor
 from .tasks import AutonomyPolicy, RuntimeLoad, TaskCoordinator, TaskStore

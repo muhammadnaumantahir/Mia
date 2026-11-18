@@ -19,7 +19,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-
 _CAPABILITY_ID = re.compile(r"^[a-z][a-z0-9._-]{1,63}$")
 _VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.-]+)?$")
 _SOURCE_KINDS = {"generated", "adapted", "reused", "composed"}

@@ -11,7 +11,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
 _FORBIDDEN_IMPORTS = {
     "builtins",
     "ctypes",

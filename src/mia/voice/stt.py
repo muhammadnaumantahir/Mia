@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import os
 import tempfile
-from threading import Lock
 from pathlib import Path
+from threading import Lock
 from typing import Protocol
 
 

@@ -1,8 +1,20 @@
+import io
+import wave
 from pathlib import Path
 
 import pytest
 
 from mia.voice.tts import Pyttsx3SpeechSynthesizer, SpeechSynthesisError
+
+
+def _minimal_wav() -> bytes:
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as writer:
+        writer.setnchannels(1)
+        writer.setsampwidth(2)
+        writer.setframerate(16000)
+        writer.writeframes(b"\x00\x00" * 160)
+    return buffer.getvalue()
 
 
 class FakeVoice:
@@ -31,9 +43,7 @@ class FakeEngine:
 
     def save_to_file(self, text, filename):
         self.saved_text = text
-        Path(filename).write_bytes(
-            bytes([82, 73, 70, 70, 0, 0, 0, 0, 87, 65, 86, 69]) + b"fake audio"
-        )
+        Path(filename).write_bytes(_minimal_wav())
 
     def runAndWait(self):
         return None

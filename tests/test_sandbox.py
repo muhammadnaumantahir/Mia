@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from mia.evolution.sandbox import DockerSandboxRunner, SandboxExecutionError, SandboxUnavailableError
+from mia.evolution.sandbox import (
+    DockerSandboxRunner,
+    SandboxExecutionError,
+    SandboxUnavailableError,
+)
 from mia.evolution.sandbox_worker import _security_findings
 
 
@@ -174,8 +178,8 @@ def test_candidate_tests_are_skipped_after_security_findings():
 
 
 def test_worker_security_policy_blocks_builtin_file_access_and_interpreter_reflection():
-    direct = "def run(data): return open('/tmp/candidate.py').read()\\n"
-    builtin = "def run(data): return __builtins__['open']('/tmp/candidate.py').read()\\n"
+    direct = "def run(data): return open('/tmp/candidate.py').read()\n"
+    builtin = "def run(data): return __builtins__['open']('/tmp/candidate.py').read()\n"
 
     direct_findings = _security_findings(direct)
     builtin_findings = _security_findings(builtin)
@@ -195,6 +199,7 @@ def test_docker_sandbox_executes_capability_in_a_separate_restricted_container()
             if command[1:3] == ["image", "inspect"]:
                 return super().__call__(command, **kwargs)
             if command[1] == "run":
+                self.calls.append((command, kwargs))
                 self.stdin_payload = kwargs.get("input")
                 return subprocess.CompletedProcess(
                     command,

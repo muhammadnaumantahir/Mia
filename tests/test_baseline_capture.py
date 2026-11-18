@@ -9,7 +9,6 @@ from mia.observatory.api import create_app
 from mia.observatory.baseline import BaselineCaptureError, capture_baseline_manifest
 from mia.observatory.store import ObservatoryStore
 
-
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
 
 
@@ -327,8 +326,8 @@ class FakeDailyResources:
 
 
 def test_daily_snapshot_is_captured_on_host_and_not_client_supplied(tmp_path):
-    from datetime import UTC, datetime, timedelta
     import sqlite3
+    from datetime import UTC, datetime, timedelta
 
     store = ObservatoryStore(tmp_path / "daily.sqlite3")
     client = TestClient(
@@ -384,8 +383,8 @@ def test_daily_snapshot_is_captured_on_host_and_not_client_supplied(tmp_path):
 
 
 def test_daily_snapshot_does_not_fill_missing_days_with_fake_values(tmp_path):
-    from datetime import UTC, datetime, timedelta
     import sqlite3
+    from datetime import UTC, datetime, timedelta
 
     store = ObservatoryStore(tmp_path / "missed-days.sqlite3")
     client = TestClient(
@@ -447,8 +446,8 @@ def test_daily_snapshot_blocks_configuration_drift_from_day_zero(tmp_path):
     )
     experiment_id = prepared.json()["experiment_id"]
     client.post(f"/api/experiments/{experiment_id}/start")
-    from datetime import UTC, datetime, timedelta
     import sqlite3
+    from datetime import UTC, datetime, timedelta
 
     started_at = (datetime.now(UTC) - timedelta(days=1, hours=1)).isoformat()
     with sqlite3.connect(store.database_path) as db:

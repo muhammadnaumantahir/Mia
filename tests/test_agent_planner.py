@@ -183,7 +183,6 @@ async def test_planner_rejects_unregistered_or_preview_execution_tools(tmp_path)
 @pytest.mark.asyncio
 async def test_planner_accepts_short_sequence_of_registered_read_tools(tmp_path):
     registry = make_read_registry()
-    from mia.agent.tools import ToolRegistry
 
     registry.register(
         name="system.list_processes",

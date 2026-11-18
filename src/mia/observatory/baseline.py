@@ -16,7 +16,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-
 BENCHMARK_SUITE_ID = "mia-foundation-v2"
 CONFIG_PATHS = (
     Path("pyproject.toml"),

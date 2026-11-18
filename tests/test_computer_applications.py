@@ -1,9 +1,9 @@
-from mia.computer.approvals import ApprovalError, ApprovalStore
 from mia.computer.applications import (
     ApplicationDefinition,
-    ApplicationLaunchError,
     ApplicationLauncher,
+    ApplicationLaunchError,
 )
+from mia.computer.approvals import ApprovalError, ApprovalStore
 
 
 def test_application_launch_requires_approval_and_fixed_catalog(tmp_path, monkeypatch):

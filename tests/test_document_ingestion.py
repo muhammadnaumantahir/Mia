@@ -5,7 +5,7 @@ import pytest
 
 from mia.computer.approvals import ApprovalStore
 from mia.computer.filesystem import FilesystemAdapter
-from mia.knowledge.document_ingestion import DocumentIngestor, DocumentIngestionError
+from mia.knowledge.document_ingestion import DocumentIngestionError, DocumentIngestor
 from mia.memory.store import MemoryStore
 
 
