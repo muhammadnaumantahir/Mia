@@ -655,7 +655,15 @@ class ObservatoryStore:
                 "experiment is marked completed but its final planned-day snapshot is missing"
             )
 
-        comparison_snapshot = final_snapshot if status == "completed" else latest_snapshot
+        comparison_snapshot = (
+            final_snapshot
+            if status == "completed"
+            else (
+                latest_snapshot
+                if latest_snapshot is not None and latest_snapshot["day_index"] > 0
+                else None
+            )
+        )
         baseline_results = baseline_manifest.get("baseline_results", {})
         comparison_results = (
             comparison_snapshot["evidence"].get("verification", {})

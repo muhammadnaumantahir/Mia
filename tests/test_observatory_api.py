@@ -174,6 +174,8 @@ def test_incomplete_experiment_report_never_claims_completion(tmp_path):
     assert report["days"]["unavailable"] == []
     assert report["days"]["unaccounted"] == [1]
     assert report["comparison"]["comparison_is_final"] is False
+    assert report["comparison"]["compared_day"] is None
+    assert report["comparison"]["latest_or_final_tests"] == {}
     assert report["comparison"]["latest_or_final_test_pass_rate"] is None
 
 
@@ -211,3 +213,27 @@ def test_report_api_rejects_tampered_snapshot_evidence(tmp_path):
 
     assert response.status_code == 500
     assert "snapshot hash" in response.json()["detail"]
+
+
+def test_report_api_rejects_tampered_day_zero_baseline(tmp_path):
+    import sqlite3
+
+    store = ObservatoryStore(tmp_path / "tampered-day-zero.sqlite3")
+    prepared = store.prepare_experiment(
+        name="Tampered baseline report",
+        baseline_manifest=_report_manifest(),
+        planned_days=1,
+    )
+    experiment_id = prepared["experiment_id"]
+    with sqlite3.connect(store.database_path) as db:
+        db.execute(
+            "UPDATE experiment_baselines SET manifest_json = ? WHERE experiment_id = ?",
+            ('{"tampered": true}', experiment_id),
+        )
+        db.commit()
+
+    client = TestClient(create_app(store))
+    response = client.get(f"/api/experiments/{experiment_id}/report")
+
+    assert response.status_code == 500
+    assert "baseline hash" in response.json()["detail"]
