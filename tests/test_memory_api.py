@@ -105,3 +105,31 @@ def test_chat_api_persists_and_reuses_conversation_id(tmp_path):
     assert second.json()["conversation_id"] == conversation_id
     assert len(memory.get_messages(conversation_id)) == 4
     assert len(client.get("/api/conversations").json()["items"]) == 1
+
+
+
+def test_memory_export_api_returns_checksummed_conversation_and_items(tmp_path):
+    memory = MemoryStore(tmp_path / "memory.sqlite3")
+    conversation_id = memory.ensure_conversation()
+    memory.append_message(conversation_id, "user", "Export this conversation")
+    memory.add_item(
+        kind="note",
+        title="Exportable note",
+        content="This item remains user-owned memory.",
+        trust_level="user",
+    )
+    client = TestClient(
+        create_app(
+            store=ObservatoryStore(tmp_path / "observatory.sqlite3"),
+            memory=memory,
+        )
+    )
+
+    response = client.get("/api/memory/export")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == 1
+    assert payload["conversations"][0]["conversation_id"] == conversation_id
+    assert payload["memory_items"][0]["title"] == "Exportable note"
+    assert len(payload["sha256"]) == 64
