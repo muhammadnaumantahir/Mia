@@ -317,9 +317,12 @@ class ObservatoryStore:
                 ) from exc
             if day_index == int(experiment["planned_days"]):
                 db.execute(
-                    "UPDATE experiments SET status = 'completed' "
-                    "WHERE experiment_id = ? AND status = 'running'",
-                    (experiment_id,),
+                    """
+                    UPDATE experiments
+                    SET status = 'completed', completed_at = ?
+                    WHERE experiment_id = ? AND status = 'running'
+                    """,
+                    (utc_now(), experiment_id),
                 )
         return snapshot_id
 
@@ -573,10 +576,18 @@ class ObservatoryStore:
                 raise ValueError(
                     f"stored Day {row['day_index']} snapshot is invalid"
                 ) from exc
-            if (
-                evidence.get("day_index") != int(row["day_index"])
-                or evidence.get("source_commit") != row["source_commit"]
-            ):
+            if int(row["day_index"]) == 0:
+                metadata_matches = (
+                    evidence == baseline_manifest
+                    and row["manifest_sha256"] == baseline_row["manifest_sha256"]
+                    and evidence.get("source_commit") == row["source_commit"]
+                )
+            else:
+                metadata_matches = (
+                    evidence.get("day_index") == int(row["day_index"])
+                    and evidence.get("source_commit") == row["source_commit"]
+                )
+            if not metadata_matches:
                 raise ValueError(
                     f"stored Day {row['day_index']} snapshot metadata is inconsistent"
                 )

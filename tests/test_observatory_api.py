@@ -64,8 +64,8 @@ def _report_manifest():
         },
         "baseline_results": {
             "tests": 10,
-            "passed": 9,
-            "failures": 1,
+            "passed": 10,
+            "failures": 0,
             "errors": 0,
             "skipped": 0,
             "ruff_passed": True,
@@ -131,9 +131,9 @@ def test_completed_experiment_report_compares_verified_day_zero_and_final(tmp_pa
     assert report["report_ready"] is True
     assert report["days"]["recorded"] == [0, 1]
     assert report["days"]["missing"] == []
-    assert report["comparison"]["baseline_test_pass_rate"] == 90.0
+    assert report["comparison"]["baseline_test_pass_rate"] == 100.0
     assert report["comparison"]["latest_or_final_test_pass_rate"] == 100.0
-    assert report["comparison"]["test_pass_rate_change_points"] == 10.0
+    assert report["comparison"]["test_pass_rate_change_points"] == 0.0
     assert report["comparison"]["comparison_is_final"] is True
     assert report["integrity"]["baseline_verified"] is True
     assert report["integrity"]["snapshots_verified"] is True
