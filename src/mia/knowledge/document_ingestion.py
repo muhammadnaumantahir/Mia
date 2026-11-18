@@ -80,16 +80,22 @@ class DocumentIngestor:
             with zipfile.ZipFile(io.BytesIO(raw)) as archive:
                 entries = archive.infolist()
                 if len(entries) > self.MAX_OFFICE_ARCHIVE_ENTRIES:
-                    raise DocumentIngestionError("Office document contains too many archive entries")
+                    raise DocumentIngestionError(
+                        "Office document contains too many archive entries"
+                    )
                 total_uncompressed = 0
                 for entry in entries:
                     if entry.flag_bits & 0x1:
-                        raise DocumentIngestionError("Encrypted Office archive entries are not supported")
+                        raise DocumentIngestionError(
+                            "Encrypted Office archive entries are not supported"
+                        )
                     if entry.file_size > self.MAX_OFFICE_MEMBER_BYTES:
                         raise DocumentIngestionError("Office archive entry exceeds the 64 MB limit")
                     total_uncompressed += entry.file_size
                     if total_uncompressed > self.MAX_OFFICE_TOTAL_BYTES:
-                        raise DocumentIngestionError("Office archive expands beyond the 128 MB limit")
+                        raise DocumentIngestionError(
+                            "Office archive expands beyond the 128 MB limit"
+                        )
                     if entry.file_size > 1024 * 1024:
                         if entry.compress_size == 0 or (
                             entry.file_size / entry.compress_size
