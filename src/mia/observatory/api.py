@@ -80,6 +80,13 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok", "service": "mia"}
 
+    @app.get("/assistant")
+    def assistant() -> FileResponse:
+        page = Path(__file__).resolve().parents[1] / "assistant.html"
+        if not page.exists():
+            raise HTTPException(status_code=404, detail="Assistant asset not found")
+        return FileResponse(page, media_type="text/html")
+
     @app.get("/")
     def dashboard() -> FileResponse:
         page = Path(__file__).with_name("dashboard.html")
