@@ -622,7 +622,13 @@ async function loadTasks(){
     const reject=document.createElement('button');reject.className='send';reject.textContent='Reject';reject.style.background='#452b2b';reject.style.color='#f3b4b4';
     reject.addEventListener('click',()=>changeTask(task.task_id,'reject','Rejected in task control'));
     actions.append(approve,reject);
-   }else if(['approved','running','waiting','failed'].includes(task.status)){
+   }else if(task.status==='failed'){
+    const retry=document.createElement('button');retry.className='send';retry.textContent='Re-approve retry';
+    retry.addEventListener('click',()=>changeTask(task.task_id,'approve','Owner reviewed the failed task and approved a retry'));
+    const cancel=document.createElement('button');cancel.className='send';cancel.textContent='Dismiss';cancel.style.background='#30393a';cancel.style.color='#d8e2dd';
+    cancel.addEventListener('click',()=>changeTask(task.task_id,'cancel','Dismissed failed task in task control'));
+    actions.append(retry,cancel);
+   }else if(['approved','running','waiting'].includes(task.status)){
     const cancel=document.createElement('button');cancel.className='send';cancel.textContent='Cancel';cancel.style.background='#30393a';cancel.style.color='#d8e2dd';
     cancel.addEventListener('click',()=>changeTask(task.task_id,'cancel','Cancelled in task control'));
     actions.append(cancel);

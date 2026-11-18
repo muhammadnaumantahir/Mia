@@ -53,3 +53,14 @@ event loop. Cancelling an awaiting request cannot forcibly terminate a
 synchronous function already running in its worker thread; handlers must
 remain read-only, bounded and internally timeout-aware. Untrusted generated
 source continues to run only through the Docker sandbox.
+
+
+## Restart recovery
+
+On application startup, any task still in the running state is treated as
+interrupted by the previous Mia process. It is atomically moved to failed and
+gets an append-only task event identifying startup recovery. Mia does not
+silently replay it: the Task Desk offers an explicit **Re-approve retry**
+action. Tasks waiting for an owner decision and tasks still approved are left
+unchanged. Run a single local Mia server process against the task database;
+multi-process lease coordination is not implemented.
