@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
+<title>Mia — Personal AI</title>
+<style>
+:root{font-family:Inter,Segoe UI,system-ui,sans-serif;color:#e9f2ef;background:#0a1112;font-synthesis:none}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 8% 0%,#13372d 0,transparent 34%),#0a1112}
+button,input,textarea{font:inherit}.layout{max-width:1440px;min-height:100vh;margin:auto;display:grid;grid-template-columns:260px 1fr}
+aside{padding:24px 18px;border-right:1px solid #203432;background:#0b1415b8;display:flex;flex-direction:column;gap:24px}
+.brand{display:flex;align-items:center;gap:12px}.logo{width:42px;height:42px;border-radius:14px;background:linear-gradient(145deg,#4ce0a8,#0b7257);display:grid;place-items:center;color:#05251b;font-size:22px;font-weight:850;box-shadow:0 10px 26px #16a87530}
+.brand strong{font-size:19px;letter-spacing:-.3px}.brand small{display:block;color:#82a198;margin-top:2px;font-size:11px}
+.nav{display:grid;gap:8px}.nav a{color:#9fb4ad;text-decoration:none;padding:11px 12px;border-radius:11px;font-size:13px;display:flex;align-items:center;gap:10px}.nav a.active,.nav a:hover{color:#d8f5e9;background:#183229}
+.sidecard{margin-top:auto;background:#101f1d;border:1px solid #29463c;border-radius:16px;padding:14px}.sidecard b{font-size:12px}.sidecard p{font-size:11px;line-height:1.5;color:#8da79e;margin:8px 0 0}
+main{min-width:0;display:flex;flex-direction:column;min-height:100vh}.top{height:70px;padding:0 30px;border-bottom:1px solid #203432;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.top .context{font-size:13px;color:#91a79f}.state{font-size:11px;color:#9ce7c4;border:1px solid #2d5b49;background:#11281e;border-radius:999px;padding:7px 11px}
+.content{width:min(900px,100%);margin:0 auto;padding:40px 28px 24px;display:flex;flex:1;flex-direction:column;min-height:0}
+.welcome{margin:auto auto 35px;text-align:center;max-width:580px}.orb{width:68px;height:68px;border-radius:23px;margin:0 auto 18px;background:radial-gradient(circle at 35% 25%,#73efc0,#087a5b 66%,#064232);box-shadow:0 12px 45px #18b47c33;display:grid;place-items:center;font-size:32px;color:#05271d}
+h1{font-size:34px;letter-spacing:-1.2px;margin:0 0 10px}.welcome p{color:#8fa79f;font-size:14px;line-height:1.6;margin:0}
+.messages{display:grid;gap:18px;width:100%;margin-bottom:25px}.message{display:flex;gap:11px;align-items:flex-start}.avatar{flex:0 0 30px;height:30px;border-radius:10px;background:#194333;color:#9bf1c8;display:grid;place-items:center;font-size:12px;font-weight:700}.message.user{justify-content:flex-end}.message.user .avatar{order:2;background:#273738;color:#c2d8d1}.bubble{max-width:min(78%,690px);border:1px solid #263b38;background:#111e1e;border-radius:4px 15px 15px 15px;padding:13px 15px;color:#dce9e4;font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}.message.user .bubble{background:#17342d;border-color:#285947;border-radius:15px 4px 15px 15px}
+.composer{border:1px solid #355047;background:#111c1d;border-radius:19px;padding:12px;box-shadow:0 14px 40px #0003}.composer:focus-within{border-color:#4b9d7b;box-shadow:0 0 0 3px #1d65462a}
+textarea{width:100%;resize:vertical;min-height:65px;max-height:180px;border:0;outline:0;background:transparent;color:#e7f1ec;padding:6px 7px;font-size:14px;line-height:1.5}textarea::placeholder{color:#718981}
+.composerfoot{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:5px 4px 0}.hint{font-size:11px;color:#748c84}.actions{display:flex;align-items:center;gap:8px}
+select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9px;padding:8px;font-size:11px}
+.send{border:0;border-radius:11px;padding:10px 16px;background:linear-gradient(135deg,#47daa1,#15845f);color:#06291e;font-weight:750;font-size:12px;cursor:pointer}.send:disabled{opacity:.5;cursor:wait}
+.bottomnote{text-align:center;font-size:10px;color:#627a72;line-height:1.5;margin:14px 0 0}
+@media(max-width:800px){.layout{grid-template-columns:1fr}aside{display:none}.top{padding:0 18px}.content{padding:30px 16px 18px}.welcome{margin-top:70px}.bubble{max-width:88%}}
+@media(max-width:440px){h1{font-size:29px}.composerfoot{align-items:flex-end}.hint{max-width:120px}}
+</style></head>
+<body><div class="layout">
+<aside>
+<div class="brand"><div class="logo">M</div><div><strong>Mia</strong><small>Your personal AI</small></div></div>
+<nav class="nav"><a class="active" href="/assistant">✳ <span>New conversation</span></a><a href="/"><span>◷</span><span>Evolution Observatory</span></a></nav>
+<div class="sidecard"><b>Local-first by design</b><p>Mia tries local models first. Cloud providers are optional, and paid routing remains disabled unless you explicitly configure it.</p></div>
+</aside>
+<main>
+<header class="top"><div class="context">Personal assistant <span style="color:#527d6c">/</span> Conversation</div><div class="state" id="providerState">Checking AI providers…</div></header>
+<section class="content">
+<div class="welcome" id="welcome"><div class="orb">✳</div><h1>What can I help with?</h1><p>Talk naturally, ask questions, explore ideas or plan a task. Mia will use an available model that meets the current cost and capability rules.</p></div>
+<div class="messages" id="messages" aria-live="polite"></div>
+<form class="composer" id="composer">
+<textarea id="prompt" rows="2" placeholder="Message Mia… (English or Roman Urdu)" aria-label="Message Mia"></textarea>
+<div class="composerfoot"><div class="hint" id="hint">Enter to send · Shift + Enter for a new line</div><div class="actions"><select id="taskType" aria-label="Task type"><option value="chat">General</option><option value="reasoning">Reasoning</option><option value="coding">Coding</option><option value="research">Research</option></select><button class="send" id="send" type="submit">Send ↗</button></div></div>
+</form>
+<div class="bottomnote">Mia is an early foundation build. Computer actions, voice and autonomous execution are not enabled yet.<br>Do not send secrets or sensitive personal information to cloud models.</div>
+</section></main></div>
+<script>
+const $=id=>document.getElementById(id);
+function addMessage(role,text,meta=''){
+ $('welcome').hidden=true;const row=document.createElement('div');row.className='message '+role;
+ const avatar=document.createElement('div');avatar.className='avatar';avatar.textContent=role==='user'?'You':'M';
+ const bubble=document.createElement('div');bubble.className='bubble';bubble.textContent=text;
+ if(meta){const small=document.createElement('small');small.style.cssText='display:block;color:#78b69a;font-size:10px;margin-top:8px';small.textContent=meta;bubble.appendChild(small);}
+ row.append(avatar,bubble);$('messages').append(row);row.scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+async function refreshProviders(){
+ try{const r=await fetch('/api/gateway/providers');const data=await r.json();const online=(data.items||[]).filter(x=>x.status==='online').map(x=>x.provider_id);
+ $('providerState').textContent=online.length?'Available: '+online.join(', '):'No AI provider online';
+ }catch(e){$('providerState').textContent='AI status unavailable';}
+}
+$('composer').addEventListener('submit',async event=>{
+ event.preventDefault();const prompt=$('prompt').value.trim();if(!prompt)return;
+ const taskType=$('taskType').value;addMessage('user',prompt);$('prompt').value='';$('send').disabled=true;$('send').textContent='Thinking…';$('hint').textContent='Mia is selecting an available model…';
+ try{
+  const response=await fetch('/api/gateway/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,task_type:taskType,max_output_tokens:1024})});
+  const result=await response.json();if(!response.ok)throw new Error(result.detail||'The model request failed.');
+  addMessage('assistant',result.content,result.provider_id+' · '+result.model_id);
+  $('hint').textContent='Response received';
+ }catch(error){addMessage('assistant','I could not complete that request. '+error.message);$('hint').textContent='Check that Ollama or an enabled provider is running.';}
+ finally{$('send').disabled=false;$('send').textContent='Send ↗';$('prompt').focus();refreshProviders();}
+});
+$('prompt').addEventListener('keydown',event=>{
+ if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();$('composer').requestSubmit();}
+});
+refreshProviders();
+</script></body></html>
