@@ -29,8 +29,11 @@ gateway = [
 credentials = [
   "keyring>=25,<27",
 ]
-voice-stt = [
+voice = [
   "faster-whisper>=1.1,<2",
+]
+voice-wake = [
+  "openwakeword>=0.6,<1",
 ]
 voice-wake = [
   "openwakeword>=0.6,<1",
