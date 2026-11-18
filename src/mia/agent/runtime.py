@@ -53,6 +53,28 @@ class AutonomyRuntime:
             if not policy.enabled or policy.emergency_stop:
                 self._stop.set()
 
+    def _permits_dispatch(self) -> bool:
+        """Re-check live owner controls immediately before a task is claimed/run."""
+        with self._state_lock:
+            policy = self.policy
+        return (
+            not self._stop.is_set()
+            and policy.enabled
+            and not policy.emergency_stop
+        )
+
+    def _validate_dispatch_task(self, task: dict[str, Any]) -> bool:
+        if not self._permits_dispatch():
+            return False
+        return self.task_validator(task) if self.task_validator is not None else True
+
+    def _execute_if_permitted(self, task: dict[str, Any]) -> dict[str, Any] | None:
+        # A stop may arrive after the task was claimed. Fail closed rather than
+        # starting its handler; the task ledger then requires owner re-approval.
+        if not self._permits_dispatch():
+            raise RuntimeError("Autonomy stopped before task execution")
+        return self.executor(task)
+
     def run_cycle(self) -> dict[str, Any]:
         """Run one synchronous cycle; useful for tests and manual operation."""
         if not self._cycle_lock.acquire(blocking=False):
@@ -60,23 +82,41 @@ class AutonomyRuntime:
         try:
             with self._state_lock:
                 policy = self.policy
-            if not policy.enabled:
+            if self._stop.is_set():
+                result = {"status": "paused", "reason": "runtime_stopped"}
+            elif not policy.enabled:
                 result = {"status": "paused", "reason": "autonomy_disabled"}
             elif policy.emergency_stop:
                 result = {"status": "paused", "reason": "emergency_stop"}
             else:
                 try:
                     snapshot = self.monitor.snapshot()
-                    load = RuntimeLoad(cpu_percent=float(snapshot["cpu_percent"]),
-                                       memory_percent=float(snapshot["memory_percent"]))
-                    result = TaskCoordinator(self.tasks, policy).dispatch_one(
-                        load=load,
-                        executor=self.executor,
-                        validator=self.task_validator,
+                    load = RuntimeLoad(
+                        cpu_percent=float(snapshot["cpu_percent"]),
+                        memory_percent=float(snapshot["memory_percent"]),
                     )
+                    # Resource sampling can take time. Re-read policy and stop
+                    # state after it completes, before attempting a task claim.
+                    with self._state_lock:
+                        current_policy = self.policy
+                    if self._stop.is_set():
+                        result = {"status": "paused", "reason": "runtime_stopped"}
+                    elif not current_policy.enabled:
+                        result = {"status": "paused", "reason": "autonomy_disabled"}
+                    elif current_policy.emergency_stop:
+                        result = {"status": "paused", "reason": "emergency_stop"}
+                    else:
+                        result = TaskCoordinator(self.tasks, current_policy).dispatch_one(
+                            load=load,
+                            executor=self._execute_if_permitted,
+                            validator=self._validate_dispatch_task,
+                        )
                 except (RuntimeError, ValueError, KeyError, TypeError) as exc:
-                    result = {"status": "paused", "reason": "resource_or_policy_error",
-                              "error_type": type(exc).__name__}
+                    result = {
+                        "status": "paused",
+                        "reason": "resource_or_policy_error",
+                        "error_type": type(exc).__name__,
+                    }
             with self._state_lock:
                 self._last_result = result
             if self.on_cycle is not None:
