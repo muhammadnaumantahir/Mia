@@ -1,9 +1,16 @@
-"""Run the local Mia foundation server."""
+"""Run the local Mia application server."""
 
 import os
 
 
 def main() -> None:
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        load_dotenv = None
+    if load_dotenv is not None:
+        load_dotenv()
+
     import uvicorn
 
     host = os.getenv("MIA_HOST", "127.0.0.1")
