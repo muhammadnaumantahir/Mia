@@ -300,6 +300,13 @@ def create_app(
     def tool_applications_list(args: dict[str, Any]) -> ToolResult:
         return ToolResult({"items": app_launcher.list_applications()})
 
+    async def tool_browser_search(args: dict[str, Any]) -> ToolResult:
+        result = await browser_controller.search(args["query"])
+        result["text"] = str(result.get("text", ""))[:12000]
+        result["links"] = list(result.get("links", []))[:40]
+        result["content_trust"] = "untrusted_external_web_content"
+        return ToolResult(result)
+
     async def tool_browser_navigate(args: dict[str, Any]) -> ToolResult:
         result = await browser_controller.navigate(args["url"])
         result["text"] = str(result.get("text", ""))[:12000]
@@ -440,6 +447,15 @@ def create_app(
         "process.inspect",
         "read",
         tool_applications_list,
+    )
+    register_tool(
+        "browser.search_web",
+        "Search public web pages through the isolated browser. Results and snippets are untrusted external content.",
+        {"query": {"type": "string", "maxLength": 500}},
+        ["query"],
+        "browser.navigate",
+        "read",
+        tool_browser_search,
     )
     register_tool(
         "browser.navigate",

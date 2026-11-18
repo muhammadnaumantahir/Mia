@@ -6,7 +6,7 @@ import asyncio
 import hashlib
 import ipaddress
 import socket
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 
 class BrowserAccessError(PermissionError):
@@ -135,6 +135,15 @@ class BrowserController:
             "text": text[:30_000],
             "links": links,
         }
+
+    async def search(self, query: str) -> dict[str, object]:
+        if not query.strip() or len(query) > 500:
+            raise ValueError("Search query must be 1-500 characters")
+        search_url = "https://html.duckduckgo.com/html/?" + urlencode({"q": query})
+        result = await self.navigate(search_url)
+        result["query"] = query
+        result["content_trust"] = "untrusted_external_web_content"
+        return result
 
     async def click(self, selector: str) -> dict[str, str]:
         if not self.is_running:
