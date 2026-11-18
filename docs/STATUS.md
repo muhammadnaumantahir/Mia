@@ -3,47 +3,35 @@
 **Last updated:** 2026-11-18  
 **Repository:** muhammadnaumantahir/Mia  
 **Default branch:** main  
-**Overall state:** Active research and foundation implementation — not release-ready
-
-## Verified repository baseline
-
-- Repository was empty when work began; no existing code was overwritten.
-- Repository is private and the default branch is main.
-- The ten canonical SPS layers remain unchanged.
-- Candidate sources and licenses have an initial audit; no upstream source code has been copied wholesale.
+**Overall state:** Active implementation — not release-ready
 
 ## Phase status
 
 | Phase | Status | Evidence / next gate |
 |---|---|---|
-| 0. Research and reuse audit | In progress | Source/license matrix and upstream commit pins recorded; complete SBOM and full legal/dependency review remain |
-| 1. Foundation | In progress | SPS registry, FastAPI app, SQLite observatory, immutable experiment baselines/snapshots and dashboard; current head still needs green CI |
-| 2. AI gateway | In progress | Ollama and OpenAI-compatible adapters, free-first router, price guard and transient fallback; streaming, model capability metadata and monthly cost ledger remain |
-| 3. Voice | In progress | Push-to-talk browser capture, local Faster-Whisper STT, editable transcript and browser TTS; target-PC benchmark and verified feminine voice selection remain |
-| 4. Computer intelligence | In progress | Scoped filesystem, approval-bound writes, allowlisted app launch, isolated public-web browser, safe process telemetry and Windows visible-window/text-control adapter; mouse/keyboard interaction, stronger OS/network sandbox and target-PC verification remain |
-| 5. Memory and knowledge | In progress | Persistent conversations, FTS5 memory, source provenance/trust labels and optional document parsers; parser integration and export/retention tests remain |
-| 6. Autonomous agent | Foundation in progress | Persistent tasks, evidence-backed proposals, approval dashboard, live CPU/RAM/process monitor and opt-in dispatcher primitive; dispatcher now preserves explicit waiting-for-approval outcomes instead of marking them complete. Scheduler, planner, telemetry-driven dispatch and governed tool executor remain |
-| 7. Self-programming | Foundation in progress | Versioned candidate source, lineage, validation/registration APIs and evidence ledger; external validation worker, OS sandbox, activation and rollback remain blocked |
-| 8. 30-day experiment | Planned | No Day 0 baseline has been captured. Start only after the sandbox, fixed benchmarks, stop conditions and reproducible environment manifest are ready |
+| 0. Research and reuse audit | In progress | Source/license matrix and upstream pins recorded; complete SBOM and legal/dependency review remain |
+| 1. Foundation | In progress | SPS registry, FastAPI app, SQLite observatory, experiment baseline/snapshot schema and dashboard; current head needs green CI |
+| 2. AI gateway | In progress | Ollama and OpenAI-compatible adapters, free-first router and fallback; streaming, capability metadata and cost ledger remain |
+| 3. Voice | In progress | Push-to-talk, local Faster-Whisper STT and browser TTS; target-PC benchmark and verified feminine voice remain |
+| 4. Computer intelligence | In progress | Scoped filesystem, approval-bound writes, allowlisted app launch, browser and Windows visible-window/text-control adapter; stronger OS sandbox and target-PC verification remain |
+| 5. Memory and knowledge | In progress | Persistent conversations, FTS5 memory, provenance labels and document parsers; parser integration/export/retention tests remain |
+| 6. Autonomous agent | Runtime primitive added | Explicit-start single-worker scheduler, pause/resume, emergency stop, resource-gated dispatch and approval-wait preservation. Production planner, governed executor and API lifecycle wiring remain |
+| 7. Self-programming | Foundation in progress | Candidate source, lineage, validation/registration APIs; isolated worker, activation and rollback remain |
+| 8. 30-day experiment | Planned | No Day 0 baseline captured. Start only after sandbox, fixed benchmarks and reproducible environment manifest are ready |
 
-## CI verification
+## Verification
 
-- Last fully verified green run remains commit 19c3fde9d110611a648c9a168b7841a0d035db75 on Windows and Ubuntu with Python 3.13.
-- Newer GitHub Actions runs, including c058b38118bab2fca6f0b7c8db2f26fe3fba533b, returned failed jobs with runner ID 0, no steps and no downloadable logs. Those results do not establish whether the code passed or failed.
-- Task lifecycle regression coverage now includes approval-wait preservation and invalid resource telemetry/policy values; these new tests have not yet been confirmed by a successful CI run. The current repository head must be re-run on actual Windows and Linux runners before release claims are made. The Windows UI adapter has mocked contract tests but has not yet been exercised against real desktop applications on the owner's Windows machine.
-- Latest observed run 44315275251 for the current head also failed on both Windows and Ubuntu, but the connector returned no job steps or log URLs. The preceding runs show the same failure pattern. This is not passing test evidence and the exact runner-side cause remains unverified.
+- Last known fully green CI commit: 19c3fde9d110611a648c9a168b7841a0d035db75 on Windows and Ubuntu with Python 3.13.
+- Recent Actions failures returned runner ID 0 with no steps/logs. These are inconclusive and do not prove code failure or success.
+- The newly added scheduler tests have not yet been confirmed by a successful CI run.
+- Windows UI adapter has mocked contract tests but has not been exercised against real desktop apps on the owner's PC.
 
-## Explicitly not complete
+## Not complete
 
-Mia is not yet a finished personal assistant. It does not have a running autonomous scheduler, automatic multi-step tool planning, self-generated code execution, hot activation, a verified OS-level code sandbox, unrestricted terminal access, always-on wake word or a completed 30-day experiment.
+Mia is not yet a finished personal assistant. Production autonomous planning/execution, isolated self-programming, hot activation, verified OS-level sandbox, always-on wake word, real desktop interaction and the 30-day experiment remain incomplete.
 
-The 30-day experiment has not started. The observatory must not display invented daily growth data.
+No Day 0 or daily growth data may be fabricated.
 
 ## Phase completion rule
 
-A phase becomes complete only when:
-1. The roadmap exit criteria are met.
-2. Automated tests pass on Windows and Linux where relevant.
-3. Target-device tests pass for hardware-specific components.
-4. Security and license checks are recorded.
-5. The evidence links to the exact commit, workflow run and test result.
+A phase is complete only after roadmap exit criteria, relevant Windows/Linux tests, target-device checks, security/license review, and evidence tied to the exact commit and successful workflow run.
