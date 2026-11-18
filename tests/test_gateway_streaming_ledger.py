@@ -242,3 +242,9 @@ def test_stream_endpoint_reports_error_event_when_no_provider(tmp_path, monkeypa
     events = parse_sse(response.text)
     assert events[-1][0] == "error"
     assert events[-1][1]["partial"] is False
+
+
+def test_assistant_page_uses_stream_endpoint_when_tools_are_off(tmp_path):
+    client = make_client(tmp_path, StreamingProvider("a", []))
+    page = client.get("/assistant").text
+    assert "/api/gateway/chat/stream" in page and "streamReply" in page

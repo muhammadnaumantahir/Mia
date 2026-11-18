@@ -291,6 +291,42 @@ function addMessage(role,text,meta=''){
  const bubble=document.createElement('div');bubble.className='bubble';bubble.textContent=text;
  if(meta){const small=document.createElement('small');small.style.cssText='display:block;color:#78b69a;font-size:10px;margin-top:8px';small.textContent=meta;bubble.appendChild(small);}
  row.append(avatar,bubble);$('messages').append(row);row.scrollIntoView({block:'nearest',behavior:'smooth'});
+ return bubble;
+}
+function usageMeta(d){
+ let m=d.provider_id+' · '+d.model_id;
+ if(d.input_tokens!=null&&d.output_tokens!=null)m+=' · '+d.input_tokens+' in / '+d.output_tokens+' out tokens';
+ if(typeof d.cost_usd==='number')m+=d.cost_usd===0?' · free':' · $'+d.cost_usd.toFixed(6);
+ return m;
+}
+async function streamReply(body,bubble){
+ const response=await fetch('/api/gateway/chat/stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+ if(!response.ok){let detail='The model request failed.';try{detail=(await response.json()).detail||detail;}catch(e){}throw new Error(detail);}
+ const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='',text='',done=null,failure=null;
+ const handle=block=>{
+  let name='',data='';
+  block.split('\n').forEach(line=>{if(line.startsWith('event: '))name=line.slice(7);else if(line.startsWith('data: '))data+=line.slice(6);});
+  if(!name||!data)return;
+  const payload=JSON.parse(data);
+  if(name==='delta'){text+=payload.text;bubble.textContent=text;bubble.scrollIntoView({block:'nearest'});}
+  else if(name==='done')done=payload;
+  else if(name==='error')failure=payload;
+ };
+ for(;;){
+  const {value,done:finished}=await reader.read();
+  if(finished)break;
+  buffer+=decoder.decode(value,{stream:true});
+  let index;
+  while((index=buffer.indexOf('\n\n'))>=0){handle(buffer.slice(0,index));buffer=buffer.slice(index+2);}
+ }
+ if(failure){
+  const note=document.createElement('small');note.style.cssText='display:block;color:#e0a0a0;font-size:11px;margin-top:8px';
+  note.textContent=(failure.partial?'Response interrupted: ':'Request failed: ')+failure.detail;bubble.appendChild(note);
+  if(!failure.partial)throw new Error(failure.detail);
+  return {text,done:null};
+ }
+ if(!done)throw new Error('The response ended unexpectedly.');
+ return {text,done};
 }
 let mediaRecorder=null;
 let activeStream=null;
@@ -448,14 +484,25 @@ async function refreshProviders(){
 }
 $('composer').addEventListener('submit',async event=>{
  event.preventDefault();const prompt=$('prompt').value.trim();if(!prompt)return;
- const taskType=$('taskType').value;addMessage('user',prompt);$('prompt').value='';$('send').disabled=true;$('send').textContent='Thinking…';$('hint').textContent='Mia is selecting an available model…';
+ const taskType=$('taskType').value;addMessage('user',prompt);$('prompt').value='';$('send').disabled=true;$('send').textContent='Thinking…';$('hint').textContent=$('useTools').checked?'Mia is selecting an available model…':'Streaming reply…';
  try{
-  const response=await fetch('/api/gateway/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,task_type:taskType,max_output_tokens:1024,conversation_id:conversationId,use_tools:$('useTools').checked})});
-  const result=await response.json();if(!response.ok)throw new Error(result.detail||'The model request failed.');
-  conversationId=result.conversation_id;
-  window.history.replaceState({},'', '/assistant?conversation_id='+encodeURIComponent(conversationId));
-  addMessage('assistant',result.content,result.provider_id+' · '+result.model_id);
-  renderApprovalCards(result.pending_actions||[]);
+  const useTools=$('useTools').checked;let result;
+  if(useTools){
+   const response=await fetch('/api/gateway/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,task_type:taskType,max_output_tokens:1024,conversation_id:conversationId,use_tools:true})});
+   result=await response.json();if(!response.ok)throw new Error(result.detail||'The model request failed.');
+   conversationId=result.conversation_id;
+   addMessage('assistant',result.content,result.provider_id+' · '+result.model_id);
+   renderApprovalCards(result.pending_actions||[]);
+  }else{
+   const bubble=addMessage('assistant','…');
+   const streamed=await streamReply({prompt,task_type:taskType,max_output_tokens:1024,conversation_id:conversationId},bubble);
+   if(streamed.done){
+    conversationId=streamed.done.conversation_id;
+    const small=document.createElement('small');small.style.cssText='display:block;color:#78b69a;font-size:10px;margin-top:8px';small.textContent=usageMeta(streamed.done);bubble.appendChild(small);
+   }
+   result={content:streamed.text};
+  }
+  if(conversationId)window.history.replaceState({},'', '/assistant?conversation_id='+encodeURIComponent(conversationId));
   loadConversationList();
   speakReply(result.content);
   $('hint').textContent='Response received';
