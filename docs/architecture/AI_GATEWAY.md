@@ -12,7 +12,7 @@ Expose one stable Mia model interface while supporting local inference and multi
 - Router: choose a suitable eligible candidate using task fit, capability, context, known cost, latency and reliability.
 - Fallback manager: retry only eligible transient failures and never repeat non-idempotent tool actions blindly.
 - Credential store: OS credential manager; no plaintext secrets in Git or logs.
-- Budget policy: paid mode off by default. Per-request price checks work only when input and output price metadata are known.
+- Budget policy: paid mode off by default. Per-request price checks work only when input and output price metadata are known. Invalid, negative, NaN or infinite price/budget values fail closed and exclude paid candidates.
 - Observability: record route rationale, provider, model, latency, usage metadata and fallback reason.
 
 ## Current routing policy
