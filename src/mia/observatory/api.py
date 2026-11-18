@@ -17,7 +17,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from mia.agent.discovery import DiscoveryFinding, WorkloadDiscovery
@@ -55,6 +55,7 @@ from mia.gateway.service import ModelGateway
 from mia.knowledge.document_ingestion import DocumentIngestor, DocumentIngestionError
 from mia.memory.store import MemoryStore
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider
+from mia.voice.tts import Pyttsx3SpeechSynthesizer, SpeechSynthesisError, SpeechSynthesizer
 
 from .baseline import BaselineCaptureError, capture_baseline_manifest
 from .snapshot_capture import ExperimentSnapshotCapturer, SnapshotCaptureError
@@ -184,6 +185,12 @@ class ApprovalExecutionInput(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class SpeechSynthesisInput(BaseModel):
+    text: str = Field(min_length=1, max_length=3000)
+    voice_id: str | None = Field(default=None, max_length=1024)
+    rate: int = Field(default=175, ge=100, le=220)
+
+
 class ChatInput(BaseModel):
     prompt: str = Field(min_length=1, max_length=100_000)
     task_type: str = Field(default="chat", min_length=1, max_length=40)
@@ -219,6 +226,7 @@ def create_app(
     windows_ui: WindowsUIAdapter | None = None,
     sandbox_runner: DockerSandboxRunner | None = None,
     baseline_capture: Callable[[str | Path], dict[str, Any]] | None = None,
+    tts_synthesizer: SpeechSynthesizer | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -234,6 +242,8 @@ def create_app(
     app.state.gateway = model_gateway
     speech_to_text = transcriber or FasterWhisperTranscriber(data_dir=data_dir)
     app.state.transcriber = speech_to_text
+    speech_synthesizer = tts_synthesizer or Pyttsx3SpeechSynthesizer()
+    app.state.tts_synthesizer = speech_synthesizer
     approval_store = approvals or ApprovalStore(data_dir / "computer-approvals.sqlite3")
     computer_files = filesystem or FilesystemAdapter.from_environment(
         approval_store,
@@ -1139,15 +1149,65 @@ def create_app(
     def voice_status() -> dict[str, Any]:
         try:
             import faster_whisper  # noqa: F401
-            installed = True
+            stt_installed = True
         except ImportError:
-            installed = False
+            stt_installed = False
+        local_tts_ready = bool(getattr(speech_synthesizer, "available", False))
         return {
-            "speech_to_text": "ready" if installed else "install_voice_extra",
+            "speech_to_text": "ready" if stt_installed else "install_voice_extra",
             "model": getattr(speech_to_text, "model_size", "custom"),
-            "text_to_speech": "browser_speech_synthesis",
+            "local_text_to_speech": "ready" if local_tts_ready else "install_tts_extra",
+            "text_to_speech": (
+                "local_and_browser_speech_synthesis"
+                if local_tts_ready else "browser_speech_synthesis"
+            ),
             "always_listening": False,
         }
+
+    @app.get("/api/voice/tts/voices")
+    async def voice_output_voices() -> dict[str, Any]:
+        try:
+            voices = await run_in_threadpool(speech_synthesizer.list_voices)
+        except SpeechSynthesisError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return {
+            "engine": "pyttsx3-local",
+            "voices": voices,
+            "audio_retained": False,
+        }
+
+    @app.post("/api/voice/speak")
+    async def synthesize_voice(item: SpeechSynthesisInput) -> Response:
+        try:
+            audio = await run_in_threadpool(
+                speech_synthesizer.synthesize,
+                item.text,
+                voice_id=item.voice_id,
+                rate=item.rate,
+            )
+        except SpeechSynthesisError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        observatory.record_event(
+            category="voice",
+            event_type="speech_synthesis",
+            summary="Local text-to-speech audio generated",
+            outcome="success",
+            payload={
+                "engine": "pyttsx3-local",
+                "text_characters": len(item.text),
+                "voice_id": item.voice_id,
+                "rate": item.rate,
+                "audio_retained": False,
+            },
+        )
+        return Response(
+            content=audio,
+            media_type="audio/wav",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.post("/api/voice/transcribe")
     async def transcribe_voice(request: Request) -> dict[str, Any]:

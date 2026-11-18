@@ -32,6 +32,9 @@ credentials = [
 voice = [
   "faster-whisper>=1.1,<2",
 ]
+tts = [
+  "pyttsx3>=2.99,<3",
+]
 voice-wake = [
   "openwakeword>=0.6,<1",
 ]

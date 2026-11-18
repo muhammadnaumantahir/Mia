@@ -26,7 +26,7 @@ The target CPU is older than the CPU used in the upstream benchmark. Run actual 
 
 ## Text-to-speech
 
-Initial TTS uses the browser's Web Speech API and installed system voices. This avoids shipping voice weights or forcing a heavy neural TTS runtime into the base install. The voice selector lists actual voices returned by the browser; Mia must not claim a specific voice is installed or female unless the metadata supports that label.
+Browser Web Speech remains the zero-install fallback. An optional `tts` extra (`pip install -e ".[tts]"`) adds offline pyttsx3 synthesis using the operating-system voice engine (SAPI5 on Windows). The local voice endpoint returns the actual installed voice ID, display name, language and reported gender; the UI labels a voice female only when the system metadata says `female`. Speech text is not persisted in Observatory events and generated WAV files are held only in memory by the API response. Synthesis is serialized and its temporary WAV file is deleted after reading. No voice weights are downloaded.
 
 Optional local TTS candidates:
 - pyttsx3 (MPL-2.0): uses Windows SAPI and installed voices offline. A compatible installed female voice must be selected and tested on the target device.

@@ -73,7 +73,7 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 <textarea id="prompt" rows="2" placeholder="Message Mia… (English or Roman Urdu)" aria-label="Message Mia"></textarea>
 <div class="composerfoot"><div class="hint" id="hint">Enter to send · Shift + Enter for a new line</div><div class="actions"><button class="send" id="mic" type="button" style="background:#1c3930;color:#a9ebcb;border:1px solid #356451">🎙 Record</button><select id="taskType" aria-label="Task type"><option value="chat">General</option><option value="reasoning">Reasoning</option><option value="coding">Coding</option><option value="research">Research</option></select><label style="font-size:11px;color:#94aaa2;display:flex;align-items:center;gap:5px"><input id="useTools" type="checkbox" checked> Tools</label><label style="font-size:11px;color:#94aaa2;display:flex;align-items:center;gap:5px"><input id="speakReplies" type="checkbox"> Speak</label><select id="voiceChoice" aria-label="Speech voice" title="Installed browser voices" style="max-width:110px"><option value="">Default voice</option></select><button class="send" id="send" type="submit">Send ↗</button></div></div>
 </form>
-<div class="bottomnote">Voice input is push-to-talk and transcribed locally when the optional voice extra is installed. Speech output uses voices installed in your browser/operating system.<br>Push-to-talk and model-requested tools are optional per message. File and knowledge contents stay local by default; writes, launches and browser clicks always require an approval card. Always-listening wake word is not enabled. Optional background dispatch is off by default and limited to owner-approved read-only system checks. Do not send secrets to cloud models.</div>
+<div class="bottomnote">Voice input is push-to-talk and transcribed locally when the optional voice extra is installed. Speech output can use offline system voices with the optional TTS extra, or browser voices as fallback.<br>Push-to-talk and model-requested tools are optional per message. File and knowledge contents stay local by default; writes, launches and browser clicks always require an approval card. Always-listening wake word is not enabled. Optional background dispatch is off by default and limited to owner-approved read-only system checks. Do not send secrets to cloud models.</div>
 </section></main></div>
 <script>
 const $=id=>document.getElementById(id);
@@ -285,19 +285,37 @@ let audioChunks=[];
 let recording=false;
 let browserVoices=[];
 
-function refreshVoices(){
- if(!('speechSynthesis' in window))return;
- browserVoices=window.speechSynthesis.getVoices();
+async function refreshVoices(){
+ browserVoices='speechSynthesis' in window?window.speechSynthesis.getVoices():[];
  const select=$('voiceChoice');
  const selected=select.value;
- select.innerHTML='<option value="">Default voice</option>';
- browserVoices.forEach((voice,index)=>{
-  const option=document.createElement('option');
-  option.value=String(index);
-  option.textContent=(voice.name+' ('+voice.lang+')').slice(0,45);
-  select.append(option);
- });
- if(selected && browserVoices[Number(selected)])select.value=selected;
+ select.replaceChildren(new Option('Default voice',''));
+ try{
+  const response=await fetch('/api/voice/tts/voices');
+  const data=await response.json();
+  if(response.ok && data.voices?.length){
+   const group=document.createElement('optgroup');group.label='Local voices · offline';
+   data.voices.forEach(voice=>{
+    const option=document.createElement('option');
+    option.value='local:'+voice.id;
+    const gender=voice.gender?' · '+voice.gender:'';
+    option.textContent=(voice.name||'System voice')+' ('+(voice.languages?.[0]||'unknown')+')'+gender;
+    group.append(option);
+   });
+   select.append(group);
+  }
+ }catch(error){}
+ if(browserVoices.length){
+  const group=document.createElement('optgroup');group.label='Browser voices';
+  browserVoices.forEach((voice,index)=>{
+   const option=document.createElement('option');
+   option.value='browser:'+index;
+   option.textContent=(voice.name+' ('+voice.lang+')').slice(0,70);
+   group.append(option);
+  });
+  select.append(group);
+ }
+ if(selected && Array.from(select.options).some(option=>option.value===selected))select.value=selected;
 }
 async function loadConversationList(){
  try{
@@ -324,12 +342,39 @@ async function loadCurrentConversation(){
   (data.messages||[]).forEach(message=>addMessage(message.role,message.content));
  }catch(error){$('hint').textContent='Could not restore previous conversation.';}
 }
-function speakReply(text){
- if(!$('speakReplies').checked || !('speechSynthesis' in window))return;
+async function speakReply(text){
+ if(!$('speakReplies').checked)return;
+ const selected=$('voiceChoice').value;
+ if(selected.startsWith('local:')){
+  if('speechSynthesis' in window)window.speechSynthesis.cancel();
+  let audioUrl=null;
+  try{
+   const response=await fetch('/api/voice/speak',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({text,voice_id:selected.slice(6),rate:175})
+   });
+   if(!response.ok){
+    const error=await response.json();throw new Error(error.detail||'Local speech failed.');
+   }
+   const blob=await response.blob();
+   audioUrl=URL.createObjectURL(blob);
+   const audio=new Audio(audioUrl);
+   audio.onended=()=>URL.revokeObjectURL(audioUrl);
+   audio.onerror=()=>URL.revokeObjectURL(audioUrl);
+   await audio.play();
+  }catch(error){
+   if(audioUrl)URL.revokeObjectURL(audioUrl);
+   $('hint').textContent='Local speech unavailable: '+error.message;
+  }
+  return;
+ }
+ if(!('speechSynthesis' in window))return;
  window.speechSynthesis.cancel();
  const utterance=new SpeechSynthesisUtterance(text);
- const selected=browserVoices[Number($('voiceChoice').value)];
- if(selected)utterance.voice=selected;
+ if(selected.startsWith('browser:')){
+  const index=Number(selected.slice(8));
+  if(browserVoices[index])utterance.voice=browserVoices[index];
+ }
  utterance.rate=1;
  window.speechSynthesis.speak(utterance);
 }
