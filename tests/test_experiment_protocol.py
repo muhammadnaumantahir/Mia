@@ -203,3 +203,12 @@ def test_final_daily_snapshot_completes_the_experiment(tmp_path):
     )
     experiment = store.list_experiments()[0]
     assert experiment["status"] == "completed"
+
+
+def test_experiment_requires_fixed_benchmark_evidence(tmp_path):
+    store = ObservatoryStore(tmp_path / "experiment.sqlite3")
+    invalid = baseline_manifest()
+    invalid.pop("fixed_benchmark_results")
+
+    with pytest.raises(ValueError, match="fixed_benchmark_results"):
+        store.prepare_experiment(name="No fixed benchmark", baseline_manifest=invalid)

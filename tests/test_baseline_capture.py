@@ -36,6 +36,7 @@ class FakeSubprocess:
         produce_report=True,
         dirty=False,
         ruff_return_code=0,
+        fixed_failures=0,
     ):
         self.calls = []
         self.dirty = dirty
@@ -44,6 +45,7 @@ class FakeSubprocess:
         self.skipped = skipped
         self.produce_report = produce_report
         self.ruff_return_code = ruff_return_code
+        self.fixed_failures = fixed_failures
 
     def __call__(self, command, **kwargs):
         self.calls.append((command, kwargs))
@@ -63,10 +65,11 @@ class FakeSubprocess:
         if self.produce_report:
             fixed_benchmark = "tests/benchmarks/test_foundation.py" in command
             test_count = 6 if fixed_benchmark else 12
+            failure_count = self.fixed_failures if fixed_benchmark else self.failures
             report_path.write_text(
                 (
                     '<testsuites><testsuite name="mia-foundation-v2" '
-                    f'tests="{test_count}" failures="{self.failures}" '
+                    f'tests="{test_count}" failures="{failure_count}" '
                     f'errors="0" skipped="{self.skipped}" time="1.25">'
                     '</testsuite></testsuites>'
                 ),
@@ -462,3 +465,20 @@ def test_experiment_snapshot_scheduler_is_opt_in_by_environment(tmp_path, monkey
     assert status.status_code == 200
     assert status.json()["enabled"] is True
     assert status.json()["interval_seconds"] == 60
+
+
+def test_local_baseline_capture_requires_fixed_and_full_regression_suites_to_pass(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    _write_baseline_files(tmp_path)
+    manifest = capture_baseline_manifest(
+        tmp_path,
+        subprocess_run=FakeSubprocess(fixed_failures=1),
+    )
+
+    assert manifest["verification_passed"] is False
+    assert manifest["baseline_results"]["passed"] == 12
+    assert manifest["fixed_benchmark_results"]["tests"] == 6
+    assert manifest["fixed_benchmark_results"]["passed"] == 5
+    assert manifest["fixed_benchmark_results"]["failures"] == 1
