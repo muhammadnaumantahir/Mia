@@ -22,7 +22,7 @@
 | 3. Voice | In progress | Push-to-talk browser capture, local Faster-Whisper STT, editable transcript and browser TTS; target-PC benchmark and verified feminine voice selection remain |
 | 4. Computer intelligence | In progress | Scoped filesystem, approval-bound writes, allowlisted app launch and isolated public-web browser; Windows UI automation and stronger OS/network sandbox remain |
 | 5. Memory and knowledge | In progress | Persistent conversations, FTS5 memory, source provenance/trust labels and optional document parsers; parser integration and export/retention tests remain |
-| 6. Autonomous agent | Foundation in progress | Persistent task state machine, append-only transition trace, opt-in single-cycle dispatcher and CPU/RAM gate; planner, scheduler, cancellation/recovery and real telemetry source remain |
+| 6. Autonomous agent | Foundation in progress | Persistent task state machine, approval/rejection API, task-control dashboard and opt-in single-cycle dispatcher; scheduler, planner, real telemetry and governed tool executor remain |
 | 7. Self-programming | Foundation in progress | Immutable versioned candidate source, lineage, validation evidence and registration; isolated validation worker, OS sandbox, activation and rollback remain blocked |
 | 8. 30-day experiment | Planned | No Day 0 baseline has been captured. Start only after the sandbox, fixed benchmarks, stop conditions and reproducible environment manifest are ready |
 

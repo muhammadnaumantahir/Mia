@@ -14,18 +14,31 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from mia.agent.tasks import AutonomyPolicy, TaskCoordinator, TaskStore, TaskTransitionError
 from mia.computer.approvals import ApprovalError, ApprovalStore
-from mia.computer.filesystem import FilesystemAccessError, FilesystemAdapter
 from mia.computer.applications import ApplicationLaunchError, ApplicationLauncher
 from mia.computer.browser import BrowserAccessError, BrowserController
+from mia.computer.filesystem import FilesystemAccessError, FilesystemAdapter
 from mia.gateway.contracts import ModelRequest, PermanentProviderError, TransientProviderError
 from mia.gateway.factory import build_default_registry, paid_route_policy
 from mia.gateway.service import ModelGateway
-from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider
-from mia.memory.store import MemoryStore
 from mia.knowledge.document_ingestion import DocumentIngestor, DocumentIngestionError
+from mia.memory.store import MemoryStore
+from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider
 
 from .store import ObservatoryStore
+
+
+class TaskInput(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    goal: str = Field(min_length=1, max_length=20000)
+    source: str = Field(default="interactive", max_length=40)
+    priority: int = Field(default=50, ge=0, le=100)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class TaskTransitionInput(BaseModel):
+    reason: str = Field(min_length=1, max_length=1000)
 
 
 class EventInput(BaseModel):
@@ -120,6 +133,7 @@ def create_app(
     application_launcher: ApplicationLauncher | None = None,
     memory: MemoryStore | None = None,
     browser: BrowserController | None = None,
+    task_store: TaskStore | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -154,6 +168,16 @@ def create_app(
     app.state.document_ingestor = document_ingestor
     browser_controller = browser or BrowserController(headless=True)
     app.state.browser = browser_controller
+    durable_tasks = task_store or TaskStore(data_dir / "mia-tasks.sqlite3")
+    autonomy_policy = AutonomyPolicy(
+        enabled=os.getenv("MIA_AUTONOMY_ENABLED", "false").strip().lower() == "true",
+        emergency_stop=os.getenv("MIA_EMERGENCY_STOP", "false").strip().lower() == "true",
+        max_cpu_percent=float(os.getenv("MIA_MAX_CPU_PERCENT", "75")),
+        max_memory_percent=float(os.getenv("MIA_MAX_RAM_PERCENT", "85")),
+    )
+    task_coordinator = TaskCoordinator(durable_tasks, autonomy_policy)
+    app.state.tasks = durable_tasks
+    app.state.task_coordinator = task_coordinator
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -522,6 +546,81 @@ def create_app(
             "language_probability": result.get("language_probability"),
             "audio_retained": False,
         }
+
+    @app.get("/api/autonomy/status")
+    def autonomy_status() -> dict[str, Any]:
+        return {
+            "enabled": autonomy_policy.enabled,
+            "emergency_stop": autonomy_policy.emergency_stop,
+            "automatic_dispatch": False,
+            "dispatcher": "single_cycle_library_only",
+            "cpu_limit_percent": autonomy_policy.max_cpu_percent,
+            "memory_limit_percent": autonomy_policy.max_memory_percent,
+            "reason": "Planner and governed tool executor are not yet connected",
+        }
+
+    @app.get("/api/tasks")
+    def tasks(limit: int = 100) -> dict[str, Any]:
+        return {"items": durable_tasks.list_tasks(limit)}
+
+    @app.post("/api/tasks", status_code=201)
+    def create_task(item: TaskInput) -> dict[str, str]:
+        try:
+            task_id = durable_tasks.create_task(**item.model_dump())
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        observatory.record_event(
+            category="agent",
+            event_type="task_proposed",
+            summary=f"Task proposed: {item.title}",
+            outcome="proposed",
+            layer_id="SPS-03",
+            payload={"task_id": task_id, "source": item.source},
+        )
+        return {"task_id": task_id, "status": "proposed"}
+
+    @app.get("/api/tasks/{task_id}")
+    def get_task(task_id: str) -> dict[str, Any]:
+        task = durable_tasks.get_task(task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return {"task": task, "events": durable_tasks.list_events(task_id)}
+
+    @app.post("/api/tasks/{task_id}/approve")
+    def approve_task(task_id: str, item: TaskTransitionInput) -> dict[str, Any]:
+        try:
+            return durable_tasks.transition(
+                task_id,
+                "approved",
+                reason=item.reason,
+                actor="local-user",
+            )
+        except TaskTransitionError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/tasks/{task_id}/reject")
+    def reject_task(task_id: str, item: TaskTransitionInput) -> dict[str, Any]:
+        try:
+            return durable_tasks.transition(
+                task_id,
+                "rejected",
+                reason=item.reason,
+                actor="local-user",
+            )
+        except TaskTransitionError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/tasks/{task_id}/cancel")
+    def cancel_task(task_id: str, item: TaskTransitionInput) -> dict[str, Any]:
+        try:
+            return durable_tasks.transition(
+                task_id,
+                "cancelled",
+                reason=item.reason,
+                actor="local-user",
+            )
+        except TaskTransitionError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.get("/api/conversations")
     def conversations(limit: int = 50) -> dict[str, Any]:
