@@ -30,3 +30,20 @@ This is a planning foundation, not yet autonomous continuous operation. The
 scheduler is deliberately not wired to the planner or an executor until a
 governed executor, operation timeouts, OS isolation, authentication boundary,
 and cross-platform verification are in place.
+
+
+## Manual approved-task execution
+
+A task may be executed through POST /api/tasks/{task_id}/execute only after
+its owner has moved it to approved. The task must include an explicit
+metadata.execution object with exactly tool_name and arguments. The tool must
+already be registered by Mia with mode read. Free-form task titles and goals
+are never interpreted as commands, and preview/write/launch/click tools are
+rejected by this route.
+
+The endpoint checks CPU/RAM policy before claiming the named task, executes one
+tool only, and records the result in the task event history and observatory.
+It is a manually invoked, local API operation; it does not start the background
+scheduler. Preview and mutation actions continue through the separate
+payload-bound approval flow. This in-process read-only boundary is not an OS
+sandbox and does not make arbitrary third-party tool handlers safe.

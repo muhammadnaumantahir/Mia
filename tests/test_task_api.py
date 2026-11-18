@@ -70,3 +70,110 @@ def test_task_api_validates_source_and_priority(tmp_path):
         },
     )
     assert response.status_code == 422
+
+
+
+class FakePsutil:
+    def cpu_percent(self, interval):
+        return 10
+
+    def virtual_memory(self):
+        from types import SimpleNamespace
+        return SimpleNamespace(percent=20, available=800, total=1000)
+
+    def process_iter(self, attrs):
+        return iter([])
+
+
+def test_manual_task_execution_requires_approval_and_runs_read_only_tool(tmp_path):
+    from mia.agent.resources import ResourceMonitor
+
+    tasks = TaskStore(tmp_path / "tasks.sqlite3")
+    client = TestClient(
+        create_app(
+            store=ObservatoryStore(tmp_path / "observatory.sqlite3"),
+            task_store=tasks,
+            resource_monitor=ResourceMonitor(psutil_module=FakePsutil()),
+        )
+    )
+    created = client.post(
+        "/api/tasks",
+        json={
+            "title": "Check local resource snapshot",
+            "goal": "Read the current CPU and memory usage.",
+            "source": "interactive",
+            "metadata": {
+                "execution": {
+                    "tool_name": "system.read_resources",
+                    "arguments": {},
+                }
+            },
+        },
+    )
+    assert created.status_code == 201
+    task_id = created.json()["task_id"]
+
+    before_approval = client.post(f"/api/tasks/{task_id}/execute")
+    assert before_approval.status_code == 409
+    assert tasks.get_task(task_id)["status"] == "proposed"
+
+    approved = client.post(
+        f"/api/tasks/{task_id}/approve",
+        json={"reason": "Approved this read-only system check."},
+    )
+    assert approved.status_code == 200
+
+    executed = client.post(f"/api/tasks/{task_id}/execute")
+    assert executed.status_code == 200
+    body = executed.json()
+    assert body["status"] == "completed"
+    assert body["task"]["status"] == "completed"
+    assert body["outcome"]["tool_name"] == "system.read_resources"
+    assert body["outcome"]["result"]["cpu_percent"] == 10
+    assert [event["to_status"] for event in tasks.list_events(task_id)] == [
+        "proposed",
+        "approved",
+        "running",
+        "completed",
+    ]
+
+
+def test_manual_task_execution_rejects_preview_tools_without_claiming_task(tmp_path):
+    from mia.agent.resources import ResourceMonitor
+
+    tasks = TaskStore(tmp_path / "tasks.sqlite3")
+    client = TestClient(
+        create_app(
+            store=ObservatoryStore(tmp_path / "observatory.sqlite3"),
+            task_store=tasks,
+            resource_monitor=ResourceMonitor(psutil_module=FakePsutil()),
+        )
+    )
+    created = client.post(
+        "/api/tasks",
+        json={
+            "title": "Prepare a file write",
+            "goal": "Preview a write but do not execute it.",
+            "source": "interactive",
+            "metadata": {
+                "execution": {
+                    "tool_name": "filesystem.preview_write",
+                    "arguments": {
+                        "root_id": "workspace",
+                        "relative_path": "notes.txt",
+                        "content": "not executed",
+                    },
+                }
+            },
+        },
+    )
+    task_id = created.json()["task_id"]
+    client.post(
+        f"/api/tasks/{task_id}/approve",
+        json={"reason": "Approved for task validation only."},
+    )
+
+    response = client.post(f"/api/tasks/{task_id}/execute")
+    assert response.status_code == 422
+    assert "read-only" in response.json()["detail"]
+    assert tasks.get_task(task_id)["status"] == "approved"

@@ -16,9 +16,16 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from mia.agent.discovery import DiscoveryFinding, WorkloadDiscovery
+from mia.agent.executor import TaskExecutionError, TaskToolExecutor
 from mia.agent.planner import PlanningError, TaskPlanner
 from mia.agent.resources import ResourceMonitor
-from mia.agent.tasks import AutonomyPolicy, TaskCoordinator, TaskStore, TaskTransitionError
+from mia.agent.tasks import (
+    AutonomyPolicy,
+    RuntimeLoad,
+    TaskCoordinator,
+    TaskStore,
+    TaskTransitionError,
+)
 from mia.agent.tools import ToolRegistry, ToolResult
 from mia.computer.approvals import ApprovalError, ApprovalStore
 from mia.computer.applications import ApplicationLaunchError, ApplicationLauncher
@@ -614,6 +621,8 @@ def create_app(
         tool_browser_preview_click,
     )
     app.state.tool_registry = tool_registry
+    task_tool_executor = TaskToolExecutor(tool_registry)
+    app.state.task_tool_executor = task_tool_executor
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -1216,6 +1225,112 @@ def create_app(
             )
         except TaskTransitionError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/tasks/{task_id}/execute")
+    async def execute_approved_task(task_id: str) -> dict[str, Any]:
+        task = durable_tasks.get_task(task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        if task["status"] != "approved":
+            raise HTTPException(status_code=409, detail="Task must be approved before execution")
+
+        try:
+            task_tool_executor.validate(task)
+        except TaskExecutionError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        try:
+            snapshot = resource_monitor_service.snapshot()
+            load = RuntimeLoad(
+                cpu_percent=float(snapshot["cpu_percent"]),
+                memory_percent=float(snapshot["memory_percent"]),
+            )
+        except (RuntimeError, ValueError, KeyError, TypeError) as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Runtime resource telemetry is unavailable",
+            ) from exc
+
+        if (
+            load.cpu_percent >= autonomy_policy.max_cpu_percent
+            or load.memory_percent >= autonomy_policy.max_memory_percent
+        ):
+            raise HTTPException(
+                status_code=503,
+                detail="Task execution paused because CPU or memory usage is above policy",
+            )
+
+        try:
+            claimed = durable_tasks.claim_task(task_id, actor="local-user")
+        except TaskTransitionError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        try:
+            outcome = await task_tool_executor.execute(claimed)
+        except Exception as exc:
+            try:
+                failed = durable_tasks.transition(
+                    task_id,
+                    "failed",
+                    reason="Read-only task execution failed",
+                    actor="task-executor",
+                    payload={"error_type": type(exc).__name__},
+                )
+            except TaskTransitionError:
+                current = durable_tasks.get_task(task_id)
+                if current is not None and current["status"] != "running":
+                    return {
+                        "status": current["status"],
+                        "task": current,
+                        "reason": "task_state_changed_during_execution",
+                    }
+                raise HTTPException(
+                    status_code=409,
+                    detail="Task state changed while execution was being finalized",
+                ) from exc
+            observatory.record_event(
+                category="agent",
+                event_type="task_execution_failed",
+                summary=f"Read-only task failed: {task_id}",
+                outcome="failed",
+                layer_id="SPS-10",
+                payload={"task_id": task_id, "error_type": type(exc).__name__},
+            )
+            raise HTTPException(
+                status_code=502,
+                detail=f"Read-only task execution failed ({type(exc).__name__})",
+            ) from exc
+
+        try:
+            completed = durable_tasks.transition(
+                task_id,
+                "completed",
+                reason="Read-only task tool returned successfully",
+                actor="task-executor",
+                payload={"tool_name": outcome["tool_name"]},
+            )
+        except TaskTransitionError as exc:
+            current = durable_tasks.get_task(task_id)
+            if current is not None and current["status"] != "running":
+                return {
+                    "status": current["status"],
+                    "task": current,
+                    "reason": "task_state_changed_during_execution",
+                }
+            raise HTTPException(
+                status_code=409,
+                detail="Task state changed while execution was being finalized",
+            ) from exc
+
+        observatory.record_event(
+            category="agent",
+            event_type="task_execution_completed",
+            summary=f"Read-only task completed: {task_id}",
+            outcome="success",
+            layer_id="SPS-10",
+            payload={"task_id": task_id, "tool_name": outcome["tool_name"]},
+        )
+        return {"status": "completed", "task": completed, "outcome": outcome}
 
     @app.get("/api/conversations")
     def conversations(limit: int = 50) -> dict[str, Any]:

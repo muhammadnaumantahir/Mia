@@ -287,6 +287,50 @@ class TaskStore:
             ).fetchone()
         return self._decode_task(claimed)
 
+    def claim_task(
+        self,
+        task_id: str,
+        *,
+        actor: str = "manual-task-executor",
+    ) -> dict[str, Any]:
+        """Atomically claim one specific task, but only after owner approval."""
+        now = _now()
+        with self._connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute(
+                "SELECT * FROM tasks WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            if row is None:
+                raise TaskTransitionError("task was not found")
+            if row["status"] != "approved":
+                raise TaskTransitionError("task must be approved before it can run")
+            updated = db.execute(
+                """
+                UPDATE tasks
+                SET status = 'running', updated_at = ?,
+                    started_at = COALESCE(started_at, ?)
+                WHERE task_id = ? AND status = 'approved'
+                """,
+                (now, now, task_id),
+            )
+            if updated.rowcount != 1:
+                raise TaskTransitionError("task is no longer available to execute")
+            self._insert_event(
+                db,
+                task_id=task_id,
+                from_status="approved",
+                to_status="running",
+                reason="Claimed for explicit manual execution",
+                actor=actor,
+                payload={},
+            )
+            claimed = db.execute(
+                "SELECT * FROM tasks WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+        return self._decode_task(claimed)
+
     def get_task(self, task_id: str) -> dict[str, Any] | None:
         with self._connection() as db:
             row = db.execute(

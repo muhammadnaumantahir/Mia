@@ -94,6 +94,11 @@ class ToolRegistry:
             for tool in self._tools.values()
         ]
 
+    def is_read_only(self, name: str) -> bool:
+        """Return whether a registered tool is explicitly classified as read-only."""
+        tool = self._tools.get(name)
+        return tool is not None and tool.mode == "read"
+
     async def execute(self, name: str, arguments: dict[str, Any]) -> ToolResult:
         tool = self._tools.get(name)
         if tool is None:
