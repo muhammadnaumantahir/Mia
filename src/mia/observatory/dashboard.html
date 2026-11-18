@@ -170,8 +170,7 @@ async function loadExperimentControl(){
   const items=listData.items||[];
   activeExperiment=items.find(item=>item.status==='running')||
    items.find(item=>item.status==='prepared')||
-   items.find(item=>item.status==='completed')||
-   items.find(item=>item.status==='incomplete')||null;
+   items[0]||null;
   if(!activeExperiment){
    el('experimentControlState').textContent='Not prepared';
    capture.disabled=false;
@@ -258,6 +257,7 @@ async function loadExperimentControl(){
    daily.disabled=true;
    el('dailySnapshotStatus').textContent=snapshotStatus.reason||'The final daily snapshot was not captured. This run is incomplete.';
    setExperimentNotice('Experiment incomplete. Its stored evidence is preserved; it was not marked completed.',true);
+   await load();
    return;
   }
 
