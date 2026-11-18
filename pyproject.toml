@@ -37,7 +37,7 @@ voice-wake = [
 ]
 computer = [
   "playwright>=1.48,<2",
-  "pywinauto>=0.6.9,<1; platform_system == "Windows"",
+  'pywinauto>=0.6.9,<1; platform_system == "Windows"',
 ]
 
 [project.scripts]
