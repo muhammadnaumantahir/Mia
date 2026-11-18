@@ -44,8 +44,8 @@ rejected by this route.
 The endpoint checks CPU/RAM policy before claiming the named task, executes one
 tool only, and records the result in the task event history and observatory.
 It is a manually invoked, local API operation; it does not start the background
-scheduler. Preview and mutation actions continue through the separate
-payload-bound approval flow. This in-process read-only boundary is not an OS
+scheduler. The global emergency-stop flag blocks it as well. Preview and
+mutation actions continue through the separate payload-bound approval flow. This in-process read-only boundary is not an OS
 sandbox and does not make arbitrary third-party tool handlers safe. Its async
 timeout can cancel cooperative async handlers, but it cannot forcibly terminate
 a blocking synchronous handler; a killable isolated worker remains a release

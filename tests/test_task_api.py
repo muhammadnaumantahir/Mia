@@ -177,3 +177,41 @@ def test_manual_task_execution_rejects_preview_tools_without_claiming_task(tmp_p
     assert response.status_code == 422
     assert "read-only" in response.json()["detail"]
     assert tasks.get_task(task_id)["status"] == "approved"
+
+
+def test_manual_task_execution_respects_global_emergency_stop(tmp_path, monkeypatch):
+    from mia.agent.resources import ResourceMonitor
+
+    monkeypatch.setenv("MIA_EMERGENCY_STOP", "true")
+    tasks = TaskStore(tmp_path / "tasks.sqlite3")
+    client = TestClient(
+        create_app(
+            store=ObservatoryStore(tmp_path / "observatory.sqlite3"),
+            task_store=tasks,
+            resource_monitor=ResourceMonitor(psutil_module=FakePsutil()),
+        )
+    )
+    created = client.post(
+        "/api/tasks",
+        json={
+            "title": "Check local resources",
+            "goal": "Read CPU and RAM values.",
+            "source": "interactive",
+            "metadata": {
+                "execution": {
+                    "tool_name": "system.read_resources",
+                    "arguments": {},
+                }
+            },
+        },
+    )
+    task_id = created.json()["task_id"]
+    client.post(
+        f"/api/tasks/{task_id}/approve",
+        json={"reason": "Approved before enabling emergency stop."},
+    )
+
+    response = client.post(f"/api/tasks/{task_id}/execute")
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Emergency stop is active"
+    assert tasks.get_task(task_id)["status"] == "approved"

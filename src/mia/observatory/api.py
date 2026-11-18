@@ -1239,6 +1239,9 @@ def create_app(
         except TaskExecutionError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+        if autonomy_policy.emergency_stop:
+            raise HTTPException(status_code=503, detail="Emergency stop is active")
+
         try:
             snapshot = resource_monitor_service.snapshot()
             load = RuntimeLoad(
