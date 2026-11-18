@@ -37,7 +37,21 @@ _FORBIDDEN_IMPORTS = {
     "urllib",
     "webbrowser",
 }
-_FORBIDDEN_CALLS = {"__import__", "breakpoint", "compile", "eval", "exec"}
+_FORBIDDEN_CALLS = {
+    "__import__",
+    "breakpoint",
+    "compile",
+    "eval",
+    "exec",
+    "getattr",
+    "setattr",
+    "delattr",
+    "globals",
+    "locals",
+    "vars",
+    "open",
+    "input",
+}
 _MAX_DETAIL = 8000
 
 

@@ -66,6 +66,13 @@ silently change the provenance of an earlier result.
 
 ## Capability Lab
 
+The **Draft with Mia** action asks an eligible free-route model for a pure
+Python `run(input_data)` implementation and a pytest file. It rejects tool
+calls, invalid syntax, missing run/test contracts, and imports/calls blocked by
+the static capability policy. Drafts are returned to the browser only; they are
+not persisted or executed. Review and edit the source/tests, then explicitly
+save the immutable candidate before sandbox validation.
+
 The Evolution Observatory exposes a Capability Lab form. It stores candidate
 source and a dedicated test file as immutable versioned artifacts, shows their
 hashes, and loads stored source through a hash-verifying read-only endpoint.

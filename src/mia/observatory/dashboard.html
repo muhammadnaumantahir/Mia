@@ -25,7 +25,7 @@ footer{margin-top:24px;color:#6f8580;font-size:11px;line-height:1.6}
 .resource-card small{color:#829890;font-size:11px}
 .resource-track{height:7px;border-radius:8px;background:#263733;overflow:hidden;margin-top:10px}
 .resource-fill{height:100%;width:0;border-radius:8px;background:linear-gradient(90deg,#31ba87,#f0bb65);transition:width .3s ease}
-.cap-form{display:grid;gap:12px;margin:4px 0 18px}.cap-fields{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}.cap-field{display:grid;gap:5px;min-width:0}.cap-field label,.cap-code-label{font-size:11px;color:#9db2aa;font-weight:650}.cap-field input,.cap-field textarea,.cap-form textarea{width:100%;min-width:0;background:#10191b;color:#dce9e4;border:1px solid #35514a;border-radius:9px;padding:10px;font:inherit;font-size:12px;outline:none}.cap-field input:focus,.cap-field textarea:focus,.cap-form textarea:focus{border-color:#4b9d7b;box-shadow:0 0 0 2px #1d65462a}.cap-code{min-height:150px;max-height:360px;resize:vertical;font-family:Consolas,Monaco,monospace!important;font-size:11px!important;line-height:1.5}.cap-rationale{min-height:70px;resize:vertical}.cap-form-foot{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.cap-notice{font-size:11px;color:#9acbb3;min-height:18px;line-height:1.5}.cap-notice.error{color:#f0b7a8}.cap-list{display:grid;gap:10px}.cap-card{border:1px solid #2b4540;border-radius:13px;padding:13px;background:#10191b}.cap-card-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.cap-card-title{font-size:13px;font-weight:700;color:#e2eee8;overflow-wrap:anywhere}.cap-card-meta{font-size:10px;color:#839b91;margin-top:5px;line-height:1.5;overflow-wrap:anywhere}.cap-status{flex:0 0 auto;font-size:10px;color:#a8e2c4;border:1px solid #315b4d;background:#122820;border-radius:999px;padding:5px 9px}.cap-card-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.cap-card details{margin-top:10px;border-top:1px solid #263936;padding-top:9px}.cap-card summary{font-size:11px;color:#9fc8b3;cursor:pointer}.cap-card pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto;background:#0a1213;border:1px solid #263936;padding:10px;border-radius:9px;color:#cbded2;font:11px/1.5 Consolas,Monaco,monospace}.cap-blocked{font-size:10px;color:#d8bd86;margin-top:9px;line-height:1.5}
+.cap-form{display:grid;gap:12px;margin:4px 0 18px}.cap-fields{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}.cap-field{display:grid;gap:5px;min-width:0}.cap-field label,.cap-code-label{font-size:11px;color:#9db2aa;font-weight:650}.cap-field input,.cap-field textarea,.cap-form textarea{width:100%;min-width:0;background:#10191b;color:#dce9e4;border:1px solid #35514a;border-radius:9px;padding:10px;font:inherit;font-size:12px;outline:none}.cap-field input:focus,.cap-field textarea:focus,.cap-form textarea:focus{border-color:#4b9d7b;box-shadow:0 0 0 2px #1d65462a}.cap-field select{width:100%;background:#10191b;color:#dce9e4;border:1px solid #35514a;border-radius:9px;padding:10px;font:inherit;font-size:12px}.cap-field select:focus{border-color:#4b9d7b;outline:none}.cap-code{min-height:150px;max-height:360px;resize:vertical;font-family:Consolas,Monaco,monospace!important;font-size:11px!important;line-height:1.5}.cap-rationale{min-height:70px;resize:vertical}.cap-form-foot{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.cap-notice{font-size:11px;color:#9acbb3;min-height:18px;line-height:1.5}.cap-notice.error{color:#f0b7a8}.cap-list{display:grid;gap:10px}.cap-card{border:1px solid #2b4540;border-radius:13px;padding:13px;background:#10191b}.cap-card-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.cap-card-title{font-size:13px;font-weight:700;color:#e2eee8;overflow-wrap:anywhere}.cap-card-meta{font-size:10px;color:#839b91;margin-top:5px;line-height:1.5;overflow-wrap:anywhere}.cap-status{flex:0 0 auto;font-size:10px;color:#a8e2c4;border:1px solid #315b4d;background:#122820;border-radius:999px;padding:5px 9px}.cap-card-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.cap-card details{margin-top:10px;border-top:1px solid #263936;padding-top:9px}.cap-card summary{font-size:11px;color:#9fc8b3;cursor:pointer}.cap-card pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto;background:#0a1213;border:1px solid #263936;padding:10px;border-radius:9px;color:#cbded2;font:11px/1.5 Consolas,Monaco,monospace}.cap-blocked{font-size:10px;color:#d8bd86;margin-top:9px;line-height:1.5}
 @media(max-width:760px){.cap-fields{grid-template-columns:1fr 1fr}}
 @media(max-width:440px){.cap-fields{grid-template-columns:1fr}.cap-card-head{align-items:flex-start;flex-direction:column}}
 @media(max-width:600px){.resource-grid{grid-template-columns:1fr}}
@@ -76,11 +76,17 @@ footer{margin-top:24px;color:#6f8580;font-size:11px;line-height:1.6}
    <div class="cap-field"><label for="capId">Capability ID</label><input id="capId" required minlength="2" maxlength="64" pattern="[a-z][a-z0-9._-]{1,63}" placeholder="example-tool"></div>
    <div class="cap-field"><label for="capVersion">Version</label><input id="capVersion" required maxlength="80" pattern="[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?" placeholder="0.1.0"></div>
    <div class="cap-field"><label for="capName">Display name</label><input id="capName" required maxlength="120" placeholder="Example capability"></div>
+   <div class="cap-field"><label for="capSourceKind">Source type</label><select id="capSourceKind"><option value="generated">Generated</option><option value="adapted">Adapted</option><option value="reused">Reused</option><option value="composed">Composed</option></select></div>
+   <div class="cap-field"><label for="capPermissions">Requested permissions (comma-separated)</label><input id="capPermissions" maxlength="1000" placeholder="Leave empty for pure logic"></div>
+  </div>
+  <div class="cap-fields" id="capProvenance" hidden>
+   <div class="cap-field"><label for="capUpstream">Upstream source URI</label><input id="capUpstream" maxlength="2000" placeholder="https://github.com/owner/repo"></div>
+   <div class="cap-field"><label for="capLicense">License identifier</label><input id="capLicense" maxlength="120" placeholder="MIT, Apache-2.0, BSD-3-Clause"></div>
   </div>
   <div class="cap-field"><label for="capRationale">Why should Mia have this capability?</label><textarea class="cap-rationale" id="capRationale" required maxlength="4000" placeholder="Describe the gap, expected behavior, and boundaries."></textarea></div>
   <div class="cap-field"><label class="cap-code-label" for="capSource">Candidate Python source</label><textarea class="cap-code" id="capSource" required maxlength="524288" spellcheck="false" placeholder="def run(...):&#10;    ..."></textarea></div>
   <div class="cap-field"><label class="cap-code-label" for="capTests">Candidate tests (required)</label><textarea class="cap-code" id="capTests" required maxlength="524288" spellcheck="false" placeholder="from candidate import run&#10;&#10;def test_run():&#10;    ..."></textarea></div>
-  <div class="cap-form-foot"><button class="send" id="saveCapability" type="submit">Save immutable candidate</button><span class="cap-notice" id="capNotice" role="status" aria-live="polite"></span></div>
+  <div class="cap-form-foot"><button class="send" id="draftCapability" type="button" style="background:#263535;color:#d8e2dd">✦ Draft with Mia</button><button class="send" id="saveCapability" type="submit">Save immutable candidate</button><span class="cap-notice" id="capNotice" role="status" aria-live="polite"></span></div>
  </form>
  <div class="panelhead"><div><h3>Capability versions</h3><div class="muted">Proposed → validating → validated → registered. Activation is intentionally blocked.</div></div></div>
  <div class="cap-list" id="capabilityList"><div class="muted">Loading capability versions…</div></div>
@@ -261,8 +267,10 @@ el('capabilityForm').addEventListener('submit',async event=>{
   source_code:source,
   test_source_code:testSource,
   rationale:el('capRationale').value.trim(),
-  source_kind:'generated',
-  permissions:[]
+  source_kind:el('capSourceKind').value,
+  upstream_uri:el('capUpstream').value.trim()||null,
+  license_id:el('capLicense').value.trim()||null,
+  permissions:el('capPermissions').value.split(',').map(value=>value.trim()).filter(Boolean)
  };
  try{
   const response=await fetch('/api/capabilities',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
@@ -273,6 +281,40 @@ el('capabilityForm').addEventListener('submit',async event=>{
  }catch(error){setCapabilityNotice(error.message,true);}
  finally{button.disabled=false;}
 });
+function updateCapabilityProvenance(){
+ const required=el('capSourceKind').value!=='generated';
+ el('capProvenance').hidden=!required;
+ el('capUpstream').required=required;
+ el('capLicense').required=required;
+ el('draftCapability').disabled=required;
+}
+async function draftCapabilityWithMia(){
+ const capabilityId=el('capId').value.trim();
+ const name=el('capName').value.trim();
+ const objective=el('capRationale').value.trim();
+ if(!capabilityId||!name||!objective){
+  setCapabilityNotice('Enter capability ID, display name, and objective first.',true);return;
+ }
+ if(el('capSourceKind').value!=='generated'){
+  setCapabilityNotice('AI drafting is only available for generated candidates. Reused/adapted code needs its source and license.',true);return;
+ }
+ const button=el('draftCapability');button.disabled=true;
+ setCapabilityNotice('Mia is drafting pure Python source and tests using the free-only model route…');
+ try{
+  const response=await fetch('/api/capabilities/draft',{
+   method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({capability_id:capabilityId,name,objective})
+  });
+  const result=await response.json();if(!response.ok)throw new Error(result.detail||'Capability drafting failed');
+  el('capSource').value=result.source_code;
+  el('capTests').value=result.test_source_code;
+  setCapabilityNotice('Draft generated by '+result.provider_id+' / '+result.model_id+'. Review and edit both files, then save the immutable version. Nothing has been stored or executed.');
+ }catch(error){setCapabilityNotice(error.message,true);}
+ finally{button.disabled=false;}
+}
+el('capSourceKind').addEventListener('change',updateCapabilityProvenance);
+el('draftCapability').addEventListener('click',draftCapabilityWithMia);
+updateCapabilityProvenance();
 el('refreshCapabilities').addEventListener('click',loadCapabilities);
 async function loadTasks(){
  try{
