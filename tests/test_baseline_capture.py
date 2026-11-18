@@ -482,3 +482,62 @@ def test_local_baseline_capture_requires_fixed_and_full_regression_suites_to_pas
     assert manifest["fixed_benchmark_results"]["tests"] == 6
     assert manifest["fixed_benchmark_results"]["passed"] == 5
     assert manifest["fixed_benchmark_results"]["failures"] == 1
+
+
+def test_runtime_configuration_is_captured_without_raw_private_values(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.setenv("MIA_AUTONOMY_ENABLED", "true")
+    monkeypatch.setenv("MIA_ALLOW_PAID", "false")
+    monkeypatch.setenv("MIA_COMPUTER_ROOTS", "D:/Private/ClientProjects")
+    _write_baseline_files(tmp_path)
+    runner = FakeSubprocess()
+
+    manifest = capture_baseline_manifest(tmp_path, subprocess_run=runner)
+
+    settings = manifest["runtime_settings"]
+    assert settings["MIA_AUTONOMY_ENABLED"] is True
+    assert settings["MIA_ALLOW_PAID"] is False
+    assert settings["MIA_COMPUTER_ROOTS_SHA256"]
+    assert "D:/Private/ClientProjects" not in str(manifest)
+    assert manifest["configuration_hash"].startswith("sha256:")
+
+
+def test_runtime_policy_changes_are_detected_as_configuration_drift(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    _write_baseline_files(tmp_path)
+    monkeypatch.setenv("MIA_AUTONOMY_ENABLED", "false")
+    before = capture_baseline_manifest(
+        tmp_path, subprocess_run=FakeSubprocess()
+    )
+    monkeypatch.setenv("MIA_AUTONOMY_ENABLED", "true")
+    after = capture_baseline_manifest(
+        tmp_path, subprocess_run=FakeSubprocess()
+    )
+
+    assert before["configuration_hash"] != after["configuration_hash"]
+    assert before["runtime_settings"]["MIA_AUTONOMY_ENABLED"] is False
+    assert after["runtime_settings"]["MIA_AUTONOMY_ENABLED"] is True
+
+
+@pytest.mark.parametrize(
+    ("name", "value", "message"),
+    [
+        ("MIA_MAX_CPU_PERCENT", "101", "between 0 and 100"),
+        ("MIA_AUTONOMY_INTERVAL_SECONDS", "0", "between 1 and 3600"),
+        ("MIA_ALLOW_PAID", "yes", "true or false"),
+        ("MIA_MAX_REQUEST_SPEND_USD", "nan", "finite"),
+    ],
+)
+def test_invalid_runtime_policy_prevents_baseline_capture(
+    tmp_path, monkeypatch, name, value, message
+):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.setenv(name, value)
+    _write_baseline_files(tmp_path)
+
+    with pytest.raises(BaselineCaptureError, match=message):
+        capture_baseline_manifest(tmp_path, subprocess_run=FakeSubprocess())

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import platform
 import subprocess
@@ -119,6 +120,82 @@ def _git_output(
     return (result.stdout or "").strip()
 
 
+RUNTIME_BOOLEAN_DEFAULTS = {
+    "MIA_EXPERIMENT_AUTO_CAPTURE": "false",
+    "MIA_AUTONOMY_ENABLED": "false",
+    "MIA_EMERGENCY_STOP": "false",
+    "MIA_ALLOW_PAID": "false",
+    "MIA_ALLOW_REMOTE_FILE_CONTEXT": "false",
+    "MIA_OLLAMA_ENABLE_TOOL_CALLING": "false",
+    "MIA_FREELLMAPI_ENABLED": "false",
+    "MIA_FREELLMAPI_ROUTE_FREE": "false",
+    "MIA_FREELLMAPI_ENABLE_TOOL_CALLING": "false",
+    "MIA_FREELLMAPI_DATA_LOCAL": "false",
+}
+RUNTIME_NUMBER_DEFAULTS = {
+    "MIA_MAX_CPU_PERCENT": "75",
+    "MIA_MAX_RAM_PERCENT": "85",
+    "MIA_AUTONOMY_INTERVAL_SECONDS": "30",
+    "MIA_MAX_MONTHLY_SPEND_USD": "0",
+    "MIA_MAX_REQUEST_SPEND_USD": "0",
+    "MIA_PORT": "8765",
+}
+RUNTIME_HASH_DEFAULTS = {
+    "MIA_HOST": "127.0.0.1",
+    "MIA_OLLAMA_BASE_URL": "http://127.0.0.1:11434",
+    "MIA_FREELLMAPI_BASE_URL": "http://127.0.0.1:3001/v1",
+    "MIA_COMPUTER_ROOTS": "",
+    "MIA_APPLICATIONS_FILE": "config/applications.json",
+    "MIA_DOCKER_EXECUTABLE": "docker",
+    "MIA_SANDBOX_IMAGE": "mia-sandbox:py313-v1",
+}
+
+
+def _runtime_configuration(repo_root: Path) -> dict[str, Any]:
+    """Capture non-secret policy/configuration without persisting private paths or URLs."""
+    settings: dict[str, Any] = {}
+    for name, default in RUNTIME_BOOLEAN_DEFAULTS.items():
+        raw = os.getenv(name, default).strip().lower()
+        if raw not in {"true", "false"}:
+            raise BaselineCaptureError(f"{name} must be true or false")
+        settings[name] = raw == "true"
+
+    for name, default in RUNTIME_NUMBER_DEFAULTS.items():
+        raw = os.getenv(name, default).strip()
+        try:
+            value = float(raw)
+        except ValueError as exc:
+            raise BaselineCaptureError(f"{name} must be a valid number") from exc
+        if not math.isfinite(value):
+            raise BaselineCaptureError(f"{name} must be finite")
+        if name in {"MIA_MAX_CPU_PERCENT", "MIA_MAX_RAM_PERCENT"} and not 0 <= value <= 100:
+            raise BaselineCaptureError(f"{name} must be between 0 and 100")
+        if name == "MIA_AUTONOMY_INTERVAL_SECONDS" and not 1 <= value <= 3600:
+            raise BaselineCaptureError(f"{name} must be between 1 and 3600")
+        if name in {"MIA_MAX_MONTHLY_SPEND_USD", "MIA_MAX_REQUEST_SPEND_USD"} and value < 0:
+            raise BaselineCaptureError(f"{name} cannot be negative")
+        if name == "MIA_PORT" and not 1 <= value <= 65535:
+            raise BaselineCaptureError("MIA_PORT must be between 1 and 65535")
+        settings[name] = int(value) if value.is_integer() else value
+
+    for name, default in RUNTIME_HASH_DEFAULTS.items():
+        raw = os.getenv(name, default).strip()
+        settings[f"{name}_SHA256"] = _sha256(raw.encode("utf-8"))
+
+    applications_path_raw = os.getenv(
+        "MIA_APPLICATIONS_FILE", "config/applications.json"
+    )
+    applications_path = Path(applications_path_raw).expanduser()
+    if not applications_path.is_absolute():
+        applications_path = repo_root / applications_path
+    applications_hash = None
+    if applications_path.is_file():
+        applications_hash = _sha256(applications_path.read_bytes())
+    settings["MIA_APPLICATIONS_CONFIG_PRESENT"] = applications_path.is_file()
+    settings["MIA_APPLICATIONS_CONFIG_SHA256"] = applications_hash
+    return settings
+
+
 def _environment() -> dict[str, Any]:
     memory_total = None
     try:
@@ -195,8 +272,16 @@ def capture_baseline_manifest(
             "path": relative.as_posix(),
             "sha256": _sha256(payload),
         })
+    runtime_configuration = _runtime_configuration(root)
     configuration_hash = "sha256:" + _sha256(
-        json.dumps(config_parts, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        json.dumps(
+            {
+                "files": config_parts,
+                "runtime_settings": runtime_configuration,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
     )
 
     started = time.monotonic()
@@ -292,6 +377,7 @@ def capture_baseline_manifest(
         "configuration_hash": configuration_hash,
         "benchmark_suite_id": BENCHMARK_SUITE_ID,
         "environment": _environment(),
+        "runtime_settings": runtime_configuration,
         "baseline_results": {
             **regression_results,
             "ruff_passed": ruff_passed,

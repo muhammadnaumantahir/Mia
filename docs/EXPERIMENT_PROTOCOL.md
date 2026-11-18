@@ -10,7 +10,7 @@ This is an experiment, not a requirement to generate code every day.
 
 Capture:
 - Git commit SHA and clean/dirty state;
-- hashes of tracked source, configuration and test files;
+- hashes of tracked source, configuration and fixed benchmark files, plus an allowlisted hash of runtime policy settings (no credentials or raw private paths/URLs);
 - OS, CPU, RAM, storage and runtime versions;
 - active model and provider IDs, quantization and inference settings;
 - installed capability registry and permission profile;
