@@ -41,7 +41,7 @@
 
 - 2026-11-19 local verification (same Linux/Python 3.12.3 environment, no CI): `ruff check src tests` passed and `pytest` reported 284 passed after the retention-purge change and 290 after the task-lease change; 291 after the cleanup panel; 301 after capability promotion and rollback; 302 after the Capability Lab controls; 307 after the experiment activity evidence; 315 after latency measurement.
 
-- 2026-11-19 local verification (Linux, Python 3.12.3; no Docker, no Windows; mocked HTTP only): after adding gateway rate-limit tracking and failure backoff, `ruff check src tests` passed and `pytest` reported 344 passed (29 new in `tests/test_gateway_health.py`). A mutation check (disabling blocking, then the degraded ordering) made 4 and 3 of those tests fail respectively, so they do detect the behavior. Not a CI result.
+- 2026-11-19 local verification (Linux, Python 3.12.3; no Docker, no Windows; mocked HTTP only): after adding gateway rate-limit tracking and failure backoff, `ruff check src tests` passed and `pytest` reported 344 passed (29 new in `tests/test_gateway_health.py`). A mutation check (disabling blocking, then the degraded ordering) made 4 and 3 of those tests fail respectively, so they do detect the behavior. Not a CI result. Push `c67627b` triggered CI run 44481362293; both jobs ended in about two seconds with `runner_id: 0` and no steps (same runner-allocation failure), so CI remains inconclusive.
 
 ## Not complete
 
