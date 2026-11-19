@@ -44,12 +44,33 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 @media(max-width:800px){.task-panel{max-height:55vh;padding:13px}.task-head{align-items:flex-start}.task-card-top{flex-direction:column;gap:7px}}
 @media(max-width:800px){.layout{grid-template-columns:1fr}aside{display:none}.top{padding:0 18px}.content{padding:30px 16px 18px}.welcome{margin-top:70px}.bubble{max-width:88%}}
 @media(max-width:440px){h1{font-size:29px}.composerfoot{align-items:flex-end}.hint{max-width:120px}}
+
+.memory-panel{margin-top:0;background:#101f1d;border:1px solid #29463c;border-radius:16px;padding:13px}
+.memory-panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.memory-panel-head b{font-size:12px}
+.memory-refresh{border:1px solid #35594a;background:#18352b;color:#c7f0dc;border-radius:8px;padding:5px 8px;font-size:10px;cursor:pointer}
+.memory-count{font-size:10px;color:#789489;margin-top:6px}
+.memory-list{display:grid;gap:6px;margin-top:8px;max-height:190px;overflow:auto}
+.memory-record{border:1px solid #29443a;border-radius:9px;background:#0d1917;padding:7px 8px}
+.memory-record summary{font-size:10px;line-height:1.45;color:#c9e4d7;cursor:pointer;overflow-wrap:anywhere}
+.memory-record p{font-size:10px;line-height:1.5;color:#9db4a9;margin:7px 0 4px;white-space:pre-wrap;overflow-wrap:anywhere}
+.memory-record small{font-size:9px;color:#718c80}
+.memory-empty{font-size:10px;color:#8da79e;line-height:1.5}
+.memory-sources{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px;padding-top:8px;border-top:1px solid #29443a}
+.memory-sources-label{width:100%;font-size:9px;color:#8eaa9b;text-transform:uppercase;letter-spacing:.7px}
+.memory-source{border:1px solid #315844;background:#132a20;color:#bce7ce;border-radius:999px;padding:4px 7px;font-size:9px;line-height:1.35;max-width:100%;overflow-wrap:anywhere}
+
 </style></head>
 <body><div class="layout">
 <aside>
 <div class="brand"><div class="logo">M</div><div><strong>Mia</strong><small>Your personal AI</small></div></div>
 <nav class="nav"><a class="active" href="/assistant">✳ <span>New conversation</span></a><button class="nav-button" id="toggleTasks" type="button" aria-controls="taskPanel" aria-expanded="false">☷ <span>Task Desk</span></button><a href="/"><span>◷</span><span>Evolution Observatory</span></a></nav>
 <div class="recent-title">Recent conversations</div><div class="recent-list" id="recentList"><div class="sub">No conversations yet</div></div>
+<div class="memory-panel">
+ <div class="memory-panel-head"><b>Long-term memory</b><button id="refreshMemory" class="memory-refresh" type="button">↻ Refresh</button></div>
+ <div class="memory-count" id="memoryCount">Loading saved memories…</div>
+ <div class="memory-list" id="memoryRecords"><div class="memory-empty">Loading records…</div></div>
+</div>
 <div class="sidecard"><b>Memory cleanup</b><p>Preview, then delete, conversations and saved knowledge not updated for a number of days.</p><div style="display:flex;gap:6px;align-items:center;margin-top:8px"><input id="purgeDays" type="number" min="1" max="36500" value="90" aria-label="Older than days" style="width:64px"><span style="font-size:11px">days</span><button id="purgePreview" type="button" class="send" style="padding:4px 10px">Preview</button></div><div id="purgeResult" style="font-size:11px;margin-top:8px"></div><button id="purgeConfirm" type="button" class="send" hidden style="margin-top:6px;padding:4px 10px;background:#5a2a2a;color:#ffd2d2">Delete previewed items</button></div>
 <div class="sidecard"><b>Local-first by design</b><p>Mia tries local models first. Cloud providers are optional, and paid routing remains disabled unless you explicitly configure it.</p></div>
 </aside>
@@ -391,6 +412,51 @@ async function loadConversationList(){
   if(!data.items?.length)box.textContent='No conversations yet';
  }catch(error){$('recentList').textContent='Conversation history unavailable';}
 }
+
+async function loadMemoryRecords(){
+ const list=$('memoryRecords');
+ try{
+  const response=await fetch('/api/memory/records?limit=100');
+  const data=await response.json();
+  if(!response.ok)throw new Error(data.detail||'Memory records are unavailable');
+  const items=Array.isArray(data.items)?data.items:[];
+  const demoCount=items.filter(item=>(item.title||'').startsWith('[MIA DEMO]')).length;
+  $('memoryCount').textContent=items.length+' structured record(s) · '+demoCount+' demo sample(s)';
+  list.replaceChildren();
+  if(!items.length){
+   const empty=document.createElement('div');empty.className='memory-empty';
+   empty.textContent='No structured records yet. Owner-approved decisions, goals and project notes will appear here.';
+   list.append(empty);return;
+  }
+  items.slice(0,6).forEach(item=>{
+   const details=document.createElement('details');details.className='memory-record';
+   const summary=document.createElement('summary');
+   summary.textContent=(item.record_type||'memory')+' · '+(item.title||'Untitled record');
+   const body=document.createElement('p');body.textContent=item.body||'No details stored.';
+   const meta=document.createElement('small');
+   meta.textContent=(item.provenance||'unknown provenance')+' · '+(item.status||'unknown status');
+   details.append(summary,body,meta);list.append(details);
+  });
+ }catch(error){
+  $('memoryCount').textContent='Memory status unavailable';
+  list.replaceChildren();
+  const message=document.createElement('div');message.className='memory-empty';message.textContent=error.message;list.append(message);
+ }
+}
+function renderMemoryReferences(container,references){
+ if(!Array.isArray(references)||!references.length)return;
+ const section=document.createElement('div');section.className='memory-sources';
+ const heading=document.createElement('div');heading.className='memory-sources-label';heading.textContent='Memory used for this reply';
+ section.append(heading);
+ references.slice(0,6).forEach(ref=>{
+  const chip=document.createElement('span');chip.className='memory-source';
+  chip.textContent='['+(ref.label||'M?')+'] '+(ref.title||ref.kind||'Memory')+' · '+(ref.provenance||ref.trust||'source');
+  chip.title='Type: '+(ref.ref_type||'memory')+' · '+(ref.provenance||'unknown provenance');
+  section.append(chip);
+ });
+ container.append(section);
+}
+
 async function loadCurrentConversation(){
  if(!conversationId)return;
  try{
@@ -507,6 +573,7 @@ $('composer').addEventListener('submit',async event=>{
    if(streamed.done){
     conversationId=streamed.done.conversation_id;
     const small=document.createElement('small');small.style.cssText='display:block;color:#78b69a;font-size:10px;margin-top:8px';small.textContent=usageMeta(streamed.done);bubble.appendChild(small);
+     renderMemoryReferences(bubble,streamed.done.context_references||[]);
    }
    result={content:streamed.text};
   }
