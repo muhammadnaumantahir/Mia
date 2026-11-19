@@ -637,7 +637,7 @@ async function submitPrompt(prompt,{voiceReply=false}={}){
   }
   if(conversationId)window.history.replaceState({},'', '/assistant?conversation_id='+encodeURIComponent(conversationId));
   loadConversationList();
-  await speakReply(result.content,{force:voiceReply});
+  if(!voiceReply||voiceMode)await speakReply(result.content,{force:voiceReply});
   $('hint').textContent='Response received';
  }catch(error){
   addMessage('assistant','I could not complete that request. '+error.message);
@@ -792,7 +792,8 @@ function startVoiceRecognition(){
    'not-allowed':'Microphone permission was denied. Allow microphone access in the browser address bar.',
    'service-not-allowed':'The browser blocked its speech service.',
    'audio-capture':'No working microphone was found.',
-   'network':'Browser speech recognition needs a working network connection.'
+   'network':'Browser speech recognition needs a working network connection.',
+   'language-not-supported':'This speech service does not support the selected language. Try English.'
   };
   const message=messages[event.error]||('Speech recognition error: '+event.error);
   stopVoiceConversation(message,true);
