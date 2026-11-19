@@ -364,6 +364,21 @@ def default_registry() -> CapabilityRegistry:
             supported_os=("windows",), requires_modules=("pywinauto",), needs_display=True,
         ),
         CapabilitySpec(
+            "terminal.run", "Run a shell command in an owner-configured folder.", X, med, 600,
+            "Exit code, separate stdout/stderr and status are recorded; success means exit 0 only.",
+            _obj(command=_S, root_id=_S, relative_path=_S, shell=_S), _obj(exit_code=_I),
+            constraints=(
+                "Working directory must be inside a configured root.",
+                "Per-command risk classification; high risk always needs per-action approval.",
+                "Administrative, security-disabling, credential and obfuscated commands are blocked.",
+                "Scrubbed environment; output capped at 256 KB per stream and redacted.",
+                "Timeout 600 s maximum; cancellable.",
+            ),
+            side_effects=("run_process",),
+            health_check=lambda env: HealthResult(bool(env.shells), "" if env.shells
+                                                  else "no supported shell found"),
+        ),
+        CapabilitySpec(
             "system.resources", "Sample CPU and RAM usage.", V, low, 10,
             "Values are read from the OS counters at call time.",
             _obj(), _obj(cpu_percent={"type": "number"}), requires_modules=("psutil",),

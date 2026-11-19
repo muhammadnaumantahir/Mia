@@ -44,6 +44,7 @@ from mia.computer.fileops import FileOperationError, FileOperations
 from mia.computer.filesystem import FilesystemAccessError, FilesystemAdapter
 from mia.computer.permissions import PermissionError_, PermissionPolicy
 from mia.computer.processes import ProcessAccessError, ProcessManager
+from mia.computer.terminal import CommandRefused, TerminalExecutor
 from mia.computer.windows_ui import DesktopAccessError, WindowsUIAdapter
 from mia.evolution.capabilities import (
     CapabilityActivationBlocked,
@@ -357,6 +358,21 @@ class IdentityUpdateInput(BaseModel):
     reason: str = Field(default="", max_length=300)
 
 
+class TerminalCommandInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command: str = Field(min_length=1, max_length=4000)
+    root_id: str = Field(min_length=1, max_length=40)
+    relative_path: str = Field(default=".", max_length=1000)
+    shell: str | None = Field(default=None, pattern="^(powershell|pwsh|cmd|bash|sh|zsh)$")
+    timeout_seconds: float | None = Field(default=None, gt=0, le=600)
+
+
+class TerminalExecution(TerminalCommandInput):
+    approval_id: str | None = Field(default=None, min_length=32, max_length=32)
+    wait_seconds: float = Field(default=0, ge=0, le=30)
+
+
 class ProcessTerminateInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -433,6 +449,7 @@ def create_app(
     usage_ledger: UsageLedger | None = None,
     permission_policy: PermissionPolicy | None = None,
     process_manager: ProcessManager | None = None,
+    terminal: TerminalExecutor | None = None,
     app_discovery: ApplicationDiscovery | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
@@ -1285,6 +1302,100 @@ def create_app(
     async def browser_close() -> dict[str, str]:
         await browser_controller.close()
         return {"status": "closed"}
+
+    def _terminal_finished(ex: Any) -> None:
+        observatory.record_event(
+            category="computer", event_type="terminal_finished",
+            summary=f"Command {ex.status} (exit {ex.exit_code}) in {ex.cwd}",
+            outcome="success" if ex.status == "completed" else "failure", layer_id="SPS-10",
+            payload={"execution_id": ex.execution_id, "status": ex.status,
+                     "exit_code": ex.exit_code, "risk": ex.risk, "truncated": ex.truncated},
+        )
+
+    _env = detect_environment()
+    terminal_executor = terminal or TerminalExecutor(
+        approval_store, computer_files, os_family=_env.os_family,
+        available_shells=_env.shells, policy=policy,
+        spec=capability_registry.get("terminal.run"), on_finish=_terminal_finished,
+    )
+    app.state.terminal = terminal_executor
+
+    @app.post("/api/computer/terminal/preview", status_code=201)
+    def computer_terminal_preview(item: TerminalCommandInput) -> dict[str, Any]:
+        try:
+            return terminal_executor.preview(
+                item.command, root_id=item.root_id, cwd=item.relative_path, shell=item.shell,
+                timeout=item.timeout_seconds)
+        except CommandRefused as exc:
+            observatory.record_event(
+                category="computer", event_type="terminal_refused",
+                summary="A command was refused before approval", outcome="blocked",
+                layer_id="SPS-10", payload={"reason": str(exc)[:200]})
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except FilesystemAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.post("/api/computer/terminal/execute")
+    def computer_terminal_execute(item: TerminalExecution) -> dict[str, Any]:
+        try:
+            ex = terminal_executor.start(
+                item.command, root_id=item.root_id, cwd=item.relative_path, shell=item.shell,
+                timeout=item.timeout_seconds, approval_id=item.approval_id)
+        except ApprovalError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (CommandRefused, FilesystemAccessError) as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        observatory.record_event(
+            category="computer", event_type="terminal_started",
+            summary=f"Started {ex.risk}-risk command in {ex.cwd} ({ex.authorized_by})",
+            outcome="started", layer_id="SPS-10",
+            payload={"execution_id": ex.execution_id, "risk": ex.risk, "shell": ex.shell,
+                     "approval_id": item.approval_id})
+        if item.wait_seconds:
+            terminal_executor.wait(ex.execution_id, item.wait_seconds)
+        return ex.public()
+
+    @app.get("/api/computer/terminal/executions")
+    def computer_terminal_list() -> dict[str, Any]:
+        return {"items": terminal_executor.list_executions()}
+
+    @app.get("/api/computer/terminal/executions/{execution_id}")
+    def computer_terminal_get(execution_id: str, wait_seconds: float = 0) -> dict[str, Any]:
+        try:
+            ex = terminal_executor.wait(execution_id, wait_seconds) if wait_seconds else \
+                terminal_executor.get(execution_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Unknown execution") from exc
+        return ex.public()
+
+    @app.post("/api/computer/terminal/executions/{execution_id}/cancel")
+    def computer_terminal_cancel(execution_id: str) -> dict[str, Any]:
+        try:
+            cancelled = terminal_executor.cancel(execution_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Unknown execution") from exc
+        observatory.record_event(
+            category="computer", event_type="terminal_cancel_requested",
+            summary="Owner cancelled a running command", outcome="success" if cancelled else "noop",
+            layer_id="SPS-10", payload={"execution_id": execution_id})
+        return {"status": "cancelling" if cancelled else "not_running"}
+
+    @app.post("/api/computer/stop-all")
+    def computer_stop_all() -> dict[str, Any]:
+        stopped = terminal_executor.stop_all()
+        observatory.record_event(
+            category="computer", event_type="stop_all",
+            summary="Owner stopped all active computer automation", outcome="success",
+            layer_id="SPS-10", payload={"terminal_stopped": stopped})
+        return {"status": "stopped", "terminal_commands_stopped": stopped}
 
     processes = process_manager or ProcessManager(approval_store)
     app.state.process_manager = processes
