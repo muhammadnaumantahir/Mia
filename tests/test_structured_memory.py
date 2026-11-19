@@ -404,7 +404,7 @@ def test_api_record_lifecycle(tmp_path, monkeypatch):
         f"/api/memory/records/{record_id}/status", json={"status": "completed"}
     ).status_code == 409
 
-    assert client.delete(f"/api/memory/records/{new_id}").json() == {"deleted": True}
+    assert client.delete(f"/api/memory/records/{new_id}").json()["deleted"] is True
     assert client.get(f"/api/memory/records/{new_id}").status_code == 404
 
     types = event_types(observatory)
@@ -425,7 +425,7 @@ def test_api_validation_errors(tmp_path, monkeypatch):
     }).status_code == 400
     assert client.post("/api/memory/records/nope/correct", json={"body": "x"}).status_code == 404
     assert client.post("/api/memory/records/nope/status", json={"status": "completed"}).status_code == 404
-    assert client.delete("/api/memory/records/nope").json() == {"deleted": False}
+    assert client.delete("/api/memory/records/nope").json()["deleted"] is False
 
 
 def test_event_payloads_never_contain_record_text(tmp_path, monkeypatch):

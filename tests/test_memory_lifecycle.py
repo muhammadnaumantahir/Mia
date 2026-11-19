@@ -578,7 +578,9 @@ def test_api_lifecycle_endpoints(tmp_path, monkeypatch):
     assert memory.structured.get(pending)["status"] == "active"
 
     assert client.post(f"/api/memory/records/{pending}/confirm").status_code == 200
-    assert client.delete(f"/api/memory/records/{record_id}").json() == {"deleted": True}
+    assert client.delete(f"/api/memory/records/{record_id}").json() == {
+        "deleted": True, "purged_messages": 0,
+    }
     assert client.get(f"/api/memory/records/{record_id}").status_code == 404
 
 

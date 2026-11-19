@@ -70,6 +70,7 @@ from mia.gateway.service import CompletionResult, ModelGateway
 from mia.knowledge.document_ingestion import DocumentIngestionError, DocumentIngestor
 from mia.life.runner import LifeRunner, LifeScheduler
 from mia.life.store import ITEM_STATES, LifeStore
+from mia.memory.capture import CaptureService
 from mia.memory.context import ContextPacket, assemble_memory_context
 from mia.memory.identity import (
     IDENTITY_VERSION,
@@ -78,7 +79,7 @@ from mia.memory.identity import (
 )
 from mia.memory.relationships import RelationshipNotFoundError
 from mia.memory.store import MemoryStore
-from mia.memory.structured import RecordNotFoundError, RecordStateError
+from mia.memory.structured import RECORD_TYPES, RecordNotFoundError, RecordStateError
 from mia.observatory.activity import ExperimentActivityCollector
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider
 from mia.voice.tts import Pyttsx3SpeechSynthesizer, SpeechSynthesisError, SpeechSynthesizer
@@ -317,6 +318,16 @@ class RelationshipVisibility(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     visibility: str = Field(min_length=1, max_length=10)
+
+
+class MemoryCaptureInput(BaseModel):
+    """Owner's explicit 'remember this' (for example from the memory panel)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=20_000)
+    record_type: str | None = Field(default=None, max_length=20)
+    conversation_id: str | None = Field(default=None, max_length=100)
 
 
 class ConversationTemporaryInput(BaseModel):
@@ -560,6 +571,44 @@ def create_app(
                 payload={},
             )
             return CHAT_SYSTEM_PROMPT, None
+
+    capture_service = CaptureService(memory_store)
+
+    def capture_from_message(
+        conversation_id: str, message_id: str, text: str
+    ) -> dict[str, Any] | None:
+        """Run memory capture for a user message. A failure never breaks chat."""
+        try:
+            outcome = capture_service.process_message(conversation_id, message_id, text)
+        except Exception:
+            observatory.record_event(
+                category="memory",
+                event_type="capture_failure",
+                summary="Memory capture failed; the reply continues without it",
+                outcome="error",
+                layer_id="SPS-05",
+                payload={"conversation_id": conversation_id},
+            )
+            return None
+        touched = (
+            outcome["saved"] or outcome["pending"] or outcome["superseded"] or outcome["forgotten"]
+        )
+        if touched:
+            observatory.record_event(
+                category="memory",
+                event_type="capture_applied",
+                summary="Memory capture changed stored memory",
+                outcome="success",
+                layer_id="SPS-05",
+                payload={
+                    "conversation_id": conversation_id,
+                    "saved": len(outcome["saved"]),
+                    "pending": len(outcome["pending"]),
+                    "superseded": len(outcome["superseded"]),
+                    "forgotten": len(outcome["forgotten"]),
+                },
+            )
+        return outcome if (outcome["processed"] or outcome["skipped"]) else None
     document_ingestor = DocumentIngestor(computer_files, memory_store)
     app.state.document_ingestor = document_ingestor
     browser_controller = browser or BrowserController(headless=True)
@@ -3345,11 +3394,13 @@ def create_app(
         return {"record_id": record_id, "status": item.status}
 
     @app.delete("/api/memory/records/{record_id}")
-    def delete_memory_record(record_id: str, chain: bool = True) -> dict[str, bool]:
-        deleted = memory_store.structured.delete(record_id, chain=chain)
-        if deleted:
+    def delete_memory_record(
+        record_id: str, chain: bool = True, purge_source: bool = True
+    ) -> dict[str, Any]:
+        outcome = memory_store.forget_record(record_id, chain=chain, purge_source=purge_source)
+        if outcome["deleted"]:
             _record_event("record_deleted", "Owner deleted a memory record", {"record_id": record_id})
-        return {"deleted": deleted}
+        return outcome
 
     def run_record_operation(operation: Callable[[], Any]) -> Any:
         try:
@@ -3375,6 +3426,25 @@ def create_app(
         conflicts = run_record_operation(lambda: memory_store.structured.approve(record_id))
         _record_event("record_approved", "Owner approved a memory suggestion", {"record_id": record_id})
         return {"record_id": record_id, "conflicts_with": conflicts}
+
+    @app.post("/api/memory/capture", status_code=201)
+    def capture_memory(item: MemoryCaptureInput) -> dict[str, Any]:
+        """Owner's explicit save. Honours the master memory switch."""
+        if not memory_store.settings.get("memory_enabled"):
+            raise HTTPException(status_code=409, detail="Memory is turned off")
+        if item.record_type is not None and item.record_type not in RECORD_TYPES:
+            raise HTTPException(status_code=400, detail="Unknown record_type")
+        origin = {"capture": "explicit", "via": "api"}
+        if item.conversation_id:
+            origin["conversation_id"] = item.conversation_id
+        return capture_service.remember(
+            item.text, record_type=item.record_type, origin_base=origin
+        )
+
+    @app.post("/api/memory/records/{record_id}/reject")
+    def reject_memory_record(record_id: str) -> dict[str, str]:
+        run_record_operation(lambda: memory_store.structured.set_status(record_id, "rejected"))
+        return {"record_id": record_id, "status": "rejected"}
 
     @app.post("/api/memory/records/{record_id}/confirm")
     def confirm_memory_record(record_id: str) -> dict[str, str]:
@@ -3708,7 +3778,8 @@ def create_app(
             conversation_id = memory_store.ensure_conversation(item.conversation_id)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        memory_store.append_message(conversation_id, "user", item.prompt)
+        user_message_id = memory_store.append_message(conversation_id, "user", item.prompt)
+        capture_result = capture_from_message(conversation_id, user_message_id, item.prompt)
         recent_messages = memory_store.get_messages(conversation_id, limit=12)
 
         def sse(event: str, data: dict[str, Any]) -> str:
@@ -3799,6 +3870,7 @@ def create_app(
                         "first_token_ms": event.first_token_ms,
                         "total_ms": event.total_ms,
                         "context_references": context_refs,
+                        "memory_capture": capture_result,
                     })
             except (TransientProviderError, PermanentProviderError, RuntimeError, KeyError) as exc:
                 if parts:  # keep what the owner already saw, marked incomplete
@@ -3867,7 +3939,8 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-        memory_store.append_message(conversation_id, "user", item.prompt)
+        user_message_id = memory_store.append_message(conversation_id, "user", item.prompt)
+        capture_result = capture_from_message(conversation_id, user_message_id, item.prompt)
         conversation_messages = memory_store.get_messages(
             conversation_id,
             limit=12,
@@ -4059,6 +4132,7 @@ def create_app(
             "tools_available": tools_available,
             "pending_actions": pending_actions,
             "context_references": context_refs,
+            "memory_capture": capture_result,
         }
 
     return app

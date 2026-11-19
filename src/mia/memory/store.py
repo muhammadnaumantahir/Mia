@@ -412,6 +412,40 @@ class MemoryStore:
             )
         return cursor.rowcount > 0
 
+    def purge_messages(self, message_ids: list[str], *, actor: str = "owner") -> int:
+        """Delete specific chat messages (and their search-index rows). Returns the count."""
+        removed = 0
+        with self._connection() as db:
+            for message_id in message_ids:
+                cursor = db.execute(
+                    "DELETE FROM conversation_messages WHERE message_id = ?", (message_id,)
+                )
+                removed += cursor.rowcount
+            if removed:
+                AuditLog.write(
+                    db,
+                    actor=actor,
+                    action="messages_purged",
+                    target_type="conversation_message",
+                    target_id=",".join(message_ids)[:200],
+                    detail={"count": removed, "reason": "source of a deleted memory"},
+                )
+        return removed
+
+    def forget_record(
+        self, record_id: str, *, purge_source: bool = True, chain: bool = True,
+        actor: str = "owner",
+    ) -> dict[str, Any]:
+        """Delete a memory and, by default, the chat message(s) it was captured from.
+
+        Without purging the source message, the deleted fact would stay searchable
+        through conversation history, so purging is the default.
+        """
+        sources = self.structured.source_message_ids(record_id, chain=chain) if purge_source else []
+        deleted = self.structured.delete(record_id, chain=chain, actor=actor)
+        purged = self.purge_messages(sources, actor=actor) if deleted and sources else 0
+        return {"deleted": deleted, "purged_messages": purged}
+
     def set_conversation_temporary(self, conversation_id: str, temporary: bool) -> bool:
         """Temporary conversations capture no memory and are never retrieved elsewhere."""
         with self._connection() as db:

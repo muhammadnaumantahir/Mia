@@ -62,7 +62,7 @@ _UPDATE = re.compile(
     r"the\s+memory\s+about)\s+(?P<topic>.+?)\s*(?::|\s-\s|\s—\s|\bto\b|\bwith\b)\s*(?P<body>.+)$",
     re.IGNORECASE | re.DOTALL,
 )
-_MY_PREFERRED = re.compile(r"^\s*my\s+(?:preferred|favou?rite)\s+.+\s+is\s+.+$", re.IGNORECASE)
+_MY_PREFERRED = re.compile(r"^\s*my\s+preferred\s+.+\s+is\s+.+$", re.IGNORECASE)
 _GENERIC_REF = re.compile(r"^(?:this|that|it|this\s+one|the\s+above|everything)?\s*[.!]*$", re.IGNORECASE)
 
 _UNCERTAIN = re.compile(
@@ -77,7 +77,8 @@ _TEMPORARY = re.compile(
     re.IGNORECASE,
 )
 _SENSITIVE = re.compile(
-    r"\b(?:religio\w*|muslim|christian|hindu|jewish|buddhist|atheist|faith|politic\w*|"
+    r"\b(?:religio\w*|muslim|christian|hindu|jewish|buddhist|sikh|atheist|faith|pray\w*|"
+    r"church|mosque|temple|worship\w*|quran|bible|god|politic\w*|"
     r"democrat|republican|vote[ds]?|sexual\w*|gay|lesbian|bisexual|transgender|"
     r"orientation|ethnic\w*|race|racial|immigra\w*|visa|citizenship|union\s+member|"
     r"health|diagnos\w*|disease|illness|cancer|diabet\w*|medication|prescri\w*|"
@@ -223,7 +224,7 @@ class CaptureService:
             result["processed"] = result["explicit"] = True
             content = _clean_body(remember.group("body"))
             if _GENERIC_REF.match(content):
-                content = self._previous_user_message(conversation_id, message_id)
+                content = self._previous_user_message(conversation_id, text)
                 if not content:
                     result["needs_clarification"] = (
                         "I am not sure what to remember. Tell me the fact, for example "
@@ -323,8 +324,12 @@ class CaptureService:
                                     for m in matches[:5]]
             return result
         target = matches[0]
-        self.memory.structured.delete(target["record_id"], actor="owner")
-        result["forgotten"].append({"record_id": target["record_id"], "title": target["title"]})
+        outcome = self.memory.forget_record(target["record_id"], actor="owner")
+        result["forgotten"].append({
+            "record_id": target["record_id"],
+            "title": target["title"],
+            "source_messages_removed": outcome["purged_messages"],
+        })
         return result
 
     def _update(
@@ -437,10 +442,13 @@ class CaptureService:
             r"job\s+title|company|team|timezone|time\s+zone|city)\s+is\s+", content, re.I)
         return match.group("s") if match else None
 
-    def _previous_user_message(self, conversation_id: str, message_id: str) -> str:
-        messages = self.memory.get_messages(conversation_id, limit=6)
-        previous = [m for m in messages if m["role"] == "user" and m["message_id"] != message_id]
-        return _clean_body(previous[-1]["content"]) if previous else ""
+    def _previous_user_message(self, conversation_id: str, current_text: str) -> str:
+        """The owner's message before the current one (never an assistant message)."""
+        users = [m for m in self.memory.get_messages(conversation_id, limit=8)
+                 if m["role"] == "user"]
+        if users and users[-1]["content"].strip() == current_text.strip():
+            users = users[:-1]  # the current message was already appended
+        return _clean_body(users[-1]["content"]) if users else ""
 
     def _compare(
         self, record_type: str, title: str, text: str

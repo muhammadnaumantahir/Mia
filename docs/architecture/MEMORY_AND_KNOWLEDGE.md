@@ -64,6 +64,28 @@ Endpoints: `GET /api/identity`, `GET /api/identity/history`, `PUT /api/identity`
 
 Verified with local automated tests only (mocked providers, no live model): restart persistence, provider/model switch with identical prompts, migration of a schema-1 database with existing items, messages and records, concurrent updates, and failure fallback.
 
+## Memory lifecycle and capture (implemented 2026-11-20)
+
+**Record types:** decision, goal, episode, project, entity, fact, preference, lesson.
+**Statuses:** pending (suggestion, never retrieved), active, completed, outdated, archived, expired, superseded, rejected. Only active and completed records are in the search index and retrievable; leaving those states removes the index row in the same transaction.
+**Trust labels (`provenance`):** `owner_provided` (stated or confirmed by the owner), `observed` (automatically captured, NOT confirmed), `inferred`, `hypothesis`, `source_backed`, `validated`. Approving or confirming a suggestion makes it `owner_provided` and keeps the earlier label in `origin`.
+**Other fields:** importance, confidence, temporary + `expires_at`, `origin` (conversation id, message id, capture mode), edit history snapshots, per-reply usage log, typed relationships with `private` visibility (private links never reach a prompt). Decisions cannot be edited in place, only corrected (a successor is created and the original kept).
+
+**Capture pipeline** (`mia.memory.capture`, runs on the owner's own chat messages only, never on assistant output, and never breaks chat if it fails):
+
+1. Memory off, or a temporary conversation: nothing is captured.
+2. Explicit commands, honoured while memory is on: "Remember/Don't forget/Keep in mind ...", "My preferred X is ...", "Update what you remember about X to Y", "Forget ...". "Remember this" refers to the owner's previous message; if there is none Mia asks.
+3. Automatic capture (`capture_mode`: `off`, `approval` (default), `auto`): pattern-based and conservative. Skipped: questions, hedged or hypothetical statements, "right now/for now" context, sensitive personal attributes (religion, health, politics, sexuality, ethnicity, immigration, finances, etc.), and credentials.
+4. Duplicates are skipped (token similarity >= 0.8, and the same message id is never processed twice). Previously rejected suggestions are not re-suggested.
+5. Conflicts (same subject or similarity >= 0.5): automatic capture never overrides an existing memory; the suggestion is queued with the conflicting ids. An explicit statement about the same subject supersedes the old record (history kept); a merely similar one is saved and the possible conflict is reported.
+6. In `approval` mode everything automatic is a pending suggestion. In `auto` mode only candidates at or above `auto_save_min_confidence` with no conflicts are saved active (still labelled `observed`).
+
+**Forgetting:** "Forget X" (or `DELETE /api/memory/records/{id}`) deletes the record, its whole correction chain, edit history, relationships, usage rows and index rows, **and by default the chat message(s) it was captured from** (`purge_source=false` keeps them), so the fact cannot resurface through conversation search. If more than one memory matches, nothing is deleted and Mia asks which. The "Forget ..." command message itself stays in history and names only the topic. Audit entries hold ids and counts, never memory text.
+
+**Known limits:** capture is heuristic English pattern matching, not a model; it misses things by design. Contradictions phrased with unrelated wording are not detected. There is no tombstone, so an automatic suggestion about a forgotten (not rejected) topic can be proposed again. Knowledge items (`memory_items`) still have trust levels only, not lifecycle states.
+
+Endpoints: `POST /api/memory/capture`, `POST /api/memory/records/{id}/(edit|approve|reject|confirm|archive|outdated|restore|temporary)`, `GET/PUT /api/memory/settings`, `POST/DELETE /api/memory/relationships`, `POST /api/conversations/{id}/temporary`, `GET /api/memory/replies/{id}/usage`. Chat responses include `memory_capture`.
+
 ## Structured memory records (implemented 2026-11-19)
 
 `mia.memory.structured` adds records with a lifecycle, stored in the same SQLite database (`structured_memory` plus an FTS5 index), for things that change or get corrected: **decision, goal, episode, project, entity**.

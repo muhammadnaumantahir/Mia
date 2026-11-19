@@ -767,6 +767,25 @@ class StructuredMemory:
             ).fetchall()
         return [self._decode(row) for row in rows]
 
+    def source_message_ids(self, record_id: str, *, chain: bool = True) -> list[str]:
+        """Chat messages that records in this record's correction chain were captured from."""
+        with self._connect() as db:
+            if db.execute(
+                "SELECT 1 FROM structured_memory WHERE record_id = ?", (record_id,)
+            ).fetchone() is None:
+                return []
+            ids = self._chain_ids(db, record_id) if chain else {record_id}
+            found: list[str] = []
+            for target in sorted(ids):
+                row = db.execute(
+                    "SELECT json_extract(origin_json, '$.message_id') AS mid "
+                    "FROM structured_memory WHERE record_id = ?",
+                    (target,),
+                ).fetchone()
+                if row and row["mid"] and row["mid"] not in found:
+                    found.append(str(row["mid"]))
+        return found
+
     def find_by_message(self, message_id: str) -> bool:
         """True if any record was captured from this chat message (retry safety)."""
         with self._connect() as db:
