@@ -83,3 +83,10 @@ None of these is marked "verified live".
   not echo provider body). Not covered: DNS-rebinding defense (no resolution). Local
   verification: `ruff` clean, `pytest` 637 passed, 1 skipped (mocked HTTP only; 60 new
   tests in `tests/test_gateway_url_policy.py`).
+- **Milestone 3 (provider configuration):** config-driven OpenAI-compatible providers
+  (FreeLLMAPI unchanged, new Omniroute entry with no assumed URL, `MIA_EXTRA_PROVIDERS`),
+  validated custom headers and timeouts, `ModelGateway.test_connection`, and model
+  discovery now skips providers with rejected credentials. Omniroute's real endpoints
+  and response shapes are **unverified**: the adapter assumes OpenAI-compatible
+  `/models` and `/chat/completions`. Local verification: `ruff` clean, `pytest`
+  705 passed, 1 skipped (mocked HTTP only).

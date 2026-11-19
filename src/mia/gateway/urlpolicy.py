@@ -70,3 +70,52 @@ def validate_provider_url(url: str, *, allow_private: bool = True) -> str:
     elif not allow_private and (host == "localhost" or host.endswith(".localhost")):
         raise UnsafeProviderURL("private and loopback provider addresses are not allowed")
     return url.rstrip("/")
+
+
+_FORBIDDEN_HEADERS = frozenset(
+    {"authorization", "host", "content-length", "content-type", "transfer-encoding", "connection"}
+)
+_HEADER_NAME_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
+
+
+def validate_extra_headers(headers: dict[str, str] | None) -> dict[str, str]:
+    """Validate owner-configured custom request headers.
+
+    Credentials belong in the OS credential store and are sent only as the
+    Authorization header, so that header (and framing headers) cannot be set here.
+    """
+    if not headers:
+        return {}
+    if len(headers) > 20:
+        raise ValueError("too many custom headers")
+    clean: dict[str, str] = {}
+    for name, value in headers.items():
+        if (
+            not isinstance(name, str)
+            or not isinstance(value, str)
+            or not name
+            or len(name) > 100
+            or not set(name) <= _HEADER_NAME_CHARS
+        ):
+            raise ValueError("invalid custom header name")
+        if name.lower() in _FORBIDDEN_HEADERS:
+            raise ValueError(f"custom header not allowed: {name}")
+        if len(value) > 1000 or any(ch in value for ch in "\r\n\0"):
+            raise ValueError(f"invalid custom header value for {name}")
+        clean[name] = value
+    return clean
+
+
+def parse_timeout_seconds(raw: str | None, default: float) -> float:
+    """Parse a request timeout; invalid, non-finite or out-of-range values use the default."""
+    import math
+
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    if not math.isfinite(value) or not 1.0 <= value <= 600.0:
+        return default
+    return value

@@ -2,12 +2,70 @@
 
 from __future__ import annotations
 
+import json
 import math
 import os
+import re
 
 from .credentials import CredentialStore
 from .providers import OllamaProvider, OpenAICompatibleProvider
 from .registry import ProviderRegistry
+from .urlpolicy import parse_timeout_seconds
+
+
+def _flag(name: str) -> bool:
+    return os.getenv(name, "false").strip().lower() == "true"
+
+
+def _register_openai_compatible(
+    registry: ProviderRegistry,
+    provider_id: str,
+    prefix: str,
+    default_url: str | None,
+    *,
+    force_enabled: bool = False,
+) -> None:
+    """Register one OpenAI-compatible provider from MIA_<PREFIX>_* variables.
+
+    Variables: ENABLED, BASE_URL, ROUTE_FREE, DATA_LOCAL, ENABLE_TOOL_CALLING,
+    TIMEOUT_SECONDS, HEADERS (JSON object of non-secret headers). The API key
+    comes only from the OS credential store entry named after the provider.
+    Providers are not free and not local unless the owner says so.
+    """
+    env = f"MIA_{prefix}_"
+    if not (force_enabled or _flag(env + "ENABLED")):
+        return
+    base_url = os.getenv(env + "BASE_URL", default_url or "").strip()
+    if not base_url:
+        raise RuntimeError(f"{provider_id} is enabled but {env}BASE_URL is not set.")
+    secret = CredentialStore().get(provider_id)
+    if not secret:
+        raise RuntimeError(
+            f"{provider_id} is enabled but no key is saved in the OS credential store. "
+            f"Run: mia-credentials set {provider_id}"
+        )
+    headers: dict[str, str] | None = None
+    raw_headers = os.getenv(env + "HEADERS", "").strip()
+    if raw_headers:
+        try:
+            parsed = json.loads(raw_headers)
+        except ValueError as exc:
+            raise RuntimeError(f"{env}HEADERS must be a JSON object") from exc
+        if not isinstance(parsed, dict):
+            raise RuntimeError(f"{env}HEADERS must be a JSON object")
+        headers = parsed
+    registry.register(
+        OpenAICompatibleProvider(
+            provider_id,
+            base_url,
+            api_key=secret,
+            timeout=parse_timeout_seconds(os.getenv(env + "TIMEOUT_SECONDS"), 90.0),
+            free_tier=_flag(env + "ROUTE_FREE"),
+            supports_tools=_flag(env + "ENABLE_TOOL_CALLING"),
+            data_local=_flag(env + "DATA_LOCAL"),
+            extra_headers=headers,
+        )
+    )
 
 
 def build_default_registry() -> ProviderRegistry:
@@ -21,43 +79,25 @@ def build_default_registry() -> ProviderRegistry:
         OllamaProvider(base_url=ollama_url, supports_tools=ollama_tools)
     )
 
-    if os.getenv("MIA_FREELLMAPI_ENABLED", "false").strip().lower() == "true":
-        base_url = os.getenv(
-            "MIA_FREELLMAPI_BASE_URL",
-            "http://127.0.0.1:3001/v1",
-        )
-        secret = CredentialStore().get("freellmapi")
-        if not secret:
-            raise RuntimeError(
-                "FreeLLMAPI is enabled but no key is saved in the OS credential store. "
-                "Run: mia-credentials set freellmapi"
-            )
-        # The default is intentionally not free. Set MIA_FREELLMAPI_ROUTE_FREE=true
-        # only after confirming the local gateway's active chains cannot bill.
-        route_is_free = (
-            os.getenv("MIA_FREELLMAPI_ROUTE_FREE", "false").strip().lower()
-            == "true"
-        )
-        registry.register(
-            OpenAICompatibleProvider(
-                "freellmapi",
-                base_url,
-                api_key=secret,
-                free_tier=route_is_free,
-                supports_tools=(
-                    os.getenv(
-                        "MIA_FREELLMAPI_ENABLE_TOOL_CALLING",
-                        "false",
-                    ).strip().lower() == "true"
-                ),
-                data_local=(
-                    os.getenv(
-                        "MIA_FREELLMAPI_DATA_LOCAL",
-                        "false",
-                    ).strip().lower() == "true"
-                ),
-            )
-        )
+    # FreeLLMAPI keeps its original variables; Omniroute follows the same scheme.
+    # Omniroute has no default URL: its endpoint is not assumed, the owner sets it.
+    _register_openai_compatible(registry, "freellmapi", "FREELLMAPI", "http://127.0.0.1:3001/v1")
+    _register_openai_compatible(registry, "omniroute", "OMNIROUTE", None)
+
+    # Further OpenAI-compatible endpoints: MIA_EXTRA_PROVIDERS=id1,id2 with
+    # MIA_PROVIDER_<ID>_BASE_URL etc. (ID upper-cased, '-' becomes '_').
+    for raw_id in os.getenv("MIA_EXTRA_PROVIDERS", "").split(","):
+        provider_id = raw_id.strip().lower()
+        if not provider_id:
+            continue
+        if not re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", provider_id) or provider_id in (
+            "ollama",
+            "freellmapi",
+            "omniroute",
+        ):
+            raise RuntimeError(f"Invalid or reserved extra provider id: {provider_id!r}")
+        prefix = "PROVIDER_" + provider_id.upper().replace("-", "_")
+        _register_openai_compatible(registry, provider_id, prefix, None, force_enabled=True)
 
     return registry
 

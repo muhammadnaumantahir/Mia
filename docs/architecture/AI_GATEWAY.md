@@ -85,3 +85,27 @@ The gateway times the provider call that actually succeeded (failed fallback att
 - `GET /api/gateway/health` lists candidates that are currently rate limited, backing off or recovering. Invalid header values (negative, NaN, infinite, unparsable) are discarded.
 
 State is process-local and not persisted; a restart resets it. This does not rotate keys or accounts to evade limits. The failure ordering applies after the cost/reliability ranking, so paid-route eligibility and spending caps are unchanged. Verified by `tests/test_gateway_health.py` (injected clock, httpx responses via respx, and API round trips); not exercised against a live rate-limited provider.
+
+## Provider configuration (environment)
+
+OpenAI-compatible providers are registered from `MIA_<PREFIX>_*` variables; the API key
+comes only from the OS credential store (`mia-credentials set <provider>`), never from
+the environment or the repository. Ollama is always registered; nothing else is, so a
+local-only setup needs no keys.
+
+| Variable | Meaning |
+|---|---|
+| `MIA_FREELLMAPI_ENABLED` / `MIA_OMNIROUTE_ENABLED` | Register the provider. Omniroute has **no default URL**; its endpoint is not assumed |
+| `..._BASE_URL` | Provider base URL, validated (`gateway/urlpolicy.py`) |
+| `..._ROUTE_FREE` | Treat the route as free (default false) |
+| `..._DATA_LOCAL` | Treat data as staying local (default false) |
+| `..._ENABLE_TOOL_CALLING` | Advertise tool calling (default false) |
+| `..._TIMEOUT_SECONDS` | Request timeout, 1 to 600; invalid values use 90 |
+| `..._HEADERS` | JSON object of extra non-secret headers; `Authorization`, `Host` and framing headers are refused |
+| `MIA_EXTRA_PROVIDERS=id1,id2` | More OpenAI-compatible providers, configured as `MIA_PROVIDER_<ID>_*` |
+
+`ModelGateway.test_connection(provider_id)` lists models and returns a sanitized
+status (`ok`, `unreachable`, `auth_failed`, `invalid_response`, `unknown_provider`,
+`error`) with model count and latency; it never returns URLs, headers or bodies.
+Model discovery skips a provider whose credentials are rejected instead of failing.
+No HTTP endpoint exposes the connection test yet (no owner-only admin auth exists).

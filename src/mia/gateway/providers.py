@@ -20,7 +20,7 @@ from .contracts import (
     TokenUsage,
     TransientProviderError,
 )
-from .urlpolicy import validate_provider_url
+from .urlpolicy import validate_extra_headers, validate_provider_url
 
 _DEFAULT_CONTEXT = 8192
 _MAX_DETAIL_MODELS = 30
@@ -290,6 +290,7 @@ class OpenAICompatibleProvider:
         supports_tools: bool = False,
         data_local: bool = False,
         allow_private_url: bool = True,
+        extra_headers: dict[str, str] | None = None,
     ):
         if not provider_id.strip():
             raise ValueError("provider_id is required")
@@ -302,6 +303,7 @@ class OpenAICompatibleProvider:
         self.model_context_window = model_context_window
         self.supports_tools = supports_tools
         self.data_local = data_local
+        self.extra_headers = validate_extra_headers(extra_headers)
 
     @staticmethod
     def _httpx():
@@ -314,7 +316,8 @@ class OpenAICompatibleProvider:
         return httpx
 
     def _headers(self) -> dict[str, str]:
-        headers = {"Content-Type": "application/json"}
+        headers = dict(self.extra_headers)
+        headers["Content-Type"] = "application/json"
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         return headers
@@ -345,6 +348,8 @@ class OpenAICompatibleProvider:
             raise TransientProviderError(
                 f"{self.provider_id} model listing timed out"
             ) from exc
+        except httpx.HTTPStatusError as exc:
+            raise _http_error(self.provider_id, exc, httpx) from exc
         except httpx.HTTPError as exc:
             raise TransientProviderError(
                 f"{self.provider_id} model listing failed"
