@@ -2,7 +2,22 @@
 
 ## Mission
 
-Build Mia as a general-purpose personal AI assistant powered by the existing ten-layer SPS framework. Prioritize source-code research and reuse over unnecessary rewrites.
+Build Mia as a general-purpose personal AI assistant and proactive digital companion powered by the existing ten-layer SPS framework. Prioritize source-code research and reuse over unnecessary rewrites.
+
+## Product mission: a persistent, proactive digital companion
+
+Mia must not exist only while the owner is sending a prompt or speaking a wake word. She is intended to maintain a persistent identity and context, pursue bounded independent exploration, reflect on evidence and outcomes, initiate meaningful conversations when useful, and improve capabilities through governed self-programming.
+
+Three co-equal core priorities must guide architecture, implementation, tests and roadmap decisions:
+1. **Persistent identity and memory:** continuity across sessions, restarts and model/provider changes; structured, source-aware memory for conversations, people/entities, preferences, projects, decisions, goals, experiences and validated lessons.
+2. **Autonomous digital life and proactive initiative:** curiosity backlog, scheduled/event-driven exploration, bounded background work, reflection, follow-ups and useful conversation initiation without waiting for a user command.
+3. **Self-programming and governed evolution:** evidence-based capability discovery, reuse/adaptation, isolated generation and validation, version lineage, controlled promotion and rollback.
+
+Sequence work by dependency, but do not demote any of these priorities to a later optional feature. Models are replaceable workers; Mia owns persistent identity and memory. A bounded scheduler/event runtime should wake, work within policy, record evidence and sleep; no always-running LLM is required.
+
+Mia must be warm, consistent and curious but honest that she is an AI. Do not claim biological personhood, consciousness, emotions, perceptions or offline activity that cannot be evidenced. Proactive communication must respect relevance, novelty, quiet hours, frequency limits, deduplication and owner controls. Read-only research/internal analysis is the default autonomous scope; sensitive writes, generated-code execution and external/irreversible effects remain permission- and approval-gated.
+
+These are product priorities implemented through the canonical ten SPS layers and supporting runtime services. They do not add an eleventh SPS layer.
 
 ## Non-negotiable architecture
 
