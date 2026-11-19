@@ -62,8 +62,8 @@ Model output is untrusted input at every boundary.
 ## 5. Checklist (status updated as work lands)
 
 - [x] M1 Audit and checklist (this file)
-- [ ] M2 Provider orchestration: capability registry (declared vs verified), task profiles
-- [ ] M3 Task-aware routing with explanations, refusal when unsuitable, fallback trace
+- [x] M2 Provider orchestration: capability registry (declared vs verified), task profiles (`brain/capabilities.py`)
+- [x] M3 Task-aware routing with explanations, refusal when unsuitable, fallback order (`brain/router.py`, `ModelGateway order_hint`)
 - [ ] M4 Intent/reference/ambiguity + budgeted context + memory integration
 - [ ] M5 Planning engine with dependencies, checkpoints, persistence
 - [ ] M6 Tool broker: selection, validation, permission gate, result interpretation
