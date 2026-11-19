@@ -683,7 +683,7 @@ function queueVoiceRestart(delay=550){
   }
  },delay);
 }
-function stopVoiceConversation(message='Voice conversation stopped.'){
+function stopVoiceConversation(message='Voice conversation stopped.',isError=false){
  voiceMode=false;
  clearTimeout(voiceSilenceTimer);
  clearTimeout(voiceRestartTimer);
@@ -707,7 +707,7 @@ function stopVoiceConversation(message='Voice conversation stopped.'){
  $('voiceLanguage').disabled=false;
  $('voicePreview').classList.remove('visible');
  $('voicePreview').textContent='';
- setVoiceStatus(message);
+ setVoiceStatus(message,isError);
 }
 function finishVoiceUtterance(){
  if(!voiceMode||voiceBusy||voiceFinalizing)return;
@@ -765,6 +765,7 @@ function startVoiceRecognition(){
  };
  recognition.onresult=event=>{
   let gotFinal=false;
+  clearTimeout(voiceSilenceTimer);
   for(let index=event.resultIndex;index<event.results.length;index++){
    const result=event.results[index];
    const text=result[0]?.transcript?.trim()||'';
@@ -781,10 +782,7 @@ function startVoiceRecognition(){
    $('voicePreview').textContent='Hearing: '+preview;
    $('voicePreview').classList.add('visible');
   }
-  if(gotFinal){
-   clearTimeout(voiceSilenceTimer);
-   voiceSilenceTimer=setTimeout(finishVoiceUtterance,1250);
-  }
+  if(voiceFinalTranscript.trim())voiceSilenceTimer=setTimeout(finishVoiceUtterance,1250);
  };
  recognition.onerror=event=>{
   voiceStarting=false;
@@ -797,7 +795,7 @@ function startVoiceRecognition(){
    'network':'Browser speech recognition needs a working network connection.'
   };
   const message=messages[event.error]||('Speech recognition error: '+event.error);
-  stopVoiceConversation(message);
+  stopVoiceConversation(message,true);
  };
  recognition.onend=()=>{
   voiceStarting=false;
@@ -807,6 +805,9 @@ function startVoiceRecognition(){
   if(voiceFinalTranscript.trim()){
    finishVoiceUtterance();
   }else{
+   voiceInterimTranscript='';
+   $('voicePreview').classList.remove('visible');
+   $('voicePreview').textContent='';
    setVoiceStatus('Reconnecting microphone…');
    queueVoiceRestart(550);
   }
@@ -817,7 +818,7 @@ function startVoiceRecognition(){
   voiceStarting=false;
   voiceRecognitionActive=false;
   voiceRecognition=null;
-  stopVoiceConversation('Could not start microphone recognition: '+error.message);
+  stopVoiceConversation('Could not start microphone recognition: '+error.message,true);
  }
 }
 function startVoiceConversation(){
