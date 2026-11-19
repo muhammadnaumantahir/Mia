@@ -15,6 +15,16 @@ class DesktopAccessError(PermissionError):
 
 
 _ALLOWED_TEXT_CONTROLS = {"Edit", "Document", "RichEdit", "ComboBox"}
+WINDOW_ACTIONS = {"focus", "minimize", "maximize", "restore", "close"}
+_UNSAVED_MARKERS = ("*", "\u25cf", "(modified)", "unsaved")
+
+
+def looks_unsaved(title: str) -> bool:
+    """Heuristic only: many editors mark unsaved work in the title bar."""
+    lowered = title.casefold().strip()
+    return lowered.startswith(("*", "\u25cf")) or any(
+        marker in lowered for marker in _UNSAVED_MARKERS
+    )
 
 
 class WindowsUIAdapter:
@@ -231,6 +241,108 @@ class WindowsUIAdapter:
             "text_sha256": payload["text_sha256"],
         }
 
+    # ---- window management ------------------------------------------------------------
+    def _find_window(self, window_handle: int, window_title: str | None = None):
+        if isinstance(window_handle, bool) or not isinstance(window_handle, int) or window_handle <= 0:
+            raise ValueError("window_handle must be a positive integer")
+        for candidate in self._desktop().windows(visible_only=True):
+            try:
+                if int(candidate.handle) == window_handle:
+                    if window_title is not None and (
+                        str(candidate.window_text() or "").strip() != window_title
+                    ):
+                        raise DesktopAccessError("The target window title has changed")
+                    return candidate
+            except DesktopAccessError:
+                raise
+            except Exception:
+                continue
+        raise DesktopAccessError("The target window is no longer available")
+
+    def _window_payload(self, window: Any, action: str, acknowledged: bool) -> dict[str, Any]:
+        return {
+            "window_handle": int(window.handle),
+            "window_title": str(window.window_text() or "").strip()[:240],
+            "process_id": int(window.process_id()),
+            "window_class": str(window.element_info.class_name or "")[:120],
+            "action": action,
+            "acknowledged_unsaved_risk": bool(acknowledged),
+        }
+
+    def preview_window_action(
+        self, window_handle: int, action: str, *, acknowledge_unsaved_risk: bool = False
+    ) -> dict[str, Any]:
+        if action not in WINDOW_ACTIONS:
+            raise ValueError("Unsupported window action")
+        window = self._find_window(window_handle)
+        payload = self._window_payload(window, action, acknowledge_unsaved_risk)
+        risk = action == "close" and looks_unsaved(payload["window_title"])
+        if risk and not acknowledge_unsaved_risk:
+            raise DesktopAccessError(
+                "This window title suggests unsaved work; save it first or explicitly "
+                "acknowledge the risk"
+            )
+        approval = self.approvals.request(
+            action_id="desktop.window_action", payload=payload,
+            summary=f"{action.capitalize()} window: {payload['window_title'][:80]}",
+        )
+        return {**approval, "payload": payload, "unsaved_risk_suspected": risk}
+
+    def execute_window_action(
+        self, approval_id: str, window_handle: int, window_title: str, action: str,
+        *, acknowledge_unsaved_risk: bool = False, wait: Any = None,
+    ) -> dict[str, Any]:
+        if action not in WINDOW_ACTIONS:
+            raise ValueError("Unsupported window action")
+        window = self._find_window(window_handle, window_title)
+        payload = self._window_payload(window, action, acknowledge_unsaved_risk)
+        self.approvals.consume(
+            approval_id=approval_id, action_id="desktop.window_action", payload=payload)
+        try:
+            if action == "focus":
+                window.set_focus()
+            elif action == "minimize":
+                window.minimize()
+            elif action == "maximize":
+                window.maximize()
+            elif action == "restore":
+                window.restore()
+            else:
+                window.close()
+        except Exception as exc:
+            raise DesktopAccessError("The window action could not be performed") from exc
+        (wait or _default_wait)(0.5)
+        return {**payload, **self._observe_after(window_handle, action)}
+
+    def _observe_after(self, window_handle: int, action: str) -> dict[str, Any]:
+        """Verify by re-inspecting the window, never by the absence of an exception."""
+        try:
+            window = self._find_window(window_handle)
+        except DesktopAccessError:
+            return {"verified": action == "close", "state": "gone",
+                    "note": "The window was closed." if action == "close" else
+                    "The window disappeared after the action."}
+        try:
+            minimized = bool(window.is_minimized())
+            maximized = bool(window.is_maximized())
+            focused = bool(window.has_keyboard_focus())
+        except Exception:
+            return {"verified": False, "state": "unknown",
+                    "note": "The resulting window state could not be read."}
+        state = "minimized" if minimized else "maximized" if maximized else "normal"
+        expected = {"minimize": minimized, "maximize": maximized, "restore": not minimized,
+                    "focus": focused and not minimized, "close": False}[action]
+        result = {"verified": expected, "state": state, "focused": focused}
+        if action == "close" and not expected:
+            result["note"] = ("The window is still open; the application may be asking to "
+                              "save or confirm.")
+        return result
+
+    def detect_hung_windows(self, *, hung_checker: Any = None) -> list[dict[str, Any]]:
+        """Windows the OS reports as not responding (IsHungAppWindow)."""
+        checker = hung_checker or _is_hung_window
+        return [w for w in self.list_windows() if checker(int(w["handle"]))]
+
     def _resolve_control(
         self,
         window_handle: int,
@@ -297,3 +409,15 @@ class WindowsUIAdapter:
             raise DesktopAccessError("Only supported text-entry control types are allowed")
         if not isinstance(text, str) or not text or len(text) > self.MAX_TEXT_CHARS:
             raise ValueError("text must be 1-20,000 characters")
+
+
+def _default_wait(seconds: float) -> None:
+    import time
+    time.sleep(seconds)
+
+
+def _is_hung_window(handle: int) -> bool:
+    if sys.platform != "win32":
+        raise RuntimeError("Hang detection is available only on Windows")
+    import ctypes
+    return bool(ctypes.windll.user32.IsHungAppWindow(handle))  # type: ignore[attr-defined]

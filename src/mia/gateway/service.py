@@ -94,6 +94,26 @@ class ModelGateway:
         degraded = [c for c in usable if self.health.is_degraded(c)]
         return healthy + degraded
 
+    @staticmethod
+    def _apply_order_hint(
+        ranked: list[ModelCandidate],
+        hint: list[ModelCandidate] | tuple[ModelCandidate, ...] | None,
+    ) -> list[ModelCandidate]:
+        """Restrict and reorder the policy-eligible list to a caller's task-aware order.
+
+        The hint can only narrow or reorder: a candidate the cost/quota policy
+        rejected is never reintroduced, and candidates absent from the hint
+        (e.g. judged unsuitable for the task) are dropped.
+        """
+        if hint is None:
+            return ranked
+        eligible = {(c.provider_id, c.model_id): c for c in ranked}
+        return [
+            eligible[(c.provider_id, c.model_id)]
+            for c in hint
+            if (c.provider_id, c.model_id) in eligible
+        ]
+
     async def discover_models(self) -> list[ModelCandidate]:
         """Discover from all usable providers; one offline provider must not block others."""
         candidates: list[ModelCandidate] = []
@@ -109,8 +129,11 @@ class ModelGateway:
         request: ModelRequest,
         candidates: list[ModelCandidate],
         policy: RoutePolicy = RoutePolicy(),
+        order_hint: list[ModelCandidate] | tuple[ModelCandidate, ...] | None = None,
     ) -> CompletionResult:
-        ranked = self._order_by_health(rank_candidates(candidates, request, policy))
+        ranked = self._order_by_health(
+            self._apply_order_hint(rank_candidates(candidates, request, policy), order_hint)
+        )
         attempted: list[str] = []
         last_error: Exception | None = None
 
@@ -154,6 +177,7 @@ class ModelGateway:
         request: ModelRequest,
         candidates: list[ModelCandidate],
         policy: RoutePolicy = RoutePolicy(),
+        order_hint: list[ModelCandidate] | tuple[ModelCandidate, ...] | None = None,
     ) -> AsyncIterator[StreamEvent]:
         """Stream a completion with the same routing policy as complete().
 
@@ -162,7 +186,9 @@ class ModelGateway:
         partial output is never silently mixed across models. Providers without
         a stream() method, and tool-bearing requests, use one buffered call.
         """
-        ranked = self._order_by_health(rank_candidates(candidates, request, policy))
+        ranked = self._order_by_health(
+            self._apply_order_hint(rank_candidates(candidates, request, policy), order_hint)
+        )
         attempted: list[str] = []
         last_error: Exception | None = None
 

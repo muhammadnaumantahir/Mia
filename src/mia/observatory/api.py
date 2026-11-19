@@ -34,10 +34,16 @@ from mia.agent.tasks import (
     TaskTransitionError,
 )
 from mia.agent.tools import ToolRegistry, ToolResult
+from mia.computer.app_discovery import ApplicationDiscovery
 from mia.computer.applications import ApplicationLauncher, ApplicationLaunchError
 from mia.computer.approvals import ApprovalError, ApprovalStore
 from mia.computer.browser import BrowserAccessError, BrowserController
+from mia.computer.capabilities import PermissionLevel, default_registry
+from mia.computer.environment import detect_environment
+from mia.computer.fileops import FileOperationError, FileOperations
 from mia.computer.filesystem import FilesystemAccessError, FilesystemAdapter
+from mia.computer.permissions import PermissionError_, PermissionPolicy
+from mia.computer.processes import ProcessAccessError, ProcessManager
 from mia.computer.windows_ui import DesktopAccessError, WindowsUIAdapter
 from mia.evolution.capabilities import (
     CapabilityActivationBlocked,
@@ -351,6 +357,56 @@ class IdentityUpdateInput(BaseModel):
     reason: str = Field(default="", max_length=300)
 
 
+class ProcessTerminateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pid: int = Field(ge=1)
+    force: bool = False
+
+
+class ProcessTerminateExecution(ProcessTerminateInput):
+    approval_id: str = Field(min_length=32, max_length=32)
+
+
+class WindowActionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    window_handle: int = Field(ge=1)
+    action: str = Field(pattern="^(focus|minimize|maximize|restore|close)$")
+    acknowledge_unsaved_risk: bool = False
+
+
+class WindowActionExecution(WindowActionInput):
+    approval_id: str = Field(min_length=32, max_length=32)
+    window_title: str = Field(min_length=1, max_length=240)
+
+
+class FileOperationInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    op: str = Field(pattern="^(mkdir|rename|copy|move|delete|restore)$")
+    root_id: str = Field(min_length=1, max_length=40)
+    relative_path: str = Field(default="", max_length=1000)
+    destination_path: str | None = Field(default=None, max_length=1000)
+    recovery_id: str | None = Field(default=None, max_length=64)
+
+
+class FileOperationExecution(FileOperationInput):
+    approval_id: str = Field(min_length=32, max_length=32)
+
+
+class PermissionGrantInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    capabilities: list[str] = Field(min_length=1, max_length=20)
+    level: str = Field(pattern="^(observe|read|write|execute|interact|administrative)$")
+    directory: str | None = Field(default=None, max_length=1000)
+    kind: str = Field(default="session", pattern="^(session|persistent)$")
+    duration_seconds: int | None = Field(default=None, ge=1, le=365 * 24 * 3600)
+    admin: bool = False
+    note: str = Field(default="", max_length=200)
+
+
 class IdentityRollbackInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -375,6 +431,9 @@ def create_app(
     baseline_capture: Callable[[str | Path], dict[str, Any]] | None = None,
     tts_synthesizer: SpeechSynthesizer | None = None,
     usage_ledger: UsageLedger | None = None,
+    permission_policy: PermissionPolicy | None = None,
+    process_manager: ProcessManager | None = None,
+    app_discovery: ApplicationDiscovery | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -420,6 +479,10 @@ def create_app(
     )
     app.state.computer_files = computer_files
     app.state.approvals = approval_store
+    policy = permission_policy or PermissionPolicy(data_dir / "computer-permissions.sqlite3")
+    capability_registry = default_registry()
+    app.state.permission_policy = policy
+    app.state.capability_registry = capability_registry
     desktop_adapter = windows_ui or WindowsUIAdapter(approval_store)
     app.state.windows_ui = desktop_adapter
     applications_file = Path(
@@ -1222,6 +1285,279 @@ def create_app(
     async def browser_close() -> dict[str, str]:
         await browser_controller.close()
         return {"status": "closed"}
+
+    processes = process_manager or ProcessManager(approval_store)
+    app.state.process_manager = processes
+    discovery = app_discovery or ApplicationDiscovery(os_family=detect_environment().os_family)
+
+    @app.get("/api/computer/apps/discover")
+    def computer_apps_discover(query: str = "") -> dict[str, Any]:
+        try:
+            items = discovery.search(query) if query.strip() else discovery.discover()
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        allowlisted = {a["display_name"].casefold() for a in app_launcher.list_applications()}
+        for item in items:
+            item["allowlisted"] = item["name"].casefold() in allowlisted
+        return {
+            "items": items[:300],
+            "note": "Discovery lists names only. Launching needs an owner allowlist entry.",
+        }
+
+    @app.get("/api/computer/system/status")
+    def computer_system_status() -> dict[str, Any]:
+        try:
+            return processes.system_status()
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.get("/api/computer/processes/top")
+    def computer_processes_top(by: str = "memory", limit: int = 10) -> dict[str, Any]:
+        try:
+            return {"items": processes.top(by=by, limit=limit)}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/api/computer/processes/{pid}")
+    def computer_process_info(pid: int) -> dict[str, Any]:
+        try:
+            return processes.info(pid)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except ProcessAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    @app.post("/api/computer/processes/terminate/preview", status_code=201)
+    def computer_process_terminate_preview(item: ProcessTerminateInput) -> dict[str, Any]:
+        try:
+            return processes.preview_terminate(item.pid, force=item.force)
+        except ProcessAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.post("/api/computer/processes/terminate/execute")
+    def computer_process_terminate_execute(item: ProcessTerminateExecution) -> dict[str, Any]:
+        try:
+            result = processes.execute_terminate(item.approval_id, item.pid, force=item.force)
+        except ProcessAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ApprovalError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        observatory.record_event(
+            category="computer", event_type="process_terminate",
+            summary=f"Approved stop of {result['name']} (PID {result['pid']}): {result['status']}",
+            outcome="success" if result["verified"] else "failure", layer_id="SPS-10",
+            payload={"approval_id": item.approval_id, "pid": result["pid"],
+                     "force": item.force, "status": result["status"]},
+        )
+        return result
+
+    @app.post("/api/desktop/windows/action/preview", status_code=201)
+    def desktop_window_action_preview(item: WindowActionInput) -> dict[str, Any]:
+        try:
+            return desktop_adapter.preview_window_action(
+                item.window_handle, item.action,
+                acknowledge_unsaved_risk=item.acknowledge_unsaved_risk)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except DesktopAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    @app.post("/api/desktop/windows/action/execute")
+    def desktop_window_action_execute(item: WindowActionExecution) -> dict[str, Any]:
+        try:
+            result = desktop_adapter.execute_window_action(
+                item.approval_id, item.window_handle, item.window_title, item.action,
+                acknowledge_unsaved_risk=item.acknowledge_unsaved_risk)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except ApprovalError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except DesktopAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        observatory.record_event(
+            category="computer", event_type=f"window_{item.action}",
+            summary=f"Approved window {item.action}: verified={result['verified']}",
+            outcome="success" if result["verified"] else "failure", layer_id="SPS-10",
+            payload={"approval_id": item.approval_id, "window_handle": item.window_handle,
+                     "state": result.get("state")},
+        )
+        return result
+
+    @app.get("/api/desktop/windows-hung")
+    def desktop_windows_hung() -> dict[str, Any]:
+        try:
+            return {"items": desktop_adapter.detect_hung_windows()}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    file_ops = FileOperations(computer_files)
+    app.state.file_ops = file_ops
+
+    def _file_error(exc: Exception) -> HTTPException:
+        if isinstance(exc, FilesystemAccessError):
+            return HTTPException(status_code=403, detail=str(exc))
+        if isinstance(exc, FileNotFoundError):
+            return HTTPException(status_code=404, detail=str(exc))
+        if isinstance(exc, ApprovalError | FileOperationError):
+            return HTTPException(status_code=409, detail=str(exc))
+        return HTTPException(status_code=422, detail=str(exc))
+
+    @app.get("/api/computer/files/metadata")
+    def computer_file_metadata(root_id: str, relative_path: str = ".") -> dict[str, Any]:
+        try:
+            return file_ops.metadata(root_id, relative_path)
+        except (FilesystemAccessError, FileNotFoundError, ValueError) as exc:
+            raise _file_error(exc) from exc
+
+    @app.get("/api/computer/files/search-content")
+    def computer_file_search_content(
+        root_id: str, query: str, relative_path: str = ".", limit: int = 50
+    ) -> dict[str, Any]:
+        try:
+            return {"items": file_ops.search_content(root_id, query, relative_path, limit=limit)}
+        except (FilesystemAccessError, FileNotFoundError, ValueError) as exc:
+            raise _file_error(exc) from exc
+
+    @app.get("/api/computer/files/compare")
+    def computer_file_compare(root_id: str, path_a: str, path_b: str) -> dict[str, Any]:
+        try:
+            return file_ops.compare_files(root_id, path_a, path_b)
+        except (FilesystemAccessError, FileNotFoundError, ValueError) as exc:
+            raise _file_error(exc) from exc
+
+    @app.get("/api/computer/files/duplicates")
+    def computer_file_duplicates(root_id: str, relative_path: str = ".") -> dict[str, Any]:
+        try:
+            return file_ops.find_duplicates(root_id, relative_path)
+        except (FilesystemAccessError, FileNotFoundError, ValueError) as exc:
+            raise _file_error(exc) from exc
+
+    @app.get("/api/computer/files/project")
+    def computer_file_project(root_id: str, relative_path: str = ".") -> dict[str, Any]:
+        try:
+            return file_ops.inspect_project(root_id, relative_path)
+        except (FilesystemAccessError, FileNotFoundError, ValueError) as exc:
+            raise _file_error(exc) from exc
+
+    @app.get("/api/computer/files/recovery")
+    def computer_file_recovery(root_id: str) -> dict[str, Any]:
+        if root_id not in computer_files.roots:
+            raise HTTPException(status_code=404, detail="Unknown filesystem root")
+        return {"items": file_ops.list_recovery(root_id)}
+
+    @app.post("/api/computer/files/ops/preview", status_code=201)
+    def computer_file_op_preview(item: FileOperationInput) -> dict[str, Any]:
+        try:
+            return file_ops.preview(
+                item.op, item.root_id, item.relative_path,
+                destination_path=item.destination_path, recovery_id=item.recovery_id,
+            )
+        except (FilesystemAccessError, FileNotFoundError, FileOperationError, ValueError) as exc:
+            raise _file_error(exc) from exc
+
+    @app.post("/api/computer/files/ops/execute")
+    def computer_file_op_execute(item: FileOperationExecution) -> dict[str, Any]:
+        try:
+            result = file_ops.execute(
+                item.op, item.approval_id, item.root_id, item.relative_path,
+                destination_path=item.destination_path, recovery_id=item.recovery_id,
+            )
+        except (
+            FilesystemAccessError, FileNotFoundError, FileOperationError, ApprovalError, ValueError
+        ) as exc:
+            raise _file_error(exc) from exc
+        observatory.record_event(
+            category="computer", event_type=f"file_{item.op}",
+            summary=f"Approved file operation {item.op} completed and verified",
+            outcome="success", layer_id="SPS-10",
+            payload={"approval_id": item.approval_id, "op": item.op,
+                     "source": result["operation"].get("source"),
+                     "destination": result["operation"].get("destination")},
+        )
+        return result
+
+    @app.get("/api/computer/environment")
+    def computer_environment() -> dict[str, Any]:
+        return detect_environment().as_dict()
+
+    @app.get("/api/computer/capabilities")
+    def computer_capabilities() -> dict[str, Any]:
+        env = detect_environment()
+        health = {h["name"]: h for h in capability_registry.health(env)}
+        items = []
+        for spec in capability_registry.specs():
+            item = spec.describe()
+            item["available"] = health[spec.name]["available"]
+            item["unavailable_reason"] = health[spec.name]["reason"]
+            items.append(item)
+        return {"os_family": env.os_family, "items": items}
+
+    @app.get("/api/computer/health")
+    def computer_health() -> dict[str, Any]:
+        return {"items": capability_registry.health(detect_environment())}
+
+    @app.get("/api/computer/permissions")
+    def computer_permissions() -> dict[str, Any]:
+        return {"items": policy.active_grants()}
+
+    @app.get("/api/computer/permissions/history")
+    def computer_permission_history(limit: int = 100) -> dict[str, Any]:
+        return {"items": policy.history(limit)}
+
+    @app.post("/api/computer/permissions", status_code=201)
+    def computer_permission_grant(item: PermissionGrantInput) -> dict[str, Any]:
+        try:
+            unknown = [c for c in item.capabilities if c != "*" and c not in capability_registry.names()]
+            if unknown:
+                raise HTTPException(status_code=422, detail=f"unknown capability: {unknown[0]}")
+            result = policy.grant(
+                granted_by="owner",
+                capabilities=item.capabilities,
+                level=PermissionLevel[item.level.upper()],
+                directory=item.directory,
+                kind=item.kind,
+                duration_seconds=item.duration_seconds,
+                admin=item.admin,
+                note=item.note,
+            )
+        except PermissionError_ as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        observatory.record_event(
+            category="computer",
+            event_type="permission_granted",
+            summary=f"Owner granted {item.level} on {', '.join(item.capabilities)}",
+            outcome="success",
+            layer_id="SPS-10",
+            payload={"grant_id": result["grant_id"], "kind": item.kind},
+        )
+        return result
+
+    @app.delete("/api/computer/permissions/{grant_id}")
+    def computer_permission_revoke(grant_id: str) -> dict[str, Any]:
+        if not policy.revoke(grant_id):
+            raise HTTPException(status_code=404, detail="No active grant with that ID")
+        observatory.record_event(
+            category="computer", event_type="permission_revoked",
+            summary="Owner revoked a computer permission grant", outcome="success",
+            layer_id="SPS-10", payload={"grant_id": grant_id},
+        )
+        return {"status": "revoked"}
+
+    @app.post("/api/computer/permissions/revoke-all")
+    def computer_permission_revoke_all() -> dict[str, Any]:
+        count = policy.revoke_all()
+        observatory.record_event(
+            category="computer", event_type="permissions_revoked_all",
+            summary="Owner revoked all computer permission grants", outcome="success",
+            layer_id="SPS-10", payload={"count": count},
+        )
+        return {"status": "revoked", "count": count}
 
     @app.get("/api/computer/apps")
     def computer_apps() -> dict[str, Any]:
