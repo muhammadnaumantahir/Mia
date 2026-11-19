@@ -94,6 +94,10 @@ class PermanentProviderError(RuntimeError):
     """A non-transient provider failure that should not be retried automatically."""
 
 
+class AuthenticationProviderError(PermanentProviderError):
+    """The provider rejected the credentials (HTTP 401/403); never retried."""
+
+
 class ModelProvider(Protocol):
     provider_id: str
 

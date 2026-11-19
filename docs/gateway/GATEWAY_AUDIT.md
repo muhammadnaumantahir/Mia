@@ -72,3 +72,14 @@ None of these is marked "verified live".
 8. Context budgeting; specialized model paths.
 9. Diagnostics API and UI.
 10. Subsystem integration review, full regression, documentation.
+
+## Progress log
+
+- **Milestone 2 (provider hardening, first slice):** added `gateway/urlpolicy.py`
+  (syntactic SSRF checks: scheme, credentials, query/fragment, metadata/link-local/
+  unspecified/multicast always blocked; loopback/private optional via
+  `allow_private`), applied to `OllamaProvider` and `OpenAICompatibleProvider`; added
+  `AuthenticationProviderError` (HTTP 401/403, permanent, never retried, message does
+  not echo provider body). Not covered: DNS-rebinding defense (no resolution). Local
+  verification: `ruff` clean, `pytest` 637 passed, 1 skipped (mocked HTTP only; 60 new
+  tests in `tests/test_gateway_url_policy.py`).
