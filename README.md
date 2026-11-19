@@ -100,7 +100,8 @@ For the supervisor walkthrough, see the [Supervisor Demo Runbook](docs/SUPERVISO
 
 For local AI, start Ollama and make sure a model is installed. Mia discovers local models through Ollama's native API. The optional gateway extra enables HTTP adapters; no cloud key is needed for the local path.
 
-Mia's gateway is an independent, Mia-owned service. It does not require FreeLLMAPI, OmniRoute, or another external gateway. See [Independent AI Gateway direction](docs/architecture/AI_GATEWAY_DIRECTION.md) for the owner-approved architecture and implementation requirements.\n
+Mia's gateway is an independent, Mia-owned service. It does not require FreeLLMAPI, OmniRoute, or another external gateway. See [Independent AI Gateway direction](docs/architecture/AI_GATEWAY_DIRECTION.md) for the owner-approved architecture and implementation requirements. 
+
 For local CPU/RAM telemetry and automatic daily experiment capture, install the optional `monitoring` extra. The default scheduler is off unless `MIA_EXPERIMENT_AUTO_CAPTURE=true` is present in `.env`.
 
 The Evolution Observatory includes a **Capability Lab** where Mia can draft pure-Python source and tests through a free-only model route. Review the draft, save an immutable candidate, run the local Docker validation pipeline, and register only passing versions. Owner-approved promotion and rollback records are supported for registered permission-free versions when MIA_CAPABILITY_ACTIVATION_ENABLED is enabled; the lifecycle enforces one active version per capability and records the decision. This does not hot-load code into the privileged Mia process. A complete permission broker and target-Windows verification remain open.
