@@ -49,15 +49,15 @@ Exit criteria:
 
 ## Phase 2 — Universal AI gateway
 
-**Goal:** One policy-controlled interface for all model providers.
+**Goal:** One independently owned, policy-controlled Mia gateway for all model providers. FreeLLMAPI and OmniRoute are not runtime dependencies or required sidecars. Follow [Independent AI Gateway direction](architecture/AI_GATEWAY_DIRECTION.md).
 
 Work:
 - Define provider and model contracts.
 - Add local Ollama adapter first.
-- Evaluate FreeLLMAPI as the self-hosted gateway candidate; compare LiteLLM as an alternative.
-- Add provider/model discovery, health checks, capability metadata, context limits, pricing/quota metadata, latency and reliability statistics.
-- Implement task-aware routing and fallback.
-- Add secure credential storage, provider-specific policy checks, request budgets and usage tracking.
+- Build Mia-owned provider/model registry, direct provider adapters and a generic OpenAI-compatible adapter. Study gateway projects only for isolated patterns; do not depend on FreeLLMAPI or OmniRoute.
+- Add model discovery, capability metadata, context limits, sourced pricing/quota metadata, health checks, latency and reliability statistics.
+- Implement task-aware routing, escalation, load balancing, fallback, circuit breakers and provider-aware retry policy.
+- Add secure credential references, data-egress policy, request/daily/monthly budgets, append-only usage tracking, observability and benchmark-based route evaluation.
 
 Routing principles:
 1. Local models first when quality and latency are acceptable.
