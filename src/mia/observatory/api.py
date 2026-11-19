@@ -60,6 +60,7 @@ from mia.gateway.ledger import UsageLedger
 from mia.gateway.service import CompletionResult, ModelGateway
 from mia.knowledge.document_ingestion import DocumentIngestionError, DocumentIngestor
 from mia.memory.store import MemoryStore
+from mia.observatory.activity import ExperimentActivityCollector
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider
 from mia.voice.tts import Pyttsx3SpeechSynthesizer, SpeechSynthesisError, SpeechSynthesizer
 
@@ -373,6 +374,11 @@ def create_app(
         baseline_capture=baseline_capture_service,
         resource_monitor=resource_monitor_service,
         repo_root=Path(__file__).resolve().parents[3],
+        activity_collector=ExperimentActivityCollector(
+            usage_ledger=ledger,
+            capability_store=capability_versions,
+            task_store=durable_tasks,
+        ),
     )
     experiment_snapshot_scheduler = ExperimentSnapshotScheduler(
         observatory,

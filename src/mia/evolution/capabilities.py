@@ -606,6 +606,30 @@ class CapabilityStore:
                 ).fetchall()
         return [self._decode(row) for row in rows]
 
+    def event_counts(self, since: str, until: str) -> dict[str, Any]:
+        """Count status transitions with occurred_at in [since, until)."""
+        with self._connection() as db:
+            rows = db.execute(
+                """
+                SELECT to_status, COUNT(*) AS n FROM capability_events
+                WHERE occurred_at >= ? AND occurred_at < ? GROUP BY to_status
+                """,
+                (since, until),
+            ).fetchall()
+            approvals = db.execute(
+                """
+                SELECT COUNT(*) AS n FROM capability_events
+                WHERE occurred_at >= ? AND occurred_at < ?
+                  AND to_status IN ('active', 'rolled_back')
+                  AND payload_json LIKE '%"approved_by"%'
+                """,
+                (since, until),
+            ).fetchone()
+        return {
+            "transitions": {row["to_status"]: row["n"] for row in rows},
+            "owner_approved_actions": approvals["n"],
+        }
+
     def list_events(self, capability_id: str, version: str) -> list[dict[str, Any]]:
         """Status-transition history of one version, oldest first."""
         with self._connection() as db:

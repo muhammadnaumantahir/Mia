@@ -548,6 +548,46 @@ class ObservatoryStore:
             """, (experiment_id,)).fetchall()
         return [dict(row) for row in rows]
 
+    @staticmethod
+    def _aggregate_activity(snapshots: list[dict[str, Any]]) -> dict[str, Any]:
+        """Sum daily activity evidence; unreadable days are listed, never counted as zero."""
+        usage_keys = ("requests", "input_tokens", "output_tokens", "estimated_token_rows",
+                      "paid_requests", "non_local_requests")
+        totals: dict[str, Any] = {
+            "days_with_activity_evidence": 0,
+            "days_without_activity_evidence": [],
+            "unavailable_sources": {},
+            "inference_usage": {key: 0 for key in usage_keys} | {"cost_usd": 0.0},
+            "capabilities": {"transitions": {}, "owner_approved_actions": 0},
+            "tasks": {"transitions": {}, "owner_actions": 0,
+                      "restart_recoveries": 0, "lease_recoveries": 0},
+        }
+        for snapshot in snapshots:
+            day = snapshot["day_index"]
+            if day == 0:
+                continue
+            activity = snapshot["evidence"].get("activity")
+            if not isinstance(activity, dict) or "window" not in activity:
+                totals["days_without_activity_evidence"].append(day)
+                continue
+            totals["days_with_activity_evidence"] += 1
+            for source in ("inference_usage", "capabilities", "tasks"):
+                data = activity.get(source)
+                if not isinstance(data, dict) or data.get("available") is not True:
+                    totals["unavailable_sources"].setdefault(source, []).append(day)
+                    continue
+                target = totals[source]
+                for key, value in data.items():
+                    if key == "available":
+                        continue
+                    if isinstance(value, dict):
+                        for name, count in value.items():
+                            target[key][name] = target[key].get(name, 0) + count
+                    elif isinstance(value, int | float) and not isinstance(value, bool):
+                        target[key] = target.get(key, 0) + value
+        totals["inference_usage"]["cost_usd"] = round(totals["inference_usage"]["cost_usd"], 8)
+        return totals
+
     def build_experiment_report(self, experiment_id: str) -> dict[str, Any] | None:
         """Build an integrity-checked report from evidence tied to one experiment."""
         # Close an expired run even when no dashboard status poll or scheduler
@@ -738,6 +778,8 @@ class ObservatoryStore:
             else None
         )
 
+        activity_totals = self._aggregate_activity(snapshots)
+
         if status == "completed":
             conclusion = "completed"
         elif status == "incomplete":
@@ -796,6 +838,7 @@ class ObservatoryStore:
             "metric_series": metric_series,
             "events": events,
             "event_counts": event_counts,
+            "activity_totals": activity_totals,
             "capability_attribution": {
                 "available": False,
                 "reason": (

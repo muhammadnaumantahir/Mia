@@ -305,6 +305,33 @@ class TaskStore:
             ).fetchone()
         return self._decode_task(updated)
 
+    def event_counts(self, since: str, until: str) -> dict[str, Any]:
+        """Count task transitions with occurred_at in [since, until)."""
+        with self._connection() as db:
+            by_status = db.execute(
+                """
+                SELECT to_status, COUNT(*) AS n FROM task_events
+                WHERE occurred_at >= ? AND occurred_at < ? GROUP BY to_status
+                """,
+                (since, until),
+            ).fetchall()
+            by_actor = db.execute(
+                """
+                SELECT actor, COUNT(*) AS n FROM task_events
+                WHERE occurred_at >= ? AND occurred_at < ?
+                  AND actor IN ('startup-recovery', 'lease-recovery', 'local-user')
+                GROUP BY actor
+                """,
+                (since, until),
+            ).fetchall()
+        actors = {row["actor"]: row["n"] for row in by_actor}
+        return {
+            "transitions": {row["to_status"]: row["n"] for row in by_status},
+            "owner_actions": actors.get("local-user", 0),
+            "restart_recoveries": actors.get("startup-recovery", 0),
+            "lease_recoveries": actors.get("lease-recovery", 0),
+        }
+
     def renew_lease(self, task_id: str) -> bool:
         """Extend this store's lease on a running task; False if it no longer holds it."""
         with self._connection() as db:

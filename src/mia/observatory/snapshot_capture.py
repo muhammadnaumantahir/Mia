@@ -30,7 +30,9 @@ class ExperimentSnapshotCapturer:
         baseline_capture: Callable[[str | Path], dict[str, Any]],
         resource_monitor: Any,
         repo_root: str | Path,
+        activity_collector: Any | None = None,
     ) -> None:
+        self.activity_collector = activity_collector
         self.observatory = observatory
         self.baseline_capture = baseline_capture
         self.resource_monitor = resource_monitor
@@ -141,6 +143,19 @@ class ExperimentSnapshotCapturer:
 
         day_index = int(due["day_index"])
         captured_at = datetime.now(UTC).isoformat()
+        # Activity window: since the previous daily snapshot, else the experiment start
+        # (the Day 0 baseline predates the start and is not part of the window).
+        previous = [
+            item for item in self.observatory.list_snapshots(experiment_id)
+            if int(item["day_index"]) > 0
+        ]
+        window_start = (
+            previous[-1]["captured_at"] if previous else (due.get("started_at") or captured_at)
+        )
+        if self.activity_collector is None:
+            activity: dict[str, Any] = {"available": False, "reason": "collector not configured"}
+        else:
+            activity = self.activity_collector.collect(window_start, captured_at)
         snapshot = {
             "captured_at": captured_at,
             "day_index": day_index,
@@ -155,6 +170,7 @@ class ExperimentSnapshotCapturer:
             "resources": resources,
             "verification_passed": True,
             "missing_day_indices": due["days_missed"],
+            "activity": activity,
         }
         try:
             snapshot_id = self.observatory.record_daily_snapshot(
@@ -222,6 +238,23 @@ class ExperimentSnapshotCapturer:
                 context={"source": "local_host_verification"},
             )
 
+        usage = activity.get("inference_usage", {})
+        if usage.get("available"):
+            for metric_name, value, unit in (
+                ("inference_cost_usd", float(usage["cost_usd"]), "usd"),
+                ("inference_requests", float(usage["requests"]), "count"),
+                ("inference_output_tokens", float(usage["output_tokens"]), "tokens"),
+            ):
+                self.observatory.record_metric(
+                    day_index=day_index,
+                    metric_name=metric_name,
+                    value=value,
+                    unit=unit,
+                    benchmark_id=None,
+                    experiment_id=experiment_id,
+                    source_event_id=event_id,
+                    context={"source": "usage_ledger", "window": activity["window"]},
+                )
         return {
             "snapshot_id": snapshot_id,
             "experiment_id": experiment_id,

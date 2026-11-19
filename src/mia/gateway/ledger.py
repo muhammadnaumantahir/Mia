@@ -111,6 +111,32 @@ class UsageLedger:
         now = _utc_now()
         return self.spend_since(now.replace(hour=0, minute=0, second=0, microsecond=0))
 
+    def window_summary(self, since: str, until: str) -> dict[str, Any]:
+        """Totals for recorded_at in [since, until); ISO-8601 UTC strings."""
+        with self._connection() as db:
+            row = db.execute(
+                """
+                SELECT COUNT(*) AS requests,
+                       COALESCE(SUM(input_tokens), 0) AS input_tokens,
+                       COALESCE(SUM(output_tokens), 0) AS output_tokens,
+                       COALESCE(SUM(cost_usd), 0) AS cost_usd,
+                       COALESCE(SUM(token_source = 'estimated'), 0) AS estimated_rows,
+                       COALESCE(SUM(free_tier = 0), 0) AS paid_requests,
+                       COALESCE(SUM(data_local = 0), 0) AS non_local_requests
+                FROM usage WHERE recorded_at >= ? AND recorded_at < ?
+                """,
+                (since, until),
+            ).fetchone()
+        return {
+            "requests": row["requests"],
+            "input_tokens": row["input_tokens"],
+            "output_tokens": row["output_tokens"],
+            "cost_usd": round(row["cost_usd"], 8),
+            "estimated_token_rows": row["estimated_rows"],
+            "paid_requests": row["paid_requests"],
+            "non_local_requests": row["non_local_requests"],
+        }
+
     def summary(self, days: int = 30) -> dict[str, Any]:
         days = max(1, min(int(days), 365))
         since = (_utc_now() - timedelta(days=days)).isoformat()
