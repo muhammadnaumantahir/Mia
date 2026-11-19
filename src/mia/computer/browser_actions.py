@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 
 from .approvals import ApprovalStore
 from .browser import BrowserAccessError, BrowserController
+from .control import AutomationControl, activity_or_null
 from .filesystem import FilesystemAdapter
 
 ACTION_KINDS = {"click", "download", "upload"}
@@ -22,7 +23,9 @@ MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 class BrowserActions:
     def __init__(self, browser: BrowserController, approvals: ApprovalStore,
-                 filesystem: FilesystemAdapter | None = None) -> None:
+                 filesystem: FilesystemAdapter | None = None,
+                 control: AutomationControl | None = None) -> None:
+        self.control = control
         self.browser = browser
         self.approvals = approvals
         self.fs = filesystem
@@ -79,6 +82,8 @@ class BrowserActions:
 
     async def preview(self, kind: str, ref: str, *, root_id: str | None = None,
                       relative_path: str | None = None) -> dict[str, Any]:
+        if self.control is not None:
+            self.control.assert_active()
         plan, summary, _ = await self._plan(kind, ref, root_id, relative_path)
         approval = self.approvals.request(
             action_id=f"browser.{kind}", payload=plan, summary=summary[:300])
@@ -86,10 +91,14 @@ class BrowserActions:
 
     async def execute(self, approval_id: str, kind: str, ref: str, *, root_id: str | None = None,
                       relative_path: str | None = None) -> dict[str, Any]:
+        if self.control is not None:
+            self.control.assert_active()
         plan, _, upload = await self._plan(kind, ref, root_id, relative_path)
         self.approvals.consume(approval_id=approval_id, action_id=f"browser.{kind}", payload=plan)
-        if kind == "click":
-            return await self.browser.click_ref(ref)
-        if kind == "download":
-            return await self.browser.download_via(ref)
-        return await self.browser.upload_file(ref, upload["path"])
+        with activity_or_null(self.control, f"browser.{kind}",
+                              f"Browser {kind} on {urlsplit(plan['page_url']).hostname}"):
+            if kind == "click":
+                return await self.browser.click_ref(ref)
+            if kind == "download":
+                return await self.browser.download_via(ref)
+            return await self.browser.upload_file(ref, upload["path"])

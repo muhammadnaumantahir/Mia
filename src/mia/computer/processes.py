@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from .approvals import ApprovalStore
+from .control import AutomationControl, activity_or_null
 
 PROTECTED_NAMES = frozenset({
     "system", "system idle process", "registry", "memory compression", "smss.exe", "csrss.exe",
@@ -39,7 +40,9 @@ class ProcessManager:
         current_user: str | None = None,
         sample_interval: float = 0.2,
         sleep: Any = time.sleep,
+        control: AutomationControl | None = None,
     ) -> None:
+        self.control = control
         self.approvals = approvals
         self._psutil_module = psutil_module
         self.own_pid = own_pid if own_pid is not None else os.getpid()
@@ -206,11 +209,19 @@ class ProcessManager:
 
     def execute_terminate(self, approval_id: str, pid: int, *, force: bool = False,
                           wait_seconds: float = 5.0) -> dict[str, Any]:
-        psutil = self._psutil()
+        if self.control is not None:
+            self.control.assert_active()
         proc, payload = self._target(pid)
         payload["force"] = bool(force)
         self.approvals.consume(approval_id=approval_id, action_id="process.terminate",
                                payload=payload)
+        with activity_or_null(self.control, "process.terminate",
+                              f"Stopping {payload['name']} (PID {pid})"):
+            return self._terminate(proc, payload, force, wait_seconds)
+
+    def _terminate(self, proc: Any, payload: dict[str, Any], force: bool,
+                   wait_seconds: float) -> dict[str, Any]:
+        psutil = self._psutil()
         try:
             proc.kill() if force else proc.terminate()
         except psutil.NoSuchProcess:

@@ -226,3 +226,38 @@ sub-requests, goes through the URL policy (public web only; loopback/private/res
   browsers, persistence of a logged-in profile across restarts (that Chromium build never writes the cookie store, so the
   restart test skips itself; run it on a full Chrome/Chromium), and real third-party websites.
 - Tests: `tests/test_browser_automation.py` skips when no Chromium is available; set `MIA_TEST_BROWSER=/path/to/chromium`.
+
+## Desktop observation and interaction, activity indicator, emergency stop (Feature 4, M7)
+
+**Desktop (`computer/desktop_control.py`, `/api/desktop/*`, Windows UI Automation via pywinauto).**
+- `GET /api/desktop/windows/{handle}/observe`: controls (type, name, automation id, enabled, toggle/selected state) with
+  the actions each supports. Password controls are skipped and edit-control values are never returned.
+- Actions through `POST /api/desktop/actions/{preview,execute}`: `click` (invoke, `click_input` fallback), `toggle`,
+  `select`, `keys` (literal text plus a whitelist of keys; Alt+F4, Win key, Ctrl+Alt+Del, Ctrl+V are not allowed;
+  secret-looking text refused), `scroll`, `click_at` (coordinates, explicit last-resort fallback) and `screenshot`
+  (one window, per-approval, never continuous).
+- Each action is bound by approval to the window (handle, title, process, class) and the control's identity and state; an
+  ambiguous or disabled target is refused. Consequential labels (Delete, Send, Install, Close, ...) are flagged in the
+  approval summary.
+- **Cycle:** observe -> understand (unique control resolution) -> act -> observe -> verify. Verification compares the
+  re-read UI: toggle must flip, a selected item must report selected, keys must change the control's value hash, clicks
+  must produce a window change (content, title, new window, or closed window). If nothing observable changed the result
+  is `verified: false` with an explanation; a returned call is never reported as success. There are no automatic retries
+  of non-idempotent actions.
+- **Protected windows:** UAC consent, credential/logon UI, Windows Security, regedit, mmc and Task Manager are refused for
+  observe, window management, typing and every desktop action (`make_window_guard`). The process name comes from psutil;
+  if it cannot be resolved the window is allowed through (documented fail-open on unknown names).
+- `desktop.type_text` now reads the control back and reports `verified`; previously it reported success on no exception.
+- OCR is not implemented (UI Automation labels cover the supported cases). Screenshots need Pillow via pywinauto.
+
+**Activity indicator and stop switch (`computer/control.py`).**
+- Every action registers an activity (`observing`, `interacting`, `executing`) visible at `GET /api/computer/activity`.
+- `POST /api/computer/stop-all` immediately cancels running terminal commands and blocks all new automation (HTTP 423)
+  until `POST /api/computer/resume`. The stop check runs before approvals are consumed in every executor, so a stopped
+  system does not burn one-time approvals. The control can only restrict; it never grants permission.
+- Wired into terminal, file operations, process termination, browser actions and desktop actions. Listeners are best-effort:
+  a failing listener cannot disable the stop switch.
+
+**Verification status:** all desktop logic is tested with a fake UI Automation tree (17 tests). **Nothing has been run
+against a real Windows desktop**, real pywinauto element behavior (invoke patterns, toggle/selection state, scroll, `type_keys`
+quoting), or a real UAC prompt. Manual Windows verification is required before relying on this.

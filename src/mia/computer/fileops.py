@@ -25,6 +25,7 @@ from typing import Any
 
 from mia.memory.safety import find_secret
 
+from .control import AutomationControl, activity_or_null
 from .filesystem import RECOVERY_DIR, FilesystemAccessError, FilesystemAdapter, _is_link
 
 MUTATING_OPS = {"mkdir", "rename", "copy", "move", "delete", "restore"}
@@ -48,8 +49,9 @@ class FileOperations:
     MAX_DUPLICATE_FILES = 5000
     MAX_COMPARE_BYTES = 512 * 1024
 
-    def __init__(self, fs: FilesystemAdapter) -> None:
+    def __init__(self, fs: FilesystemAdapter, control: AutomationControl | None = None) -> None:
         self.fs = fs
+        self.control = control
 
     # ---- helpers ------------------------------------------------------------------------
     def _rel(self, root_id: str, path: Path) -> str:
@@ -313,8 +315,15 @@ class FileOperations:
 
     def execute(self, op: str, approval_id: str, root_id: str, relative_path: str = "", *,
                 destination_path: str | None = None, recovery_id: str | None = None) -> dict[str, Any]:
+        if self.control is not None:
+            self.control.assert_active()
         plan = self._plan(op, root_id, relative_path, destination_path, recovery_id)
         self.fs.approvals.consume(approval_id=approval_id, action_id=f"filesystem.{op}", payload=plan)
+        with activity_or_null(self.control, f"filesystem.{op}",
+                              f"File {op}: {plan.get('source', plan.get('recovery_id', ''))}"[:100]):
+            return self._execute_plan(op, root_id, plan)
+
+    def _execute_plan(self, op: str, root_id: str, plan: dict[str, Any]) -> dict[str, Any]:
         root = self.fs.roots[root_id]
         result: dict[str, Any] = {"op": op, "operation": plan}
         if op == "mkdir":

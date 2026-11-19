@@ -28,6 +28,9 @@ def looks_unsaved(title: str) -> bool:
 
 
 class WindowsUIAdapter:
+    #: Optional callable(window) that raises DesktopAccessError for windows Mia must never drive.
+    window_guard: Any = None
+
     """Inspect visible windows and prepare one exact text-control replacement.
 
     No mouse automation, keyboard shortcuts, arbitrary keystrokes, menus,
@@ -233,13 +236,29 @@ class WindowsUIAdapter:
             raise DesktopAccessError(
                 "The approved text could not be entered into the selected control"
             ) from exc
+        verified, note = self._read_back(control, text)
         return {
             "window_title": window_title,
             "window_handle": int(window_handle),
             "automation_id": automation_id,
             "characters_entered": len(text),
             "text_sha256": payload["text_sha256"],
+            "verified": verified,
+            "note": note,
         }
+
+    @staticmethod
+    def _read_back(control: Any, expected: str) -> tuple[bool, str | None]:
+        """Confirm the control now holds the text; a missing read-back is not success."""
+        for reader in ("get_value", "window_text"):
+            fn = getattr(control, reader, None)
+            if callable(fn):
+                try:
+                    return (str(fn()) == expected,
+                            None if str(fn()) == expected else "The control's content differs from the approved text.")
+                except Exception:
+                    continue
+        return False, "The control's content could not be read back to confirm the entry."
 
     # ---- window management ------------------------------------------------------------
     def _find_window(self, window_handle: int, window_title: str | None = None):
@@ -252,6 +271,8 @@ class WindowsUIAdapter:
                         str(candidate.window_text() or "").strip() != window_title
                     ):
                         raise DesktopAccessError("The target window title has changed")
+                    if self.window_guard is not None:
+                        self.window_guard(candidate)
                     return candidate
             except DesktopAccessError:
                 raise
@@ -366,6 +387,8 @@ class WindowsUIAdapter:
             raise DesktopAccessError("The target window is no longer available")
         if str(window.window_text() or "").strip() != window_title:
             raise DesktopAccessError("The target window title has changed")
+        if self.window_guard is not None:
+            self.window_guard(window)
         if expected_process_id is not None and int(window.process_id()) != expected_process_id:
             raise DesktopAccessError("The target window process has changed")
         current_class = str(window.element_info.class_name or "")[:120]

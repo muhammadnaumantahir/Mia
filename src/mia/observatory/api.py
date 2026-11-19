@@ -43,6 +43,8 @@ from mia.computer.approvals import ApprovalError, ApprovalStore
 from mia.computer.browser import BrowserAccessError, BrowserController
 from mia.computer.browser_actions import BrowserActions
 from mia.computer.capabilities import PermissionLevel, default_registry
+from mia.computer.control import AutomationControl, AutomationStopped
+from mia.computer.desktop_control import DesktopController, make_window_guard
 from mia.computer.environment import detect_environment
 from mia.computer.fileops import FileOperationError, FileOperations
 from mia.computer.filesystem import FilesystemAccessError, FilesystemAdapter
@@ -506,6 +508,22 @@ class WindowActionInput(BaseModel):
     acknowledge_unsaved_risk: bool = False
 
 
+class DesktopActionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: str = Field(pattern="^(click|toggle|select|keys|scroll|click_at|screenshot)$")
+    window_handle: int = Field(ge=1)
+    automation_id: str = Field(default="", max_length=160)
+    control_type: str = Field(default="", max_length=60)
+    name: str = Field(default="", max_length=160)
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class DesktopActionExecution(DesktopActionInput):
+    approval_id: str = Field(min_length=32, max_length=32)
+    window_title: str = Field(min_length=1, max_length=240)
+
+
 class WindowActionExecution(WindowActionInput):
     approval_id: str = Field(min_length=32, max_length=32)
     window_title: str = Field(min_length=1, max_length=240)
@@ -563,6 +581,8 @@ def create_app(
     usage_ledger: UsageLedger | None = None,
     permission_policy: PermissionPolicy | None = None,
     process_manager: ProcessManager | None = None,
+    automation_control: AutomationControl | None = None,
+    desktop_controller: DesktopController | None = None,
     terminal: TerminalExecutor | None = None,
     app_discovery: ApplicationDiscovery | None = None,
     life: LifeStore | None = None,
@@ -615,11 +635,24 @@ def create_app(
     )
     app.state.computer_files = computer_files
     app.state.approvals = approval_store
+    control = automation_control or AutomationControl()
+    app.state.automation_control = control
+
+    @app.exception_handler(AutomationStopped)
+    async def _automation_stopped(_request: Any, exc: AutomationStopped):
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=423, content={"detail": str(exc)})
     policy = permission_policy or PermissionPolicy(data_dir / "computer-permissions.sqlite3")
     capability_registry = default_registry()
     app.state.permission_policy = policy
     app.state.capability_registry = capability_registry
     desktop_adapter = windows_ui or WindowsUIAdapter(approval_store)
+    if desktop_adapter.window_guard is None:
+        desktop_adapter.window_guard = make_window_guard()
+    desktop_ctl = desktop_controller or DesktopController(
+        desktop_adapter, approval_store, control=control,
+        screenshot_dir=Path(os.getenv("MIA_DATA_DIR", "./data")) / "desktop-screenshots")
+    app.state.desktop_controller = desktop_ctl
     app.state.windows_ui = desktop_adapter
     applications_file = Path(
         os.getenv("MIA_APPLICATIONS_FILE", "config/applications.json")
@@ -731,7 +764,8 @@ def create_app(
         screenshot_dir=data_dir / "browser-screenshots",
     )
     app.state.browser = browser_controller
-    browser_actions = BrowserActions(browser_controller, approval_store, computer_files)
+    browser_actions = BrowserActions(
+        browser_controller, approval_store, computer_files, control=control)
 
     def _browser_error(exc: Exception) -> HTTPException:
         if isinstance(exc, BrowserAccessError):
@@ -1844,7 +1878,9 @@ def create_app(
         approval_store, computer_files, os_family=_env.os_family,
         available_shells=_env.shells, policy=policy,
         spec=capability_registry.get("terminal.run"), on_finish=_terminal_finished,
+        control=control,
     )
+    control.on_stop(terminal_executor.stop_all)
     app.state.terminal = terminal_executor
 
     @app.post("/api/computer/terminal/preview", status_code=201)
@@ -1915,16 +1951,30 @@ def create_app(
             layer_id="SPS-10", payload={"execution_id": execution_id})
         return {"status": "cancelling" if cancelled else "not_running"}
 
+    @app.get("/api/computer/activity")
+    def computer_activity() -> dict[str, Any]:
+        return control.status()
+
     @app.post("/api/computer/stop-all")
     def computer_stop_all() -> dict[str, Any]:
-        stopped = terminal_executor.stop_all()
+        result = control.request_stop()
         observatory.record_event(
             category="computer", event_type="stop_all",
-            summary="Owner stopped all active computer automation", outcome="success",
-            layer_id="SPS-10", payload={"terminal_stopped": stopped})
-        return {"status": "stopped", "terminal_commands_stopped": stopped}
+            summary="Owner stopped all computer automation; new actions are blocked until resumed",
+            outcome="success", layer_id="SPS-10", payload=result)
+        return {"status": "stopped", **result,
+                "terminal_commands_stopped": result["background_tasks_cancelled"]}
 
-    processes = process_manager or ProcessManager(approval_store)
+    @app.post("/api/computer/resume")
+    def computer_resume() -> dict[str, Any]:
+        control.resume()
+        observatory.record_event(
+            category="computer", event_type="automation_resumed",
+            summary="Owner resumed computer automation", outcome="success", layer_id="SPS-10",
+            payload={})
+        return control.status()
+
+    processes = process_manager or ProcessManager(approval_store, control=control)
     app.state.process_manager = processes
     discovery = app_discovery or ApplicationDiscovery(os_family=detect_environment().os_family)
 
@@ -2027,6 +2077,53 @@ def create_app(
         )
         return result
 
+    def _desktop_error(exc: Exception) -> HTTPException:
+        if isinstance(exc, AutomationStopped):
+            return HTTPException(status_code=423, detail=str(exc))
+        if isinstance(exc, DesktopAccessError):
+            return HTTPException(status_code=403, detail=str(exc))
+        if isinstance(exc, ApprovalError):
+            return HTTPException(status_code=409, detail=str(exc))
+        if isinstance(exc, ValueError):
+            return HTTPException(status_code=422, detail=str(exc))
+        if isinstance(exc, RuntimeError):
+            return HTTPException(status_code=503, detail=str(exc))
+        return HTTPException(status_code=502, detail="The desktop action failed")
+
+    @app.get("/api/desktop/windows/{window_handle}/observe")
+    def desktop_observe(window_handle: int, limit: int = 200) -> dict[str, Any]:
+        try:
+            return desktop_ctl.observe(window_handle, limit=limit)
+        except Exception as exc:
+            raise _desktop_error(exc) from exc
+
+    @app.post("/api/desktop/actions/preview", status_code=201)
+    def desktop_action_preview(item: DesktopActionInput) -> dict[str, Any]:
+        try:
+            control.assert_active()
+            return desktop_ctl.preview(
+                item.action, item.window_handle, automation_id=item.automation_id,
+                control_type=item.control_type, name=item.name, params=item.params)
+        except Exception as exc:
+            raise _desktop_error(exc) from exc
+
+    @app.post("/api/desktop/actions/execute")
+    def desktop_action_execute(item: DesktopActionExecution) -> dict[str, Any]:
+        try:
+            result = desktop_ctl.execute(
+                item.approval_id, item.action, item.window_handle, item.window_title,
+                automation_id=item.automation_id, control_type=item.control_type,
+                name=item.name, params=item.params)
+        except Exception as exc:
+            raise _desktop_error(exc) from exc
+        observatory.record_event(
+            category="computer", event_type=f"desktop_{item.action}",
+            summary=f"Approved desktop {item.action}: verified={result.get('verified')}",
+            outcome="success" if result.get("verified") else "failure", layer_id="SPS-10",
+            payload={"approval_id": item.approval_id, "action": item.action,
+                     "window_handle": item.window_handle})
+        return result
+
     @app.get("/api/desktop/windows-hung")
     def desktop_windows_hung() -> dict[str, Any]:
         try:
@@ -2034,7 +2131,7 @@ def create_app(
         except RuntimeError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-    file_ops = FileOperations(computer_files)
+    file_ops = FileOperations(computer_files, control=control)
     app.state.file_ops = file_ops
 
     def _file_error(exc: Exception) -> HTTPException:

@@ -30,6 +30,7 @@ from mia.memory.safety import find_secret
 
 from .approvals import ApprovalError, ApprovalStore
 from .capabilities import CapabilitySpec, RiskLevel
+from .control import AutomationControl
 from .filesystem import FilesystemAdapter
 from .permissions import PermissionPolicy
 
@@ -214,6 +215,7 @@ class Execution:
     error: str | None = None
     approval_id: str | None = None
     authorized_by: str = "approval"
+    _activity: str | None = field(default=None, repr=False)
     _proc: Any = field(default=None, repr=False)
     _cancel: threading.Event = field(default_factory=threading.Event, repr=False)
     _done: threading.Event = field(default_factory=threading.Event, repr=False)
@@ -248,7 +250,9 @@ class TerminalExecutor:
         spec: CapabilitySpec | None = None,
         environ: Any = None,
         on_finish: Any = None,
+        control: AutomationControl | None = None,
     ) -> None:
+        self.control = control
         self.approvals = approvals
         self.on_finish = on_finish
         self.fs = filesystem
@@ -318,6 +322,8 @@ class TerminalExecutor:
         plan, assessment, directory = self._plan(command, shell, root_id, cwd, timeout)
         decision = self._decision(assessment, directory)
         authorized_by = "approval"
+        if self.control is not None:
+            self.control.assert_active()
         if approval_id:
             self.approvals.consume(approval_id=approval_id, action_id="terminal.run", payload=plan)
         elif decision and decision.allowed and not decision.requires_approval:
@@ -332,6 +338,9 @@ class TerminalExecutor:
                 root_id=root_id, cwd=plan["cwd"], risk=plan["risk"], timeout=plan["timeout"],
                 started_at=datetime.now(UTC).isoformat(), approval_id=approval_id,
                 authorized_by=authorized_by)
+            if self.control is not None:
+                execution._activity = self.control.begin(
+                    "terminal.run", f"Running: {redact_output(plan['command'])[:80]}")
             self._executions[execution.execution_id] = execution
             self._prune()
         threading.Thread(target=self._run, args=(execution, directory), daemon=True).start()
@@ -403,6 +412,8 @@ class TerminalExecutor:
             ex.stderr = redact_output(bytes(buffers["stderr"]).decode("utf-8", errors="replace"))
             ex.finished_at = datetime.now(UTC).isoformat()
             ex._done.set()
+            if self.control is not None and ex._activity:
+                self.control.end(ex._activity)
             if self.on_finish is not None:
                 try:
                     self.on_finish(ex)
