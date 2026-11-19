@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 from time import monotonic
 from typing import Any, Protocol
 
-from mia.life.store import LifeSettings, LifeStore, utc_now
+from mia.life.store import LifeSettings, LifeStore, in_quiet_hours, utc_now
 from mia.memory.store import MemoryStore, extract_query_terms
 
 NO_MODEL_RESOURCE = {"model_id": None, "provider_id": None, "model_calls": 0, "cost_usd": 0.0}
@@ -196,7 +196,10 @@ class LifeRunner:
             "cycles_today": self.store.cycles_started_since(day_start),
             "last_result": self.last_result,
             "explorer": {"name": self.explorer.name, "permission_level": self.explorer.permission_level},
-            "external_research_enabled": False,
+            "quiet_hours_active": in_quiet_hours(settings, now),
+            "research_sources": [source["host"] for source in self.store.list_sources()],
+            "external_research_enabled": bool(self.store.list_sources())
+            and self.explorer.permission_level >= 1,
             "proactive_delivery_enabled": False,
         }
 
@@ -210,6 +213,8 @@ class LifeRunner:
             return None
         if settings.paused:
             return {"status": "skipped", "reason": "paused"}
+        if in_quiet_hours(settings, now):
+            return {"status": "skipped", "reason": "quiet_hours"}
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         if self.store.cycles_started_since(day_start) >= settings.max_cycles_per_day:
             return {"status": "skipped", "reason": "daily_cycle_cap"}
@@ -245,15 +250,26 @@ class LifeRunner:
                 pass
         return result
 
+    def _permission_for(self, item: dict[str, Any]) -> int:
+        chooser = getattr(self.explorer, "permission_for", None)
+        return int(chooser(item)) if chooser else int(self.explorer.permission_level)
+
     def _run_cycle(self, trigger: str, detail: str) -> dict[str, Any]:
         now = self.clock()
         settings = self.store.get_settings()
         skipped = self._gate(trigger, settings, now)
         if skipped:
             return skipped
-        policy = {"trigger": trigger, "gates_passed": True, **{
-            k: getattr(settings, k) for k in ("max_cycles_per_day", "min_interval_seconds", "time_budget_seconds")
-        }}
+        policy = {
+            "trigger": trigger,
+            "gates_passed": True,
+            "quiet_hours_enabled": settings.quiet_hours_enabled,
+            "research_sources_allowed": len(self.store.list_sources()),
+            **{
+                k: getattr(settings, k)
+                for k in ("max_cycles_per_day", "min_interval_seconds", "time_budget_seconds")
+            },
+        }
 
         created = derive_followups(self.store, self.memory, settings, now)
         eligible = self.store.eligible_items(max_attempts=settings.max_attempts, now=now)
@@ -274,7 +290,7 @@ class LifeRunner:
             rationale=f"{rationale}; {len(eligible)} eligible; {created} follow-up(s) derived this cycle",
             item_id=item["item_id"],
             policy=policy,
-            permission_level=self.explorer.permission_level,
+            permission_level=self._permission_for(item),
         )
         self.store.set_item_state(item["item_id"], "in_progress", reason="cycle started")
         started = monotonic()

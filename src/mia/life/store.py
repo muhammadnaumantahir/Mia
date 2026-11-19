@@ -57,6 +57,10 @@ class LifeSettings:
     max_attempts: int = 3
     max_cpu_percent: int = 85
     max_memory_percent: int = 85
+    quiet_hours_enabled: bool = False
+    quiet_start_minute: int = 22 * 60  # local minutes after midnight
+    quiet_end_minute: int = 7 * 60
+    utc_offset_minutes: int = 0
 
 
 _SETTING_RANGES: dict[str, tuple[int, int]] = {
@@ -67,8 +71,11 @@ _SETTING_RANGES: dict[str, tuple[int, int]] = {
     "max_attempts": (1, 10),
     "max_cpu_percent": (10, 100),
     "max_memory_percent": (10, 100),
+    "quiet_start_minute": (0, 1439),
+    "quiet_end_minute": (0, 1439),
+    "utc_offset_minutes": (-720, 840),
 }
-_BOOL_SETTINGS = {"paused", "emergency_stop"}
+_BOOL_SETTINGS = {"paused", "emergency_stop", "quiet_hours_enabled"}
 
 
 def validate_settings(values: dict[str, Any]) -> dict[str, Any]:
@@ -92,6 +99,33 @@ def validate_settings(values: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"{key} must be between {low} and {high}")
         cleaned[key] = int(value)
     return cleaned
+
+
+def in_quiet_hours(settings: LifeSettings, moment: datetime) -> bool:
+    """True when `moment` falls in the owner's quiet window (handles wrap past midnight)."""
+    if not settings.quiet_hours_enabled:
+        return False
+    local = moment.astimezone(UTC) + timedelta(minutes=settings.utc_offset_minutes)
+    minute = local.hour * 60 + local.minute
+    start, end = settings.quiet_start_minute, settings.quiet_end_minute
+    if start == end:
+        return False  # an empty window; rejected at update time but harmless here
+    if start < end:
+        return start <= minute < end
+    return minute >= start or minute < end
+
+
+_HOST_RE = re.compile(r"^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
+
+
+def normalise_source_host(value: str) -> str:
+    """A bare DNS hostname (no scheme, port, path, wildcard or IP literal) or ValueError."""
+    host = value.strip().lower().rstrip(".")
+    if not _HOST_RE.fullmatch(host):
+        raise ValueError("source must be a plain domain name such as docs.python.org")
+    if host.endswith((".local", ".localhost", ".internal", ".test", ".invalid", ".example")):
+        raise ValueError("local and reserved domains cannot be research sources")
+    return host
 
 
 def _unit(value: float, name: str) -> float:
@@ -155,6 +189,11 @@ class LifeStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_curiosity_state
                     ON curiosity_items(state, updated_at DESC);
+                CREATE TABLE IF NOT EXISTS life_sources (
+                    host TEXT PRIMARY KEY,
+                    note TEXT NOT NULL,
+                    added_at TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS activity_journal (
                     cycle_id TEXT PRIMARY KEY,
                     status TEXT NOT NULL,
@@ -201,6 +240,8 @@ class LifeStore:
         cleaned = validate_settings(changes)
         current = asdict(self.get_settings())
         current.update(cleaned)
+        if current["quiet_hours_enabled"] and current["quiet_start_minute"] == current["quiet_end_minute"]:
+            raise ValueError("quiet hours need different start and end times")
         with self._connection() as db:
             db.execute(
                 """
@@ -212,6 +253,38 @@ class LifeStore:
                 (json.dumps(current, sort_keys=True), _iso(utc_now())),
             )
         return LifeSettings(**current)
+
+    # ---------------------------------------------------------------- sources
+
+    def add_source(self, host: str, note: str = "") -> tuple[str, bool]:
+        """Allow read-only research on one exact hostname. Returns (host, created)."""
+        clean = normalise_source_host(host)
+        with self._connection() as db:
+            if db.execute("SELECT 1 FROM life_sources WHERE host = ?", (clean,)).fetchone():
+                return clean, False
+            db.execute(
+                "INSERT INTO life_sources (host, note, added_at) VALUES (?, ?, ?)",
+                (clean, note.strip()[:200], _iso(utc_now())),
+            )
+        return clean, True
+
+    def remove_source(self, host: str) -> bool:
+        with self._connection() as db:
+            cursor = db.execute(
+                "DELETE FROM life_sources WHERE host = ?", (host.strip().lower().rstrip("."),)
+            )
+        return cursor.rowcount > 0
+
+    def list_sources(self) -> list[dict[str, Any]]:
+        with self._connection() as db:
+            rows = db.execute("SELECT * FROM life_sources ORDER BY host").fetchall()
+        return [dict(row) for row in rows]
+
+    def source_allowed(self, host: str) -> bool:
+        with self._connection() as db:
+            return db.execute(
+                "SELECT 1 FROM life_sources WHERE host = ?", (host.strip().lower().rstrip("."),)
+            ).fetchone() is not None
 
     # ---------------------------------------------------------------- backlog
 

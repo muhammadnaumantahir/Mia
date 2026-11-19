@@ -70,6 +70,7 @@ from mia.gateway.service import CompletionResult, ModelGateway
 from mia.knowledge.document_ingestion import DocumentIngestionError, DocumentIngestor
 from mia.life.runner import LifeRunner, LifeScheduler
 from mia.life.store import ITEM_STATES, LifeStore
+from mia.life.web import ResearchExplorer, normalise_research_url
 from mia.memory.capture import CaptureService
 from mia.memory.context import ContextPacket, assemble_memory_context
 from mia.memory.identity import (
@@ -359,11 +360,21 @@ class LifeSettingsInput(BaseModel):
     max_attempts: int | None = None
     max_cpu_percent: int | None = None
     max_memory_percent: int | None = None
+    quiet_hours_enabled: bool | None = None
+    quiet_start_minute: int | None = None
+    quiet_end_minute: int | None = None
+    utc_offset_minutes: int | None = None
+
+
+class LifeSourceInput(BaseModel):
+    host: str = Field(min_length=1, max_length=253)
+    note: str = Field(default="", max_length=200)
 
 
 class CuriosityInput(BaseModel):
     title: str = Field(min_length=1, max_length=300)
     why_it_matters: str = Field(min_length=1, max_length=4000)
+    url: str | None = Field(default=None, max_length=2000)
     expected_value: float = 0.5
     novelty: float = 0.5
 
@@ -490,6 +501,7 @@ def create_app(
     terminal: TerminalExecutor | None = None,
     app_discovery: ApplicationDiscovery | None = None,
     life: LifeStore | None = None,
+    life_fetcher: Any | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -1154,6 +1166,7 @@ def create_app(
     life_runner = LifeRunner(
         life_store,
         memory_store,
+        ResearchExplorer(life_store, memory_store, life_fetcher),
         resource_snapshot=resource_monitor_service.snapshot,
         on_cycle=record_life_cycle,
     )
@@ -1255,8 +1268,10 @@ def create_app(
     @app.post("/api/life/curiosity", status_code=201)
     def add_curiosity(item: CuriosityInput) -> dict[str, Any]:
         try:
+            url = normalise_research_url(item.url) if item.url else None
             item_id, created = life_store.add_item(
                 title=item.title, why_it_matters=item.why_it_matters, origin="owner",
+                source_ref={"type": "url", "ref": url} if url else None,
                 expected_value=item.expected_value, novelty=item.novelty,
             )
         except ValueError as exc:
@@ -1288,6 +1303,27 @@ def create_app(
         if deleted:
             _life_event("curiosity_deleted", "Owner deleted a curiosity item", {"item_id": item_id})
         return {"deleted": deleted}
+
+    @app.get("/api/life/sources")
+    def list_life_sources() -> dict[str, Any]:
+        return {"sources": life_store.list_sources()}
+
+    @app.post("/api/life/sources", status_code=201)
+    def add_life_source(item: LifeSourceInput) -> dict[str, Any]:
+        try:
+            host, created = life_store.add_source(item.host, item.note)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if created:
+            _life_event("source_allowed", "Owner allowed a research source", {"host": host})
+        return {"host": host, "created": created}
+
+    @app.delete("/api/life/sources/{host}")
+    def remove_life_source(host: str) -> dict[str, bool]:
+        removed = life_store.remove_source(host)
+        if removed:
+            _life_event("source_removed", "Owner removed a research source", {"host": host.lower()})
+        return {"removed": removed}
 
     @app.post("/api/life/cycle")
     async def run_life_cycle() -> dict[str, Any]:
