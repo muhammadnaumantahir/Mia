@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ASSISTANT_PAGE = (
     Path(__file__).resolve().parents[1] / "src" / "mia" / "assistant.html"
 )
