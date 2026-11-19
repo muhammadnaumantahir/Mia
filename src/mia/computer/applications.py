@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -48,8 +49,11 @@ class ApplicationLauncher:
         self,
         applications: list[ApplicationDefinition],
         approvals: ApprovalStore,
+        *,
+        launch_check_seconds: float = 1.0,
     ) -> None:
         self.approvals = approvals
+        self.launch_check_seconds = launch_check_seconds
         self._applications: dict[str, ApplicationDefinition] = {}
         for app in applications:
             key = app.app_id.strip().lower()
@@ -128,15 +132,26 @@ class ApplicationLauncher:
             action_id="process.launch",
             payload=payload,
         )
-        process = subprocess.Popen(
-            [executable, *app.arguments],
-            shell=False,
-            close_fds=True,
-        )
+        try:
+            process = subprocess.Popen(
+                [executable, *app.arguments],
+                shell=False,
+                close_fds=True,
+            )
+        except OSError as exc:
+            raise ApplicationLaunchError(f"The application could not be started: {exc.strerror}") from exc
+        time.sleep(self.launch_check_seconds)
+        code = process.poll() if callable(getattr(process, "poll", None)) else None
+        if code not in (None, 0):
+            raise ApplicationLaunchError(
+                f"{app.display_name} exited immediately with code {code}; the launch failed"
+            )
         return {
             "app_id": app.app_id,
             "display_name": app.display_name,
             "process_id": process.pid,
+            "launch_state": "running" if code is None else "handed_off_or_exited_cleanly",
+            "verified": code is None,
         }
 
     def _get_application(self, app_id: str) -> ApplicationDefinition:

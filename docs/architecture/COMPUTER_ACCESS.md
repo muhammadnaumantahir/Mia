@@ -140,3 +140,27 @@ Install on Windows with `python -m pip install -e ".[computer]"`. This adapter i
 - Limits: copies up to 100 MB / 5000 files; compare 512 KB per file; duplicate scan 5000 files. Office/PDF document
   reading remains via the existing knowledge ingestion path; no new document writers were added.
 - Like M2, these paths still use the one-time approval store directly; `PermissionPolicy` is not yet consulted.
+
+## Application, window and process control (Feature 4, M4)
+
+- **Discovery** (`computer/app_discovery.py`, `GET /api/computer/apps/discover`): installed application names from
+  Start Menu shortcuts and the uninstall registry (Windows), `.desktop` entries (Linux), `/Applications` (macOS).
+  Names only: no command lines are returned and nothing is launched. Launching still requires an owner allowlist entry.
+- **Launch failure detection**: after an approved launch the process is polled; a non-zero early exit raises, a clean
+  early exit is reported as `handed_off_or_exited_cleanly` with `verified: false`, a running process as `verified: true`.
+- **Window management** (`WindowsUIAdapter`, Windows only): focus, minimize, maximize, restore, close via
+  `/api/desktop/windows/action/{preview,execute}`. Approval is bound to handle, title, PID, class and action. Results are
+  verified by re-reading window state (close = window gone); if nothing changed, `verified` is false. Close is refused when
+  the title suggests unsaved work (`*`, `●`, "(modified)") unless the owner explicitly acknowledges the risk. This is a
+  title heuristic only and cannot see unsaved state inside an application. Close uses the window's normal close request,
+  not a process kill, so applications can still prompt to save.
+- **Hung windows**: `GET /api/desktop/windows-hung` uses the OS `IsHungAppWindow` check (Windows only).
+- **Processes** (`computer/processes.py`): `system/status` (CPU, RAM, disks, uptime, interface state only: no outbound
+  connectivity probe), `processes/top` (by memory or CPU), `processes/{pid}`. No command lines or environment variables.
+- **Termination**: preview -> approval -> execute, bound to PID + name + start time (PID reuse invalidates the approval),
+  graceful by default with `force` as a separate approval. Refused: PID <= 4, Mia and its parent processes, critical OS and
+  security process names, and any process whose owner is not the current user. Result is `verified` only if the process is
+  actually gone. Elevated/administrator operations are not implemented.
+- **Verification status**: process and system code ran against real processes on Linux. Window, registry and hung-window
+  code ran only against test doubles. **No real Windows run has happened.**
+- Policy engine wiring (`PermissionPolicy.authorize`) is still pending for these adapters.

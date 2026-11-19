@@ -34,6 +34,7 @@ from mia.agent.tasks import (
     TaskTransitionError,
 )
 from mia.agent.tools import ToolRegistry, ToolResult
+from mia.computer.app_discovery import ApplicationDiscovery
 from mia.computer.applications import ApplicationLauncher, ApplicationLaunchError
 from mia.computer.approvals import ApprovalError, ApprovalStore
 from mia.computer.browser import BrowserAccessError, BrowserController
@@ -42,6 +43,7 @@ from mia.computer.environment import detect_environment
 from mia.computer.fileops import FileOperationError, FileOperations
 from mia.computer.filesystem import FilesystemAccessError, FilesystemAdapter
 from mia.computer.permissions import PermissionError_, PermissionPolicy
+from mia.computer.processes import ProcessAccessError, ProcessManager
 from mia.computer.windows_ui import DesktopAccessError, WindowsUIAdapter
 from mia.evolution.capabilities import (
     CapabilityActivationBlocked,
@@ -301,6 +303,30 @@ class IdentityUpdateInput(BaseModel):
     reason: str = Field(default="", max_length=300)
 
 
+class ProcessTerminateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pid: int = Field(ge=1)
+    force: bool = False
+
+
+class ProcessTerminateExecution(ProcessTerminateInput):
+    approval_id: str = Field(min_length=32, max_length=32)
+
+
+class WindowActionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    window_handle: int = Field(ge=1)
+    action: str = Field(pattern="^(focus|minimize|maximize|restore|close)$")
+    acknowledge_unsaved_risk: bool = False
+
+
+class WindowActionExecution(WindowActionInput):
+    approval_id: str = Field(min_length=32, max_length=32)
+    window_title: str = Field(min_length=1, max_length=240)
+
+
 class FileOperationInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -352,6 +378,8 @@ def create_app(
     tts_synthesizer: SpeechSynthesizer | None = None,
     usage_ledger: UsageLedger | None = None,
     permission_policy: PermissionPolicy | None = None,
+    process_manager: ProcessManager | None = None,
+    app_discovery: ApplicationDiscovery | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -1203,6 +1231,116 @@ def create_app(
     async def browser_close() -> dict[str, str]:
         await browser_controller.close()
         return {"status": "closed"}
+
+    processes = process_manager or ProcessManager(approval_store)
+    app.state.process_manager = processes
+    discovery = app_discovery or ApplicationDiscovery(os_family=detect_environment().os_family)
+
+    @app.get("/api/computer/apps/discover")
+    def computer_apps_discover(query: str = "") -> dict[str, Any]:
+        try:
+            items = discovery.search(query) if query.strip() else discovery.discover()
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        allowlisted = {a["display_name"].casefold() for a in app_launcher.list_applications()}
+        for item in items:
+            item["allowlisted"] = item["name"].casefold() in allowlisted
+        return {
+            "items": items[:300],
+            "note": "Discovery lists names only. Launching needs an owner allowlist entry.",
+        }
+
+    @app.get("/api/computer/system/status")
+    def computer_system_status() -> dict[str, Any]:
+        try:
+            return processes.system_status()
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.get("/api/computer/processes/top")
+    def computer_processes_top(by: str = "memory", limit: int = 10) -> dict[str, Any]:
+        try:
+            return {"items": processes.top(by=by, limit=limit)}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/api/computer/processes/{pid}")
+    def computer_process_info(pid: int) -> dict[str, Any]:
+        try:
+            return processes.info(pid)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except ProcessAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    @app.post("/api/computer/processes/terminate/preview", status_code=201)
+    def computer_process_terminate_preview(item: ProcessTerminateInput) -> dict[str, Any]:
+        try:
+            return processes.preview_terminate(item.pid, force=item.force)
+        except ProcessAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.post("/api/computer/processes/terminate/execute")
+    def computer_process_terminate_execute(item: ProcessTerminateExecution) -> dict[str, Any]:
+        try:
+            result = processes.execute_terminate(item.approval_id, item.pid, force=item.force)
+        except ProcessAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ApprovalError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        observatory.record_event(
+            category="computer", event_type="process_terminate",
+            summary=f"Approved stop of {result['name']} (PID {result['pid']}): {result['status']}",
+            outcome="success" if result["verified"] else "failure", layer_id="SPS-10",
+            payload={"approval_id": item.approval_id, "pid": result["pid"],
+                     "force": item.force, "status": result["status"]},
+        )
+        return result
+
+    @app.post("/api/desktop/windows/action/preview", status_code=201)
+    def desktop_window_action_preview(item: WindowActionInput) -> dict[str, Any]:
+        try:
+            return desktop_adapter.preview_window_action(
+                item.window_handle, item.action,
+                acknowledge_unsaved_risk=item.acknowledge_unsaved_risk)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except DesktopAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    @app.post("/api/desktop/windows/action/execute")
+    def desktop_window_action_execute(item: WindowActionExecution) -> dict[str, Any]:
+        try:
+            result = desktop_adapter.execute_window_action(
+                item.approval_id, item.window_handle, item.window_title, item.action,
+                acknowledge_unsaved_risk=item.acknowledge_unsaved_risk)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except ApprovalError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except DesktopAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        observatory.record_event(
+            category="computer", event_type=f"window_{item.action}",
+            summary=f"Approved window {item.action}: verified={result['verified']}",
+            outcome="success" if result["verified"] else "failure", layer_id="SPS-10",
+            payload={"approval_id": item.approval_id, "window_handle": item.window_handle,
+                     "state": result.get("state")},
+        )
+        return result
+
+    @app.get("/api/desktop/windows-hung")
+    def desktop_windows_hung() -> dict[str, Any]:
+        try:
+            return {"items": desktop_adapter.detect_hung_windows()}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     file_ops = FileOperations(computer_files)
     app.state.file_ops = file_ops
