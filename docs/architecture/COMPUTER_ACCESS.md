@@ -103,3 +103,21 @@ The optional Windows adapter uses pywinauto's UI Automation backend:
 - Arbitrary keystrokes, mouse clicks, menu selection, button activation, password controls, shell access and process termination are not implemented.
 
 Install on Windows with `python -m pip install -e ".[computer]"`. This adapter is Windows-only; the other core tests remain cross-platform. UI Automation support varies by application, and elevated/admin windows may not be accessible to a non-elevated Mia process.
+
+## Unified capability contract, environment and permission policy (Feature 4, M2)
+
+- `computer/capabilities.py`: every capability declares name, description, supported OS, input/output schema,
+  permission level (observe/read/write/execute/interact/administrative), risk (low..critical), timeout,
+  constraints and a verification method. Only capabilities with a working adapter are registered.
+- `computer/environment.py`: read-only detection of OS family/version, CPU/RAM, user, display, shells, disks.
+  `GET /api/computer/environment`, `/api/computer/capabilities`, `/api/computer/health` report availability and
+  the reason a capability is unavailable (wrong OS, missing optional dependency, no display).
+- `computer/permissions.py`: owner-created grants (session or expiring persistent), directory scoping,
+  revocation, history. Low-risk observe/read is allowed; write/execute/interact need a grant or per-action approval;
+  high/critical risk always need per-action approval; administrative actions need a separate admin grant that
+  still needs per-action approval. `granted_by` must be `owner`; no model-callable tool grants permissions.
+- API: `GET/POST /api/computer/permissions`, `DELETE /api/computer/permissions/{id}`,
+  `POST /api/computer/permissions/revoke-all`, `GET /api/computer/permissions/history`. The API is localhost-only;
+  authenticated owner identity is still required before any remote exposure.
+- Not yet done: existing adapters (filesystem write, app launch, browser click, UI text) still use their own
+  approval flow and do not yet call `PermissionPolicy.authorize`; this is wired in the milestones that touch them.

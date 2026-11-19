@@ -37,7 +37,10 @@ from mia.agent.tools import ToolRegistry, ToolResult
 from mia.computer.applications import ApplicationLauncher, ApplicationLaunchError
 from mia.computer.approvals import ApprovalError, ApprovalStore
 from mia.computer.browser import BrowserAccessError, BrowserController
+from mia.computer.capabilities import PermissionLevel, default_registry
+from mia.computer.environment import detect_environment
 from mia.computer.filesystem import FilesystemAccessError, FilesystemAdapter
+from mia.computer.permissions import PermissionError_, PermissionPolicy
 from mia.computer.windows_ui import DesktopAccessError, WindowsUIAdapter
 from mia.evolution.capabilities import (
     CapabilityActivationBlocked,
@@ -297,6 +300,18 @@ class IdentityUpdateInput(BaseModel):
     reason: str = Field(default="", max_length=300)
 
 
+class PermissionGrantInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    capabilities: list[str] = Field(min_length=1, max_length=20)
+    level: str = Field(pattern="^(observe|read|write|execute|interact|administrative)$")
+    directory: str | None = Field(default=None, max_length=1000)
+    kind: str = Field(default="session", pattern="^(session|persistent)$")
+    duration_seconds: int | None = Field(default=None, ge=1, le=365 * 24 * 3600)
+    admin: bool = False
+    note: str = Field(default="", max_length=200)
+
+
 class IdentityRollbackInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -321,6 +336,7 @@ def create_app(
     baseline_capture: Callable[[str | Path], dict[str, Any]] | None = None,
     tts_synthesizer: SpeechSynthesizer | None = None,
     usage_ledger: UsageLedger | None = None,
+    permission_policy: PermissionPolicy | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -366,6 +382,10 @@ def create_app(
     )
     app.state.computer_files = computer_files
     app.state.approvals = approval_store
+    policy = permission_policy or PermissionPolicy(data_dir / "computer-permissions.sqlite3")
+    capability_registry = default_registry()
+    app.state.permission_policy = policy
+    app.state.capability_registry = capability_registry
     desktop_adapter = windows_ui or WindowsUIAdapter(approval_store)
     app.state.windows_ui = desktop_adapter
     applications_file = Path(
@@ -1168,6 +1188,83 @@ def create_app(
     async def browser_close() -> dict[str, str]:
         await browser_controller.close()
         return {"status": "closed"}
+
+    @app.get("/api/computer/environment")
+    def computer_environment() -> dict[str, Any]:
+        return detect_environment().as_dict()
+
+    @app.get("/api/computer/capabilities")
+    def computer_capabilities() -> dict[str, Any]:
+        env = detect_environment()
+        health = {h["name"]: h for h in capability_registry.health(env)}
+        items = []
+        for spec in capability_registry.specs():
+            item = spec.describe()
+            item["available"] = health[spec.name]["available"]
+            item["unavailable_reason"] = health[spec.name]["reason"]
+            items.append(item)
+        return {"os_family": env.os_family, "items": items}
+
+    @app.get("/api/computer/health")
+    def computer_health() -> dict[str, Any]:
+        return {"items": capability_registry.health(detect_environment())}
+
+    @app.get("/api/computer/permissions")
+    def computer_permissions() -> dict[str, Any]:
+        return {"items": policy.active_grants()}
+
+    @app.get("/api/computer/permissions/history")
+    def computer_permission_history(limit: int = 100) -> dict[str, Any]:
+        return {"items": policy.history(limit)}
+
+    @app.post("/api/computer/permissions", status_code=201)
+    def computer_permission_grant(item: PermissionGrantInput) -> dict[str, Any]:
+        try:
+            unknown = [c for c in item.capabilities if c != "*" and c not in capability_registry.names()]
+            if unknown:
+                raise HTTPException(status_code=422, detail=f"unknown capability: {unknown[0]}")
+            result = policy.grant(
+                granted_by="owner",
+                capabilities=item.capabilities,
+                level=PermissionLevel[item.level.upper()],
+                directory=item.directory,
+                kind=item.kind,
+                duration_seconds=item.duration_seconds,
+                admin=item.admin,
+                note=item.note,
+            )
+        except PermissionError_ as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        observatory.record_event(
+            category="computer",
+            event_type="permission_granted",
+            summary=f"Owner granted {item.level} on {', '.join(item.capabilities)}",
+            outcome="success",
+            layer_id="SPS-10",
+            payload={"grant_id": result["grant_id"], "kind": item.kind},
+        )
+        return result
+
+    @app.delete("/api/computer/permissions/{grant_id}")
+    def computer_permission_revoke(grant_id: str) -> dict[str, Any]:
+        if not policy.revoke(grant_id):
+            raise HTTPException(status_code=404, detail="No active grant with that ID")
+        observatory.record_event(
+            category="computer", event_type="permission_revoked",
+            summary="Owner revoked a computer permission grant", outcome="success",
+            layer_id="SPS-10", payload={"grant_id": grant_id},
+        )
+        return {"status": "revoked"}
+
+    @app.post("/api/computer/permissions/revoke-all")
+    def computer_permission_revoke_all() -> dict[str, Any]:
+        count = policy.revoke_all()
+        observatory.record_event(
+            category="computer", event_type="permissions_revoked_all",
+            summary="Owner revoked all computer permission grants", outcome="success",
+            layer_id="SPS-10", payload={"count": count},
+        )
+        return {"status": "revoked", "count": count}
 
     @app.get("/api/computer/apps")
     def computer_apps() -> dict[str, Any]:
