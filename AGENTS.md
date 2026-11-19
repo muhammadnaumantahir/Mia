@@ -65,3 +65,16 @@ Do not copy whole projects into this repository without a written decision. Do n
 ## Completion reporting
 
 Report implemented, tested, blocked and deferred items separately. A README update is not proof that a capability is implemented. No phase is complete while mandatory exit criteria remain open.
+
+
+## Independent Mia AI Gateway — owner-approved direction
+
+Follow [Mia Independent AI Gateway direction](docs/architecture/AI_GATEWAY_DIRECTION.md) as the canonical source of truth.
+
+- Mia owns the gateway, provider/model registry, routing intelligence, fallback/resilience, security, budgets, usage ledger, benchmarking and observability.
+- **Do not add FreeLLMAPI or OmniRoute as runtime dependencies, sidecars, required services or control planes.** They may be studied as references only; any code reuse requires exact-source and licence/security review and must not make Mia depend on them.
+- Implement direct provider adapters and a generic OpenAI-compatible adapter behind Mia-owned contracts. Keep local Ollama working independently.
+- Do not describe FreeLLMAPI as the preferred gateway or OmniRoute as a built-in gateway in new code, docs, examples or configuration.
+- When touching legacy references, migrate the documentation/configuration to the independent architecture. Do not leave setup instructions that tell users to install or run either gateway.
+- Treat model availability, free quotas, pricing and terms as dynamic, sourced metadata. Unknown prices are never zero; paid routing stays fail-closed until request, daily and monthly limits are implemented and tested.
+- Preserve the ten SPS layers. The gateway is a supporting service, not an additional SPS layer.
