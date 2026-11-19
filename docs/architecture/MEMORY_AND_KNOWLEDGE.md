@@ -5,7 +5,7 @@
 ### Conversation memory
 
 - Stores user and assistant turns locally in SQLite.
-- The assistant sends the latest 12 turns with each new message.
+- The assistant sends the latest 12 turns with each new message, plus a bounded retrieved-memory block (see Contextual retrieval below) so earlier turns and other conversations are reachable.
 - Conversations are identified by a random ID and can be listed, restored and deleted.
 - The current web UI carries the conversation ID in its URL and displays recent conversations.
 - Raw voice audio is not stored; only the text transcription is eligible for conversation history after the user sends it.
@@ -27,8 +27,23 @@ SQLite FTS5 provides local full-text search. The database does not require a clo
 - External webpages, repositories, documents and tool outputs are saved as untrusted by default.
 - The trust label is metadata, not an instruction.
 - Search returns provenance so the caller can cite the source.
-- The current gateway does not automatically inject arbitrary retrieved knowledge into a model prompt. Retrieval augmentation must later add source quoting, conflict handling, prompt-injection resistance and policy enforcement.
+- Retrieved knowledge and past messages are injected only through the bounded, delimited block described below. Conflict handling between competing memories and structured decision/goal memory are not implemented yet.
 - Only explicitly user-authored preferences or facts should be marked as user/trusted.
+
+## Contextual retrieval and identity (implemented 2026-11-19)
+
+Every chat request (`POST /api/gateway/chat` and `/api/gateway/chat/stream`) is built independently of the serving model:
+
+1. **Canonical identity** (`mia.memory.identity`): one versioned identity prompt (`IDENTITY_VERSION`) plus the tool/data-safety policy. It names no model and is identical whichever provider answers. It is a code-defined constant, not yet an owner-editable persisted profile.
+2. **Retrieval** (`mia.memory.context`): the prompt is reduced to distinctive terms (stopwords and short words dropped) and matched with SQLite FTS5 over knowledge items *and* over all past conversation messages (a `message_fts` index kept in sync by triggers, including cascade deletes and retention purges; existing databases are backfilled on startup). Candidates must match at least two distinctive terms (one, if the prompt has only one). Ranking blends normalised bm25 relevance, trust (owner-provided > trusted > untrusted), kind (preference/fact) and recency. Messages in the 12-turn recent window are excluded so nothing is repeated.
+3. **Bounded block**: at most 5 knowledge items and 4 past messages, 700 characters each and 5,000 in total, deduplicated. Each entry carries a label (`[M1]`), provenance, date and source: *owner-provided*, *trusted source*, *untrusted external content*, *owner statement (not independently verified)* or *Mia's earlier reply (model-generated, unverified)*. Model output is never promoted to trusted memory.
+4. **Injection resistance**: the block is a separate system message that states its contents are data, not instructions; tag-like text inside stored content that could close the block or imitate a role (`</memory_data>`, `<system>`, `<assistant>` ...) is defanged.
+5. **Data-egress policy**: retrieved memory is the owner's private data. Unless `MIA_ALLOW_REMOTE_FILE_CONTEXT=true`, a request that carries retrieved memory is routed only over local (`data_local`) candidates; when no local candidate can serve it, the block is withheld (never sent to a remote provider) and a `context_withheld` Observatory event is recorded. Requests with no relevant memory are routed exactly as before.
+6. **Transparency**: the chat response and the SSE `done` event include `context_references` (label, type, id, provenance, trust, title, source, timestamp, score). Observatory `context_assembled` events store reference ids only, never content, plus the identity version.
+
+`MIA_CONTEXT_RETRIEVAL=false` disables retrieval. Retrieval failures never block a reply (`context_retrieval_failure` event).
+
+Known limits: lexical (FTS5) matching only, so paraphrases with no shared words are missed; no entity/relationship graph; no consolidation or summarisation of old conversations; no automatic conflict detection; the web UI does not yet display `context_references`.
 
 ## API
 

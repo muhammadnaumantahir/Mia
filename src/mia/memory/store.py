@@ -7,7 +7,7 @@ import json
 import re
 import sqlite3
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -21,6 +21,38 @@ def _now() -> str:
 def _safe_fts_query(query: str) -> str:
     terms = re.findall(r"[\w-]{2,}", query, flags=re.UNICODE)
     return " AND ".join(f'"{term.replace(chr(34), "")}"' for term in terms[:12])
+
+
+_STOPWORDS = frozenset(
+    """
+    the and for are but not you your yours with this that these those from have has had was were
+    will would could should can cannot did does done what when where which who whom why how about
+    into onto over under then than them they their there here just like also very more most some
+    any all our ours out off its it's i'm i've i'll don't doesn't didn't isn't aren't wasn't
+    please tell give let know want need get got make made use using been being been once again
+    mia hey hello thanks thank
+    """.split()
+)
+
+
+def extract_query_terms(text: str, *, max_terms: int = 10) -> list[str]:
+    """Distinctive lowercase search terms from free text.
+
+    Drops very short words and common stopwords, removes duplicates, and keeps
+    the longest (usually most specific) terms while preserving first-seen order.
+    """
+    seen: list[str] = []
+    for term in re.findall(r"[\w-]{3,}", text.lower(), flags=re.UNICODE):
+        if term in _STOPWORDS or term in seen:
+            continue
+        seen.append(term)
+    keep = set(sorted(seen, key=lambda t: (-len(t), seen.index(t)))[: max(1, max_terms)])
+    return [term for term in seen if term in keep]
+
+
+def _retrieval_fts_query(text: str) -> str:
+    """OR-query over distinctive terms, ranked by bm25 (unlike the strict AND search)."""
+    return " OR ".join(f'"{term.replace(chr(34), "")}"' for term in extract_query_terms(text))
 
 
 class MemoryStore:
@@ -90,6 +122,33 @@ class MemoryStore:
                 CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts
                 USING fts5(item_id UNINDEXED, title, content, tags)
             """)
+            # Full-text index over conversation messages so earlier turns and other
+            # conversations can be retrieved. Its rowid mirrors the message rowid and
+            # triggers keep it in sync, including rows removed by ON DELETE CASCADE.
+            db.execute("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS message_fts
+                USING fts5(message_id UNINDEXED, conversation_id UNINDEXED, content)
+            """)
+            db.executescript("""
+                CREATE TRIGGER IF NOT EXISTS trg_message_fts_insert
+                AFTER INSERT ON conversation_messages BEGIN
+                    INSERT INTO message_fts (rowid, message_id, conversation_id, content)
+                    VALUES (new.rowid, new.message_id, new.conversation_id, new.content);
+                END;
+                CREATE TRIGGER IF NOT EXISTS trg_message_fts_delete
+                AFTER DELETE ON conversation_messages BEGIN
+                    DELETE FROM message_fts WHERE rowid = old.rowid;
+                END;
+            """)
+            indexed = db.execute("SELECT COUNT(*) FROM message_fts").fetchone()[0]
+            stored = db.execute("SELECT COUNT(*) FROM conversation_messages").fetchone()[0]
+            if indexed != stored:  # databases created before the index existed
+                db.execute("DELETE FROM message_fts")
+                db.execute("""
+                    INSERT INTO message_fts (rowid, message_id, conversation_id, content)
+                    SELECT rowid, message_id, conversation_id, content
+                    FROM conversation_messages
+                """)
 
     def ensure_conversation(self, conversation_id: str | None = None) -> str:
         conversation_id = conversation_id or uuid.uuid4().hex
@@ -165,6 +224,71 @@ class MemoryStore:
                 (conversation_id, safe_limit),
             ).fetchall()
         return [{"role": row["role"], "content": row["content"]} for row in reversed(rows)]
+
+    def recent_message_ids(self, conversation_id: str, limit: int = 12) -> list[str]:
+        """Ids of the newest messages, matching the window `get_messages` returns."""
+        safe_limit = max(1, min(int(limit), 50))
+        with self._connection() as db:
+            rows = db.execute(
+                """
+                SELECT message_id FROM conversation_messages
+                WHERE conversation_id = ?
+                ORDER BY created_at DESC, rowid DESC
+                LIMIT ?
+                """,
+                (conversation_id, safe_limit),
+            ).fetchall()
+        return [str(row["message_id"]) for row in rows]
+
+    def retrieve_items(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
+        """Knowledge items matching ANY distinctive term in free text, best first."""
+        match_query = _retrieval_fts_query(query)
+        if not match_query:
+            return []
+        safe_limit = max(1, min(int(limit), 100))
+        with self._connection() as db:
+            rows = db.execute(
+                """
+                SELECT m.*, bm25(memory_fts) AS relevance
+                FROM memory_fts
+                JOIN memory_items m ON m.item_id = memory_fts.item_id
+                WHERE memory_fts MATCH ?
+                ORDER BY relevance
+                LIMIT ?
+                """,
+                (match_query, safe_limit),
+            ).fetchall()
+        return [self._decode_item(row) for row in rows]
+
+    def retrieve_messages(
+        self,
+        query: str,
+        *,
+        limit: int = 20,
+        exclude_message_ids: Iterable[str] = (),
+    ) -> list[dict[str, Any]]:
+        """Past messages (any conversation) matching distinctive terms, best first."""
+        match_query = _retrieval_fts_query(query)
+        if not match_query:
+            return []
+        excluded = set(exclude_message_ids)
+        safe_limit = max(1, min(int(limit), 100))
+        with self._connection() as db:
+            rows = db.execute(
+                """
+                SELECT m.message_id, m.conversation_id, m.role, m.content, m.created_at,
+                       c.title AS conversation_title, bm25(message_fts) AS relevance
+                FROM message_fts
+                JOIN conversation_messages m ON m.rowid = message_fts.rowid
+                JOIN conversations c ON c.conversation_id = m.conversation_id
+                WHERE message_fts MATCH ?
+                ORDER BY relevance
+                LIMIT ?
+                """,
+                (match_query, safe_limit + len(excluded)),
+            ).fetchall()
+        results = [dict(row) for row in rows if row["message_id"] not in excluded]
+        return results[:safe_limit]
 
     def list_conversations(self, limit: int = 50) -> list[dict[str, Any]]:
         safe_limit = max(1, min(int(limit), 200))

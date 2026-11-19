@@ -177,7 +177,7 @@ The digital-companion runtime is not complete until evidence demonstrates that:
 
 ## 12. Implementation sequence
 
-1. Strengthen canonical identity and context retrieval on top of existing conversation persistence.
+1. Strengthen canonical identity and context retrieval on top of existing conversation persistence. **Partly implemented (2026-11-19):** versioned code-defined identity, FTS retrieval over knowledge and all past messages, provenance/trust-labelled bounded context packets and a local-only egress rule are in place (see MEMORY_AND_KNOWLEDGE.md). Still open: owner-editable persisted identity/operating preferences, relationship-aware and semantic retrieval, and UI display of references.
 2. Add structured episodic/decision/goal memory, provenance and consolidation.
 3. Add a durable activity journal, event-triggered scheduler and curiosity backlog.
 4. Implement safe, resource-aware, read-only exploration cycles with checkpoints and recovery.
