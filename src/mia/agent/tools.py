@@ -208,3 +208,7 @@ class ToolRegistry:
 
     def names(self) -> tuple[str, ...]:
         return tuple(self._tools)
+
+    def definition(self, name: str) -> ToolDefinition | None:
+        """Return the registered tool contract, or None. Never matches by similarity."""
+        return self._tools.get(name)
