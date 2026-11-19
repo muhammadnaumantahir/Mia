@@ -121,3 +121,22 @@ Install on Windows with `python -m pip install -e ".[computer]"`. This adapter i
   authenticated owner identity is still required before any remote exposure.
 - Not yet done: existing adapters (filesystem write, app launch, browser click, UI text) still use their own
   approval flow and do not yet call `PermissionPolicy.authorize`; this is wired in the milestones that touch them.
+
+## File operations (Feature 4, M3)
+
+`computer/fileops.py` adds, on top of the scoped adapter:
+- Read-only: metadata (with SHA-256), content search (secret-looking lines redacted, credential files skipped),
+  text compare (diff), duplicate finder (size then SHA-256, reclaimable bytes), project inspection
+  (type, extension counts, top-level tree, README excerpt with secrets redacted, docs, tests/git presence).
+- Mutations with preview -> approval -> execute, approval bound to the exact source fingerprint: `mkdir`, `rename`,
+  `copy`, `move`, `delete`, `restore`. Existing destinations are never overwritten. `delete` moves the item to
+  `<root>/.mia-recovery/deleted/<id>/` with a manifest and can be restored; the recovery area is hidden from listing/search
+  and cannot be targeted. Every mutation is verified by re-hashing and returns `verified`.
+- Approved text writes now copy the previous file to `.mia-recovery/backups/` first (newest 50 kept) and return `backup`.
+- Encoding detection (`read_text_auto`): UTF-8/UTF-8-BOM, UTF-16 with BOM, explicit cp1252 fallback flag, binary rejected.
+- Windows junctions are treated like symlinks (`Path.is_junction`); this is untested on a real Windows host.
+- API: `/api/computer/files/{metadata,search-content,compare,duplicates,project,recovery}` (GET) and
+  `/api/computer/files/ops/{preview,execute}` (POST).
+- Limits: copies up to 100 MB / 5000 files; compare 512 KB per file; duplicate scan 5000 files. Office/PDF document
+  reading remains via the existing knowledge ingestion path; no new document writers were added.
+- Like M2, these paths still use the one-time approval store directly; `PermissionPolicy` is not yet consulted.

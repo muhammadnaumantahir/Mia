@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +23,15 @@ _BLOCKED_FILENAMES = {
 }
 _BLOCKED_SUFFIXES = {".pem", ".key", ".pfx", ".p12", ".kdbx"}
 _BLOCKED_DIRECTORIES = {".ssh", ".gnupg", ".aws", ".azure", ".git"}
+RECOVERY_DIR = ".mia-recovery"
+
+
+def _is_link(path: Path) -> bool:
+    """True for symlinks and, on Windows, directory junctions."""
+    if path.is_symlink():
+        return True
+    is_junction = getattr(path, "is_junction", None)
+    return bool(is_junction and is_junction())
 
 
 class FilesystemAdapter:
@@ -77,7 +88,7 @@ class FilesystemAdapter:
             if part in {"", "."}:
                 continue
             candidate = candidate / part
-            if candidate.is_symlink():
+            if _is_link(candidate):
                 raise FilesystemAccessError("Symlink paths are not available to computer tools")
 
         resolved = candidate.resolve()
@@ -97,6 +108,8 @@ class FilesystemAdapter:
             raise FileNotFoundError("Directory not found")
         entries = []
         for item in sorted(directory.iterdir(), key=lambda entry: (not entry.is_dir(), entry.name.lower())):
+            if item.name == RECOVERY_DIR:
+                continue
             entries.append(
                 {
                     "name": item.name,
@@ -142,7 +155,9 @@ class FilesystemAdapter:
         safe_limit = max(1, min(limit, 200))
         matches = []
         for current, dirs, files in os.walk(root, followlinks=False):
-            dirs[:] = [name for name in dirs if not (Path(current) / name).is_symlink()]
+            dirs[:] = [
+                name for name in dirs if name != RECOVERY_DIR and not _is_link(Path(current) / name)
+            ]
             for filename in files:
                 candidate = Path(current) / filename
                 try:
@@ -222,6 +237,7 @@ class FilesystemAdapter:
             payload=payload,
         )
         path.parent.mkdir(parents=True, exist_ok=True)
+        backup = self.backup_existing(root_id, path)
         with tempfile.NamedTemporaryFile(
             mode="wb",
             dir=path.parent,
@@ -239,7 +255,46 @@ class FilesystemAdapter:
             "relative_path": payload["relative_path"],
             "sha256": payload["content_sha256"],
             "size_bytes": len(encoded),
+            "backup": backup,
         }
+
+    MAX_BACKUPS = 50
+
+    def backup_existing(self, root_id: str, path: Path) -> str | None:
+        """Copy an existing file into the root's recovery area before it is replaced."""
+        if not path.is_file():
+            return None
+        root = self.roots[root_id]
+        folder = root / RECOVERY_DIR / "backups"
+        folder.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        target = folder / f"{stamp}-{path.name}"
+        shutil.copy2(path, target)
+        backups = sorted(folder.iterdir(), key=lambda item: item.name)
+        for old in backups[: max(0, len(backups) - self.MAX_BACKUPS)]:
+            old.unlink(missing_ok=True)
+        return str(target.relative_to(root))
+
+    def read_text_auto(self, root_id: str, relative_path: str) -> dict[str, Any]:
+        """Read text, detecting UTF-8/UTF-16 (BOM) and falling back to cp1252 explicitly."""
+        path = self._resolve(root_id, relative_path)
+        self._validate_read_path(path)
+        if _is_link(path) or not path.is_file():
+            raise FileNotFoundError("Regular file not found")
+        if path.stat().st_size > self.MAX_READ_BYTES:
+            raise ValueError("File exceeds the 2 MB text-read limit")
+        raw = path.read_bytes()
+        if b"\x00" in raw and not raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+            raise ValueError("File looks binary, not text")
+        for encoding in ("utf-8-sig", "utf-16"):
+            if encoding == "utf-16" and not raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+                continue
+            try:
+                return {"content": raw.decode(encoding), "encoding": encoding, "fallback": False}
+            except UnicodeDecodeError:
+                continue
+        return {"content": raw.decode("cp1252", errors="replace"), "encoding": "cp1252",
+                "fallback": True}
 
     @staticmethod
     def _validate_read_path(path: Path) -> None:

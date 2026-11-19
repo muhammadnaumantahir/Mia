@@ -39,6 +39,7 @@ from mia.computer.approvals import ApprovalError, ApprovalStore
 from mia.computer.browser import BrowserAccessError, BrowserController
 from mia.computer.capabilities import PermissionLevel, default_registry
 from mia.computer.environment import detect_environment
+from mia.computer.fileops import FileOperationError, FileOperations
 from mia.computer.filesystem import FilesystemAccessError, FilesystemAdapter
 from mia.computer.permissions import PermissionError_, PermissionPolicy
 from mia.computer.windows_ui import DesktopAccessError, WindowsUIAdapter
@@ -298,6 +299,20 @@ class IdentityUpdateInput(BaseModel):
     owner_relationship: str | None = Field(default=None, max_length=2000)
     interaction_preferences: list[str] | None = Field(default=None, max_length=50)
     reason: str = Field(default="", max_length=300)
+
+
+class FileOperationInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    op: str = Field(pattern="^(mkdir|rename|copy|move|delete|restore)$")
+    root_id: str = Field(min_length=1, max_length=40)
+    relative_path: str = Field(default="", max_length=1000)
+    destination_path: str | None = Field(default=None, max_length=1000)
+    recovery_id: str | None = Field(default=None, max_length=64)
+
+
+class FileOperationExecution(FileOperationInput):
+    approval_id: str = Field(min_length=32, max_length=32)
 
 
 class PermissionGrantInput(BaseModel):
@@ -1188,6 +1203,92 @@ def create_app(
     async def browser_close() -> dict[str, str]:
         await browser_controller.close()
         return {"status": "closed"}
+
+    file_ops = FileOperations(computer_files)
+    app.state.file_ops = file_ops
+
+    def _file_error(exc: Exception) -> HTTPException:
+        if isinstance(exc, FilesystemAccessError):
+            return HTTPException(status_code=403, detail=str(exc))
+        if isinstance(exc, FileNotFoundError):
+            return HTTPException(status_code=404, detail=str(exc))
+        if isinstance(exc, ApprovalError | FileOperationError):
+            return HTTPException(status_code=409, detail=str(exc))
+        return HTTPException(status_code=422, detail=str(exc))
+
+    @app.get("/api/computer/files/metadata")
+    def computer_file_metadata(root_id: str, relative_path: str = ".") -> dict[str, Any]:
+        try:
+            return file_ops.metadata(root_id, relative_path)
+        except (FilesystemAccessError, FileNotFoundError, ValueError) as exc:
+            raise _file_error(exc) from exc
+
+    @app.get("/api/computer/files/search-content")
+    def computer_file_search_content(
+        root_id: str, query: str, relative_path: str = ".", limit: int = 50
+    ) -> dict[str, Any]:
+        try:
+            return {"items": file_ops.search_content(root_id, query, relative_path, limit=limit)}
+        except (FilesystemAccessError, FileNotFoundError, ValueError) as exc:
+            raise _file_error(exc) from exc
+
+    @app.get("/api/computer/files/compare")
+    def computer_file_compare(root_id: str, path_a: str, path_b: str) -> dict[str, Any]:
+        try:
+            return file_ops.compare_files(root_id, path_a, path_b)
+        except (FilesystemAccessError, FileNotFoundError, ValueError) as exc:
+            raise _file_error(exc) from exc
+
+    @app.get("/api/computer/files/duplicates")
+    def computer_file_duplicates(root_id: str, relative_path: str = ".") -> dict[str, Any]:
+        try:
+            return file_ops.find_duplicates(root_id, relative_path)
+        except (FilesystemAccessError, FileNotFoundError, ValueError) as exc:
+            raise _file_error(exc) from exc
+
+    @app.get("/api/computer/files/project")
+    def computer_file_project(root_id: str, relative_path: str = ".") -> dict[str, Any]:
+        try:
+            return file_ops.inspect_project(root_id, relative_path)
+        except (FilesystemAccessError, FileNotFoundError, ValueError) as exc:
+            raise _file_error(exc) from exc
+
+    @app.get("/api/computer/files/recovery")
+    def computer_file_recovery(root_id: str) -> dict[str, Any]:
+        if root_id not in computer_files.roots:
+            raise HTTPException(status_code=404, detail="Unknown filesystem root")
+        return {"items": file_ops.list_recovery(root_id)}
+
+    @app.post("/api/computer/files/ops/preview", status_code=201)
+    def computer_file_op_preview(item: FileOperationInput) -> dict[str, Any]:
+        try:
+            return file_ops.preview(
+                item.op, item.root_id, item.relative_path,
+                destination_path=item.destination_path, recovery_id=item.recovery_id,
+            )
+        except (FilesystemAccessError, FileNotFoundError, FileOperationError, ValueError) as exc:
+            raise _file_error(exc) from exc
+
+    @app.post("/api/computer/files/ops/execute")
+    def computer_file_op_execute(item: FileOperationExecution) -> dict[str, Any]:
+        try:
+            result = file_ops.execute(
+                item.op, item.approval_id, item.root_id, item.relative_path,
+                destination_path=item.destination_path, recovery_id=item.recovery_id,
+            )
+        except (
+            FilesystemAccessError, FileNotFoundError, FileOperationError, ApprovalError, ValueError
+        ) as exc:
+            raise _file_error(exc) from exc
+        observatory.record_event(
+            category="computer", event_type=f"file_{item.op}",
+            summary=f"Approved file operation {item.op} completed and verified",
+            outcome="success", layer_id="SPS-10",
+            payload={"approval_id": item.approval_id, "op": item.op,
+                     "source": result["operation"].get("source"),
+                     "destination": result["operation"].get("destination")},
+        )
+        return result
 
     @app.get("/api/computer/environment")
     def computer_environment() -> dict[str, Any]:

@@ -30,7 +30,7 @@ Status is updated as milestones are pushed. Nothing is ticked without a test or 
 
 - [x] M1 Audit (this document)
 - [x] M2 Unified capability contract, environment detection, permission levels, risk classes, health checks (Linux-tested; Windows detection simulated with injected platform data, not run on Windows)
-- [ ] M3 Filesystem: folders, rename, copy, move, delete-to-recovery, compare, duplicates, metadata, project inspection, edit backups
+- [x] M3 Filesystem: folders, rename, copy, move, delete-to-recovery, compare, duplicates, metadata, project inspection, edit backups (Linux-tested; Windows junction/long-path behavior unverified)
 - [ ] M4 Application discovery and window management; process detail and approved termination; disk/network status
 - [ ] M5 Terminal execution: validation, risk classification, approval, timeout, stdout/stderr, redaction
 - [ ] M6 Browser: tabs, forms, scroll, structured extraction, downloads/uploads to approved folders, verification
