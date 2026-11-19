@@ -77,7 +77,7 @@ Show the ten layers from \`docs/architecture/SPS_LAYERS.md\`. The coordinator an
 
 4. Show the \`Memory used for this reply\` source chip below Mia's answer. Explain that the reference came from the stored structured decision, not from the model's training or a hard-coded answer.
 
-Expected content: PostgreSQL is the planned database for the fictional Atlas Learning Portal; Mia's local conversations, structured memories and observability use separate SQLite stores. The project and all five seed records are fictional demo data.
+Expected content: PostgreSQL is the planned database for the fictional Atlas Learning Portal; Mia stores conversations and structured memories together in its local SQLite memory store, with observability in a separate local SQLite store. The project and all five seed records are fictional demo data.
 
 ### Part C — Governed computer/task work (about 2 minutes)
 
