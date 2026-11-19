@@ -193,3 +193,12 @@ def test_api_enabled_activation_without_approval_body_is_rejected(tmp_path):
                                    capability_store=store))
     assert client.post("/api/capabilities/hello-tool/0.1.0/activate").status_code == 400
     assert store.get_active("hello-tool") is None
+
+
+def test_dashboard_offers_confirmed_promotion_and_rollback():
+    from pathlib import Path
+
+    page = Path("src/mia/observatory/dashboard.html").read_text(encoding="utf-8")
+    assert "promoteCapability" in page and "rollbackCapability" in page
+    assert "window.confirm" in page and "/rollback" in page
+    assert "Activation is intentionally blocked" not in page

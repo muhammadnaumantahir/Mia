@@ -104,7 +104,7 @@ footer{margin-top:24px;color:#6f8580;font-size:11px;line-height:1.6}
   <div class="cap-field"><label class="cap-code-label" for="capTests">Candidate tests (required)</label><textarea class="cap-code" id="capTests" required maxlength="524288" spellcheck="false" placeholder="from candidate import run&#10;&#10;def test_run():&#10;    ..."></textarea></div>
   <div class="cap-form-foot"><button class="send" id="draftCapability" type="button" style="background:#263535;color:#d8e2dd">✦ Draft with Mia</button><button class="send" id="saveCapability" type="submit">Save immutable candidate</button><span class="cap-notice" id="capNotice" role="status" aria-live="polite"></span></div>
  </form>
- <div class="panelhead"><div><h3>Capability versions</h3><div class="muted">Proposed → validating → validated → registered. Activation is intentionally blocked.</div></div></div>
+ <div class="panelhead"><div><h3>Capability versions</h3><div class="muted">Proposed → validating → validated → registered → active. Promotion records the approved version only and is off unless the owner enables it; nothing is hot-loaded.</div></div></div>
  <div class="cap-list" id="capabilityList"><div class="muted">Loading capability versions…</div></div>
 </section>
 <footer>Local preview · no cloud analytics · no sample growth data. Keep this service bound to 127.0.0.1 until authentication and remote-access controls are implemented.</footer>
@@ -491,11 +491,23 @@ async function loadCapabilities(){
     const actions=document.createElement('div');actions.className='cap-card-actions';
     actions.append(capabilityButton('Register validated version',()=>registerCapability(cap)));
     card.append(actions);
+   }else if(cap.status==='active'){
+    const note=document.createElement('div');note.className='cap-blocked';
+    note.textContent='Active (approved version). Recorded only: Mia does not load or run it outside the isolated container. Rolling back restores the version it replaced.';
+    const actions=document.createElement('div');actions.className='cap-card-actions';
+    actions.append(capabilityButton('Roll back…',()=>rollbackCapability(cap)));
+    card.append(note,actions);
+   }else if(cap.status==='deprecated'||cap.status==='rolled_back'){
+    const note=document.createElement('div');note.className='cap-blocked';
+    note.textContent=cap.status==='deprecated'?'Superseded by a newer active version; a rollback can restore it.':'Rolled back. This version cannot be activated again.';
+    card.append(note);
    }else if(cap.status==='registered'){
     const blocked=document.createElement('div');blocked.className='cap-blocked';
-    blocked.textContent='Registered, not active. Permission-free versions can run once in an isolated Docker container. Runtime activation and rollback remain disabled.';
+    blocked.textContent='Registered, not active. Permission-free versions can run once in an isolated Docker container. Promotion records your approval; it is blocked unless MIA_CAPABILITY_ACTIVATION_ENABLED=true.';
     card.append(blocked);
     if(!Array.isArray(cap.permissions)||cap.permissions.length===0){
+     const promoteRow=document.createElement('div');promoteRow.className='cap-card-actions';
+     promoteRow.append(capabilityButton('Promote to active…',()=>promoteCapability(cap)));card.append(promoteRow);
      const inputLabel=document.createElement('div');inputLabel.className='cap-card-meta';
      inputLabel.textContent='JSON input_data (max 32 KB)';
      const input=document.createElement('textarea');input.rows=4;input.value='{}';
@@ -554,6 +566,31 @@ async function runCapabilityValidation(cap){
   setCapabilityNotice(error.message,true);
   await loadCapabilities();
  }
+}
+function askApproval(action,cap){
+ const reason=window.prompt(action+' '+cap.capability_id+' '+cap.version+'. Enter the reason for the audit log (at least 3 characters):','');
+ if(reason===null)return null;
+ if(reason.trim().length<3){setCapabilityNotice('A reason of at least 3 characters is required.',true);return null;}
+ if(!window.confirm(action+' '+cap.capability_id+' '+cap.version+'? This is recorded in the audit log as approved by "owner".'))return null;
+ return {approved_by:'owner',reason:reason.trim()};
+}
+async function promoteCapability(cap){
+ const body=askApproval('Promote',cap);if(!body)return;
+ try{
+  const response=await fetch('/api/capabilities/'+encodeURIComponent(cap.capability_id)+'/'+encodeURIComponent(cap.version)+'/activate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const result=await response.json();if(!response.ok)throw new Error(typeof result.detail==='string'?result.detail:'Promotion failed');
+  setCapabilityNotice('Promoted '+result.capability_id+' '+result.version+' (recorded only; not loaded into Mia).');
+  await loadCapabilities();
+ }catch(error){setCapabilityNotice(error.message,true);}
+}
+async function rollbackCapability(cap){
+ const body=askApproval('Roll back',cap);if(!body)return;
+ try{
+  const response=await fetch('/api/capabilities/'+encodeURIComponent(cap.capability_id)+'/rollback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const result=await response.json();if(!response.ok)throw new Error(typeof result.detail==='string'?result.detail:'Rollback failed');
+  setCapabilityNotice('Rolled back '+result.rolled_back_version+'. '+(result.restored_version?'Restored '+result.restored_version+'.':'No version is active now.'));
+  await loadCapabilities();
+ }catch(error){setCapabilityNotice(error.message,true);}
 }
 async function registerCapability(cap){
  setCapabilityNotice('Registering the validated immutable version…');
