@@ -164,3 +164,31 @@ Install on Windows with `python -m pip install -e ".[computer]"`. This adapter i
 - **Verification status**: process and system code ran against real processes on Linux. Window, registry and hung-window
   code ran only against test doubles. **No real Windows run has happened.**
 - Policy engine wiring (`PermissionPolicy.authorize`) is still pending for these adapters.
+
+## Terminal execution (Feature 4, M5)
+
+`computer/terminal.py`, API under `/api/computer/terminal/*`. This replaces the earlier "shell disabled" stance with a
+controlled executor; there is still no unrestricted command path.
+
+1. **Validate and classify** (`classify_command`): every command gets a risk (low/medium/high) or is **blocked**.
+   Blocked even with approval: administrative/system tools (sudo, runas, reg, schtasks, netsh, shutdown, format, diskpart,
+   bcdedit, ...), security-setting changes (Set-MpPreference, Set-ExecutionPolicy), encoded/obfuscated commands, piping into
+   a shell, download-and-run, credential/key files and locations, environment dumps, and recursive deletion of drive roots
+   or system folders. High: delete/kill, network tools (curl, ssh, git push/pull), package managers, nested shells.
+   Medium: anything that runs a program or writes files. Low: read-only inspection (git status/log/diff, ls, cat, version checks).
+   The classifier is defence in depth, not a sandbox; approval is the control that matters.
+2. **Confine**: the working directory must be inside an owner-configured filesystem root (no traversal, symlinks, junctions).
+3. **Authorize**: one-time approval bound to command, shell, directory, timeout and risk, or an active owner grant from
+   `PermissionPolicy` (capability `terminal.run`, level execute, directory-scoped). Grants never cover high-risk commands,
+   expire, and can be revoked. This is the first adapter that consults `PermissionPolicy`.
+4. **Run**: no model text reaches a shell except through the validated command; child gets a scrubbed environment
+   (PATH, temp, home and similar only; no API keys/tokens); stdin closed; max 3 concurrent; timeout default 60 s, max 600 s;
+   timeout and cancel kill the whole process tree.
+5. **Report**: separate stdout/stderr (256 KB cap each, `truncated` flag), exit code, status
+   (`completed|failed|timed_out|cancelled`), secret-looking output redacted. A zero exit code means the process ended
+   normally, not that the user's goal was achieved; callers must verify outcomes themselves.
+6. **Stop**: `POST /api/computer/terminal/executions/{id}/cancel` and `POST /api/computer/stop-all`.
+- Audit: `terminal_started`, `terminal_finished`, `terminal_refused`, `terminal_cancel_requested`, `stop_all` events.
+- Not implemented: administrator elevation, interactive/TTY sessions, persistent shell sessions, execution history that
+  survives a restart (execution output is in memory; the audit events persist).
+- Verified on Linux with real `bash`. PowerShell/cmd argument handling and quoting rules are untested on Windows.

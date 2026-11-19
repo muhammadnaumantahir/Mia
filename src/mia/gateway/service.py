@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .contracts import (
+    AuthenticationProviderError,
     ModelCandidate,
     ModelRequest,
     PermanentProviderError,
@@ -34,6 +35,18 @@ class CompletionResult:
     cost_usd: float | None = 0.0
     free_tier: bool = True
     latency_ms: float | None = None  # wall time of the successful provider call
+
+
+@dataclass(frozen=True, slots=True)
+class ConnectionTestResult:
+    """Sanitized outcome of a provider connection test (no URLs, headers or bodies)."""
+
+    provider_id: str
+    ok: bool
+    status: str  # ok | unreachable | auth_failed | invalid_response | unknown_provider | error
+    model_count: int = 0
+    latency_ms: float | None = None
+    detail: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,9 +133,41 @@ class ModelGateway:
         for provider in self.providers.values():
             try:
                 candidates.extend(await provider.list_models())
-            except TransientProviderError:
+            except (TransientProviderError, PermanentProviderError):
+                # An offline or misconfigured provider must not block the others.
                 continue
         return candidates
+
+    async def test_connection(self, provider_id: str) -> ConnectionTestResult:
+        """List models from one provider and classify the outcome safely."""
+        try:
+            provider = self.providers.get(provider_id)
+        except KeyError:
+            return ConnectionTestResult(provider_id, False, "unknown_provider")
+        started = time.perf_counter()
+        try:
+            models = await provider.list_models()
+        except AuthenticationProviderError:
+            return ConnectionTestResult(
+                provider_id, False, "auth_failed", detail="credentials were rejected"
+            )
+        except TransientProviderError as exc:
+            return ConnectionTestResult(
+                provider_id,
+                False,
+                "unreachable",
+                detail="rate limited" if exc.rate_limited else "unavailable or timed out",
+            )
+        except PermanentProviderError:
+            return ConnectionTestResult(
+                provider_id, False, "invalid_response", detail="provider response was rejected"
+            )
+        except Exception:  # noqa: BLE001 - diagnostics must never raise or leak details
+            return ConnectionTestResult(provider_id, False, "error", detail="unexpected error")
+        elapsed = (time.perf_counter() - started) * 1000.0
+        return ConnectionTestResult(
+            provider_id, True, "ok", model_count=len(models), latency_ms=elapsed
+        )
 
     async def complete(
         self,

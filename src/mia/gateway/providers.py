@@ -11,6 +11,7 @@ from email.utils import parsedate_to_datetime
 from typing import Any
 
 from .contracts import (
+    AuthenticationProviderError,
     ModelCandidate,
     ModelRequest,
     PermanentProviderError,
@@ -19,6 +20,7 @@ from .contracts import (
     TokenUsage,
     TransientProviderError,
 )
+from .urlpolicy import validate_extra_headers, validate_provider_url
 
 _DEFAULT_CONTEXT = 8192
 _MAX_DETAIL_MODELS = 30
@@ -73,6 +75,9 @@ def _http_error(name: str, exc: Exception, httpx: Any) -> Exception:
                 retry_after=retry_after,
                 rate_limited=status == 429 or retry_after is not None,
             )
+        if status in (401, 403):
+            # Never retried: repeating a rejected credential cannot succeed.
+            return AuthenticationProviderError(f"{name} rejected the credentials (HTTP {status})")
         return PermanentProviderError(f"{name} rejected the request with HTTP {status}")
     return TransientProviderError(f"{name} request failed")
 
@@ -88,7 +93,7 @@ class OllamaProvider:
         timeout: float = 90.0,
         supports_tools: bool = False,
     ):
-        self.base_url = base_url.rstrip("/")
+        self.base_url = validate_provider_url(base_url)
         self.timeout = timeout
         self.supports_tools = supports_tools
 
@@ -284,11 +289,12 @@ class OpenAICompatibleProvider:
         model_context_window: int = 8192,
         supports_tools: bool = False,
         data_local: bool = False,
+        allow_private_url: bool = True,
+        extra_headers: dict[str, str] | None = None,
     ):
         if not provider_id.strip():
             raise ValueError("provider_id is required")
-        if not base_url.startswith(("http://", "https://")):
-            raise ValueError("base_url must be an HTTP(S) URL")
+        base_url = validate_provider_url(base_url, allow_private=allow_private_url)
         self.provider_id = provider_id.strip().lower()
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -297,6 +303,7 @@ class OpenAICompatibleProvider:
         self.model_context_window = model_context_window
         self.supports_tools = supports_tools
         self.data_local = data_local
+        self.extra_headers = validate_extra_headers(extra_headers)
 
     @staticmethod
     def _httpx():
@@ -309,7 +316,8 @@ class OpenAICompatibleProvider:
         return httpx
 
     def _headers(self) -> dict[str, str]:
-        headers = {"Content-Type": "application/json"}
+        headers = dict(self.extra_headers)
+        headers["Content-Type"] = "application/json"
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         return headers
@@ -340,6 +348,8 @@ class OpenAICompatibleProvider:
             raise TransientProviderError(
                 f"{self.provider_id} model listing timed out"
             ) from exc
+        except httpx.HTTPStatusError as exc:
+            raise _http_error(self.provider_id, exc, httpx) from exc
         except httpx.HTTPError as exc:
             raise TransientProviderError(
                 f"{self.provider_id} model listing failed"

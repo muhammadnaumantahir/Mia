@@ -163,14 +163,19 @@ def server(tmp_path_factory):
 
 
 @pytest.fixture(scope="module")
-def browser():
+def pw():
     with playwright_sync.sync_playwright() as p:
-        try:
-            b = p.chromium.launch()
-        except Exception as exc:  # pragma: no cover - environment dependent
-            pytest.skip(f"Chromium is not available for Playwright: {exc}")
-        yield b
-        b.close()
+        yield p
+
+
+@pytest.fixture(scope="module")
+def browser(pw):
+    try:
+        b = pw.chromium.launch()
+    except Exception as exc:  # pragma: no cover - environment dependent
+        pytest.skip(f"Chromium is not available for Playwright: {exc}")
+    yield b
+    b.close()
 
 
 class Ctx:
@@ -180,6 +185,20 @@ class Ctx:
 
     def js(self, expr):
         return self.page.evaluate(expr)
+
+    def wait_state(self, state, timeout=10000):
+        try:
+            self.wait(f"document.getElementById('voiceOrb').dataset.state==={state!r}", timeout=timeout)
+        except Exception as exc:
+            raise AssertionError(
+                f"wanted state {state!r}; got {self.state()!r} / {self.status()!r} / "
+                f"mic calls {self.js('window.__gum ? window.__gum.calls.length : -1')}"
+            ) from exc
+
+    def sleep(self, seconds):
+        # Playwright (sync) only dispatches route/request handlers while the test thread is inside
+        # a Playwright call, so never use time.sleep() when observing browser-side requests.
+        self.page.wait_for_timeout(int(seconds * 1000))
 
     def wait(self, expr, timeout=8000):
         self.page.wait_for_function(expr, timeout=timeout)
@@ -203,7 +222,7 @@ class Ctx:
     def turns(self, n, timeout=10000):
         deadline = time.time() + timeout / 1000
         while time.time() < deadline and len(self.provider.requests) < n:
-            time.sleep(0.05)
+            self.sleep(0.05)
         assert len(self.provider.requests) >= n
 
 
@@ -257,11 +276,11 @@ def test_no_duplicate_submission_when_speech_repeats(ctx):
     ctx.say("first part")
     ctx.say("second part")
     ctx.turns(1)
-    time.sleep(0.2)
+    ctx.sleep(0.2)
     # speech heard while Mia is thinking must be ignored (recognizer is stopped)
     assert ctx.js("window.__rec.live().length") == 0
     assert ctx.js("window.__rec.emit('late echo', true)") is False
-    time.sleep(2.0)
+    ctx.sleep(2.0)
     assert len(ctx.provider.requests) == 1
     assert ctx.provider.user_prompts()[0] == "first part second part"
 
@@ -279,7 +298,7 @@ def test_interrupt_button_stops_speech_and_returns_to_listening(ctx):
     ctx.wait("window.__rec.live().length===1")
     ctx.listening()
     spoken_before = ctx.js("window.__tts.spoken.length")
-    time.sleep(0.5)
+    ctx.sleep(0.5)
     assert ctx.js("window.__tts.spoken.length") == spoken_before, "no further chunks after interrupt"
     assert ctx.js("window.__tts.overlap") == 0
     assert ctx.js("document.getElementById('voiceInterrupt').hidden") is True
@@ -304,7 +323,7 @@ def test_end_phrases_stop_session_without_ai_call_or_restart(ctx, phrase):
     ctx.say(phrase)
     ctx.wait("document.getElementById('voiceOrb').dataset.state==='stopped'")
     count = ctx.js("window.__rec.instances.length")
-    time.sleep(1.8)
+    ctx.sleep(1.8)
     assert ctx.js("window.__rec.live().length") == 0
     assert ctx.js("window.__rec.instances.length") == count, "stopped session must not restart"
     assert ctx.provider.requests == [], "stop phrases are commands, not model prompts"
@@ -337,7 +356,7 @@ def test_end_conversation_button_cancels_speech_and_never_restarts(ctx):
     ctx.page.click("#voiceMode")
     ctx.wait("window.__tts.cancelled>=1")
     count = ctx.js("window.__rec.instances.length")
-    time.sleep(1.8)
+    ctx.sleep(1.8)
     assert ctx.state() == "stopped"
     assert ctx.js("window.__rec.live().length") == 0
     assert ctx.js("window.__rec.instances.length") == count
@@ -351,7 +370,7 @@ def test_microphone_permission_denied_is_reported_and_not_retried(ctx):
     ctx.wait("document.getElementById('voiceOrb').dataset.state==='error'")
     assert "permission was denied" in ctx.status()
     count = ctx.js("window.__rec.instances.length")
-    time.sleep(1.5)
+    ctx.sleep(1.5)
     assert ctx.js("window.__rec.instances.length") == count
 
 
@@ -370,7 +389,7 @@ def test_mute_stops_microphone_and_unmute_resumes(ctx):
     assert ctx.state() == "muted"
     assert ctx.js("window.__rec.live().length") == 0
     assert ctx.js("window.__rec.emit('should be ignored', true)") is False
-    time.sleep(1.2)
+    ctx.sleep(1.2)
     assert ctx.js("window.__rec.live().length") == 0, "muted mic must not restart"
     ctx.page.click("#voiceMute")
     ctx.wait("window.__rec.live().length===1")
@@ -380,20 +399,19 @@ def test_push_to_talk_records_only_while_held(ctx):
     ctx.page.select_option("#voiceInputMode", "ptt")
     ctx.start()
     ctx.wait("document.getElementById('voiceOrb').dataset.state==='ready'")
-    time.sleep(0.4)
+    ctx.sleep(0.4)
     assert ctx.js("window.__rec.instances.length") == 0, "mic stays off until the button is held"
-    box = ctx.page.locator("#voicePtt").bounding_box()
-    ctx.page.mouse.move(box["x"] + 5, box["y"] + 5)
+    ctx.page.locator("#voicePtt").hover()
     ctx.page.mouse.down()
     ctx.wait("window.__rec.live().length===1")
     ctx.say("push to talk message")
-    time.sleep(1.8)  # longer than the hands-free silence timer: must not auto-submit
+    ctx.sleep(1.8)  # longer than the hands-free silence timer: must not auto-submit
     assert ctx.provider.requests == []
     ctx.page.mouse.up()
     ctx.turns(1)
     assert ctx.provider.user_prompts()[0] == "push to talk message"
     ctx.wait("document.getElementById('voiceOrb').dataset.state==='ready'")
-    time.sleep(1.0)
+    ctx.sleep(1.0)
     assert ctx.js("window.__rec.live().length") == 0, "push-to-talk never re-opens the mic by itself"
 
 
@@ -529,7 +547,7 @@ def test_voice_does_not_auto_approve_sensitive_actions(ctx):
     ctx.listening()
     ctx.say("please write a file called notes dot txt")
     ctx.wait("document.querySelectorAll('.approval-card').length===1")
-    time.sleep(1.5)
+    ctx.sleep(1.5)
     assert approvals == [], "voice must never approve actions; the owner has to click the card"
 
 
@@ -542,3 +560,227 @@ def test_privacy_disclosure_and_mic_badge(ctx):
     assert "browser speech service" in ctx.js("document.getElementById('voiceMicBadge').textContent")
     ctx.page.click("#voiceMode")
     assert ctx.js("document.getElementById('voiceMicBadge').textContent") == "Mic off"
+
+
+# ---------------------------------------------------------------------------------------------
+# Local (offline) engine: Chromium's fake audio device plays a generated WAV; the transcription
+# endpoint is mocked because Faster-Whisper model weights cannot be downloaded in CI.
+# ---------------------------------------------------------------------------------------------
+
+import json  # noqa: E402
+import math  # noqa: E402
+import struct  # noqa: E402
+import wave  # noqa: E402
+
+GUM_LOG = r"""
+(() => {
+  window.__gum = {calls: [], tracks: []};
+  const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+  navigator.mediaDevices.getUserMedia = async (c) => {
+    window.__gum.calls.push(c);
+    // WebRTC noise suppression would remove the synthetic steady tone used as fake speech.
+    const relaxed = {audio: Object.assign({}, c.audio,
+      {echoCancellation: false, noiseSuppression: false, autoGainControl: false})};
+    const stream = await original(relaxed);
+    stream.getTracks().forEach(t => window.__gum.tracks.push(t));
+    return stream;
+  };
+})();
+"""
+
+
+def write_wav(path, pattern, rate=16000):
+    frames = bytearray()
+    for seconds, amplitude in pattern:
+        for i in range(int(seconds * rate)):
+            value = int(32767 * amplitude * math.sin(2 * math.pi * 440 * i / rate))
+            frames += struct.pack("<h", value)
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(bytes(frames))
+
+
+class Uploads:
+    def __init__(self):
+        self.items: list[dict] = []
+        self.text = "hello from the local engine"
+        self.status = 200
+
+    def handler(self, route, request):
+        self.items.append(
+            {
+                "url": request.url,
+                "type": request.headers.get("content-type"),
+                "body": request.post_data_buffer,
+            }
+        )
+        if self.status == 200:
+            route.fulfill(status=200, content_type="application/json", body=json.dumps({"text": self.text}))
+        else:
+            route.fulfill(
+                status=self.status,
+                content_type="application/json",
+                body=json.dumps({"detail": "Install the voice extra."}),
+            )
+
+
+@pytest.fixture
+def local_mic(server, pw, tmp_path):
+    base, provider = server
+    provider.requests.clear()
+    provider.reply = "Noted."
+    provider.delay = 0.0
+    made = []
+
+    def make(pattern, *, status_ready=True):
+        wav = tmp_path / f"mic{len(made)}.wav"
+        write_wav(wav, pattern)
+        try:
+            browser = pw.chromium.launch(
+                args=[
+                    "--use-fake-device-for-media-stream",
+                    "--use-fake-ui-for-media-stream",
+                    f"--use-file-for-fake-audio-capture={wav}",
+                ]
+            )
+        except Exception as exc:  # pragma: no cover
+            pytest.skip(f"Chromium unavailable: {exc}")
+        context = browser.new_context(permissions=["microphone"])
+        context.add_init_script(FAKES)
+        context.add_init_script(GUM_LOG)
+        page = context.new_page()
+        uploads = Uploads()
+        page.route("**/api/voice/transcribe*", uploads.handler)
+        if status_ready:
+            page.route(
+                "**/api/voice/status",
+                lambda route: route.fulfill(
+                    status=200, content_type="application/json", body='{"speech_to_text":"ready"}'
+                ),
+            )
+        page.goto(base + "/assistant")
+        page.wait_for_selector("#voiceMode")
+        page.select_option("#voiceEngine", "local")
+        c = Ctx(page, provider, base)
+        made.append(browser)
+        return c, uploads
+
+    yield make
+    for browser in made:
+        browser.close()
+
+
+def wait_uploads(c, uploads, n, timeout=15.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline and len(uploads.items) < n:
+        c.sleep(0.05)
+    assert len(uploads.items) >= n, "expected the local engine to upload an utterance"
+
+
+SPEECH_LOOP = [(1.0, 0.0), (1.5, 0.5), (3.0, 0.0)]
+
+
+def test_local_engine_detects_utterance_sends_wav_and_uses_normal_pipeline(local_mic):
+    c, uploads = local_mic(SPEECH_LOOP)
+    c.start()
+    c.wait("document.getElementById('voiceOrb').dataset.state==='listening'", timeout=10000)
+    assert "local Faster-Whisper" in c.js("document.getElementById('voiceMicBadge').textContent")
+    wait_uploads(c, uploads, 1)
+    item = uploads.items[0]
+    assert item["type"] == "audio/wav"
+    assert "language=en" in item["url"] and "filename=utterance.wav" in item["url"]
+    body = item["body"]
+    assert body[:4] == b"RIFF" and body[8:12] == b"WAVE"
+    with wave.open(__import__("io").BytesIO(body)) as w:
+        assert w.getframerate() == 16000 and w.getnchannels() == 1
+        assert 0.5 < w.getnframes() / 16000 < 4.0
+    c.turns(1)
+    assert c.provider.user_prompts()[0] == "hello from the local engine"
+    # the engine used only Mia's own API for audio
+    assert all(u.startswith(c.base) or u.startswith("blob:") or u.startswith("data:") for u in c.requests)
+
+
+def test_local_engine_releases_microphone_when_session_ends(local_mic):
+    c, uploads = local_mic(SPEECH_LOOP)
+    c.start()
+    c.wait("document.getElementById('voiceOrb').dataset.state==='listening'", timeout=10000)
+    assert c.js("window.__gum.tracks.some(t=>t.readyState==='live')") is True
+    c.page.click("#voiceMode")
+    c.wait("window.__gum.tracks.every(t=>t.readyState==='ended')")
+    count = len(uploads.items)
+    c.sleep(3.5)
+    assert len(uploads.items) == count, "no audio may be uploaded after the session ended"
+    assert c.state() == "stopped"
+
+
+def test_local_engine_ignores_silence(local_mic):
+    c, uploads = local_mic([(6.0, 0.0)])
+    c.start()
+    c.wait("document.getElementById('voiceOrb').dataset.state==='listening'", timeout=10000)
+    c.sleep(3.5)
+    assert uploads.items == []
+    assert c.provider.requests == []
+
+
+def test_local_engine_reports_missing_install_without_opening_mic(local_mic):
+    c, _ = local_mic(SPEECH_LOOP, status_ready=False)
+    c.start()
+    c.wait("document.getElementById('voiceOrb').dataset.state==='error'")
+    assert 'pip install -e ".[voice]"' in c.status()
+    assert c.js("window.__gum.calls.length") == 0
+
+
+def test_local_engine_transcription_failure_stops_session_and_releases_mic(local_mic):
+    c, uploads = local_mic(SPEECH_LOOP)
+    uploads.status = 503
+    c.start()
+    c.wait("document.getElementById('voiceOrb').dataset.state==='error'", timeout=15000)
+    assert "Install the voice extra." in c.status()
+    c.wait("window.__gum.tracks.every(t=>t.readyState==='ended')")
+
+
+def test_local_engine_language_parameter_for_urdu_and_auto(local_mic):
+    c, uploads = local_mic(SPEECH_LOOP)
+    c.page.select_option("#voiceLanguage", "ur-PK")
+    c.start()
+    wait_uploads(c, uploads, 1)
+    assert "language=ur" in uploads.items[0]["url"]
+    c.page.close()
+    c2, uploads2 = local_mic(SPEECH_LOOP)
+    c2.page.select_option("#voiceLanguage", "auto")
+    c2.start()
+    wait_uploads(c2, uploads2, 1)
+    assert "language=" not in uploads2.items[0]["url"], "auto lets Whisper detect English/Urdu per utterance"
+
+
+def test_microphone_device_selection_reaches_the_local_engine(local_mic):
+    c, _ = local_mic(SPEECH_LOOP)
+    c.start()
+    c.wait("document.getElementById('voiceOrb').dataset.state==='listening'", timeout=10000)
+    c.page.click("#voiceMode")
+    c.wait("document.getElementById('micDevice').options.length>=2")
+    device_id = c.js("document.getElementById('micDevice').options[1].value")
+    c.page.select_option("#micDevice", device_id)
+    c.start()
+    c.wait("window.__gum.calls.length>=2", timeout=10000)
+    last = c.js("window.__gum.calls[window.__gum.calls.length-1]")
+    assert last["audio"]["deviceId"]["exact"] == device_id
+
+
+def test_local_engine_push_to_talk_transcribes_on_release(local_mic):
+    c, uploads = local_mic([(4.0, 0.5)])
+    c.page.select_option("#voiceInputMode", "ptt")
+    c.start()
+    c.wait("document.getElementById('voiceOrb').dataset.state==='ready'")
+    assert c.js("window.__gum.calls.length") == 0, "mic stays closed until the button is held"
+    c.page.locator("#voicePtt").hover()
+    c.page.mouse.down()
+    c.wait_state("listening")
+    c.sleep(1.2)
+    c.page.mouse.up()
+    wait_uploads(c, uploads, 1)
+    c.turns(1)
+    assert c.provider.user_prompts()[0] == "hello from the local engine"
+    c.wait("window.__gum.tracks.every(t=>t.readyState==='ended')")

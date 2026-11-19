@@ -52,3 +52,20 @@ def test_memory_references_remain_visible_in_voice_chat_modes():
     assert 'id="memoryRecords"' in source
     assert "renderMemoryReferences(assistantBubble,result.context_references||[])" in source
     assert "renderMemoryReferences(bubble,streamed.done.context_references||[])" in source
+
+
+def test_voice_session_exposes_state_interrupt_mute_push_to_talk_and_engine_controls():
+    source = assistant_source()
+    for element_id in (
+        "voiceOrb", "voiceState", "voiceMicBadge", "voiceInterrupt", "voiceMute", "voicePtt",
+        "voiceInputMode", "voiceEngine", "micDevice", "voiceRate", "voiceVolume", "voiceBargeIn",
+    ):
+        assert f'id="{element_id}"' in source
+    assert 'id="voiceBargeIn" type="checkbox">' in source  # voice barge-in is opt-in (unchecked)
+    assert "stop speaking" in source and "function classifyVoiceCommand(" in source
+    assert "class LocalRecognizer" in source and "/api/voice/transcribe" in source
+
+
+def test_always_listening_wake_word_is_not_present():
+    source = assistant_source().lower()
+    assert "wakeword" not in source and "hey mia" not in source

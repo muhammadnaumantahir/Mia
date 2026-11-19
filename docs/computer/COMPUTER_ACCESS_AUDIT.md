@@ -32,7 +32,7 @@ Status is updated as milestones are pushed. Nothing is ticked without a test or 
 - [x] M2 Unified capability contract, environment detection, permission levels, risk classes, health checks (Linux-tested; Windows detection simulated with injected platform data, not run on Windows)
 - [x] M3 Filesystem: folders, rename, copy, move, delete-to-recovery, compare, duplicates, metadata, project inspection, edit backups (Linux-tested; Windows junction/long-path behavior unverified)
 - [x] M4 Application discovery and window management; process detail and approved termination; disk/network status (process/system parts tested with real processes on Linux; window management, hang detection and Windows app discovery tested only against fakes, NOT on real Windows)
-- [ ] M5 Terminal execution: validation, risk classification, approval, timeout, stdout/stderr, redaction
+- [x] M5 Terminal execution: validation, risk classification, approval, timeout, stdout/stderr, redaction (tested with real bash on Linux; PowerShell and cmd.exe execution NOT verified on Windows)
 - [ ] M6 Browser: tabs, forms, scroll, structured extraction, downloads/uploads to approved folders, verification
 - [ ] M7 Desktop: observe/act/verify loop, UIA click/key/scroll, screenshot on demand
 - [ ] M8 Multi-step computer task engine: step ledger, checkpoints, cancel, retry limits, revalidation on resume

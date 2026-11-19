@@ -1,68 +1,133 @@
 # Mia voice architecture
 
-## Interaction modes
+Voice is opt-in and always layered on the normal chat pipeline. A voice turn is submitted through the same
+`submitPrompt` -> `/api/gateway/chat` path as typed text, so model routing, governance, conversation history,
+memory retrieval, tool use and approval cards are identical. Voice never approves anything: approval cards
+must be clicked by the owner.
 
-Mia supports three distinct voice paths. Voice is opt-in; text chat always remains available.
+## Controls on the Assistant page ("Talk with Mia")
 
-### Hands-free browser voice conversation
+| Control | Behaviour |
+| --- | --- |
+| **Start voice / End conversation** | Starts or ends the session. Ending stops recognition, cancels speech and releases the microphone; a stopped session cannot restart itself. |
+| **Engine** | *Browser speech service (online)* or *Local Faster-Whisper (offline)*. Locked while a session is active. |
+| **Input** | *Hands-free* (continuous, auto-submit after silence) or *Push-to-talk* (microphone only open while the Hold-to-talk button or Space is held; submit on release). |
+| **Language** | English (`en-US`), Urdu Pakistan (`ur-PK`), or Auto (local engine only; Whisper detects the language of each utterance, which is how mixed English/Urdu is handled). |
+| **Microphone** | Selects the input device for the local engine and for Local record. The browser engine cannot choose a device and uses the browser/OS default. |
+| **Mute mic** | Closes the microphone but keeps the session; unmute resumes. |
+| **Interrupt (Esc)** | Appears while Mia speaks; stops playback immediately and returns to listening. |
+| **Interrupt by voice (use headphones)** | Opt-in, off by default. Keeps the browser recogniser open while Mia speaks so that speaking over her stops her. Without headphones Mia's own voice can trigger it. |
+| **Speed / Volume** | Apply to browser voices and, for speed, to local pyttsx3 voices (`rate = 175 x speed`). Local-voice volume uses the audio element volume. |
+| **Test voice** | Speaks a short preview with the selected voice. |
 
-The Assistant page offers **Talk with Mia**:
+### Session states
 
-1. The owner presses **Start voice** and grants microphone permission if the browser asks.
-2. The browser's Web Speech SpeechRecognition interface listens continuously during this explicitly started session. English and Urdu (Pakistan) recognition language choices are exposed.
-3. Mia shows interim speech text while listening. A completed utterance is automatically submitted after a short silence; the owner does not need to press Send.
-4. Mia routes the transcript through the normal chat pipeline, including the current conversation, available model routing, governance and memory retrieval.
-5. Mia speaks the reply through the selected browser or local operating-system voice. It waits for speech playback to finish, then resumes listening.
-6. The owner can press **End conversation** or say **“stop listening”**, **“stop voice”**, **“goodbye Mia”** or **“sleep Mia”**.
+`Off -> Ready -> Listening -> Thinking -> Speaking -> Listening ...`, plus `Muted`, `Stopped` and `Error`. The orb
+animates per state (respecting `prefers-reduced-motion`), a badge shows when the microphone is open and which
+engine receives it, and failures are shown as text rather than silent.
 
-This is an active conversation session, not a wake word and not always-on listening. The browser's speech recognition implementation is not consistently available across all browsers. Some implementations use a server-based recognition service, can require network access, and may send microphone audio to that service outside Mia. The UI discloses this before the session starts. Do not use this mode for confidential or sensitive speech unless the browser/service data handling is acceptable.
+### Turn taking
 
-### Local push-to-talk transcription
+1. Mic opens (explicit Start, or holding the talk button in push-to-talk).
+2. Interim and final text appear under the console ("Hearing: ...").
+3. Hands-free submits after ~1.25 s of silence on the browser engine (~0.15 s after the local engine's own
+   0.9 s silence detection). Push-to-talk submits on release.
+4. The recogniser is stopped while Mia thinks and speaks (unless voice barge-in is enabled), so nothing said
+   during that time can create a second submission.
+5. Mia's reply is cleaned of markdown, split into sentence chunks of at most 220 characters and spoken in
+   sequence (at most 6000 characters per reply; the rest stays on screen). A new reply or an interrupt always
+   cancels the previous playback first, so audio cannot overlap.
+6. Listening resumes automatically (hands-free) or returns to *Ready* (push-to-talk).
 
-The separate **Local record** button remains available as a fallback:
+### Voice commands
 
-1. The user records one short clip.
-2. Mia uploads that clip to its local API.
-3. Faster-Whisper transcribes it locally on CPU when the optional voice extra and model weights are installed.
-4. The transcript is placed in the composer for review/editing before sending.
+Matched only in short utterances (the phrase plus at most three extra words), never sent to the model:
 
-The first Faster-Whisper use downloads the selected model into MIA_DATA_DIR/models/faster-whisper. The default is multilingual base, CPU int8, one worker and up to two CPU threads. The target CPU is older than current upstream benchmark machines; measure real latency on the target Windows laptop. If it is too slow, test MIA_STT_MODEL=tiny and compare accuracy before the demo. The transcript—not the raw audio—is then handled by normal chat and provider data-egress rules.
+- End the session: "stop listening", "stop voice", "goodbye Mia", "sleep Mia", "end conversation".
+- Stop talking but keep the session: "stop speaking", "stop talking", "be quiet".
 
-### Spoken replies
+A long question that merely contains these words is treated as a normal prompt.
 
-- Browser Web Speech synthesis is the no-install fallback.
-- Optional tts extra (pip install -e ".[tts]") adds offline pyttsx3 synthesis using installed OS voices (SAPI5 on Windows).
-- The voice selector reports real local voice IDs, names, languages and metadata. A local voice is labelled female only when the system reports female.
-- In Voice Conversation Mode, replies are spoken regardless of the ordinary **Speak** checkbox, then listening resumes. In text mode, the checkbox controls optional speech.
-- If the selected local voice is unavailable or synthesis fails, the UI falls back to browser speech synthesis when the browser supports it.
+### Safety rails
 
-## Speech-to-text
+- A restart-loop guard ends the session if the recogniser starts 5 times in 6 s without hearing speech.
+- Permission denied, missing device, blocked service, unsupported language, lost network (browser engine) and
+  local-engine failures stop the session with a specific message.
+- A late event from an already-stopped recogniser is ignored.
+- Page unload ends the session and cancels speech.
 
-- Local candidate: Faster-Whisper (MIT), pinned audit commit in UPSTREAM_PINS.md.
-- Default local model: base, CPU, int8, 2 threads, 1 worker.
-- Use a multilingual model so English, Urdu and mixed-language speech can be recognized; auto language detection is the default for local transcription.
-- The hands-free browser mode uses the selected recognition language (en-US or ur-PK); browser language availability depends on the installed browser/service.
-- Limit clip size and duration; reject empty or unsupported uploads.
-- Record model and language metadata, but do not retain raw audio by default.
+## Speech input
 
-## Text-to-speech
+### Browser engine (Web Speech `SpeechRecognition`)
 
-Optional local TTS candidates:
-- pyttsx3 (MPL-2.0): uses Windows SAPI and installed voices offline. A compatible installed voice must be selected and tested on the target device.
-- Kokoro-82M (Apache-2.0 model): evaluate separately because the Python package brings a larger PyTorch/Transformers stack and voice/language quality needs testing.
-- Piper (GPL-3.0): do not bundle without a deliberate licensing decision; review each voice model separately.
+Works in Chromium browsers (Chrome, Edge). Not offline: Chrome sends audio to a Google service, Edge to a
+Microsoft service. The UI says so before the session starts. Do not use it for confidential speech. Urdu
+quality and availability depend on the browser's service.
 
-## Wake word and always-on mode
+### Local engine (Faster-Whisper, offline)
 
-Wake-word detection is not enabled. Mia does not listen before the owner starts Voice Conversation Mode or presses Local record. openWakeWord remains a future adapter candidate; recheck maintenance, model licenses and false-positive rates before adopting it. A true wake-word mode requires a separate opt-in, visible listening indicator and a one-action mute.
+- Install: `python -m pip install -e ".[voice]"`. Model weights download into `MIA_DATA_DIR/models/faster-whisper`
+  on first transcription (not stored in Git). Defaults: multilingual `base`, CPU int8, 1 worker, up to 2 threads.
+  Use `MIA_STT_MODEL=tiny` for speed or `small` for better Urdu.
+- The page captures microphone audio (`getUserMedia`, device selectable), cuts it into utterances with a simple
+  energy detector (0.9 s of silence ends an utterance, ignores clips under 250 ms of speech, 30 s maximum),
+  converts each to 16 kHz mono WAV and POSTs it to `/api/voice/transcribe` on the loopback server. The
+  transcript is returned and the audio is deleted; the microphone is released when the session ends or while
+  Mia is thinking/speaking.
+- Language is sent as `language=en` or `language=ur`; "Auto" omits it so Whisper detects it per utterance.
+  Whisper language detection on very short clips can be wrong; prefer an explicit language when possible.
+- `/api/voice/status` reports whether the extra is installed; the UI refuses to start the local engine and
+  shows the install command when it is not.
+- The separate **Local record** button remains: one clip, transcript placed in the composer for review.
+
+## Speech output
+
+- Optional `tts` extra (`python -m pip install -e ".[tts]"`) adds pyttsx3 synthesis using installed OS voices
+  (SAPI5 on Windows). The selector lists real voice IDs, names and languages; "female" is shown only when the
+  OS reports it.
+- Browser `speechSynthesis` is the no-install fallback. If a local voice fails mid-reply, the remaining chunks
+  continue on the browser voice.
+- In a voice session replies are always spoken; in text mode the **Speak** checkbox controls it.
+- Urdu speech output requires an installed Urdu voice; this repository does not ship or install voices.
+  Availability on a given Windows/browser was not verified here.
+
+## Wake word
+
+Not implemented, deliberately. Mia does not listen until the owner starts a session or holds the talk button.
+A browser page cannot keep an offline keyword spotter running safely without a continuously open microphone, and
+the candidate (openWakeWord) needs a license, maintenance and false-positive review on the target hardware first
+(see `docs/research/INTEGRATION_MATRIX.md`). If added later it must be opt-in, off by default, show an
+always-visible microphone indicator, and have an immediate one-action mute.
 
 ## Privacy and control
 
-- Microphone use begins only after an explicit user action.
-- The active voice session has a visible status and an End conversation control.
-- Browser hands-free recognition may use a remote browser speech service; it is not described as local/offline. Check the browser's service settings and do not speak secrets in this mode.
-- Local push-to-talk audio is sent to the Mia API on loopback and processed by Faster-Whisper; raw audio is deleted after transcription.
-- A local transcript remains editable before it is sent to the AI model.
-- Cloud inference data-egress rules still apply to text sent to the model; private retrieved memory remains local unless remote context is explicitly permitted.
-- Speech text and raw audio are not persisted in Observatory events.
-- Stopping Voice Conversation Mode stops recognition and cancels active speech playback.
+- The microphone opens only after an explicit user action and the badge shows when it is open.
+- Raw audio is never saved by default: browser audio is handled by the browser service; local audio is held in
+  memory in the page, sent over loopback, transcribed and deleted. Observatory events record metadata only (no
+  transcript text, no audio).
+- Transcripts are handled like typed text by the chat pipeline and its data-egress rules; retrieved private
+  memory stays local unless remote context is explicitly permitted.
+- Voice cannot approve sensitive computer actions; approval cards require a click.
+- Sessions stop on End conversation, a stop phrase, any fatal error, page unload and (browser engine) loss of
+  network.
+
+## Browser compatibility
+
+| Browser | Browser engine | Local engine | Speech output |
+| --- | --- | --- | --- |
+| Chrome / Edge (desktop) | Supported (online) | Supported | Browser voices + local voices |
+| Firefox | Not supported (no SpeechRecognition) | Supported | Browser voices + local voices |
+| Safari | Partial/unreliable; not tested | Not tested | Browser voices |
+
+Only Chromium was exercised by the automated tests.
+
+## Automated tests
+
+- `tests/test_voice_browser.py`: 34 real-Chromium tests of the page JavaScript against the real FastAPI app and
+  gateway, using a controllable fake recogniser and synthesiser, plus Chromium's fake microphone for the local
+  engine (transcription endpoint mocked).
+- `tests/test_voice_api.py`, `test_voice_stt.py`, `test_voice_tts.py`: backend endpoints and adapters.
+- `tests/test_voice_ui_contract.py`: static contract checks (element ids, privacy text, no wake word).
+
+These do not prove that a physical microphone, speaker, Windows SAPI voice or the Whisper model works on the
+target laptop. See `docs/voice/OWNER_VERIFICATION.md`.
