@@ -49,7 +49,7 @@ Exit criteria:
 
 ## Phase 2 — Universal AI gateway
 
-**Goal:** One policy-controlled interface for all model providers.
+**Goal:** One independently owned, policy-controlled Mia gateway for all model providers. FreeLLMAPI and OmniRoute are not runtime dependencies or required sidecars. Follow [Independent AI Gateway direction](architecture/AI_GATEWAY_DIRECTION.md).
 
 Work:
 - Define provider and model contracts.
