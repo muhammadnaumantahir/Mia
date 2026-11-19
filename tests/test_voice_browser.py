@@ -1,0 +1,544 @@
+"""Real-browser (Chromium via Playwright) tests of the voice session lifecycle.
+
+Speech recognition and speech synthesis are replaced by controllable fakes injected before the page
+loads, so these tests exercise Mia's real page JavaScript, the real FastAPI app, the real model
+gateway (with a recording provider), conversation context and memory retrieval. They do NOT prove that
+a physical microphone or speaker works; see docs/voice/OWNER_VERIFICATION.md.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import socket
+import threading
+import time
+
+import pytest
+import uvicorn
+
+from mia.gateway.contracts import ModelCandidate, ModelRequest, StreamChunk, TokenUsage
+from mia.gateway.registry import ProviderRegistry
+from mia.gateway.service import ModelGateway
+from mia.memory.store import MemoryStore
+from mia.observatory.api import create_app
+from mia.observatory.store import ObservatoryStore
+
+playwright_sync = pytest.importorskip("playwright.sync_api")
+
+FAKES = r"""
+(() => {
+  const rec = window.__rec = {instances: [], autoEnd: false, noApi: false};
+  class FakeRecognition {
+    constructor() { this.active = false; this.lang = ''; rec.instances.push(this); }
+    start() {
+      this.active = true;
+      setTimeout(() => { this.onstart && this.onstart(); if (rec.autoEnd) this._end(); }, 5);
+    }
+    stop() { this._end(); }
+    abort() { this.active = false; }
+    _end() {
+      if (!this.active) return;
+      this.active = false;
+      setTimeout(() => this.onend && this.onend(), 5);
+    }
+  }
+  if (new URLSearchParams(location.search).has('norec')) {
+    window.SpeechRecognition = undefined;
+    window.webkitSpeechRecognition = undefined;
+  } else {
+    window.SpeechRecognition = FakeRecognition;
+    window.webkitSpeechRecognition = FakeRecognition;
+  }
+  rec.live = () => rec.instances.filter(i => i.active);
+  rec.emit = (text, isFinal) => {
+    const target = rec.live().reverse().find(i => i.onresult);
+    if (!target) return false;
+    const result = [{transcript: text}]; result.isFinal = isFinal;
+    target.onresult({resultIndex: 0, results: [result]});
+    return true;
+  };
+  rec.error = code => { const t = rec.live().reverse().find(i => i.onerror); t && t.onerror({error: code}); };
+
+  const tts = window.__tts = {spoken: [], cancelled: 0, duration: 120, current: null, timer: null, overlap: 0};
+  class FakeUtterance { constructor(text) { this.text = text; this.rate = 1; this.volume = 1; } }
+  window.SpeechSynthesisUtterance = FakeUtterance;
+  const synth = {
+    onvoiceschanged: null,
+    getVoices: () => [],
+    speak(u) {
+      if (tts.current) tts.overlap += 1;
+      tts.current = u;
+      tts.spoken.push({text: u.text, rate: u.rate, volume: u.volume});
+      tts.timer = setTimeout(() => { const c = tts.current; tts.current = null; c.onend && c.onend(); }, tts.duration);
+    },
+    cancel() {
+      clearTimeout(tts.timer);
+      const c = tts.current; tts.current = null;
+      if (c) { tts.cancelled += 1; c.onerror && c.onerror({error: 'interrupted'}); }
+    },
+  };
+  Object.defineProperty(window, 'speechSynthesis', {value: synth, configurable: true});
+})();
+"""
+
+
+class Provider:
+    provider_id = "local-test"
+    data_local = True
+
+    def __init__(self):
+        self.reply = "Noted."
+        self.delay = 0.0
+        self.requests: list[ModelRequest] = []
+
+    async def health(self):
+        return True
+
+    async def list_models(self):
+        return [
+            ModelCandidate(
+                provider_id=self.provider_id,
+                model_id="model",
+                capabilities=frozenset({"chat"}),
+                context_window=8192,
+                free_tier=True,
+                healthy=True,
+                enabled=True,
+                data_local=True,
+            )
+        ]
+
+    async def complete(self, candidate, request: ModelRequest):
+        self.requests.append(request)
+        await asyncio.sleep(self.delay)
+        return self.reply
+
+    async def stream(self, candidate, request: ModelRequest):
+        self.requests.append(request)
+        await asyncio.sleep(self.delay)
+        yield StreamChunk(delta=self.reply)
+        yield StreamChunk(finish_reason="stop", usage=TokenUsage(5, 2))
+
+    def user_prompts(self):
+        return [r.messages[-1]["content"] for r in self.requests]
+
+
+@pytest.fixture(scope="module")
+def server(tmp_path_factory):
+    tmp = tmp_path_factory.mktemp("voice-browser")
+    import os
+
+    os.environ["MIA_DATA_DIR"] = str(tmp / "data")
+    provider = Provider()
+    registry = ProviderRegistry()
+    registry.register(provider)
+    memory = MemoryStore(tmp / "memory.sqlite3")
+    memory.add_item(
+        kind="fact",
+        title="Billing database decision",
+        content="We decided to use PostgreSQL for the billing service for transactional safety.",
+        source_title="Architecture review",
+        trust_level="user",
+    )
+    app = create_app(
+        store=ObservatoryStore(tmp / "obs.sqlite3"),
+        gateway=ModelGateway(registry),
+        memory=memory,
+    )
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
+    uv = uvicorn.Server(config)
+    thread = threading.Thread(target=uv.run, daemon=True)
+    thread.start()
+    for _ in range(100):
+        if uv.started:
+            break
+        time.sleep(0.05)
+    assert uv.started
+    yield f"http://127.0.0.1:{port}", provider
+    uv.should_exit = True
+    thread.join(timeout=5)
+
+
+@pytest.fixture(scope="module")
+def browser():
+    with playwright_sync.sync_playwright() as p:
+        try:
+            b = p.chromium.launch()
+        except Exception as exc:  # pragma: no cover - environment dependent
+            pytest.skip(f"Chromium is not available for Playwright: {exc}")
+        yield b
+        b.close()
+
+
+class Ctx:
+    def __init__(self, page, provider, base):
+        self.page, self.provider, self.base = page, provider, base
+        self.requests: list[str] = []
+
+    def js(self, expr):
+        return self.page.evaluate(expr)
+
+    def wait(self, expr, timeout=8000):
+        self.page.wait_for_function(expr, timeout=timeout)
+
+    def state(self):
+        return self.js("document.getElementById('voiceOrb').dataset.state")
+
+    def status(self):
+        return self.js("document.getElementById('voiceStatus').textContent")
+
+    def start(self):
+        self.page.click("#voiceMode")
+
+    def listening(self):
+        self.wait("window.__rec.live().length>0")
+        self.wait("document.getElementById('voiceOrb').dataset.state==='listening'")
+
+    def say(self, text):
+        assert self.js(f"window.__rec.emit({text!r}, true)")
+
+    def turns(self, n, timeout=10000):
+        deadline = time.time() + timeout / 1000
+        while time.time() < deadline and len(self.provider.requests) < n:
+            time.sleep(0.05)
+        assert len(self.provider.requests) >= n
+
+
+@pytest.fixture
+def ctx(server, browser):
+    base, provider = server
+    provider.requests.clear()
+    provider.reply = "Noted."
+    provider.delay = 0.0
+    context = browser.new_context()
+    context.add_init_script(FAKES)
+    page = context.new_page()
+    c = Ctx(page, provider, base)
+    page.on("request", lambda r: c.requests.append(r.url))
+    page.goto(base + "/assistant")
+    page.wait_for_selector("#voiceMode")
+    yield c
+    context.close()
+
+
+def test_session_listens_submits_speaks_and_listens_again(ctx):
+    ctx.provider.reply = "We chose PostgreSQL for billing."
+    assert ctx.state() == "idle"
+    ctx.start()
+    ctx.listening()
+    assert ctx.js("document.getElementById('voiceMicBadge').dataset.on") == "true"
+    ctx.say("Which database did we choose for the billing service?")
+    assert "Hearing" in ctx.js("document.getElementById('voicePreview').textContent")
+    ctx.turns(1)
+    first = ctx.provider.requests[0]
+    assert first.messages[-1]["content"].startswith("Which database")
+    assert any("PostgreSQL" in m["content"] and "<memory_data>" in m["content"] for m in first.messages)
+    ctx.wait("window.__tts.spoken.length>=1")
+    assert "PostgreSQL" in ctx.js("window.__tts.spoken[0].text")
+    # listening resumes on a NEW recognition session without any click
+    ctx.wait("window.__rec.instances.length>=2 && window.__rec.live().length===1")
+    ctx.listening()
+    ctx.say("And why did we pick it?")
+    ctx.turns(2)
+    second = ctx.provider.requests[1]
+    texts = [m["content"] for m in second.messages]
+    assert any("Which database" in t for t in texts), "voice turns must keep conversation context"
+    assert any("We chose PostgreSQL for billing." in t for t in texts)
+    assert not any("/api/voice/transcribe" in u for u in ctx.requests), "browser mode uploads no audio"
+
+
+def test_no_duplicate_submission_when_speech_repeats(ctx):
+    ctx.provider.delay = 0.6
+    ctx.start()
+    ctx.listening()
+    ctx.say("first part")
+    ctx.say("second part")
+    ctx.turns(1)
+    time.sleep(0.2)
+    # speech heard while Mia is thinking must be ignored (recognizer is stopped)
+    assert ctx.js("window.__rec.live().length") == 0
+    assert ctx.js("window.__rec.emit('late echo', true)") is False
+    time.sleep(2.0)
+    assert len(ctx.provider.requests) == 1
+    assert ctx.provider.user_prompts()[0] == "first part second part"
+
+
+def test_interrupt_button_stops_speech_and_returns_to_listening(ctx):
+    ctx.provider.reply = "A long answer. " * 3
+    ctx.js("window.__tts.duration=10000")
+    ctx.start()
+    ctx.listening()
+    ctx.say("tell me something")
+    ctx.wait("document.getElementById('voiceOrb').dataset.state==='speaking'")
+    assert ctx.js("document.getElementById('voiceInterrupt').hidden") is False
+    ctx.page.click("#voiceInterrupt")
+    ctx.wait("window.__tts.cancelled>=1")
+    ctx.wait("window.__rec.live().length===1")
+    ctx.listening()
+    spoken_before = ctx.js("window.__tts.spoken.length")
+    time.sleep(0.5)
+    assert ctx.js("window.__tts.spoken.length") == spoken_before, "no further chunks after interrupt"
+    assert ctx.js("window.__tts.overlap") == 0
+    assert ctx.js("document.getElementById('voiceInterrupt').hidden") is True
+
+
+def test_escape_key_interrupts_speech(ctx):
+    ctx.provider.reply = "One sentence."
+    ctx.js("window.__tts.duration=10000")
+    ctx.start()
+    ctx.listening()
+    ctx.say("hello")
+    ctx.wait("document.getElementById('voiceOrb').dataset.state==='speaking'")
+    ctx.page.keyboard.press("Escape")
+    ctx.wait("window.__tts.cancelled>=1")
+    ctx.listening()
+
+
+@pytest.mark.parametrize("phrase", ["goodbye Mia", "Stop listening.", "okay Mia, please stop listening"])
+def test_end_phrases_stop_session_without_ai_call_or_restart(ctx, phrase):
+    ctx.start()
+    ctx.listening()
+    ctx.say(phrase)
+    ctx.wait("document.getElementById('voiceOrb').dataset.state==='stopped'")
+    count = ctx.js("window.__rec.instances.length")
+    time.sleep(1.8)
+    assert ctx.js("window.__rec.live().length") == 0
+    assert ctx.js("window.__rec.instances.length") == count, "stopped session must not restart"
+    assert ctx.provider.requests == [], "stop phrases are commands, not model prompts"
+    assert ctx.js("document.getElementById('voiceMicBadge').dataset.on") == "false"
+
+
+def test_stop_speaking_phrase_keeps_session_alive(ctx):
+    ctx.start()
+    ctx.listening()
+    ctx.say("stop speaking")
+    ctx.wait("window.__rec.instances.length>=2 && window.__rec.live().length===1")
+    assert ctx.provider.requests == []
+    assert ctx.state() in {"ready", "listening"}
+
+
+def test_long_question_containing_stop_words_is_a_normal_prompt(ctx):
+    ctx.start()
+    ctx.listening()
+    ctx.say("how do I stop listening to my neighbours music when they play it very loudly")
+    ctx.turns(1)
+
+
+def test_end_conversation_button_cancels_speech_and_never_restarts(ctx):
+    ctx.provider.reply = "Speaking for a while."
+    ctx.js("window.__tts.duration=10000")
+    ctx.start()
+    ctx.listening()
+    ctx.say("go")
+    ctx.wait("document.getElementById('voiceOrb').dataset.state==='speaking'")
+    ctx.page.click("#voiceMode")
+    ctx.wait("window.__tts.cancelled>=1")
+    count = ctx.js("window.__rec.instances.length")
+    time.sleep(1.8)
+    assert ctx.state() == "stopped"
+    assert ctx.js("window.__rec.live().length") == 0
+    assert ctx.js("window.__rec.instances.length") == count
+    assert ctx.js("window.__tts.current") is None
+
+
+def test_microphone_permission_denied_is_reported_and_not_retried(ctx):
+    ctx.start()
+    ctx.wait("window.__rec.live().length>0")
+    ctx.js("window.__rec.error('not-allowed')")
+    ctx.wait("document.getElementById('voiceOrb').dataset.state==='error'")
+    assert "permission was denied" in ctx.status()
+    count = ctx.js("window.__rec.instances.length")
+    time.sleep(1.5)
+    assert ctx.js("window.__rec.instances.length") == count
+
+
+def test_restart_loop_is_detected_and_stops(ctx):
+    ctx.js("window.__rec.autoEnd=true")
+    ctx.start()
+    ctx.wait("document.getElementById('voiceOrb').dataset.state==='error'", timeout=15000)
+    assert "restart loop" in ctx.status()
+    assert ctx.js("window.__rec.instances.length") <= 8
+
+
+def test_mute_stops_microphone_and_unmute_resumes(ctx):
+    ctx.start()
+    ctx.listening()
+    ctx.page.click("#voiceMute")
+    assert ctx.state() == "muted"
+    assert ctx.js("window.__rec.live().length") == 0
+    assert ctx.js("window.__rec.emit('should be ignored', true)") is False
+    time.sleep(1.2)
+    assert ctx.js("window.__rec.live().length") == 0, "muted mic must not restart"
+    ctx.page.click("#voiceMute")
+    ctx.wait("window.__rec.live().length===1")
+
+
+def test_push_to_talk_records_only_while_held(ctx):
+    ctx.page.select_option("#voiceInputMode", "ptt")
+    ctx.start()
+    ctx.wait("document.getElementById('voiceOrb').dataset.state==='ready'")
+    time.sleep(0.4)
+    assert ctx.js("window.__rec.instances.length") == 0, "mic stays off until the button is held"
+    box = ctx.page.locator("#voicePtt").bounding_box()
+    ctx.page.mouse.move(box["x"] + 5, box["y"] + 5)
+    ctx.page.mouse.down()
+    ctx.wait("window.__rec.live().length===1")
+    ctx.say("push to talk message")
+    time.sleep(1.8)  # longer than the hands-free silence timer: must not auto-submit
+    assert ctx.provider.requests == []
+    ctx.page.mouse.up()
+    ctx.turns(1)
+    assert ctx.provider.user_prompts()[0] == "push to talk message"
+    ctx.wait("document.getElementById('voiceOrb').dataset.state==='ready'")
+    time.sleep(1.0)
+    assert ctx.js("window.__rec.live().length") == 0, "push-to-talk never re-opens the mic by itself"
+
+
+def test_push_to_talk_space_key(ctx):
+    ctx.page.select_option("#voiceInputMode", "ptt")
+    ctx.start()
+    ctx.wait("document.getElementById('voiceOrb').dataset.state==='ready'")
+    ctx.page.keyboard.down("Space")
+    ctx.wait("window.__rec.live().length===1")
+    ctx.say("space bar message")
+    ctx.page.keyboard.up("Space")
+    ctx.turns(1)
+    assert ctx.provider.user_prompts()[0] == "space bar message"
+
+
+def test_recognition_language_is_configurable_english_and_urdu(ctx):
+    ctx.start()
+    ctx.listening()
+    assert ctx.js("window.__rec.live()[0].lang") == "en-US"
+    assert ctx.js("document.getElementById('voiceLanguage').disabled") is True
+    ctx.page.click("#voiceMode")
+    ctx.page.select_option("#voiceLanguage", "ur-PK")
+    ctx.start()
+    ctx.wait("window.__rec.live().length===1")
+    assert ctx.js("window.__rec.live()[0].lang") == "ur-PK"
+    ctx.say("میرا نام نعمان ہے")
+    ctx.turns(1)
+    assert ctx.provider.user_prompts()[0] == "میرا نام نعمان ہے"
+
+
+def test_voice_interrupt_by_barge_in_when_enabled(ctx):
+    ctx.provider.reply = "Here is a long explanation. " * 4
+    ctx.js("window.__tts.duration=10000")
+    ctx.page.check("#voiceBargeIn")
+    ctx.start()
+    ctx.listening()
+    ctx.say("explain")
+    ctx.wait("document.getElementById('voiceOrb').dataset.state==='speaking'")
+    ctx.wait("window.__rec.live().length===1")
+    ctx.js("window.__tts.duration=100")
+    ctx.say("wait actually tell me about billing")
+    ctx.wait("window.__tts.cancelled>=1")
+    ctx.say("wait actually tell me about billing")
+    ctx.turns(2)
+    assert ctx.provider.user_prompts()[1] == "wait actually tell me about billing"
+
+
+def test_barge_in_is_off_by_default(ctx):
+    assert ctx.js("document.getElementById('voiceBargeIn').checked") is False
+
+
+def test_long_reply_is_spoken_in_sequential_chunks_with_speed_and_volume(ctx):
+    ctx.provider.reply = " ".join(f"This is sentence number {i} of a rather long answer." for i in range(30))
+    ctx.page.fill("#voiceRate", "1.3")
+    ctx.page.fill("#voiceVolume", "0.5")
+    ctx.start()
+    ctx.listening()
+    ctx.say("give me the long version")
+    ctx.wait("window.__tts.spoken.length>=4", timeout=15000)
+    spoken = ctx.js("window.__tts.spoken")
+    assert all(len(s["text"]) <= 220 for s in spoken)
+    assert all(abs(s["rate"] - 1.3) < 1e-6 and abs(s["volume"] - 0.5) < 1e-6 for s in spoken)
+    assert spoken[0]["text"].startswith("This is sentence number 0")
+    assert ctx.js("window.__tts.overlap") == 0
+
+
+def test_local_tts_failure_falls_back_to_browser_speech(ctx):
+    ctx.provider.reply = "Fallback voice test."
+    ctx.js(
+        "(()=>{const o=new Option('Broken local','local:does-not-exist');"
+        "document.getElementById('voiceChoice').add(o);document.getElementById('voiceChoice').value=o.value;})()"
+    )
+    ctx.start()
+    ctx.listening()
+    ctx.say("speak please")
+    ctx.wait("window.__tts.spoken.length>=1", timeout=12000)
+    assert "Fallback voice test." in ctx.js("window.__tts.spoken[0].text")
+
+
+def test_voice_preview_speaks_and_reports(ctx):
+    ctx.page.click("#previewVoice")
+    ctx.wait("window.__tts.spoken.length>=1")
+    ctx.wait("document.getElementById('voiceStatus').textContent.includes('preview finished')")
+    assert ctx.state() == "idle"
+    assert ctx.provider.requests == []
+
+
+def test_unsupported_browser_reports_clearly_and_never_opens_mic(server, browser):
+    base, _ = server
+    context = browser.new_context()
+    context.add_init_script(FAKES)
+    page = context.new_page()
+    page.goto(base + "/assistant?norec=1")
+    page.click("#voiceMode")
+    page.wait_for_function("document.getElementById('voiceOrb').dataset.state==='error'")
+    assert "not supported" in page.inner_text("#voiceStatus")
+    assert page.evaluate("window.__rec.instances.length") == 0
+    context.close()
+
+
+def test_provider_failure_is_reported_and_listening_resumes(ctx):
+    ctx.page.route(
+        "**/api/gateway/chat",
+        lambda route: route.fulfill(status=503, content_type="application/json", body='{"detail":"No provider"}'),
+    )
+    ctx.start()
+    ctx.listening()
+    ctx.say("hello there")
+    ctx.wait("document.getElementById('messages').textContent.includes('could not complete')")
+    ctx.wait("window.__rec.instances.length>=2 && window.__rec.live().length===1")
+    assert ctx.state() in {"ready", "listening"}
+
+
+def test_going_offline_stops_the_browser_session(ctx):
+    ctx.start()
+    ctx.listening()
+    ctx.page.context.set_offline(True)
+    ctx.wait("document.getElementById('voiceOrb').dataset.state==='error'")
+    assert "Network connection lost" in ctx.status()
+    assert ctx.js("window.__rec.live().length") == 0
+
+
+def test_voice_does_not_auto_approve_sensitive_actions(ctx):
+    approvals: list[str] = []
+    ctx.page.on("request", lambda r: approvals.append(r.url) if "approv" in r.url else None)
+    body = (
+        '{"content":"I need your approval to write a file.","conversation_id":"c1","provider_id":"p",'
+        '"model_id":"m","context_references":[],"pending_actions":[{"id":"a1","kind":"file.write",'
+        '"summary":"Write notes.txt","display":{"target":"notes.txt"}}]}'
+    )
+    ctx.page.route("**/api/gateway/chat", lambda route: route.fulfill(status=200, content_type="application/json", body=body))
+    ctx.start()
+    ctx.listening()
+    ctx.say("please write a file called notes dot txt")
+    ctx.wait("document.querySelectorAll('.approval-card').length===1")
+    time.sleep(1.5)
+    assert approvals == [], "voice must never approve actions; the owner has to click the card"
+
+
+def test_privacy_disclosure_and_mic_badge(ctx):
+    text = ctx.page.inner_text(".voice-privacy")
+    assert "may process microphone audio outside Mia" in text
+    assert ctx.js("document.getElementById('voiceMicBadge').textContent") == "Mic off"
+    ctx.start()
+    ctx.listening()
+    assert "browser speech service" in ctx.js("document.getElementById('voiceMicBadge').textContent")
+    ctx.page.click("#voiceMode")
+    assert ctx.js("document.getElementById('voiceMicBadge').textContent") == "Mic off"

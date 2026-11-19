@@ -14,15 +14,15 @@ implemented and covered by a test that was actually run.
 - [x] Privacy disclosure for browser recognition; raw audio deleted after local transcription
 
 ## Gaps found
-- [ ] No way to interrupt Mia while speaking (mic is off during playback)
-- [ ] "Stop speaking" phrase not supported; stop phrases only match as the whole utterance
-- [ ] No push-to-talk inside the voice session
-- [ ] No speech speed / volume controls (local rate hard-coded to 175, browser rate 1)
-- [ ] Long replies are spoken as one blob; browser TTS is cut off by a 45 s timeout
-- [ ] No distinct listening / processing / speaking / stopped state UI, no mute control
+- [x] Interrupt Mia while speaking: Interrupt button, Esc key, optional opt-in voice barge-in (tested)
+- [x] "Stop speaking" supported; stop phrases match short utterances, long questions are not treated as commands (tested)
+- [x] Push-to-talk mode inside the voice session (button hold and Space key, tested)
+- [x] Speech speed and volume controls for browser and local voices (tested for browser voices)
+- [x] Long replies are spoken sentence-chunk by sentence-chunk with a spoken-length cap (tested)
+- [x] Distinct ready/listening/thinking/speaking/muted/stopped/error states with animated orb, mic badge, mute control (tested)
 - [ ] No microphone device selection
 - [ ] Hands-free mode has no local/offline option (only single-clip Local record)
-- [ ] Tests are static string checks only; no real-browser lifecycle tests
+- [x] 26 real-Chromium lifecycle tests with a fake recogniser/synthesiser against the real app (tests/test_voice_browser.py)
 - [ ] Wake word: evaluated, not enabled (see VOICE.md); decision to be recorded
 
 ## Milestones
@@ -31,3 +31,8 @@ implemented and covered by a test that was actually run.
 3. Playwright lifecycle tests with a mocked recogniser and synthesiser
 4. Push-to-talk, device selection, local (offline) hands-free option
 5. Docs, regression run, final report
+
+## Bugs found and fixed by the new tests
+- A late `onstart` event from a recogniser that had already been stopped could flip a stopped session back to
+  "Listening" and show the microphone as on.
+- The restart-loop guard needed to trigger after 5 starts in 6 s with no speech, not after 8 s.
