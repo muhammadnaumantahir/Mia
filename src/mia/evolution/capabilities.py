@@ -53,7 +53,16 @@ class CapabilityStore:
         self,
         database_path: str | Path,
         workspace: str | Path = "./workspace/generated_code",
+        activation_enabled: bool | None = None,
     ) -> None:
+        # Fail closed: promotion needs an explicit owner opt-in
+        # (MIA_CAPABILITY_ACTIVATION_ENABLED=true) or an explicit argument.
+        self.activation_enabled = (
+            activation_enabled
+            if activation_enabled is not None
+            else os.getenv("MIA_CAPABILITY_ACTIVATION_ENABLED", "false").strip().lower()
+            == "true"
+        )
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self.workspace = Path(workspace).resolve()
@@ -118,6 +127,9 @@ class CapabilityStore:
 
                 CREATE INDEX IF NOT EXISTS idx_capability_events_lineage
                 ON capability_events(capability_id, version, occurred_at);
+
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_capability_one_active
+                ON capability_versions(capability_id) WHERE status = 'active';
             """)
             columns = {
                 row["name"]
@@ -379,11 +391,183 @@ class CapabilityStore:
             reason="Validated capability added to the registry; not activated",
         )
 
-    def activate(self, capability_id: str, version: str) -> None:
-        raise CapabilityActivationBlocked(
-            "Activation is deliberately disabled: Mia does not yet have a verified "
-            "OS-level sandbox, permission-separated worker and runtime rollback controller."
-        )
+    def get_active(self, capability_id: str) -> dict[str, Any] | None:
+        with self._connection() as db:
+            row = db.execute(
+                "SELECT * FROM capability_versions WHERE capability_id = ? AND status = 'active'",
+                (capability_id,),
+            ).fetchone()
+        return self._decode(row) if row else None
+
+    def activate(
+        self,
+        capability_id: str,
+        version: str,
+        *,
+        approved_by: str = "",
+        reason: str = "",
+    ) -> dict[str, Any]:
+        """Promote a registered, permission-free version to the active pointer.
+
+        This records which version the owner approved; it never imports,
+        hot-loads or executes the source in the Mia process. The previously
+        active version is kept as `deprecated` so it can be restored.
+        """
+        if not self.activation_enabled:
+            raise CapabilityActivationBlocked(
+                "Activation is disabled by default. The owner must set "
+                "MIA_CAPABILITY_ACTIVATION_ENABLED=true; promotion only records the "
+                "approved version, and generated code still runs only in the isolated sandbox "
+                "container, never in the Mia process."
+            )
+        if not approved_by.strip() or not reason.strip():
+            raise ValueError("approved_by and a promotion reason are required")
+        item = self.get(capability_id, version)
+        if item is None:
+            raise CapabilityLifecycleError("capability version not found")
+        if item["status"] != "registered":
+            raise CapabilityLifecycleError(
+                f"only a registered version can be activated, found {item['status']}"
+            )
+        if item["permissions"]:
+            raise CapabilityActivationBlocked(
+                "Capabilities that request permissions cannot be activated: "
+                "the permission broker is not implemented."
+            )
+        self.read_source(capability_id, version)  # source must still match its hash
+        validation = item["validation"] or {}
+        if validation.get("passed") is not True:
+            raise CapabilityLifecycleError("version has no passing validation report")
+        with self._connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            current = db.execute(
+                "SELECT version FROM capability_versions "
+                "WHERE capability_id = ? AND status = 'active'",
+                (capability_id,),
+            ).fetchone()
+            now = _now()
+            previous = current["version"] if current else None
+            if previous is not None:
+                db.execute(
+                    "UPDATE capability_versions SET status = 'deprecated', updated_at = ? "
+                    "WHERE capability_id = ? AND version = ? AND status = 'active'",
+                    (now, capability_id, previous),
+                )
+                self._insert_event(
+                    db,
+                    capability_id=capability_id,
+                    version=previous,
+                    from_status="active",
+                    to_status="deprecated",
+                    reason=f"Superseded by {version}",
+                    payload={"superseded_by": version},
+                )
+            updated = db.execute(
+                "UPDATE capability_versions SET status = 'active', updated_at = ? "
+                "WHERE capability_id = ? AND version = ? AND status = 'registered'",
+                (now, capability_id, version),
+            )
+            if updated.rowcount != 1:
+                raise CapabilityLifecycleError("version changed during activation")
+            self._insert_event(
+                db,
+                capability_id=capability_id,
+                version=version,
+                from_status="registered",
+                to_status="active",
+                reason=reason.strip(),
+                payload={
+                    "approved_by": approved_by.strip(),
+                    "previous_active": previous,
+                    "source_sha256": item["source_sha256"],
+                },
+            )
+        return self.get(capability_id, version) or {}
+
+    def rollback(
+        self,
+        capability_id: str,
+        *,
+        approved_by: str = "",
+        reason: str = "",
+    ) -> dict[str, Any]:
+        """Retire the active version as `rolled_back` and restore the one it replaced.
+
+        If it replaced nothing, the capability is left with no active version.
+        A rolled-back version is terminal and cannot be re-activated.
+        """
+        if not approved_by.strip() or not reason.strip():
+            raise ValueError("approved_by and a rollback reason are required")
+        with self._connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            active = db.execute(
+                "SELECT version, source_sha256 FROM capability_versions "
+                "WHERE capability_id = ? AND status = 'active'",
+                (capability_id,),
+            ).fetchone()
+            if active is None:
+                raise CapabilityLifecycleError("capability has no active version")
+            activation = db.execute(
+                """
+                SELECT payload_json FROM capability_events
+                WHERE capability_id = ? AND version = ? AND to_status = 'active'
+                ORDER BY occurred_at DESC, rowid DESC LIMIT 1
+                """,
+                (capability_id, active["version"]),
+            ).fetchone()
+            previous = (
+                json.loads(activation["payload_json"]).get("previous_active")
+                if activation
+                else None
+            )
+            restore = None
+            if previous:
+                restore = db.execute(
+                    "SELECT version FROM capability_versions "
+                    "WHERE capability_id = ? AND version = ? AND status = 'deprecated'",
+                    (capability_id, previous),
+                ).fetchone()
+            now = _now()
+            db.execute(
+                "UPDATE capability_versions SET status = 'rolled_back', updated_at = ? "
+                "WHERE capability_id = ? AND version = ? AND status = 'active'",
+                (now, capability_id, active["version"]),
+            )
+            self._insert_event(
+                db,
+                capability_id=capability_id,
+                version=active["version"],
+                from_status="active",
+                to_status="rolled_back",
+                reason=reason.strip(),
+                payload={
+                    "approved_by": approved_by.strip(),
+                    "restored_version": restore["version"] if restore else None,
+                },
+            )
+            if restore:
+                db.execute(
+                    "UPDATE capability_versions SET status = 'active', updated_at = ? "
+                    "WHERE capability_id = ? AND version = ? AND status = 'deprecated'",
+                    (now, capability_id, restore["version"]),
+                )
+                self._insert_event(
+                    db,
+                    capability_id=capability_id,
+                    version=restore["version"],
+                    from_status="deprecated",
+                    to_status="active",
+                    reason=f"Restored by rollback of {active['version']}",
+                    payload={
+                        "approved_by": approved_by.strip(),
+                        "rolled_back_version": active["version"],
+                    },
+                )
+        return {
+            "capability_id": capability_id,
+            "rolled_back_version": active["version"],
+            "restored_version": restore["version"] if restore else None,
+        }
 
     def retire(self, capability_id: str, version: str, reason: str) -> dict[str, Any]:
         return self._transition(
@@ -421,6 +605,19 @@ class CapabilityStore:
                     "SELECT * FROM capability_versions ORDER BY updated_at DESC"
                 ).fetchall()
         return [self._decode(row) for row in rows]
+
+    def list_events(self, capability_id: str, version: str) -> list[dict[str, Any]]:
+        """Status-transition history of one version, oldest first."""
+        with self._connection() as db:
+            rows = db.execute(
+                """
+                SELECT * FROM capability_events
+                WHERE capability_id = ? AND version = ?
+                ORDER BY occurred_at, rowid
+                """,
+                (capability_id, version),
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def lineage(self, capability_id: str, version: str) -> list[dict[str, Any]]:
         chain = []

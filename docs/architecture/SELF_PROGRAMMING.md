@@ -59,3 +59,14 @@ For each discovered capability gap, the system must consider:
 - defer or reject.
 
 No-op is a valid result. Mia must never create code merely to increase its capability count or create a misleading Day N growth curve.
+
+## Promotion (activation) and rollback
+
+Activation is a governance record, not code loading. It is disabled unless the owner sets `MIA_CAPABILITY_ACTIVATION_ENABLED=true`; without it every attempt returns 409 and nothing changes.
+
+- `POST /api/capabilities/{id}/{version}/activate` needs `approved_by` and a `reason`. Only a `registered` version with a passing validation report, no requested permissions (the permission broker does not exist) and a source file that still matches its stored hash can be promoted.
+- At most one version per capability is `active`, enforced by a unique database index. Promotion moves the previous active version to `deprecated` in the same transaction and records it in the event payload.
+- `POST /api/capabilities/{id}/rollback` marks the active version `rolled_back` (terminal, cannot return) and restores the `deprecated` version it replaced. If it replaced nothing, the capability is left with no active version. Both actions write capability events and Observatory events (SPS-08).
+- `GET /api/capabilities/{id}/active` returns the current pointer.
+- Nothing imports, hot-loads or runs the active version in the Mia process. Generated code still runs only through the existing isolated single-call container, so the verified-Windows-sandbox and permission-broker requirements for real use are unchanged and not met.
+

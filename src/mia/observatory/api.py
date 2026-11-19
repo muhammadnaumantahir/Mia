@@ -222,6 +222,11 @@ class ChatInput(BaseModel):
     use_tools: bool = True
 
 
+class CapabilityPromotionInput(BaseModel):
+    approved_by: str = Field(min_length=1, max_length=80)
+    reason: str = Field(min_length=3, max_length=500)
+
+
 class MemoryPurgeInput(BaseModel):
     older_than_days: int = Field(ge=1, le=36500)
     include_conversations: bool = True
@@ -1638,6 +1643,13 @@ def create_app(
         )
         return candidate
 
+    @app.get("/api/capabilities/{capability_id}/active")
+    def active_capability(capability_id: str) -> dict[str, Any]:
+        active = capability_versions.get_active(capability_id)
+        if active is None:
+            raise HTTPException(status_code=404, detail="No active version")
+        return active
+
     @app.get("/api/capabilities/{capability_id}/{version}")
     def get_capability(capability_id: str, version: str) -> dict[str, Any]:
         candidate = capability_versions.get(capability_id, version)
@@ -1966,12 +1978,63 @@ def create_app(
         }
 
     @app.post("/api/capabilities/{capability_id}/{version}/activate")
-    def activate_capability(capability_id: str, version: str) -> dict[str, Any]:
+    def activate_capability(
+        capability_id: str, version: str, item: CapabilityPromotionInput | None = None
+    ) -> dict[str, Any]:
+        # The body is optional so a disabled gate answers 409 before approval
+        # details are even considered; once enabled, approval details are required.
         try:
-            capability_versions.activate(capability_id, version)
+            result = capability_versions.activate(
+                capability_id,
+                version,
+                approved_by=item.approved_by if item else "",
+                reason=item.reason if item else "",
+            )
         except CapabilityActivationBlocked as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        raise HTTPException(status_code=501, detail="Activation is not implemented")
+        except CapabilityLifecycleError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        observatory.record_event(
+            category="evolution",
+            event_type="capability_activated",
+            summary=f"Capability promoted (recorded only, not hot-loaded): {capability_id} {version}",
+            outcome="success",
+            layer_id="SPS-08",
+            payload={
+                "capability_id": capability_id,
+                "version": version,
+                "approved_by": item.approved_by if item else "",
+                "source_sha256": result.get("source_sha256"),
+            },
+        )
+        return result
+
+    @app.post("/api/capabilities/{capability_id}/rollback")
+    def rollback_capability(
+        capability_id: str, item: CapabilityPromotionInput
+    ) -> dict[str, Any]:
+        try:
+            result = capability_versions.rollback(
+                capability_id, approved_by=item.approved_by, reason=item.reason
+            )
+        except CapabilityLifecycleError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        observatory.record_event(
+            category="evolution",
+            event_type="capability_rolled_back",
+            summary=(
+                f"Capability rolled back: {capability_id} {result['rolled_back_version']}"
+                f" -> {result['restored_version'] or 'no active version'}"
+            ),
+            outcome="success",
+            layer_id="SPS-08",
+            payload={**result, "approved_by": item.approved_by},
+        )
+        return result
 
     @app.post("/api/agent/discovery/proposals", status_code=201)
     def discover_task_proposals(item: DiscoveryBatchInput) -> dict[str, Any]:
