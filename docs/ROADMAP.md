@@ -2,6 +2,16 @@
 
 The roadmap is sequenced by dependencies and quality gates, not by artificial release dates. Each phase must produce working, tested software before dependent phases are marked complete.
 
+## Three co-equal core product priorities
+
+The owner's product direction is that Mia must become a persistent, proactive digital companion—not only a passive voice/chat assistant. Three priorities are co-equal and permanent; sequence their implementation by dependency, but do not defer one until the others are complete:
+
+1. **Persistent identity and memory:** one canonical Mia identity and structured, source-aware memory that survives sessions, restarts and model/provider changes. This includes conversations, preferences, people/entities, projects, decisions, goals, episodic experience and validated lessons.
+2. **Autonomous digital life and proactive initiative:** Mia can maintain curiosity and follow-up queues, independently explore permitted topics/projects, reflect on evidence, create internal work products and initiate useful conversations without waiting for a command. This runs through bounded scheduled/event-driven cycles, not an always-running model.
+3. **Self-programming and governed evolution:** discover capability gaps, reuse/adapt/create capabilities, test in isolation, record lineage/evidence, promote through governance and roll back regressions.
+
+These are cross-cutting product priorities implemented through the existing ten SPS layers and supporting runtime components. They do not change the canonical SPS layer count. See [Proactive Digital Companion Runtime](architecture/DIGITAL_PERSON_RUNTIME.md) for the target behaviour and acceptance criteria.
+
 ## Phase 0 — Research and open-source reuse audit
 
 **Goal:** Decide what Mia should adopt, integrate, adapt, study or reject.
@@ -105,36 +115,49 @@ Exit criteria:
 
 Work:
 - SQLite as the zero-service baseline.
-- Conversations, facts, tasks, preferences and episodic experiences stored separately.
+- Conversations, facts, tasks, preferences, goals, decisions and episodic experiences stored separately.
+- Stable identity and contextual continuity across sessions, restarts and model/provider changes.
+- Memory consolidation that summarizes older conversations while preserving key details, corrections, decision history and source links.
+- Contextual retrieval that combines recent turns with relevant semantic, episodic, entity, project and decision memory; retrieval must include provenance and trust labels.
 - Document ingestion for PDF, Markdown, code and office formats through replaceable parsers.
 - Full-text retrieval first; optional embeddings only when resource and license checks pass.
-- Source citations, deletion, retention, export and user-controlled memory policies.
+- Source citations, conflict handling, deletion, retention, export and user-controlled memory policies.
 
 Exit criteria:
 - Every imported item records source, timestamp, parser/version and provenance.
 - Retrieved claims can be traced to source passages.
 - Memory does not silently elevate untrusted document instructions into system policy.
 
-## Phase 6 — Autonomous agent runtime
+## Phase 6 — Autonomous digital life and agent runtime
 
-**Goal:** Execute multi-step tasks and self-directed maintenance within a controlled budget.
+**Goal:** Give Mia a persistent life between conversations: independently pursue bounded, useful work, reflect on evidence, and initiate relevant conversations while safely executing approved tasks.
+
+This phase is not just a task queue or a voice wake-word feature. Its target architecture is specified in [Proactive Digital Companion Runtime](architecture/DIGITAL_PERSON_RUNTIME.md).
 
 Work:
 - Task state machine: proposed, approved, running, waiting, completed, failed, cancelled.
 - Planner, tool dispatcher, task queue, scheduler and retry policy.
 - Task Desk UI for proposal generation/review, plus explicit manual execution of one registered read-only tool or a bounded 2-5 step read-only sequence after owner approval and CPU/RAM checks; model-generated task descriptions are never interpreted as commands.
-- Workload sources: self-assessment, internal tests, benchmarks, research discoveries, authorized environment signals and experience analysis.
-- Resource-aware scheduling and sleep/idle policies.
-- Resume, cancellation, timeout, rate limit and recovery.
-- A user-visible activity ledger.
+- Workload sources: self-assessment, internal tests, benchmarks, research discoveries, authorized environment signals, curiosity backlog, unresolved conversations and experience analysis.
+- Autonomous life cycle: observe, orient, explore, reason, create, verify, remember, reflect, then communicate or sleep.
+- Durable curiosity/interest/follow-up backlog with rationale, evidence quality, novelty, expected value, cost and state; no random work to simulate activity.
+- Proactive social/conversation engine that initiates useful, contextual discussions, remembers their outcomes and avoids stale/duplicate interruptions.
+- Configurable quiet hours, notification caps, per-topic cooldowns, deduplication, pause/resume, emergency stop and per-tool/source scopes.
+- Resource-aware scheduling and sleep/idle policies; bounded wake-up cycles rather than continuous model inference.
+- Resume, cancellation, timeout, rate limit, idempotency, durable lease/heartbeat, checkpoint and recovery.
+- A user-visible activity ledger that records triggers, goals, sources, model/provider use, actions, decisions, resource costs and outcomes.
+- Internal/read-only research and analysis are the default autonomous scope. Sensitive writes, generated-code execution, external communication and irreversible actions remain separately permission- and approval-gated.
 
 Exit criteria:
 - Tasks left running by a process restart are atomically marked failed with an append-only recovery event; no task is silently replayed, and retry requires owner re-approval.
-- Automatic continuation across restart requires a future durable lease/heartbeat design and remains a separate exit gate.
-- The system can explain why a task was selected and what evidence changed its state.
-- A manually invoked read-only execution sequence validates every step, stops on first failure, shares one overall timeout and records an append-only lifecycle trace; background scheduler execution, automatic continuation across restart, durable worker leases and cancellable isolated workers remain separate exit gates.
-- Background workload pauses under resource pressure.
-- The autonomy switch and emergency stop are reliable.
+- Durable leases/heartbeats and expired-lease recovery prevent one live worker from being mistaken for abandoned work; process-restart continuation still requires safe checkpoints and action-specific idempotency.
+- The system can explain why each task or curiosity item was selected and what evidence changed its state.
+- Read-only execution validates every step, stops on first failure, shares one overall timeout and records an append-only lifecycle trace.
+- Autonomous exploration can complete a permitted investigation without a user prompt, persist its sources/findings and decide whether a proactive message is justified.
+- Proactive messaging enforces quiet hours, rate/frequency limits, deduplication, pause/resume and emergency stop in runtime tests.
+- Background workload pauses under resource pressure; offline periods are recorded honestly and never filled with fabricated activity.
+- The autonomy switch, per-scope permissions and emergency stop are reliable.
+- Sensitive or externally visible actions require the configured approval path; cancelling or pausing prevents new steps from starting.
 
 ## Phase 7 — Self-programming and capability evolution
 
