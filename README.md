@@ -38,7 +38,7 @@ The coordinator/runtime connects these existing layers; it is not an additional 
 | Domain | Intended capability |
 |---|---|
 | Conversation | Context-aware text and natural voice interaction |
-| AI gateway | Local models, multiple providers, model discovery, routing, fallbacks, usage and budget controls |
+| AI gateway | Independent Mia-owned gateway: local and direct cloud providers, model discovery, intelligent routing, resilience, security, budgets, evaluation and observability |
 | Computer operations | Browser, applications, files, documents and authorized OS workflows |
 | Research | Web research, repository inspection, PDFs, technical documentation and citations |
 | Identity and memory | Persistent, source-aware identity, conversations, decisions, goals, experiences and contextual retrieval across sessions and model/provider changes |
@@ -100,12 +100,7 @@ For the supervisor walkthrough, see the [Supervisor Demo Runbook](docs/SUPERVISO
 
 For local AI, start Ollama and make sure a model is installed. Mia discovers local models through Ollama's native API. The optional gateway extra enables HTTP adapters; no cloud key is needed for the local path.
 
-To connect an already-running **self-hosted** FreeLLMAPI at its default localhost endpoint:
-1. Save its unified key in the Windows credential manager: `mia-credentials set freellmapi`.
-2. Set `MIA_FREELLMAPI_ENABLED=true` in `.env`.
-3. Keep `MIA_FREELLMAPI_ROUTE_FREE=false` until you have checked the gateway's active model chain and confirmed all enabled routes are free tiers you are allowed to use.
-4. Restart Mia. Its key is retrieved from the OS credential store and is never put in SQLite or logged.
-
+Mia's gateway is an independent, Mia-owned service. It does not require FreeLLMAPI, OmniRoute, or another external gateway. See [Independent AI Gateway direction](docs/architecture/AI_GATEWAY_DIRECTION.md) for the owner-approved architecture and implementation requirements.\n
 For local CPU/RAM telemetry and automatic daily experiment capture, install the optional `monitoring` extra. The default scheduler is off unless `MIA_EXPERIMENT_AUTO_CAPTURE=true` is present in `.env`.
 
 The Evolution Observatory includes a **Capability Lab** where Mia can draft pure-Python source and tests through a free-only model route. Review the draft, save an immutable candidate, run the local Docker validation pipeline, and register only passing versions. Owner-approved promotion and rollback records are supported for registered permission-free versions when MIA_CAPABILITY_ACTIVATION_ENABLED is enabled; the lifecycle enforces one active version per capability and records the decision. This does not hot-load code into the privileged Mia process. A complete permission broker and target-Windows verification remain open.
@@ -138,7 +133,7 @@ Mia will not blindly copy whole repositories. Each candidate is assessed as one 
 - **Study:** use architecture and interaction ideas without copying code.
 - **Reject/defer:** security, maintenance, licensing, hardware, or compatibility makes it unsuitable.
 
-The first audit covers OpenJarvis, FreeLLMAPI, LiteLLM, OpenHands Software Agent SDK, Open Interpreter, 01, Faster-Whisper, openWakeWord, Piper and Playwright. See [Open-source audit](docs/research/OPEN_SOURCE_AUDIT.md) and [integration matrix](docs/research/INTEGRATION_MATRIX.md).
+The first audit covers OpenJarvis, FreeLLMAPI, LiteLLM, OpenHands Software Agent SDK, Open Interpreter, 01, Faster-Whisper, openWakeWord, Piper and Playwright. See [Open-source audit](docs/research/OPEN_SOURCE_AUDIT.md), [integration matrix](docs/research/INTEGRATION_MATRIX.md), and the [Independent AI Gateway direction](docs/architecture/AI_GATEWAY_DIRECTION.md).
 
 ## Security and privacy baseline
 
