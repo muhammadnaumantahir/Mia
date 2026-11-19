@@ -100,10 +100,7 @@ class ToolBroker:
     def select_tools(self, prompt: str, analysis: IntentAnalysis) -> list[str]:
         """Offer only tools plausibly relevant to the request; none for light conversation."""
         names = self.registry.names()
-        if analysis.category == "simple" or (
-            analysis.category == "conversation" and analysis.complexity == "simple"
-            and not analysis.references
-        ):
+        if analysis.category == "simple":
             return []
         if analysis.category == "tool" or analysis.complexity == "complex":
             return list(names)

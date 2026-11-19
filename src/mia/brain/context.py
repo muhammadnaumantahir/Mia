@@ -96,7 +96,7 @@ def build_context(
             resolved.append("continuation:previous_conversation")
 
     if wants_memory:
-        query = analysis.memory_query or prompt
+        query = prompt  # the retriever interprets contextual references itself
         try:
             packet = assemble_memory_context(
                 store, query, conversation_id, budget=_budget_for(analysis)
