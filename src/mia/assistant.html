@@ -565,7 +565,8 @@ $('composer').addEventListener('submit',async event=>{
    const response=await fetch('/api/gateway/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,task_type:taskType,max_output_tokens:1024,conversation_id:conversationId,use_tools:true})});
    result=await response.json();if(!response.ok)throw new Error(result.detail||'The model request failed.');
    conversationId=result.conversation_id;
-   addMessage('assistant',result.content,result.provider_id+' · '+result.model_id);
+   const assistantBubble=addMessage('assistant',result.content,result.provider_id+' · '+result.model_id);
+   renderMemoryReferences(assistantBubble,result.context_references||[]);
    renderApprovalCards(result.pending_actions||[]);
   }else{
    const bubble=addMessage('assistant','…');
@@ -610,9 +611,11 @@ $('purgeConfirm').addEventListener('click',async()=>{
   $('purgeConfirm').hidden=true;purgeDays=null;loadConversationList();
  }catch(e){$('purgeResult').textContent=e.message;}
 });
+$('refreshMemory').addEventListener('click',loadMemoryRecords);
 refreshVoices();
 if('speechSynthesis' in window)window.speechSynthesis.onvoiceschanged=refreshVoices;
 refreshProviders();
 loadCurrentConversation();
 loadConversationList();
+loadMemoryRecords();
 </script></body></html>
