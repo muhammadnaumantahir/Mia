@@ -2553,6 +2553,7 @@ def create_app(
                 cost_usd=result.cost_usd,
                 free_tier=result.free_tier,
                 data_local=result.data_local,
+                total_ms=result.latency_ms,
             )
         except Exception:  # ledger failure must never lose the user's reply
             observatory.record_event(
@@ -2615,6 +2616,8 @@ def create_app(
                             free_tier=event.free_tier,
                             data_local=event.data_local,
                             streamed=True,
+                            first_token_ms=event.first_token_ms,
+                            total_ms=event.total_ms,
                         )
                     except Exception:
                         observatory.record_event(
@@ -2648,6 +2651,8 @@ def create_app(
                         "input_tokens": event.usage.input_tokens if event.usage else None,
                         "output_tokens": event.usage.output_tokens if event.usage else None,
                         "cost_usd": event.cost_usd,
+                        "first_token_ms": event.first_token_ms,
+                        "total_ms": event.total_ms,
                     })
             except (TransientProviderError, PermanentProviderError, RuntimeError, KeyError) as exc:
                 if parts:  # keep what the owner already saw, marked incomplete

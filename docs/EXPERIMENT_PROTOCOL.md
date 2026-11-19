@@ -78,5 +78,5 @@ Each daily snapshot also stores an `activity` block, covered by the same snapsho
 
 Rules: a source that is not configured or cannot be read is recorded as `available: false` with a reason and is listed in the report's `activity_totals.unavailable_sources`; it is never recorded as zero. These stores are not linked to experiment IDs, so the block says explicitly that the counts are window counts, not attribution. A quiet day is a real zero; a missing source is not. Inference cost, request and output-token counts are also written as daily metrics. The report adds `activity_totals`, summing only days with readable evidence and listing days without it.
 
-Not covered yet: per-task success rates against a fixed task set, latency distributions, reuse-versus-original code attribution, downtime, and a control run of the Day 0 build.
+Inference latency (count, mean, median, p95 of provider-call time, plus first-token time for streamed calls) is part of the usage block when requests were measured. Not covered yet: per-task success rates against a fixed task set, reuse-versus-original code attribution, downtime, and a control run of the Day 0 build.
 

@@ -16,6 +16,28 @@ from pathlib import Path
 from typing import Any
 
 
+def _valid_ms(value: float | None) -> float | None:
+    if value is None or isinstance(value, bool) or not math.isfinite(value) or value < 0:
+        return None
+    return float(value)
+
+
+def _latency_stats(values: list[float]) -> dict[str, Any]:
+    """Count, mean, median and nearest-rank p95 of measured values; None when empty."""
+    if not values:
+        return {"count": 0, "mean": None, "median": None, "p95": None}
+    ordered = sorted(values)
+    rank = max(1, math.ceil(0.95 * len(ordered)))
+    middle = len(ordered) // 2
+    median = ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2
+    return {
+        "count": len(ordered),
+        "mean": round(sum(ordered) / len(ordered), 3),
+        "median": round(median, 3),
+        "p95": round(ordered[rank - 1], 3),
+    }
+
+
 def _utc_now() -> datetime:
     return datetime.now(UTC)
 
@@ -45,6 +67,10 @@ class UsageLedger:
                 """
             )
             db.execute("CREATE INDEX IF NOT EXISTS usage_time ON usage(recorded_at)")
+            columns = {row["name"] for row in db.execute("PRAGMA table_info(usage)").fetchall()}
+            for column in ("first_token_ms", "total_ms"):
+                if column not in columns:
+                    db.execute(f"ALTER TABLE usage ADD COLUMN {column} REAL")
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
@@ -70,7 +96,12 @@ class UsageLedger:
         free_tier: bool,
         data_local: bool,
         streamed: bool = False,
+        first_token_ms: float | None = None,
+        total_ms: float | None = None,
     ) -> None:
+        # Latency is stored only when it is a finite, non-negative measurement.
+        first_token_ms = _valid_ms(first_token_ms)
+        total_ms = _valid_ms(total_ms)
         reported = input_tokens is not None and output_tokens is not None
         if cost_usd is not None and (not math.isfinite(cost_usd) or cost_usd < 0):
             cost_usd = None
@@ -79,8 +110,8 @@ class UsageLedger:
                 """
                 INSERT INTO usage (recorded_at, provider_id, model_id, task_type,
                     input_tokens, output_tokens, token_source, cost_usd,
-                    free_tier, data_local, streamed)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    free_tier, data_local, streamed, first_token_ms, total_ms)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     _utc_now().isoformat(),
@@ -94,6 +125,8 @@ class UsageLedger:
                     int(free_tier),
                     int(data_local),
                     int(streamed),
+                    first_token_ms,
+                    total_ms,
                 ),
             )
 
@@ -127,6 +160,13 @@ class UsageLedger:
                 """,
                 (since, until),
             ).fetchone()
+            lat = db.execute(
+                """
+                SELECT first_token_ms, total_ms FROM usage
+                WHERE recorded_at >= ? AND recorded_at < ?
+                """,
+                (since, until),
+            ).fetchall()
         return {
             "requests": row["requests"],
             "input_tokens": row["input_tokens"],
@@ -135,6 +175,12 @@ class UsageLedger:
             "estimated_token_rows": row["estimated_rows"],
             "paid_requests": row["paid_requests"],
             "non_local_requests": row["non_local_requests"],
+            "latency_ms": {
+                "total": _latency_stats([r["total_ms"] for r in lat if r["total_ms"] is not None]),
+                "first_token": _latency_stats(
+                    [r["first_token_ms"] for r in lat if r["first_token_ms"] is not None]
+                ),
+            },
         }
 
     def summary(self, days: int = 30) -> dict[str, Any]:
@@ -148,7 +194,8 @@ class UsageLedger:
                        SUM(output_tokens) AS output_tokens,
                        COALESCE(SUM(cost_usd), 0) AS cost_usd,
                        SUM(token_source = 'estimated') AS estimated_rows,
-                       MAX(free_tier) AS free_tier, MAX(data_local) AS data_local
+                       MAX(free_tier) AS free_tier, MAX(data_local) AS data_local,
+                       AVG(total_ms) AS avg_total_ms, AVG(first_token_ms) AS avg_first_token_ms
                 FROM usage WHERE recorded_at >= ?
                 GROUP BY provider_id, model_id
                 ORDER BY cost_usd DESC, requests DESC
@@ -166,6 +213,11 @@ class UsageLedger:
                 "estimated_token_rows": row["estimated_rows"],
                 "free_tier": bool(row["free_tier"]),
                 "data_local": bool(row["data_local"]),
+                "avg_total_ms": None if row["avg_total_ms"] is None else round(row["avg_total_ms"], 1),
+                "avg_first_token_ms": (
+                    None if row["avg_first_token_ms"] is None
+                    else round(row["avg_first_token_ms"], 1)
+                ),
             }
             for row in rows
         ]

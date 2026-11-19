@@ -255,6 +255,26 @@ class ExperimentSnapshotCapturer:
                     source_event_id=event_id,
                     context={"source": "usage_ledger", "window": activity["window"]},
                 )
+        total_latency = (usage.get("latency_ms") or {}).get("total") or {}
+        if usage.get("available") and total_latency.get("median") is not None:
+            for metric_name, key in (
+                ("inference_latency_median_ms", "median"),
+                ("inference_latency_p95_ms", "p95"),
+            ):
+                self.observatory.record_metric(
+                    day_index=day_index,
+                    metric_name=metric_name,
+                    value=float(total_latency[key]),
+                    unit="ms",
+                    benchmark_id=None,
+                    experiment_id=experiment_id,
+                    source_event_id=event_id,
+                    context={
+                        "source": "usage_ledger",
+                        "measured_requests": total_latency["count"],
+                        "window": activity["window"],
+                    },
+                )
         return {
             "snapshot_id": snapshot_id,
             "experiment_id": experiment_id,

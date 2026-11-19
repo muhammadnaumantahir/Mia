@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
@@ -31,6 +32,7 @@ class CompletionResult:
     usage: TokenUsage | None = None
     cost_usd: float | None = 0.0
     free_tier: bool = True
+    latency_ms: float | None = None  # wall time of the successful provider call
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +49,8 @@ class StreamEvent:
     cost_usd: float | None = None
     data_local: bool = False
     free_tier: bool = True
+    first_token_ms: float | None = None  # request start to first text; final event only
+    total_ms: float | None = None
 
 
 class ModelGateway:
@@ -77,7 +81,9 @@ class ModelGateway:
             attempted.append(f"{candidate.provider_id}/{candidate.model_id}")
             provider = self.providers.get(candidate.provider_id)
             try:
+                started = time.perf_counter()
                 response = await provider.complete(candidate, request)
+                latency_ms = (time.perf_counter() - started) * 1000.0
                 if isinstance(response, str):
                     response = ProviderResponse(content=response)
                 if not response.content and not response.tool_calls:
@@ -92,6 +98,7 @@ class ModelGateway:
                     usage=response.usage,
                     cost_usd=actual_cost_usd(candidate, response.usage, request),
                     free_tier=candidate.free_tier,
+                    latency_ms=latency_ms,
                 )
             except TransientProviderError as exc:
                 last_error = exc
@@ -127,9 +134,17 @@ class ModelGateway:
             provider = self.providers.get(candidate.provider_id)
             emitted = False
             streamer = getattr(provider, "stream", None)
+            started = time.perf_counter()
+            first_token_at: float | None = None
+            last_chunk_at = started
+            # Time this generator spends suspended at a yield belongs to the
+            # consumer, not the provider; it is excluded from the measurements.
+            paused = 0.0
+            paused_at_last_chunk = 0.0
             try:
                 if streamer is None or request.tools:
                     response = await provider.complete(candidate, request)
+                    last_chunk_at = first_token_at = time.perf_counter()
                     if isinstance(response, str):
                         response = ProviderResponse(content=response)
                     if not response.content:
@@ -143,16 +158,26 @@ class ModelGateway:
                     ]
                     for chunk in chunks:
                         emitted = True
+                        yielded_at = time.perf_counter()
                         yield StreamEvent(delta=chunk.delta)
+                        paused += time.perf_counter() - yielded_at
                     final = chunks[-1]
                 else:
                     final = StreamChunk()
                     text_parts: list[str] = []
                     async for chunk in streamer(candidate, request):
+                        # Timestamps are taken on receipt, before yielding to the
+                        # consumer, so a slow consumer does not inflate latency.
+                        last_chunk_at = time.perf_counter()
+                        paused_at_last_chunk = paused
                         if chunk.delta:
+                            if first_token_at is None:
+                                first_token_at = last_chunk_at
                             emitted = True
                             text_parts.append(chunk.delta)
+                            yielded_at = time.perf_counter()
                             yield StreamEvent(delta=chunk.delta)
+                            paused += time.perf_counter() - yielded_at
                         if chunk.finish_reason or chunk.usage:
                             final = chunk
                     if not text_parts:
@@ -167,6 +192,10 @@ class ModelGateway:
                     cost_usd=actual_cost_usd(candidate, final.usage, request),
                     data_local=candidate.data_local,
                     free_tier=candidate.free_tier,
+                    first_token_ms=(
+                        (first_token_at - started) * 1000.0 if first_token_at else None
+                    ),
+                    total_ms=max(0.0, last_chunk_at - started - paused_at_last_chunk) * 1000.0,
                 )
                 return
             except TransientProviderError as exc:

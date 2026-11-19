@@ -580,6 +580,12 @@ class ObservatoryStore:
                 for key, value in data.items():
                     if key == "available":
                         continue
+                    if key == "latency_ms":
+                        # Medians and percentiles are not additive: keep them per day.
+                        target.setdefault("daily_latency_ms", []).append(
+                            {"day_index": day, **value}
+                        )
+                        continue
                     if isinstance(value, dict):
                         for name, count in value.items():
                             target[key][name] = target[key].get(name, 0) + count
