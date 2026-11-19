@@ -767,6 +767,16 @@ class StructuredMemory:
             ).fetchall()
         return [self._decode(row) for row in rows]
 
+    def find_by_message(self, message_id: str) -> bool:
+        """True if any record was captured from this chat message (retry safety)."""
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT 1 FROM structured_memory "
+                "WHERE json_extract(origin_json, '$.message_id') = ? LIMIT 1",
+                (message_id,),
+            ).fetchone()
+        return row is not None
+
     def active_with_title_key(self, record_type: str, title_key: str) -> list[str]:
         with self._connect() as db:
             rows = db.execute(
