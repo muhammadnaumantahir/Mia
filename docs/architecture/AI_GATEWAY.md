@@ -30,9 +30,11 @@ Default mode is local/free-first:
 
 Routing should optimize the task, not simply choose the newest or largest model. Benchmark-based quality and reliability evidence by task type is still future work. Do not fabricate quality scores for newly discovered models.
 
-## FreeLLMAPI evaluation
+## Gateway project research (non-runtime)
 
-FreeLLMAPI is the preferred first gateway prototype due to the owner's familiarity and its unified endpoint, provider adapters, key encryption, health/quota tracking, fallback and usage dashboard. Self-hosted operation must not require the hosted paid model catalog. The Mia adapter treats a FreeLLMAPI route as paid/unknown by default. The owner must inspect the actual active model chain and upstream provider terms before manually marking a route as free.
+FreeLLMAPI and OmniRoute are not approved runtime dependencies, sidecars or control planes. Other gateway projects (including LiteLLM, Bifrost and Portkey) may be studied for isolated patterns. Any code reuse requires exact-source, licence, security and dependency review and must not make Mia depend on the upstream project. Prefer implementing required behavior in Mia-owned modules.
+
+Existing provider adapters or configuration for FreeLLMAPI/OmniRoute, if present in the codebase, are legacy migration scope. Do not add new setup instructions or new runtime dependencies for them.
 
 ## Provider contract
 
