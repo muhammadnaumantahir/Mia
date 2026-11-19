@@ -53,6 +53,8 @@ Mia's three co-equal core priorities are now **persistent identity and memory**,
 
 - 2026-11-19 local verification (same Linux/Python 3.13.18 environment, mocked providers, no CI): after adding structured memory records, `ruff check src tests` passed and `pytest` reported 418 passed (45 new in `tests/test_structured_memory.py`; 373 before). Four mutation checks (evidence requirement removed, correction not retiring the old record, superseded records no longer excluded from retrieval, correction's own-evidence rule removed) each made at least two new tests fail. Not a CI result.
 
+- 2026-11-19: hands-free browser Voice Conversation Mode, spoken-response turn-taking, voice preview control and four static UI contract regression tests were committed. The browser uses Web Speech Recognition only after an explicit Start action; its audio may be processed by a browser speech service. These UI tests have not been run locally, and target-device Chrome/Edge microphone, recognition language and speech playback remain to be rehearsed. Latest Windows/Ubuntu Actions jobs still fail before runner allocation, so no CI pass is claimed.
+
 ## Not complete
 
 Mia is not yet a finished personal assistant or proactive digital companion. The autonomous digital-life cycle (curiosity backlog, independent exploration, reflection, proactive conversation initiation and notification policy) is not implemented. Long-term memory retrieval/consolidation and full continuity across model/provider changes remain incomplete. General multi-step autonomous execution, verified OS-level sandbox, a permission broker for activation of permissioned capabilities on the target PC, always-on wake word, real desktop interaction and the actual 30-day experiment also remain incomplete.
