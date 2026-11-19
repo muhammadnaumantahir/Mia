@@ -192,3 +192,37 @@ controlled executor; there is still no unrestricted command path.
 - Not implemented: administrator elevation, interactive/TTY sessions, persistent shell sessions, execution history that
   survives a restart (execution output is in memory; the audit events persist).
 - Verified on Linux with real `bash`. PowerShell/cmd argument handling and quoting rules are untested on Windows.
+
+## Browser automation (Feature 4, M6)
+
+`computer/browser.py` (controller) and `computer/browser_actions.py` (approval-bound actions). The browser is Mia's own
+isolated Playwright context, never the owner's default profile. Every request of every tab, including redirects and
+sub-requests, goes through the URL policy (public web only; loopback/private/reserved blocked).
+
+- **Observe (no approval):** `GET /api/browser/observe` returns page text and visible controls (links, buttons, inputs,
+  selects) with short-lived element references (`e1`...), flags for consequential controls, and `content_trust:
+  untrusted_external_web_content`. Password values are never returned. `find` filters by label; `extract` returns headings,
+  tables and lists.
+- **Prepare (no approval, verified by read-back):** `fill`, `select`, `check`, `scroll`, tab list/new/switch/close, and
+  on-request `screenshot` to an owner-configured folder. `fill` refuses password, payment (`cc-*`), one-time-code, file and
+  button controls, and refuses text that looks like a secret. Element references go stale when the page is re-observed or
+  navigates; stale references are rejected rather than guessed.
+- **Approval required:** `click`, `download`, `upload` via `/api/browser/actions/{preview,execute}`. The approval is bound to
+  the page URL and content digest and to the real element (tag, type, label, link target, form action). A page change
+  after approval invalidates it. Previews explain the action ("CONSEQUENTIAL click 'Place order' (submits a form) on
+  host"). Form submission, sending and uploading are flagged consequential. Uploads are also bound to the file's SHA-256 and
+  come only from configured filesystem roots (credential files blocked, 25 MB cap).
+- **Verification:** a click reports URL/title/content/new-tab effects; if nothing observable changed, `verified` is
+  false with a note instead of claiming success. Downloads report the saved path and SHA-256. Uploads read back the
+  input's file list.
+- **Downloads:** refused unless an approved download action is in progress (unexpected/automatic downloads are cancelled);
+  saved only to the configured download folder (default `<data>/browser-downloads`), never overwriting, executable and script
+  types (.exe, .msi, .bat, .ps1, .js, ...) refused, 100 MB cap.
+- **Authenticated sessions:** optional persistent Mia-only profile (`MIA_BROWSER_PROFILE`) so the owner can log in once; no
+  API reads cookies, storage or passwords. CAPTCHA and access controls are not bypassed. Mia does not type passwords.
+- Configuration: `MIA_BROWSER_EXECUTABLE` selects a Chromium/Chrome binary; downloads/screenshots under the data folder.
+- **Verification status:** all of the above ran against a real headless Chromium 131 (bundled-binary build) on Linux with a
+  local HTTP test server. Real form submission and upload were confirmed by what the server received. Not verified: Windows
+  browsers, persistence of a logged-in profile across restarts (that Chromium build never writes the cookie store, so the
+  restart test skips itself; run it on a full Chrome/Chromium), and real third-party websites.
+- Tests: `tests/test_browser_automation.py` skips when no Chromium is available; set `MIA_TEST_BROWSER=/path/to/chromium`.

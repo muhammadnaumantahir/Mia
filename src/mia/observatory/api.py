@@ -41,6 +41,7 @@ from mia.computer.app_discovery import ApplicationDiscovery
 from mia.computer.applications import ApplicationLauncher, ApplicationLaunchError
 from mia.computer.approvals import ApprovalError, ApprovalStore
 from mia.computer.browser import BrowserAccessError, BrowserController
+from mia.computer.browser_actions import BrowserActions
 from mia.computer.capabilities import PermissionLevel, default_registry
 from mia.computer.environment import detect_environment
 from mia.computer.fileops import FileOperationError, FileOperations
@@ -424,6 +425,48 @@ class IdentityUpdateInput(BaseModel):
     reason: str = Field(default="", max_length=300)
 
 
+class BrowserRefInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ref: str = Field(pattern=r"^e\d{1,3}$")
+
+
+class BrowserFillInput(BrowserRefInput):
+    text: str = Field(max_length=5000)
+
+
+class BrowserSelectInput(BrowserRefInput):
+    value: str = Field(min_length=1, max_length=300)
+
+
+class BrowserCheckInput(BrowserRefInput):
+    checked: bool
+
+
+class BrowserScrollInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    direction: str = Field(default="down", pattern="^(up|down|top|bottom)$")
+    amount: int = Field(default=600, ge=1, le=5000)
+
+
+class BrowserTabInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    url: str | None = Field(default=None, max_length=2000)
+    index: int | None = Field(default=None, ge=0, le=20)
+
+
+class BrowserActionInput(BrowserRefInput):
+    kind: str = Field(pattern="^(click|download|upload)$")
+    root_id: str | None = Field(default=None, max_length=40)
+    relative_path: str | None = Field(default=None, max_length=1000)
+
+
+class BrowserActionExecution(BrowserActionInput):
+    approval_id: str = Field(min_length=32, max_length=32)
+
+
 class TerminalCommandInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -675,8 +718,35 @@ def create_app(
             )
     document_ingestor = DocumentIngestor(computer_files, memory_store)
     app.state.document_ingestor = document_ingestor
-    browser_controller = browser or BrowserController(headless=True)
+    browser_controller = browser or BrowserController(
+        headless=True,
+        executable_path=os.environ.get("MIA_BROWSER_EXECUTABLE") or None,
+        profile_dir=os.environ.get("MIA_BROWSER_PROFILE") or None,
+        download_dir=data_dir / "browser-downloads",
+        screenshot_dir=data_dir / "browser-screenshots",
+    )
     app.state.browser = browser_controller
+    browser_actions = BrowserActions(browser_controller, approval_store, computer_files)
+
+    def _browser_error(exc: Exception) -> HTTPException:
+        if isinstance(exc, BrowserAccessError):
+            return HTTPException(status_code=403, detail=str(exc))
+        if isinstance(exc, ApprovalError):
+            return HTTPException(status_code=409, detail=str(exc))
+        if isinstance(exc, FilesystemAccessError):
+            return HTTPException(status_code=403, detail=str(exc))
+        if isinstance(exc, FileNotFoundError):
+            return HTTPException(status_code=404, detail=str(exc))
+        if isinstance(exc, ValueError):
+            return HTTPException(status_code=422, detail=str(exc))
+        if isinstance(exc, RuntimeError):
+            return HTTPException(status_code=503, detail=str(exc))
+        if type(exc).__name__ == "TimeoutError":
+            return HTTPException(status_code=504, detail="The page did not respond in time")
+        return HTTPException(status_code=502, detail="The browser action failed")
+
+    _BROWSER_ERRORS = (BrowserAccessError, ApprovalError, FilesystemAccessError,
+                       FileNotFoundError, ValueError, RuntimeError, Exception)
     durable_tasks = task_store or TaskStore(data_dir / "mia-tasks.sqlite3")
     autonomy_policy = AutonomyPolicy(
         enabled=os.getenv("MIA_AUTONOMY_ENABLED", "false").strip().lower() == "true",
@@ -1632,6 +1702,122 @@ def create_app(
             layer_id="SPS-10",
             payload={"approval_id": item.approval_id, "selector": item.selector},
         )
+        return result
+
+    @app.get("/api/browser/observe")
+    async def browser_observe() -> dict[str, Any]:
+        try:
+            return await browser_controller.observe()
+        except Exception as exc:
+            raise _browser_error(exc) from exc
+
+    @app.get("/api/browser/find")
+    async def browser_find(query: str) -> dict[str, Any]:
+        try:
+            return {"items": await browser_controller.find(query)}
+        except Exception as exc:
+            raise _browser_error(exc) from exc
+
+    @app.get("/api/browser/extract")
+    async def browser_extract() -> dict[str, Any]:
+        try:
+            return await browser_controller.extract()
+        except Exception as exc:
+            raise _browser_error(exc) from exc
+
+    @app.post("/api/browser/fill")
+    async def browser_fill(item: BrowserFillInput) -> dict[str, Any]:
+        try:
+            return await browser_controller.fill(item.ref, item.text)
+        except Exception as exc:
+            raise _browser_error(exc) from exc
+
+    @app.post("/api/browser/select")
+    async def browser_select(item: BrowserSelectInput) -> dict[str, Any]:
+        try:
+            return await browser_controller.select_option(item.ref, item.value)
+        except Exception as exc:
+            raise _browser_error(exc) from exc
+
+    @app.post("/api/browser/check")
+    async def browser_check(item: BrowserCheckInput) -> dict[str, Any]:
+        try:
+            return await browser_controller.set_checked(item.ref, item.checked)
+        except Exception as exc:
+            raise _browser_error(exc) from exc
+
+    @app.post("/api/browser/scroll")
+    async def browser_scroll(item: BrowserScrollInput) -> dict[str, Any]:
+        try:
+            return await browser_controller.scroll(item.direction, item.amount)
+        except Exception as exc:
+            raise _browser_error(exc) from exc
+
+    @app.get("/api/browser/tabs")
+    async def browser_tabs() -> dict[str, Any]:
+        try:
+            return {"items": await browser_controller.list_tabs()}
+        except Exception as exc:
+            raise _browser_error(exc) from exc
+
+    @app.post("/api/browser/tabs/new", status_code=201)
+    async def browser_tab_new(item: BrowserTabInput) -> dict[str, Any]:
+        try:
+            return await browser_controller.new_tab(item.url)
+        except Exception as exc:
+            raise _browser_error(exc) from exc
+
+    @app.post("/api/browser/tabs/switch")
+    async def browser_tab_switch(item: BrowserTabInput) -> dict[str, Any]:
+        try:
+            if item.index is None:
+                raise ValueError("index is required")
+            return await browser_controller.switch_tab(item.index)
+        except Exception as exc:
+            raise _browser_error(exc) from exc
+
+    @app.post("/api/browser/tabs/close")
+    async def browser_tab_close(item: BrowserTabInput) -> dict[str, Any]:
+        try:
+            if item.index is None:
+                raise ValueError("index is required")
+            return await browser_controller.close_tab(item.index)
+        except Exception as exc:
+            raise _browser_error(exc) from exc
+
+    @app.post("/api/browser/screenshot")
+    async def browser_screenshot() -> dict[str, Any]:
+        try:
+            result = await browser_controller.screenshot()
+        except Exception as exc:
+            raise _browser_error(exc) from exc
+        observatory.record_event(
+            category="computer", event_type="browser_screenshot",
+            summary="Owner-requested browser screenshot captured", outcome="success",
+            layer_id="SPS-10", payload={"bytes": result["bytes"]})
+        return result
+
+    @app.post("/api/browser/actions/preview", status_code=201)
+    async def browser_action_preview(item: BrowserActionInput) -> dict[str, Any]:
+        try:
+            return await browser_actions.preview(
+                item.kind, item.ref, root_id=item.root_id, relative_path=item.relative_path)
+        except Exception as exc:
+            raise _browser_error(exc) from exc
+
+    @app.post("/api/browser/actions/execute")
+    async def browser_action_execute(item: BrowserActionExecution) -> dict[str, Any]:
+        try:
+            result = await browser_actions.execute(
+                item.approval_id, item.kind, item.ref, root_id=item.root_id,
+                relative_path=item.relative_path)
+        except Exception as exc:
+            raise _browser_error(exc) from exc
+        observatory.record_event(
+            category="computer", event_type=f"browser_{item.kind}",
+            summary=f"Approved browser {item.kind}: verified={result.get('verified')}",
+            outcome="success" if result.get("verified") else "failure", layer_id="SPS-10",
+            payload={"approval_id": item.approval_id, "kind": item.kind})
         return result
 
     @app.post("/api/browser/close")
