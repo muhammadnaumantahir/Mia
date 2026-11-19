@@ -57,6 +57,7 @@ def test_explicit_remember_saves_active_owner_provided_with_provenance(tmp_path)
     [
         ("Don't forget this decision: we chose Redis for caching", "decision"),
         ("Remember that my goal is to ship the beta by March", "goal"),
+        ("Remember that I always review pull requests before lunch", "preference"),
         ("Remember that I learned a lesson: always pin dependency versions", "lesson"),
         ("Remember my colleague Sam reviews all releases", "entity"),
         ("Remember that the billing project requires invoicing support", "project"),
@@ -501,3 +502,11 @@ def test_approval_mode_keeps_even_high_confidence_suggestions_pending(tmp_path):
     assert result["saved"] == []
     assert records(store, status="active") == []
     assert store.retrieve_records("favorite editor neovim") == []
+
+
+def test_same_sentence_is_one_memory_whether_suggested_or_stated_explicitly(tmp_path):
+    store, service, conv = make(tmp_path)
+    say(store, service, conv, "I always review pull requests before lunch.")
+    explicit = say(store, service, conv, "Remember that I always review pull requests before lunch.")
+    assert explicit["saved"] == [] and explicit["skipped"][0]["reason"] == "duplicate"
+    assert len(records(store)) == 1 and records(store)[0]["provenance"] == "owner_provided"

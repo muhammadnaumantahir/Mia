@@ -78,6 +78,7 @@ from mia.memory.identity import (
     identity_system_prompt,
     render_identity_prompt,
 )
+from mia.memory.maintenance import MaintenanceService
 from mia.memory.relationships import RelationshipNotFoundError
 from mia.memory.store import MemoryStore
 from mia.memory.structured import RECORD_TYPES, RecordNotFoundError, RecordStateError
@@ -329,6 +330,20 @@ class MemoryCaptureInput(BaseModel):
     text: str = Field(min_length=1, max_length=20_000)
     record_type: str | None = Field(default=None, max_length=20)
     conversation_id: str | None = Field(default=None, max_length=100)
+
+
+class MaintenanceInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    apply: bool = False
+    stale_days: int = Field(default=180, ge=1, le=3650)
+
+
+class ConsolidateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    keep_id: str = Field(min_length=1, max_length=64)
+    merge_ids: list[str] = Field(min_length=1, max_length=50)
 
 
 class ConversationTemporaryInput(BaseModel):
@@ -585,6 +600,10 @@ def create_app(
             return CHAT_SYSTEM_PROMPT, None
 
     capture_service = CaptureService(memory_store)
+    try:  # expired temporary memories are already excluded from retrieval; tidy their status
+        memory_store.structured.expire_due()
+    except Exception:
+        pass
 
     def capture_from_message(
         conversation_id: str, message_id: str, text: str
@@ -3504,6 +3523,29 @@ def create_app(
         return capture_service.remember(
             item.text, record_type=item.record_type, origin_base=origin
         )
+
+    @app.post("/api/memory/maintenance")
+    def run_memory_maintenance(item: MaintenanceInput) -> dict[str, Any]:
+        """Find duplicates, conflicts and stale goals; with apply=true also run the
+        safe expiry sweeps. Nothing else is ever changed automatically."""
+        report = MaintenanceService(memory_store).run(apply=item.apply, stale_days=item.stale_days)
+        if item.apply and (report["expired_temporary"] or report["expired_pending"]):
+            _record_event(
+                "maintenance_applied",
+                "Memory maintenance expired old entries",
+                {"temporary": len(report["expired_temporary"]),
+                 "pending": len(report["expired_pending"])},
+            )
+        return report
+
+    @app.post("/api/memory/records/consolidate")
+    def consolidate_memory_records(item: ConsolidateInput) -> dict[str, Any]:
+        merged = run_record_operation(
+            lambda: MaintenanceService(memory_store).consolidate(item.keep_id, item.merge_ids)
+        )
+        _record_event("records_consolidated", "Owner consolidated duplicate memories",
+                      {"keep_id": item.keep_id, "merged": len(merged)})
+        return {"keep_id": item.keep_id, "merged": merged}
 
     @app.post("/api/memory/records/{record_id}/reject")
     def reject_memory_record(record_id: str) -> dict[str, str]:

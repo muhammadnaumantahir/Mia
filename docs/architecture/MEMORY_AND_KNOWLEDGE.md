@@ -100,6 +100,21 @@ Endpoints: `POST /api/memory/capture`, `POST /api/memory/records/{id}/(edit|appr
 
 Retrieved memory still reaches only local models unless `MIA_ALLOW_REMOTE_FILE_CONTEXT=true`.
 
+## Maintenance and conflict handling (implemented 2026-11-20)
+
+`POST /api/memory/maintenance` (`{"apply": false, "stale_days": 180}`) reports; with `apply: true` it also runs the only two automatic sweeps. Nothing else is ever changed without the owner.
+
+- **Automatic (apply only):** temporary memories past `expires_at` become `expired`; suggestions unreviewed for `pending_retention_days` (default 30) become `expired`. A sweep for expired temporary memories also runs at application start, and expired memories are excluded from retrieval even before a sweep runs.
+- **Reported, never auto-resolved:**
+  - *Duplicate clusters* (same type, token similarity >= 0.8) with a suggested keeper (owner-provided first, then importance, then oldest). `POST /api/memory/records/consolidate` merges on the owner's approval: the copy becomes `superseded` and leaves retrieval and the search index but its text is kept; deleting the kept record later removes the copies too.
+  - *Conflicts*: active records of one type with the same subject or similar wording but different content (`same_subject` / `similar_wording`). Mia does not choose which is true; chat context marks competing records so the model asks the owner, and the owner resolves them by correcting, archiving or deleting.
+  - *Possibly stale* goals and projects (not updated or used for `stale_days`). Decisions, preferences and facts are never flagged by age alone.
+- **Confidence updates:** repeating an automatic suggestion raises its confidence by 0.1 (cap 0.95) without changing its trust label; an owner-provided memory's confidence never changes; stating a suggestion explicitly confirms it (`owner_provided`). Retrieval also gives a small bonus to memories that have proven useful (`use_count`).
+- **History:** corrections create successors, edits snapshot the previous version, merges keep the text, and decisions can only be corrected, never edited in place. A maintenance run was tested not to alter a decision or its history.
+- Duplicate detection at capture time matches across record types (identical text is one memory); conflict detection stays within a type.
+
+Limits: similarity is token overlap, so paraphrases and contradictions with unrelated wording are not detected; maintenance analyses at most 400 active records per type per run (the report says when it truncated); there is no scheduler, so maintenance runs at start-up (expiry only) or when the owner triggers it.
+
 ## Structured memory records (implemented 2026-11-19)
 
 `mia.memory.structured` adds records with a lifecycle, stored in the same SQLite database (`structured_memory` plus an FTS5 index), for things that change or get corrected: **decision, goal, episode, project, entity**.

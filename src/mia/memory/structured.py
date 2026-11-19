@@ -767,6 +767,65 @@ class StructuredMemory:
             ).fetchall()
         return [self._decode(row) for row in rows]
 
+    def due_for_expiry(self, *, now: str | None = None) -> list[str]:
+        """Ids of temporary memories past their expiry (what ``expire_due`` would expire)."""
+        cutoff = _clean_expiry(now) if now else _now()
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT record_id FROM structured_memory "
+                "WHERE temporary = 1 AND expires_at IS NOT NULL AND expires_at <= ? "
+                "AND status IN ('active', 'completed', 'pending', 'outdated')",
+                (cutoff,),
+            ).fetchall()
+        return [str(row["record_id"]) for row in rows]
+
+    def pending_older_than(self, days: int) -> list[str]:
+        """Ids of unreviewed suggestions older than ``days`` days."""
+        cutoff = datetime.fromtimestamp(
+            datetime.now(UTC).timestamp() - days * 86400, UTC
+        ).isoformat()
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT record_id FROM structured_memory WHERE status = 'pending' AND created_at < ?",
+                (cutoff,),
+            ).fetchall()
+        return [str(row["record_id"]) for row in rows]
+
+    def merge_into(self, duplicate_id: str, keep_id: str, *, actor: str = "owner") -> None:
+        """Consolidate a duplicate into the record kept. Nothing is deleted.
+
+        The duplicate becomes ``superseded`` (linked to the kept record) so it leaves
+        retrieval but its text and history remain; deleting the kept record later
+        removes the duplicate with it.
+        """
+        if duplicate_id == keep_id:
+            raise ValueError("cannot merge a record into itself")
+        with self._connect() as db:
+            dup = self._row(db, duplicate_id)
+            keep = self._row(db, keep_id)
+            if dup["record_type"] != keep["record_type"]:
+                raise ValueError("only records of the same type can be consolidated")
+            if dup["status"] not in {"active", "completed"} or keep["status"] not in {
+                "active", "completed",
+            }:
+                raise RecordStateError("both records must be active or completed to consolidate")
+            self._snapshot(db, dup, actor, "consolidate")
+            now = _now()
+            db.execute(
+                "UPDATE structured_memory SET status = 'superseded', superseded_by = ?, "
+                "updated_at = ?, resolved_at = ? WHERE record_id = ?",
+                (keep_id, now, now, duplicate_id),
+            )
+            db.execute("DELETE FROM structured_fts WHERE record_id = ?", (duplicate_id,))
+            AuditLog.write(
+                db,
+                actor=actor,
+                action="record_consolidated",
+                target_type="memory_record",
+                target_id=duplicate_id,
+                detail={"merged_into": keep_id},
+            )
+
     def recent(self, record_types: Iterable[str], limit: int = 12) -> list[dict[str, Any]]:
         """Newest retrievable records of the given types, for contextual references.
 

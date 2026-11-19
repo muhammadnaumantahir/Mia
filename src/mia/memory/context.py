@@ -224,6 +224,7 @@ def _record_weight(record: dict[str, Any], conversation_id: str, now: datetime) 
         weight += 0.1 * (float(record["confidence"]) - 0.5)
     if (record.get("origin") or {}).get("conversation_id") == conversation_id:
         weight += 0.04
+    weight += 0.04 * min(int(record.get("use_count") or 0), 10) / 10  # proven useful
     return weight
 
 

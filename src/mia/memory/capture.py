@@ -115,7 +115,8 @@ _TYPE_HINTS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\b(?:decid\w*|decision|we\s+chose|going\s+with|agreed\s+(?:to|on))\b", re.I), "decision"),
     (re.compile(r"\b(?:lesson|learn(?:ed|t)|mistake|next\s+time|root\s+cause)\b", re.I), "lesson"),
     (re.compile(r"\b(?:goal|aim\s+to|plan\s+to|target|deadline)\b", re.I), "goal"),
-    (re.compile(r"\b(?:prefer\w*|favou?rite|always\s+use|usually|i\s+like\s+to)\b", re.I), "preference"),
+    (re.compile(r"\b(?:prefer\w*|favou?rite|always\s+use|i\s+(?:always|usually|generally|never)|"
+                r"i\s+like\s+to)\b", re.I), "preference"),
     (re.compile(r"\b(?:project|milestone|requirement|feature|repo(?:sitory)?|working\s+on|building)\b", re.I), "project"),
     (re.compile(r"\b(?:happened|met\s+with|yesterday|last\s+(?:week|month)|we\s+(?:discussed|talked))\b", re.I), "episode"),
     (re.compile(r"\bmy\s+(?:friend|colleague|manager|brother|sister|wife|husband|partner|client|mentor)\b", re.I), "entity"),
@@ -275,8 +276,12 @@ class CaptureService:
         origin = {**(origin_base or {}), "capture": "explicit"}
         dup, conflicts, rejected = self._compare(rtype, title, content)
         if dup:
-            result["skipped"].append({"reason": "duplicate", "record_id": dup["record_id"],
-                                      "title": dup["title"]})
+            entry = {"reason": "duplicate", "record_id": dup["record_id"], "title": dup["title"]}
+            # the owner said it again, explicitly: that confirms an earlier suggestion
+            if dup["provenance"] != "owner_provided" and dup["status"] in {"active", "pending"}:
+                self.memory.structured.confirm(dup["record_id"], actor="capture")
+                entry["confirmed"] = True
+            result["skipped"].append(entry)
             return result
         same_subject = [c for c in conflicts if c["title_key_match"]]
         if len(same_subject) == 1 and same_subject[0]["type"] == rtype:
@@ -391,6 +396,7 @@ class CaptureService:
             dup, conflicts, rejected = self._compare(rtype, title, sentence)
             if dup:
                 result["skipped"].append({"reason": "duplicate", "record_id": dup["record_id"]})
+                self._reinforce(dup)
                 continue
             if rejected:
                 result["skipped"].append({"reason": "previously_rejected"})
@@ -417,6 +423,14 @@ class CaptureService:
             (result["saved"] if auto_save else result["pending"]).append(entry)
             if conflicts:
                 result["conflicts"].extend(c["record_id"] for c in conflicts)
+
+    def _reinforce(self, record: dict[str, Any]) -> None:
+        """A repeated mention raises confidence a little (never above 0.95, never trust)."""
+        if record["provenance"] == "owner_provided" or record["confidence"] is None:
+            return
+        raised = min(0.95, float(record["confidence"]) + 0.1)
+        if raised > float(record["confidence"]):
+            self.memory.structured.edit(record["record_id"], confidence=raised, actor="capture")
 
     @staticmethod
     def _match_auto(sentence: str) -> tuple[str, float, str | None] | None:
@@ -461,9 +475,9 @@ class CaptureService:
         conflicts: list[dict[str, Any]] = []
         rejected = False
         for status in ("active", "pending", "rejected"):
-            for rec in self.memory.structured.list(
-                record_type=record_type, status=status, limit=MAX_COMPARE
-            ):
+            # duplicates are matched across record types (the same sentence is the same
+            # memory whatever it is labelled); conflicts only within the same type
+            for rec in self.memory.structured.list(status=status, limit=MAX_COMPARE):
                 sim = similarity(text, rec["body"])
                 same_title = normalise_title(rec["title"]) == title_key
                 if sim >= DUPLICATE_SIMILARITY:
@@ -472,7 +486,8 @@ class CaptureService:
                     elif dup is None:
                         dup = rec
                     continue
-                if status == "active" and (same_title or sim >= CONFLICT_SIMILARITY):
+                if (status == "active" and rec["record_type"] == record_type
+                        and (same_title or sim >= CONFLICT_SIMILARITY)):
                     conflicts.append({"record_id": rec["record_id"], "type": rec["record_type"],
                                       "title_key_match": same_title})
         return dup, conflicts, rejected
