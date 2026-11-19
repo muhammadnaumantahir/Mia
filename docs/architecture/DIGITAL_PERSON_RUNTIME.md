@@ -45,6 +45,25 @@ A cycle may be triggered by:
 
 Each cycle must have a declared goal, time/step budget, model/provider budget, permitted tools and stop condition. It should persist its queue and checkpoint so work can resume safely after a restart without silently replaying side effects.
 
+## Implementation status: first autonomous cycle (2026-11-20)
+
+Implemented in `mia.life` (`store.py`, `runner.py`) and `/api/life/*`; local tests only, no CI result, nothing exercised on the owner's Windows machine.
+
+- **Durable curiosity backlog** (`mia-life.sqlite3`): items with a reason it matters, origin (`owner`, `goal_followup`, ...), expected value, novelty, state (`queued`, `in_progress`, `deferred`, `blocked`, `done`, `rejected`, `dropped`), attempt count and a deduplicating `source_key`. Duplicate open titles are not added twice. Owners add, requeue, reject, drop and delete items; only the runner marks items `done`.
+- **Observation that is not invented:** each cycle derives a follow-up for every *active* goal record not updated for `stale_goal_days` (default 14), keyed on the goal and its last update so it is idempotent. Nothing else is derived yet.
+- **Selection:** the highest score of `0.55*value + 0.2*novelty + 0.15*age - 0.15*attempts` runs next; the formula and numbers are written into the journal entry.
+- **Exploration (permission level 0, read-only, no model, no network):** `MemoryReviewExplorer` checks what Mia's own memory (knowledge, structured records, past messages) already holds about the item. It writes nothing. If it finds related entries the item is `done` with those sources cited; if not, the cycle is `deferred` and the item `blocked` with reason `no_enabled_research_source` instead of fabricating a finding. A goal follow-up never "finds" the goal it came from. **No web research, model reasoning or reflection exists yet**, so the journal says "No external research was performed".
+- **Activity journal** (`activity_journal`): per started cycle - trigger (`schedule`/`event`/`owner`) and detail, goal, item, selection rationale, permission level, policy/budget snapshot, sources, actions, resource record (`model_id`/`provider_id` null, `model_calls` 0, `cost_usd` 0.0 for this explorer), duration, outcome (`completed`, `no_op`, `deferred`, `failed`, `cancelled`), error type only, next step and `notification_decision` (always "none: proactive delivery is not implemented"). Cycles that are gated off are **not** journaled (the API returns the skip reason), so the journal only contains work that started. Identical consecutive no-op cycles coalesce into one entry with `repeat_count`.
+- **Owner controls** (persisted, validated, re-read live): `paused`, `emergency_stop`, `max_cycles_per_day` (24), `min_interval_seconds` (300), `time_budget_seconds` (20), `stale_goal_days`, `max_attempts` (3), `max_cpu_percent` / `max_memory_percent` (85). Corrupted stored settings fall back to paused. Emergency stop also pauses, blocks owner-requested cycles, and clearing it leaves Mia paused until the owner resumes. A pause or stop arriving mid-cycle cancels it: findings are discarded and the item is requeued. The time budget is enforced with a deadline; an explorer exceeding it is recorded as `failed` (the worker thread cannot be force-killed; explorers must honour `context.deadline` / `should_stop`).
+- **Gating:** background cycles need telemetry (`psutil` snapshot) and skip when it is missing, invalid or above the CPU/RAM limits; they also respect the daily cap and minimum interval. An explicit owner `POST /api/life/cycle` bypasses pause, cap, interval and resource gates but never the emergency stop.
+- **Scheduling:** `LifeScheduler` wakes on a timer or an event (an owner-added curiosity item) and runs one cycle. It starts only when `MIA_LIFE_ENABLED=true`, the owner has not paused, and no emergency stop is set (`MIA_LIFE_INTERVAL_SECONDS`, 5-86400, default 300). It is off by default.
+- **Recovery:** at startup, journal cycles left `running` by an earlier process are marked `failed` ("nothing was resumed"), their item is requeued with the attempt counted, and a `cycles_recovered` event is recorded. Leases are per instance; Mia is assumed to run as a single server process.
+- **Audit:** owner actions and finished cycles append Observatory `life` events carrying ids only, never item text.
+
+Endpoints: `GET /api/life/status`, `PUT /api/life/settings`, `POST /api/life/pause|resume|emergency-stop|emergency-stop/clear|cycle`, `GET/POST /api/life/curiosity`, `POST /api/life/curiosity/{id}/state`, `DELETE /api/life/curiosity/{id}`, `GET /api/life/journal[/{id}]`.
+
+Not implemented: web/document exploration, reflection, interest model, quiet hours and per-source/tool scopes, daily spend limits (no paid model is used), proactive conversation delivery and outcome tracking, UI for any of this, automatic creation of curiosity items from conversations or capability gaps, and idle-aware scheduling beyond the CPU/RAM gate.
+
 ## 3. Curiosity and independent exploration
 
 Mia should maintain an inspectable curiosity backlog rather than perform random research to simulate activity.

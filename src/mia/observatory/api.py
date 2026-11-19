@@ -13,6 +13,7 @@ import math
 import os
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -67,6 +68,8 @@ from mia.gateway.factory import apply_daily_cap, build_default_registry, paid_ro
 from mia.gateway.ledger import UsageLedger
 from mia.gateway.service import CompletionResult, ModelGateway
 from mia.knowledge.document_ingestion import DocumentIngestionError, DocumentIngestor
+from mia.life.runner import LifeRunner, LifeScheduler
+from mia.life.store import ITEM_STATES, LifeStore
 from mia.memory.context import ContextPacket, assemble_memory_context
 from mia.memory.identity import (
     IDENTITY_VERSION,
@@ -335,6 +338,30 @@ class MemoryRecordStatus(BaseModel):
     status: str = Field(min_length=1, max_length=20)
 
 
+class LifeSettingsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    max_cycles_per_day: int | None = None
+    min_interval_seconds: int | None = None
+    time_budget_seconds: int | None = None
+    stale_goal_days: int | None = None
+    max_attempts: int | None = None
+    max_cpu_percent: int | None = None
+    max_memory_percent: int | None = None
+
+
+class CuriosityInput(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    why_it_matters: str = Field(min_length=1, max_length=4000)
+    expected_value: float = 0.5
+    novelty: float = 0.5
+
+
+class CuriosityStateInput(BaseModel):
+    state: str = Field(min_length=1, max_length=20)
+    reason: str | None = Field(default=None, max_length=300)
+
+
 class CommunicationStyleInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -451,6 +478,7 @@ def create_app(
     process_manager: ProcessManager | None = None,
     terminal: TerminalExecutor | None = None,
     app_discovery: ApplicationDiscovery | None = None,
+    life: LifeStore | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -1055,6 +1083,177 @@ def create_app(
 
     startup_handlers.append(start_autonomy_runtime)
     shutdown_handlers.append(stop_autonomy_runtime)
+
+    # ---- autonomous life: curiosity backlog, activity journal, owner controls ----
+    life_store = life or LifeStore(data_dir / "mia-life.sqlite3")
+    life_background_enabled = os.getenv("MIA_LIFE_ENABLED", "false").strip().lower() == "true"
+
+    def record_life_cycle(result: dict[str, Any]) -> None:
+        observatory.record_event(
+            category="life",
+            event_type=f"cycle_{result.get('status')}",
+            summary=f"Autonomous cycle finished: {result.get('status')}",
+            outcome="success" if result.get("status") in {"completed", "no_op"} else "warning",
+            layer_id="SPS-05",
+            payload={
+                "cycle_id": result.get("cycle_id"),
+                "item_id": result.get("item_id"),
+                "trigger": result.get("trigger"),
+            },
+        )
+
+    life_runner = LifeRunner(
+        life_store,
+        memory_store,
+        resource_snapshot=resource_monitor_service.snapshot,
+        on_cycle=record_life_cycle,
+    )
+    life_scheduler = LifeScheduler(
+        life_runner, interval_seconds=float(os.getenv("MIA_LIFE_INTERVAL_SECONDS", "300"))
+    )
+    app.state.life_runner = life_runner
+    app.state.life_scheduler = life_scheduler
+
+    def start_life_runtime() -> None:
+        recovered = life_store.recover_interrupted(at_startup=True)
+        if recovered:
+            observatory.record_event(
+                category="life",
+                event_type="cycles_recovered",
+                summary=f"Marked {len(recovered)} interrupted autonomous cycle(s) as failed; none were resumed",
+                outcome="warning",
+                layer_id="SPS-05",
+                payload={"cycle_ids": recovered},
+            )
+        settings = life_store.get_settings()
+        if life_background_enabled and not settings.paused and not settings.emergency_stop:
+            life_scheduler.start()
+
+    def stop_life_runtime() -> None:
+        if not life_scheduler.stop(10.0):
+            observatory.record_event(
+                category="life",
+                event_type="scheduler_shutdown_timeout",
+                summary="Autonomous life scheduler did not stop within its shutdown window",
+                outcome="warning",
+                layer_id="SPS-05",
+            )
+
+    startup_handlers.append(start_life_runtime)
+    shutdown_handlers.append(stop_life_runtime)
+
+    def _life_event(event_type: str, summary: str, payload: dict[str, Any]) -> None:
+        observatory.record_event(
+            category="life", event_type=event_type, summary=summary,
+            outcome="success", layer_id="SPS-05", payload=payload,
+        )
+
+    @app.get("/api/life/status")
+    def life_status() -> dict[str, Any]:
+        return {
+            **life_runner.status(),
+            "background_enabled": life_background_enabled,
+            "scheduler_running": life_scheduler.running,
+        }
+
+    @app.put("/api/life/settings")
+    def update_life_settings(item: LifeSettingsInput) -> dict[str, Any]:
+        changes = item.model_dump(exclude_none=True)
+        if not changes:
+            raise HTTPException(status_code=400, detail="No settings provided")
+        try:
+            updated = life_store.update_settings(changes)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _life_event("settings_changed", "Owner changed autonomous life settings", {"changed": sorted(changes)})
+        return {"settings": asdict(updated)}
+
+    @app.post("/api/life/pause")
+    def pause_life() -> dict[str, Any]:
+        life_store.update_settings({"paused": True})
+        _life_event("paused", "Owner paused autonomous activity", {})
+        return {"paused": True}
+
+    @app.post("/api/life/resume")
+    def resume_life() -> dict[str, Any]:
+        if life_store.get_settings().emergency_stop:
+            raise HTTPException(status_code=409, detail="Clear the emergency stop before resuming")
+        life_store.update_settings({"paused": False})
+        if life_background_enabled:
+            life_scheduler.start()
+        _life_event("resumed", "Owner resumed autonomous activity", {"background": life_background_enabled})
+        return {"paused": False, "scheduler_running": life_scheduler.running}
+
+    @app.post("/api/life/emergency-stop")
+    def life_emergency_stop() -> dict[str, Any]:
+        # Also pauses, so clearing the stop never silently restarts autonomous work.
+        life_store.update_settings({"emergency_stop": True, "paused": True})
+        _life_event("emergency_stop", "Owner triggered the autonomous life emergency stop", {})
+        return {"emergency_stop": True, "paused": True}
+
+    @app.post("/api/life/emergency-stop/clear")
+    def clear_life_emergency_stop() -> dict[str, Any]:
+        life_store.update_settings({"emergency_stop": False})
+        _life_event("emergency_stop_cleared", "Owner cleared the emergency stop; activity stays paused", {})
+        return {"emergency_stop": False, "paused": life_store.get_settings().paused}
+
+    @app.get("/api/life/curiosity")
+    def list_curiosity(state: str | None = None, limit: int = 100) -> dict[str, Any]:
+        if state is not None and state not in ITEM_STATES:
+            raise HTTPException(status_code=400, detail="Unknown state")
+        return {"items": life_store.list_items(state=state, limit=limit)}
+
+    @app.post("/api/life/curiosity", status_code=201)
+    def add_curiosity(item: CuriosityInput) -> dict[str, Any]:
+        try:
+            item_id, created = life_store.add_item(
+                title=item.title, why_it_matters=item.why_it_matters, origin="owner",
+                expected_value=item.expected_value, novelty=item.novelty,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if created:
+            _life_event("curiosity_added", "Owner added a curiosity item", {"item_id": item_id})
+            if life_scheduler.running:
+                life_scheduler.wake("owner added a curiosity item")
+        return {"item_id": item_id, "created": created}
+
+    @app.post("/api/life/curiosity/{item_id}/state")
+    def set_curiosity_state(item_id: str, item: CuriosityStateInput) -> dict[str, str]:
+        if item.state not in {"queued", "rejected", "dropped"}:
+            raise HTTPException(status_code=400, detail="Owners can requeue, reject or drop an item")
+        try:
+            life_store.set_item_state(
+                item_id, item.state, reason=item.reason or f"owner set {item.state}",
+                reset_attempts=item.state == "queued",
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Item not found") from exc
+        _life_event("curiosity_state_changed", f"Owner set a curiosity item to {item.state}",
+                    {"item_id": item_id, "state": item.state})
+        return {"item_id": item_id, "state": item.state}
+
+    @app.delete("/api/life/curiosity/{item_id}")
+    def delete_curiosity(item_id: str) -> dict[str, bool]:
+        deleted = life_store.delete_item(item_id)
+        if deleted:
+            _life_event("curiosity_deleted", "Owner deleted a curiosity item", {"item_id": item_id})
+        return {"deleted": deleted}
+
+    @app.post("/api/life/cycle")
+    async def run_life_cycle() -> dict[str, Any]:
+        return await run_in_threadpool(life_runner.run_cycle, "owner", "owner requested a cycle")
+
+    @app.get("/api/life/journal")
+    def life_journal(limit: int = 50, outcome: str | None = None) -> dict[str, Any]:
+        return {"entries": life_store.list_journal(limit=limit, outcome=outcome)}
+
+    @app.get("/api/life/journal/{cycle_id}")
+    def life_journal_entry(cycle_id: str) -> dict[str, Any]:
+        entry = life_store.get_cycle(cycle_id)
+        if entry is None:
+            raise HTTPException(status_code=404, detail="Journal entry not found")
+        return entry
 
     @app.get("/health")
     def health() -> dict[str, str]:
