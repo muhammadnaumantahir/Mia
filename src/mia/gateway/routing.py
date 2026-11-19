@@ -64,6 +64,38 @@ def actual_cost_usd(
     return total if math.isfinite(total) else None
 
 
+def ineligibility_reason(
+    candidate: ModelCandidate,
+    request: ModelRequest,
+    policy: RoutePolicy,
+    *,
+    needed_tokens: int,
+    budget_is_valid: bool,
+) -> tuple[str | None, float]:
+    """Why a candidate cannot serve the request (None if it can) and its estimated cost."""
+    if not candidate.enabled:
+        return "disabled", 0.0
+    if not candidate.healthy:
+        return "unhealthy", 0.0
+    missing = request.required_capabilities - candidate.capabilities
+    if missing:
+        return "missing capabilities: " + ", ".join(sorted(missing)), 0.0
+    if candidate.context_window < needed_tokens:
+        return "context window too small", 0.0
+    if candidate.quota_remaining is not None and candidate.quota_remaining <= 0:
+        return "quota exhausted", 0.0
+    if candidate.free_tier:
+        return None, 0.0
+    if not policy.allow_paid or not budget_is_valid:
+        return "paid route not permitted", 0.0
+    estimated_cost = estimate_cost_usd(candidate, request)
+    if estimated_cost is None:
+        return "price unknown", 0.0
+    if estimated_cost > policy.max_request_cost_usd:
+        return "over per-request budget", estimated_cost
+    return None, estimated_cost
+
+
 def rank_candidates(
     candidates: list[ModelCandidate],
     request: ModelRequest,
@@ -76,38 +108,22 @@ def rank_candidates(
     This function does not make requests or rotate credentials.
     """
     eligible: list[tuple[tuple[float, float, float], ModelCandidate]] = []
-    input_tokens = request.estimated_input_tokens or max(
-        1, len(request.prompt) // 4
-    )
+    input_tokens = request.estimated_input_tokens or max(1, len(request.prompt) // 4)
     if input_tokens < 0 or request.max_output_tokens < 0:
         return []
     needed_tokens = input_tokens + request.max_output_tokens
-    budget_is_valid = (
-        math.isfinite(policy.max_request_cost_usd)
-        and policy.max_request_cost_usd >= 0
-    )
+    budget_is_valid = math.isfinite(policy.max_request_cost_usd) and policy.max_request_cost_usd >= 0
 
     for candidate in candidates:
-        if not candidate.enabled or not candidate.healthy:
+        reason, estimated_cost = ineligibility_reason(
+            candidate,
+            request,
+            policy,
+            needed_tokens=needed_tokens,
+            budget_is_valid=budget_is_valid,
+        )
+        if reason is not None:
             continue
-        if not request.required_capabilities.issubset(candidate.capabilities):
-            continue
-        if candidate.context_window < needed_tokens:
-            continue
-        if candidate.quota_remaining is not None and candidate.quota_remaining <= 0:
-            continue
-
-        if candidate.free_tier:
-            estimated_cost = 0.0
-        else:
-            if not policy.allow_paid or not budget_is_valid:
-                continue
-            estimated_cost = estimate_cost_usd(candidate, request)
-            if estimated_cost is None:
-                continue
-            if estimated_cost > policy.max_request_cost_usd:
-                continue
-
         sort_key = (
             estimated_cost,
             -max(0.0, min(1.0, candidate.reliability_score)),

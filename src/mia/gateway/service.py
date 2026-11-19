@@ -21,7 +21,8 @@ from .contracts import (
 from .health import CandidateHealthTracker
 from .model_registry import ModelRegistry
 from .registry import ProviderRegistry
-from .routing import actual_cost_usd, rank_candidates
+from .routing import actual_cost_usd
+from .selection import DecisionLog, RoutingPreferences, select
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,10 +85,37 @@ class ModelGateway:
         providers: ProviderRegistry,
         health: CandidateHealthTracker | None = None,
         model_registry: ModelRegistry | None = None,
+        preferences: RoutingPreferences | None = None,
+        decisions: DecisionLog | None = None,
     ) -> None:
         self.providers = providers
         self.health = health or CandidateHealthTracker()
         self.model_registry = model_registry
+        self.preferences = preferences or RoutingPreferences()
+        self.decisions = decisions or DecisionLog()
+
+    def set_preferences(self, preferences: RoutingPreferences) -> None:
+        """Replace routing preferences after validating them."""
+        pinned = preferences.pinned
+        if pinned is not None and (pinned.count("/") < 1 or len(pinned) > 300):
+            raise ValueError("pinned model must be 'provider/model'")
+        for key, value in preferences.preferences.items():
+            if isinstance(value, bool) or not isinstance(value, int) or not -10 <= value <= 10:
+                raise ValueError(f"preference for {key!r} must be an integer from -10 to 10")
+        self.preferences = preferences
+
+    def _rank(
+        self,
+        candidates: list[ModelCandidate],
+        request: ModelRequest,
+        policy: RoutePolicy,
+        order_hint: list[ModelCandidate] | tuple[ModelCandidate, ...] | None,
+    ) -> list[ModelCandidate]:
+        ordered, decision = select(
+            candidates, request, policy, self.preferences, hint=order_hint
+        )
+        self.decisions.add(decision)
+        return ordered
 
     def _order_by_health(self, ranked: list[ModelCandidate]) -> list[ModelCandidate]:
         """Drop rate-limited candidates, then put degraded ones after healthy ones.
@@ -189,7 +217,7 @@ class ModelGateway:
         order_hint: list[ModelCandidate] | tuple[ModelCandidate, ...] | None = None,
     ) -> CompletionResult:
         ranked = self._order_by_health(
-            self._apply_order_hint(rank_candidates(candidates, request, policy), order_hint)
+            self._rank(candidates, request, policy, order_hint)
         )
         attempted: list[str] = []
         last_error: Exception | None = None
@@ -244,7 +272,7 @@ class ModelGateway:
         a stream() method, and tool-bearing requests, use one buffered call.
         """
         ranked = self._order_by_health(
-            self._apply_order_hint(rank_candidates(candidates, request, policy), order_hint)
+            self._rank(candidates, request, policy, order_hint)
         )
         attempted: list[str] = []
         last_error: Exception | None = None

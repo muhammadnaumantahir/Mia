@@ -100,3 +100,19 @@ None of these is marked "verified live".
   the API app wires it in. Not yet done: runtime capability *testing* that writes
   `tested` rows, an HTTP API for registry administration, discovery caching/TTL.
   Local verification: `ruff` clean, `pytest` 718 passed, 1 skipped (mocked only).
+- **Milestone 5 (routing modes, pinning, privacy, decision records):** new
+  `gateway/selection.py` and a shared `ineligibility_reason` in `gateway/routing.py`
+  (`rank_candidates` behaviour unchanged). Modes: `free_first` (default, identical to
+  the previous order), `local_first`, `best_quality` (a heuristic proxy: preference,
+  then context window, then reliability; there is no benchmark data), `lowest_latency`
+  and `manual`. A pinned model goes first, with fallbacks unless disabled; if it cannot
+  serve the request (missing mandatory capability, unavailable, barred by privacy) the
+  override is explained in the decision. `ModelRequest.sensitive` plus
+  `allow_remote_for_sensitive=False` (default) and `local_only` keep private content on
+  local models, and nothing is chosen rather than leaking to a remote model. Decisions
+  (selected, reason, ranked, rejected with reasons, overrides) are kept in a bounded
+  in-memory `DecisionLog` and contain no prompt text. **Not yet done:** preferences are
+  in-memory only (no persistence or HTTP API), no caller sets `sensitive` yet (Voice and
+  Memory wiring is a later milestone), and the task-aware hint from `brain/router.py` is
+  unchanged. The baseline grew to 942 tests when the rebase pulled in other work on
+  `main`; after this milestone: `ruff` clean, `pytest` 957 passed, 1 skipped (mocked).
