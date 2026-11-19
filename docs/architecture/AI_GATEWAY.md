@@ -68,9 +68,20 @@ The chat tool loop withholds file and knowledge contents from non-local provider
 - Cost: free-tier routes record 0. Paid routes use reported tokens times the candidate prices; with no reported usage the worst-case estimate is recorded so spend is never undercounted. Invalid prices produce no cost value and such routes are already ineligible.
 - `UsageLedger` (SQLite `mia-usage.sqlite3` in `MIA_DATA_DIR`) is append-only. `GET /api/gateway/usage?days=N` returns totals per provider/model and today's UTC spend.
 - Daily cap: `MIA_MAX_DAILY_SPEND_USD` (optional) is enforced at runtime on top of `MIA_MAX_REQUEST_SPEND_USD`. Each request's cap is `min(per-request cap, remaining daily budget)`; once spend reaches the cap, paid routing is disabled. A malformed, non-finite or negative value disables paid routing. Paid routing still requires `MIA_ALLOW_PAID=true`.
-- Not yet done: streaming tool calls, a UI for the stream and usage view, per-provider rate-limit tracking, and mid-stream cost cut-off for paid models.
+- Not yet done: streaming tool calls, a UI for the stream and usage view, a UI for the health view, rate-limit tracking from response headers beyond Retry-After (e.g. remaining-quota headers feeding `quota_remaining`), and mid-stream cost cut-off for paid models.
 
 ## Latency measurement
 
 The gateway times the provider call that actually succeeded (failed fallback attempts are not included). Buffered calls record `total_ms`; streamed calls also record `first_token_ms` (request start to first text). Timestamps are taken when a chunk is received, and time the generator spends suspended while the consumer handles an earlier chunk is subtracted, so a slow browser does not look like a slow model. The ledger stores only finite, non-negative values (otherwise NULL), `GET /api/gateway/usage` shows per-model average latency, and the stream `done` event carries both numbers. Daily experiment snapshots add count, mean, median and nearest-rank p95 for the window, and write median and p95 as daily metrics; the report keeps these per day and does not add them up. Requests with no measurement are excluded from the statistics. Not measured: queueing before the gateway, network time to the browser, and tokens per second. Local timings depend on the host's load and model state, so only same-host comparisons mean anything.
 
+## Rate-limit tracking and failure backoff
+
+`ModelGateway` owns a `CandidateHealthTracker` (`src/mia/gateway/health.py`), keyed by `provider/model`, so a failing candidate is not retried first on every request.
+
+- **Throttle (HTTP 429, or 503 with `Retry-After`)** — the candidate is *blocked* until the provider-advised wait elapses (`Retry-After` as delta-seconds or HTTP-date; capped at 900 s; with no usable header it falls back to the exponential backoff below). Mia never retries inside a provider's advised wait.
+- **Other transient failures (timeout, 5xx, connection error)** — the candidate is *degraded*: tried after healthy candidates with exponential backoff (5 s doubling, capped at 300 s), but never excluded, so a lone local Ollama model stays usable after a blip.
+- **Success** clears the record. **Permanent errors** (4xx) are request-specific and are not recorded.
+- If every eligible candidate is blocked, the gateway raises a `TransientProviderError` carrying the shortest remaining wait without calling any provider. `POST /api/gateway/chat` turns that into HTTP 503 with a `Retry-After` header; the stream `error` event carries `retry_after_seconds`.
+- `GET /api/gateway/health` lists candidates that are currently rate limited, backing off or recovering. Invalid header values (negative, NaN, infinite, unparsable) are discarded.
+
+State is process-local and not persisted; a restart resets it. This does not rotate keys or accounts to evade limits. The failure ordering applies after the cost/reliability ranking, so paid-route eligibility and spending caps are unchanged. Verified by `tests/test_gateway_health.py` (injected clock, httpx responses via respx, and API round trips); not exercised against a live rate-limited provider.

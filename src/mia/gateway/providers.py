@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import math
 import uuid
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 from .contracts import (
@@ -34,13 +37,42 @@ def _usage(input_tokens: Any, output_tokens: Any) -> TokenUsage | None:
     return TokenUsage(prompt, completion)
 
 
+def _retry_after_seconds(response: Any) -> float | None:
+    """Parse a Retry-After header (delta-seconds or HTTP-date); None if absent/invalid."""
+    try:
+        raw = response.headers.get("retry-after")
+    except AttributeError:
+        return None
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    raw = raw.strip()
+    try:
+        seconds = float(raw)
+    except ValueError:
+        try:
+            when = parsedate_to_datetime(raw)
+        except (TypeError, ValueError):
+            return None
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=UTC)
+        seconds = (when - datetime.now(UTC)).total_seconds()
+    if not math.isfinite(seconds):
+        return None
+    return max(0.0, seconds)
+
+
 def _http_error(name: str, exc: Exception, httpx: Any) -> Exception:
     if isinstance(exc, httpx.TimeoutException):
         return TransientProviderError(f"{name} request timed out")
     if isinstance(exc, httpx.HTTPStatusError):
         status = exc.response.status_code
         if status == 429 or status >= 500:
-            return TransientProviderError(f"{name} returned transient HTTP {status}")
+            retry_after = _retry_after_seconds(exc.response)
+            return TransientProviderError(
+                f"{name} returned transient HTTP {status}",
+                retry_after=retry_after,
+                rate_limited=status == 429 or retry_after is not None,
+            )
         return PermanentProviderError(f"{name} rejected the request with HTTP {status}")
     return TransientProviderError(f"{name} request failed")
 
@@ -168,18 +200,8 @@ class OllamaProvider:
                 response = await client.post(f"{self.base_url}/api/chat", json=body)
                 response.raise_for_status()
                 payload = response.json()
-        except httpx.TimeoutException as exc:
-            raise TransientProviderError("Ollama request timed out") from exc
-        except httpx.HTTPStatusError as exc:
-            if exc.response.status_code >= 500 or exc.response.status_code == 429:
-                raise TransientProviderError(
-                    f"Ollama returned transient HTTP {exc.response.status_code}"
-                ) from exc
-            raise PermanentProviderError(
-                f"Ollama rejected the request with HTTP {exc.response.status_code}"
-            ) from exc
         except httpx.HTTPError as exc:
-            raise TransientProviderError("Ollama request failed") from exc
+            raise _http_error("Ollama", exc, httpx) from exc
         except ValueError as exc:
             raise PermanentProviderError("Ollama returned invalid JSON") from exc
 
@@ -372,21 +394,8 @@ class OpenAICompatibleProvider:
                 )
                 response.raise_for_status()
                 payload = response.json()
-        except httpx.TimeoutException as exc:
-            raise TransientProviderError(
-                f"{self.provider_id} request timed out"
-            ) from exc
-        except httpx.HTTPStatusError as exc:
-            status = exc.response.status_code
-            if status == 429 or status >= 500:
-                raise TransientProviderError(
-                    f"{self.provider_id} returned transient HTTP {status}"
-                ) from exc
-            raise PermanentProviderError(
-                f"{self.provider_id} rejected the request with HTTP {status}"
-            ) from exc
         except httpx.HTTPError as exc:
-            raise TransientProviderError(f"{self.provider_id} request failed") from exc
+            raise _http_error(self.provider_id, exc, httpx) from exc
         except ValueError as exc:
             raise PermanentProviderError(
                 f"{self.provider_id} returned invalid JSON"

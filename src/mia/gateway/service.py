@@ -17,6 +17,7 @@ from .contracts import (
     TokenUsage,
     TransientProviderError,
 )
+from .health import CandidateHealthTracker
 from .registry import ProviderRegistry
 from .routing import actual_cost_usd, rank_candidates
 
@@ -53,9 +54,45 @@ class StreamEvent:
     total_ms: float | None = None
 
 
+def _aggregate_failure(attempted: list[str], last_error: Exception) -> TransientProviderError:
+    """Summarise an exhausted fallback chain, keeping the last throttle's retry hint."""
+    throttled = isinstance(last_error, TransientProviderError) and last_error.rate_limited
+    return TransientProviderError(
+        f"All eligible candidates failed. Tried: {', '.join(attempted)}",
+        retry_after=last_error.retry_after if throttled else None,  # type: ignore[union-attr]
+        rate_limited=throttled,
+    )
+
+
 class ModelGateway:
-    def __init__(self, providers: ProviderRegistry) -> None:
+    def __init__(
+        self,
+        providers: ProviderRegistry,
+        health: CandidateHealthTracker | None = None,
+    ) -> None:
         self.providers = providers
+        self.health = health or CandidateHealthTracker()
+
+    def _order_by_health(self, ranked: list[ModelCandidate]) -> list[ModelCandidate]:
+        """Drop rate-limited candidates, then put degraded ones after healthy ones.
+
+        The router's cost/reliability order is preserved within each group.
+        Raises TransientProviderError (rate_limited) when every eligible
+        candidate is inside a provider-advised wait, so callers can say when to retry.
+        """
+        if not ranked:
+            return ranked
+        usable = [c for c in ranked if not self.health.is_blocked(c)]
+        if not usable:
+            wait = min(self.health.blocked_for(c) for c in ranked)
+            raise TransientProviderError(
+                f"All eligible models are rate limited; retry in about {int(wait) + 1}s",
+                retry_after=wait,
+                rate_limited=True,
+            )
+        healthy = [c for c in usable if not self.health.is_degraded(c)]
+        degraded = [c for c in usable if self.health.is_degraded(c)]
+        return healthy + degraded
 
     async def discover_models(self) -> list[ModelCandidate]:
         """Discover from all usable providers; one offline provider must not block others."""
@@ -73,7 +110,7 @@ class ModelGateway:
         candidates: list[ModelCandidate],
         policy: RoutePolicy = RoutePolicy(),
     ) -> CompletionResult:
-        ranked = rank_candidates(candidates, request, policy)
+        ranked = self._order_by_health(rank_candidates(candidates, request, policy))
         attempted: list[str] = []
         last_error: Exception | None = None
 
@@ -88,6 +125,7 @@ class ModelGateway:
                     response = ProviderResponse(content=response)
                 if not response.content and not response.tool_calls:
                     raise PermanentProviderError("Provider returned an empty response")
+                self.health.record_success(candidate)
                 return CompletionResult(
                     provider_id=candidate.provider_id,
                     model_id=candidate.model_id,
@@ -101,15 +139,14 @@ class ModelGateway:
                     latency_ms=latency_ms,
                 )
             except TransientProviderError as exc:
+                self.health.record_failure(candidate, exc)
                 last_error = exc
                 continue
             except PermanentProviderError:
                 raise
 
         if last_error:
-            raise TransientProviderError(
-                f"All eligible candidates failed. Tried: {', '.join(attempted)}"
-            ) from last_error
+            raise _aggregate_failure(attempted, last_error) from last_error
         raise RuntimeError("No eligible model is available under the current routing policy")
 
     async def stream(
@@ -125,7 +162,7 @@ class ModelGateway:
         partial output is never silently mixed across models. Providers without
         a stream() method, and tool-bearing requests, use one buffered call.
         """
-        ranked = rank_candidates(candidates, request, policy)
+        ranked = self._order_by_health(rank_candidates(candidates, request, policy))
         attempted: list[str] = []
         last_error: Exception | None = None
 
@@ -182,6 +219,7 @@ class ModelGateway:
                             final = chunk
                     if not text_parts:
                         raise PermanentProviderError("Provider returned an empty response")
+                self.health.record_success(candidate)
                 yield StreamEvent(
                     done=True,
                     provider_id=candidate.provider_id,
@@ -199,13 +237,12 @@ class ModelGateway:
                 )
                 return
             except TransientProviderError as exc:
+                self.health.record_failure(candidate, exc)
                 if emitted:
                     raise
                 last_error = exc
                 continue
 
         if last_error:
-            raise TransientProviderError(
-                f"All eligible candidates failed. Tried: {', '.join(attempted)}"
-            ) from last_error
+            raise _aggregate_failure(attempted, last_error) from last_error
         raise RuntimeError("No eligible model is available under the current routing policy")

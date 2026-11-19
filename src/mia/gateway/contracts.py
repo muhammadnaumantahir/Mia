@@ -65,7 +65,29 @@ class RoutePolicy:
 
 
 class TransientProviderError(RuntimeError):
-    """A provider failure for which trying the next eligible candidate is safe."""
+    """A provider failure for which trying the next eligible candidate is safe.
+
+    ``rate_limited`` marks an explicit provider throttle (HTTP 429, or a 503
+    that carries Retry-After); ``retry_after`` is the provider-advised wait in
+    seconds. Invalid values (negative, NaN, infinite) are discarded, never trusted.
+    """
+
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        retry_after: float | None = None,
+        rate_limited: bool = False,
+    ) -> None:
+        super().__init__(message)
+        valid = (
+            isinstance(retry_after, (int, float))
+            and not isinstance(retry_after, bool)
+            and retry_after == retry_after  # not NaN
+            and 0 <= retry_after < float("inf")
+        )
+        self.retry_after: float | None = float(retry_after) if valid else None
+        self.rate_limited = bool(rate_limited)
 
 
 class PermanentProviderError(RuntimeError):

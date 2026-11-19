@@ -9,6 +9,7 @@ import ast
 import asyncio
 import hashlib
 import json
+import math
 import os
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
@@ -2659,13 +2660,25 @@ def create_app(
                     memory_store.append_message(
                         conversation_id, "assistant", "".join(parts) + "\n[response interrupted]"
                     )
-                yield sse("error", {"detail": str(exc), "partial": bool(parts)})
+                retry_after = getattr(exc, "retry_after", None)
+                yield sse("error", {
+                    "detail": str(exc),
+                    "partial": bool(parts),
+                    "retry_after_seconds": (
+                        retry_after if getattr(exc, "rate_limited", False) else None
+                    ),
+                })
 
         return StreamingResponse(
             events(),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
+
+    @app.get("/api/gateway/health")
+    def gateway_health() -> dict[str, Any]:
+        """Candidates currently rate limited or backing off after transient failures."""
+        return {"items": model_gateway.health.snapshot()}
 
     @app.get("/api/gateway/providers")
     async def providers() -> dict[str, Any]:
@@ -2850,7 +2863,12 @@ def create_app(
                         "The actions listed below still require your approval."
                     )
         except TransientProviderError as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
+            headers = (
+                {"Retry-After": str(max(1, math.ceil(exc.retry_after)))}
+                if exc.rate_limited and exc.retry_after is not None
+                else None
+            )
+            raise HTTPException(status_code=503, detail=str(exc), headers=headers) from exc
         except PermanentProviderError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         except RuntimeError as exc:
