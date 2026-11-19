@@ -621,6 +621,34 @@ def create_app(
                 },
             )
         return outcome if (outcome["processed"] or outcome["skipped"]) else None
+
+    def record_reply_usage(
+        conversation_id: str, reply_id: str, references: list[dict[str, Any]]
+    ) -> None:
+        """Remember which memories a reply used. Failure never loses the reply."""
+        if not references:
+            return
+        try:
+            normalised = [
+                {**ref, "ref_type": "record" if ref.get("ref_type") == "structured"
+                 else ref.get("ref_type")}
+                for ref in references
+            ]
+            memory_store.usage.record(
+                conversation_id=conversation_id, reply_id=reply_id, references=normalised
+            )
+            memory_store.structured.mark_used(
+                [ref["ref_id"] for ref in normalised if ref["ref_type"] == "record"]
+            )
+        except Exception:
+            observatory.record_event(
+                category="memory",
+                event_type="usage_log_failure",
+                summary="Could not record which memories the reply used",
+                outcome="error",
+                layer_id="SPS-05",
+                payload={"conversation_id": conversation_id},
+            )
     document_ingestor = DocumentIngestor(computer_files, memory_store)
     app.state.document_ingestor = document_ingestor
     browser_controller = browser or BrowserController(headless=True)
@@ -3854,7 +3882,8 @@ def create_app(
                         yield sse("delta", {"text": event.delta})
                         continue
                     text = "".join(parts)
-                    memory_store.append_message(conversation_id, "assistant", text)
+                    reply_id = memory_store.append_message(conversation_id, "assistant", text)
+                    record_reply_usage(conversation_id, reply_id, context_refs)
                     try:
                         ledger.record(
                             provider_id=event.provider_id,
@@ -3907,6 +3936,7 @@ def create_app(
                         "total_ms": event.total_ms,
                         "context_references": context_refs,
                         "memory_capture": capture_result,
+                        "reply_id": reply_id,
                     })
             except (TransientProviderError, PermanentProviderError, RuntimeError, KeyError) as exc:
                 if parts:  # keep what the owner already saw, marked incomplete
@@ -4144,7 +4174,8 @@ def create_app(
             else:
                 final_content = "I could not produce a response for this request."
 
-        memory_store.append_message(conversation_id, "assistant", final_content)
+        reply_id = memory_store.append_message(conversation_id, "assistant", final_content)
+        record_reply_usage(conversation_id, reply_id, context_refs)
         observatory.record_event(
             category="ai_gateway",
             event_type="completion",
@@ -4169,6 +4200,7 @@ def create_app(
             "pending_actions": pending_actions,
             "context_references": context_refs,
             "memory_capture": capture_result,
+            "reply_id": reply_id,
         }
 
     return app

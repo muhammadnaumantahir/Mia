@@ -767,6 +767,32 @@ class StructuredMemory:
             ).fetchall()
         return [self._decode(row) for row in rows]
 
+    def recent(self, record_types: Iterable[str], limit: int = 12) -> list[dict[str, Any]]:
+        """Newest retrievable records of the given types, for contextual references.
+
+        Used when a request refers to memory without naming it ("what did we decide
+        last time?"). Same retrievability rules as ``retrieve``: active or completed,
+        not archived, not past expiry.
+        """
+        types = [t for t in record_types if t in RECORD_TYPES]
+        if not types:
+            return []
+        marks = ",".join("?" for _ in types)
+        with self._connect() as db:
+            rows = db.execute(
+                f"""
+                SELECT * FROM structured_memory
+                WHERE record_type IN ({marks})
+                  AND status IN ('active', 'completed')
+                  AND archived_at IS NULL
+                  AND (expires_at IS NULL OR expires_at > ?)
+                ORDER BY importance DESC, updated_at DESC
+                LIMIT ?
+                """,  # noqa: S608 - placeholders only
+                (*types, _now(), max(1, min(int(limit), 50))),
+            ).fetchall()
+        return [self._decode(row) for row in rows]
+
     def source_message_ids(self, record_id: str, *, chain: bool = True) -> list[str]:
         """Chat messages that records in this record's correction chain were captured from."""
         with self._connect() as db:

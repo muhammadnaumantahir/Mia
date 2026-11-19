@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -36,6 +36,49 @@ _RECORD_PROVENANCE = {
     "hypothesis": ("hypothesis (unverified)", -0.05),
 }
 _RECORD_TYPE_WEIGHT = {"decision": 0.08, "goal": 0.08, "project": 0.04}
+
+# Requests that point at memory without naming it. Each maps to the record types that
+# usually answer it; matching records are pulled by type and recency, not by keywords.
+_CONTEXT_INTENTS: tuple[tuple[re.Pattern[str], frozenset[str]], ...] = (
+    (re.compile(
+        r"\b(?:continue|resume|pick\s+up|back\s+to|carry\s+on)\b.*\b(?:project|work|feature|task)\b"
+        r"|\b(?:previous|last|earlier)\s+project\b|\bwhere\s+did\s+we\s+leave\s+off\b", re.I),
+     frozenset({"project", "goal", "decision"})),
+    (re.compile(
+        r"\bwhat\s+did\s+we\s+(?:decide|agree|choose)\b|\bwhat\s+was\s+decided\b"
+        r"|\b(?:our|the|last|previous|earlier)\s+decisions?\b", re.I),
+     frozenset({"decision"})),
+    (re.compile(
+        r"\b(?:as\s+usual|my\s+usual|my\s+(?:usual\s+)?preferences?|my\s+preferred|"
+        r"the\s+way\s+i\s+like|same\s+as\s+(?:always|before)|usual\s+preferences?)\b", re.I),
+     frozenset({"preference"})),
+    (re.compile(
+        r"\b(?:problem|issue|bug|error|failure|trouble)\b.*\b(?:earlier|before|last\s+time|"
+        r"encountered|ran\s+into)\b|\bwhat\s+went\s+wrong\b|\bwhat\s+was\s+the\s+(?:problem|issue)\b",
+        re.I),
+     frozenset({"lesson", "episode", "project"})),
+    (re.compile(
+        r"\b(?:current\s+state|current\s+status|status|progress)\b.*\b(?:feature|project|work|goal)\b",
+        re.I),
+     frozenset({"project", "goal", "decision"})),
+    (re.compile(r"\bmy\s+goals?\b|\bwhat\s+am\s+i\s+(?:working\s+toward|aiming)\b", re.I),
+     frozenset({"goal"})),
+)
+INTENT_RECORD_CAP = 6
+INTENT_POOL = 12
+LINKED_LIMIT = 4
+
+
+def detect_context_intent(prompt: str) -> frozenset[str]:
+    """Record types a contextual reference such as "what did we decide?" points at."""
+    types: set[str] = set()
+    for pattern, record_types in _CONTEXT_INTENTS:
+        if pattern.search(prompt):
+            types |= record_types
+    return frozenset(types)
+
+
+Reranker = Callable[[str, list[dict[str, Any]]], dict[str, float]]
 
 _ROLE_TAG = re.compile(
     r"<\s*/?\s*(?:memory_[a-z_]*|mia_[a-z_]*|system|assistant|user|tool|developer)\b[^>]*>",
@@ -164,8 +207,61 @@ def _recency(timestamp: str, now: datetime) -> float:
     return 0.15 * math.exp(-_age_days(timestamp, now) / 90.0)
 
 
+def _record_weight(record: dict[str, Any], conversation_id: str, now: datetime) -> float:
+    """Trust, type, recency, importance and confidence for a structured record.
+
+    Importance and confidence are centred on 0.5 so a default record is neutral; an
+    owner-marked-important record rises and a low-confidence suggestion falls.
+    """
+    _, trust = _RECORD_PROVENANCE.get(record["provenance"], ("", 0.0))
+    weight = (
+        trust
+        + _RECORD_TYPE_WEIGHT.get(record["record_type"], 0.0)
+        + _recency(record["updated_at"], now)
+        + 0.12 * (float(record.get("importance", 0.5)) - 0.5)
+    )
+    if record.get("confidence") is not None:
+        weight += 0.1 * (float(record["confidence"]) - 0.5)
+    if (record.get("origin") or {}).get("conversation_id") == conversation_id:
+        weight += 0.04
+    return weight
+
+
 def _dedupe_key(text: str) -> str:
     return re.sub(r"\W+", "", text.lower())[:160]
+
+
+def _add_linked_records(
+    store: MemoryStore, scored: list[tuple[float, str, dict[str, Any]]]
+) -> None:
+    """Follow non-private links from the best records to related, retrievable ones."""
+    anchors = {
+        record["record_id"]: score
+        for score, kind, record in scored
+        if kind == "structured"
+    }
+    if not anchors:
+        return
+    top = sorted(anchors, key=lambda rid: anchors[rid], reverse=True)[:3]
+    try:
+        links = store.relationships.neighbours(top, limit=LINKED_LIMIT * 2)
+    except Exception:  # links are an enhancement; never block retrieval
+        return
+    added = 0
+    for link in links:
+        anchor = link["from_id"] if link["from_id"] in top else link["to_id"]
+        other = link["to_id"] if anchor == link["from_id"] else link["from_id"]
+        if other in anchors or added >= LINKED_LIMIT:
+            continue
+        record = store.structured.get(other)
+        if not record or record["status"] not in {"active", "completed"}:
+            continue
+        record["_linked_via"] = link["relation"]
+        scored.append((anchors[anchor] - 0.05, "structured", record))
+        anchors[other] = anchors[anchor] - 0.05
+        added += 1
+    if added:
+        scored.sort(key=lambda entry: entry[0], reverse=True)
 
 
 def assemble_memory_context(
@@ -175,6 +271,7 @@ def assemble_memory_context(
     *,
     budget: ContextBudget = ContextBudget(),
     now: datetime | None = None,
+    reranker: Reranker | None = None,
 ) -> ContextPacket:
     """Build the retrieved-memory block for a prompt, or an empty packet.
 
@@ -182,8 +279,12 @@ def assemble_memory_context(
     and past-message candidates must each match enough distinctive query terms,
     so a single incidental word does not pull unrelated memory into the prompt.
     """
+    settings = store.settings.get_all()
+    if not settings["memory_enabled"] or not settings["retrieval_enabled"]:
+        return EMPTY_PACKET
     terms = extract_query_terms(prompt)
-    if not terms:
+    intent_types = detect_context_intent(prompt)
+    if not terms and not intent_types:
         return EMPTY_PACKET
     now = now or datetime.now(UTC)
 
@@ -193,6 +294,7 @@ def assemble_memory_context(
         prompt, limit=budget.candidate_pool, exclude_message_ids=recent_ids
     )
     records = store.retrieve_records(prompt, limit=budget.candidate_pool)
+    lexical_record_ids = {record["record_id"] for record in records}
 
     scored: list[tuple[float, str, dict[str, Any]]] = []
     for item, relevance in zip(items, _normalised_relevance(items), strict=True):
@@ -218,16 +320,30 @@ def assemble_memory_context(
     for record, relevance in zip(records, _normalised_relevance(records), strict=True):
         if not _matches_enough(terms, f"{record['title']} {record['body']}"):
             continue
-        _, trust_weight = _RECORD_PROVENANCE.get(record["provenance"], ("", 0.0))
-        score = (
-            0.6 * relevance
-            + trust_weight
-            + _RECORD_TYPE_WEIGHT.get(record["record_type"], 0.0)
-            + _recency(record["updated_at"], now)
-        )
+        score = 0.6 * relevance + _record_weight(record, conversation_id, now)
         scored.append((score, "structured", record))
+    if intent_types:
+        for record in store.structured.recent(intent_types, limit=INTENT_POOL):
+            if record["record_id"] in lexical_record_ids:
+                continue
+            scored.append((0.3 + _record_weight(record, conversation_id, now), "structured", record))
+    if reranker is not None:
+        try:
+            boosts = reranker(prompt, [r for _, kind, r in scored if kind == "structured"])
+            scored = [
+                (
+                    score + max(-0.3, min(0.3, float(boosts.get(r.get("record_id", ""), 0.0))))
+                    if kind == "structured" else score,
+                    kind,
+                    r,
+                )
+                for score, kind, r in scored
+            ]
+        except Exception:  # an optional semantic layer must never break retrieval
+            pass
 
     scored.sort(key=lambda entry: entry[0], reverse=True)
+    _add_linked_records(store, scored)
 
     references: list[MemoryReference] = []
     blocks: list[str] = []
@@ -240,7 +356,7 @@ def assemble_memory_context(
             if knowledge_count >= budget.max_knowledge:
                 continue
         elif ref_type == "structured":
-            if record_count >= budget.max_records:
+            if record_count >= (INTENT_RECORD_CAP if intent_types else budget.max_records):
                 continue
         elif message_count >= budget.max_messages:
             continue
@@ -293,6 +409,8 @@ def assemble_memory_context(
             )
             if record["confidence"] is not None:
                 header += f' \u00b7 confidence {record["confidence"]:.2f}'
+            if record.get("_linked_via"):
+                header += f' \u00b7 linked ({record["_linked_via"]})'
             if record["status"] == "active":
                 rivals = store.structured.active_with_title_key(
                     record["record_type"], normalise_title(record["title"])

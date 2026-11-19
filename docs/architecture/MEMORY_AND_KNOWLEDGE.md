@@ -86,6 +86,20 @@ Verified with local automated tests only (mocked providers, no live model): rest
 
 Endpoints: `POST /api/memory/capture`, `POST /api/memory/records/{id}/(edit|approve|reject|confirm|archive|outdated|restore|temporary)`, `GET/PUT /api/memory/settings`, `POST/DELETE /api/memory/relationships`, `POST /api/conversations/{id}/temporary`, `GET /api/memory/replies/{id}/usage`. Chat responses include `memory_capture`.
 
+## Retrieval (upgraded 2026-11-20)
+
+`assemble_memory_context` (model-independent; the same block is built whichever provider answers) now:
+
+- **Honours the owner's switches:** `memory_enabled` or `retrieval_enabled` off means no memory is retrieved.
+- **Ranks** records by full-text relevance (SQLite FTS5 bm25), provenance trust, record type, recency, **importance** and **confidence** (both centred on 0.5, so a default record is neutral), with a small boost for memories captured in the current conversation. Pending, outdated, archived, expired, superseded and rejected records are never retrieved.
+- **Understands contextual references** by pulling records by type when the request names none of their words: "Continue my previous project" (project/goal/decision), "What did we decide last time?" (decision), "Use my usual preferences" (preference), "What was the problem we encountered earlier?" (lesson/episode/project), "What is the current state of this feature?" (project/goal/decision), "What are my goals?" (goal). Pattern-based, English only.
+- **Follows relationships:** up to 4 records linked (non-private, retrievable) to the top three results are added and labelled `linked (relation)`. Private links and archived/pending endpoints are never followed.
+- **Stays bounded:** at most 4 records (6 for a contextual reference), 5 knowledge items, 4 past messages, about 5,000 characters; duplicates collapse. A 1,500-record store retrieves in well under a second in tests; the database is never loaded wholesale.
+- **Optional semantic hook:** `assemble_memory_context(..., reranker=fn)` accepts a function that returns score boosts for candidate records. **No embedding provider ships with Mia**, so retrieval is lexical today; if a reranker raises, retrieval silently continues lexically.
+- **Records usage:** each reply logs the memories placed in its prompt (`memory_usage`), bumps `use_count`/`last_used_at`, and returns a `reply_id`; `GET /api/memory/replies/{reply_id}/usage` and the record detail (`used_in_replies`) expose it. Usage rows are deleted with the memory, the knowledge item or the conversation.
+
+Retrieved memory still reaches only local models unless `MIA_ALLOW_REMOTE_FILE_CONTEXT=true`.
+
 ## Structured memory records (implemented 2026-11-19)
 
 `mia.memory.structured` adds records with a lifecycle, stored in the same SQLite database (`structured_memory` plus an FTS5 index), for things that change or get corrected: **decision, goal, episode, project, entity**.
