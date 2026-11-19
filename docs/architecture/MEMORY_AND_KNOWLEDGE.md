@@ -45,6 +45,22 @@ Every chat request (`POST /api/gateway/chat` and `/api/gateway/chat/stream`) is 
 
 Known limits: lexical (FTS5) matching only, so paraphrases with no shared words are missed; no entity/relationship graph; no consolidation or summarisation of old conversations; no automatic conflict detection; the web UI does not yet display `context_references`.
 
+## Structured memory records (implemented 2026-11-19)
+
+`mia.memory.structured` adds records with a lifecycle, stored in the same SQLite database (`structured_memory` plus an FTS5 index), for things that change or get corrected: **decision, goal, episode, project, entity**.
+
+- **Provenance:** `owner_provided` (default for the owner API), `observed`, `source_backed`, `inferred`, `hypothesis`, `validated`. `inferred`, `validated` and `source_backed` records must cite at least one evidence reference (`message`, `knowledge`, `record`, `url`, `tool_event`, `other`); a hypothesis may have none. Confidence is optional and must be a finite number in 0..1.
+- **Corrections never overwrite.** `POST /api/memory/records/{id}/correct` creates a successor (linked to the original as evidence) and marks the original `superseded` in one transaction; the original text stays in history. Only active/completed records can be corrected, and a derived-provenance correction must supply its own evidence (the automatic link to the original does not count).
+- **Status:** `active`, `completed`, `superseded`, `rejected`. Owners can move a record between active and completed or reject it (final). Superseded and rejected records are removed from the search index and never injected into prompts; they remain in history/export.
+- **Competing claims** are surfaced, not merged: creating or correcting into an active record with the same normalised title and type returns `conflicts_with`, and retrieved records that still have an active rival carry a `COMPETING` marker telling the model to ask the owner which is current.
+- **Context assembly:** records are a third candidate pool (max 4) ranked by relevance, provenance weight (owner-provided/validated highest, hypothesis lowest), record type (decision/goal/project favoured) and recency. The block shows type, status, provenance label, date, optional confidence, and a decision's stored `rationale`. Hypotheses and inferences are labelled unverified. All text is defanged like other retrieved content, and the same local-only egress rule applies.
+- **Export** (`GET /api/memory/export`) now includes `structured_memory` inside the checksummed payload.
+- **Audit:** `record_created`, `record_corrected`, `record_status_changed` and `record_deleted` Observatory events carry ids and metadata only, never record text.
+
+Endpoints: `POST/GET /api/memory/records`, `GET /api/memory/records/{id}` (with correction history), `POST /api/memory/records/{id}/correct`, `POST /api/memory/records/{id}/status`, `DELETE /api/memory/records/{id}`.
+
+Known limits: records are created only through the owner API (nothing extracts decisions or goals from conversations automatically, and there is no web UI for them yet); the retention purge does not touch structured records (owner deletion does); matching is lexical; there are no entity relationships or automatic consolidation; a stale earlier assistant reply can still be retrieved next to a corrected record, labelled as unverified model output.
+
 ## API
 
 - `GET /api/conversations`

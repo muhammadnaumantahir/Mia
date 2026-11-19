@@ -13,6 +13,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from mia.memory.structured import StructuredMemory
+
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
@@ -63,6 +65,7 @@ class MemoryStore:
     def __init__(self, database_path: str | Path) -> None:
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        self.structured = StructuredMemory(self._connection)
         self._initialize()
 
     @contextmanager
@@ -122,6 +125,7 @@ class MemoryStore:
                 CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts
                 USING fts5(item_id UNINDEXED, title, content, tags)
             """)
+            StructuredMemory.initialize(db)
             # Full-text index over conversation messages so earlier turns and other
             # conversations can be retrieved. Its rowid mirrors the message rowid and
             # triggers keep it in sync, including rows removed by ON DELETE CASCADE.
@@ -260,6 +264,10 @@ class MemoryStore:
             ).fetchall()
         return [self._decode_item(row) for row in rows]
 
+    def retrieve_records(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
+        """Structured records (decisions, goals, ...) matching ANY distinctive term."""
+        return self.structured.retrieve(_retrieval_fts_query(query), limit)
+
     def retrieve_messages(
         self,
         query: str,
@@ -352,6 +360,7 @@ class MemoryStore:
                 for row in conversations
             ],
             "memory_items": [self._decode_item(row) for row in items],
+            "structured_memory": self.structured.export(),
         }
         canonical = json.dumps(
             payload,

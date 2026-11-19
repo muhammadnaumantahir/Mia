@@ -178,7 +178,7 @@ The digital-companion runtime is not complete until evidence demonstrates that:
 ## 12. Implementation sequence
 
 1. Strengthen canonical identity and context retrieval on top of existing conversation persistence. **Partly implemented (2026-11-19):** versioned code-defined identity, FTS retrieval over knowledge and all past messages, provenance/trust-labelled bounded context packets and a local-only egress rule are in place (see MEMORY_AND_KNOWLEDGE.md). Still open: owner-editable persisted identity/operating preferences, relationship-aware and semantic retrieval, and UI display of references.
-2. Add structured episodic/decision/goal memory, provenance and consolidation.
+2. Add structured episodic/decision/goal memory, provenance and consolidation. **Partly implemented (2026-11-19):** decision/goal/episode/project/entity records with provenance, evidence requirements, owner corrections that supersede with history, competing-claim surfacing and retrieval into chat (see MEMORY_AND_KNOWLEDGE.md). Still open: automatic extraction from conversations (owner-approved), consolidation/summarisation, entity relationships, retention coverage and a UI.
 3. Add a durable activity journal, event-triggered scheduler and curiosity backlog.
 4. Implement safe, resource-aware, read-only exploration cycles with checkpoints and recovery.
 5. Add the proactive conversation decision/delivery engine with quiet hours and frequency controls.

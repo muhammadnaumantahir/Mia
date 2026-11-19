@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from mia.memory.store import MemoryStore, extract_query_terms
+from mia.memory.structured import normalise_title
 
 _TRUST_WEIGHT = {"user": 0.25, "trusted": 0.15, "untrusted": 0.0}
 _TRUST_LABEL = {
@@ -26,6 +27,15 @@ _TRUST_LABEL = {
     "untrusted": "untrusted external content",
 }
 _KIND_WEIGHT = {"preference": 0.06, "fact": 0.05, "experience": 0.02}
+_RECORD_PROVENANCE = {
+    "owner_provided": ("owner-provided", 0.25),
+    "validated": ("validated", 0.25),
+    "observed": ("observed by Mia's runtime", 0.15),
+    "source_backed": ("source-backed (external; untrusted unless reviewed)", 0.0),
+    "inferred": ("inference (unverified)", 0.0),
+    "hypothesis": ("hypothesis (unverified)", -0.05),
+}
+_RECORD_TYPE_WEIGHT = {"decision": 0.08, "goal": 0.08, "project": 0.04}
 
 _ROLE_TAG = re.compile(
     r"<\s*/?\s*(?:memory_[a-z_]*|mia_[a-z_]*|system|assistant|user|tool|developer)\b[^>]*>",
@@ -37,6 +47,7 @@ _ROLE_TAG = re.compile(
 class ContextBudget:
     max_knowledge: int = 5
     max_messages: int = 4
+    max_records: int = 4
     max_chars: int = 5000
     item_chars: int = 700
     recent_window: int = 12
@@ -181,6 +192,7 @@ def assemble_memory_context(
     messages = store.retrieve_messages(
         prompt, limit=budget.candidate_pool, exclude_message_ids=recent_ids
     )
+    records = store.retrieve_records(prompt, limit=budget.candidate_pool)
 
     scored: list[tuple[float, str, dict[str, Any]]] = []
     for item, relevance in zip(items, _normalised_relevance(items), strict=True):
@@ -203,25 +215,44 @@ def assemble_memory_context(
             + _recency(message["created_at"], now)
         )
         scored.append((score, "conversation", message))
+    for record, relevance in zip(records, _normalised_relevance(records), strict=True):
+        if not _matches_enough(terms, f"{record['title']} {record['body']}"):
+            continue
+        _, trust_weight = _RECORD_PROVENANCE.get(record["provenance"], ("", 0.0))
+        score = (
+            0.6 * relevance
+            + trust_weight
+            + _RECORD_TYPE_WEIGHT.get(record["record_type"], 0.0)
+            + _recency(record["updated_at"], now)
+        )
+        scored.append((score, "structured", record))
 
     scored.sort(key=lambda entry: entry[0], reverse=True)
 
     references: list[MemoryReference] = []
     blocks: list[str] = []
     seen: set[str] = set()
-    knowledge_count = message_count = 0
+    knowledge_count = message_count = record_count = 0
     used_chars = 0
 
     for score, ref_type, record in scored:
         if ref_type == "knowledge":
             if knowledge_count >= budget.max_knowledge:
                 continue
+        elif ref_type == "structured":
+            if record_count >= budget.max_records:
+                continue
         elif message_count >= budget.max_messages:
             continue
-        key = _dedupe_key(record["content"])
+        content_field = "body" if ref_type == "structured" else "content"
+        key = _dedupe_key(record[content_field])
         if key in seen:
             continue
-        text = _neutralise(_snippet(record["content"], terms, budget.item_chars))
+        text = _neutralise(_snippet(record[content_field], terms, budget.item_chars))
+        if ref_type == "structured":
+            rationale = record["details"].get("rationale")
+            if isinstance(rationale, str) and rationale.strip():
+                text += " Rationale: " + _neutralise(_one_line(rationale, 200))
         if used_chars + len(text) > budget.max_chars and references:
             continue
 
@@ -251,6 +282,39 @@ def assemble_memory_context(
                 score=score,
             )
             knowledge_count += 1
+        elif ref_type == "structured":
+            provenance, _ = _RECORD_PROVENANCE.get(
+                record["provenance"], ("unverified", 0.0)
+            )
+            title = _neutralise(_one_line(record["title"], 120))
+            header = (
+                f'[{label}] {record["record_type"]} ({record["status"]}) \u00b7 {provenance} '
+                f'\u00b7 {str(record["updated_at"])[:10]} \u00b7 "{title}"'
+            )
+            if record["confidence"] is not None:
+                header += f' \u00b7 confidence {record["confidence"]:.2f}'
+            if record["status"] == "active":
+                rivals = store.structured.active_with_title_key(
+                    record["record_type"], normalise_title(record["title"])
+                )
+                if len(rivals) > 1:
+                    header += (
+                        f" \u00b7 COMPETING: {len(rivals)} active records share this title; "
+                        "ask the owner which is current"
+                    )
+            reference = MemoryReference(
+                label=label,
+                ref_type=ref_type,
+                ref_id=str(record["record_id"]),
+                kind=str(record["record_type"]),
+                provenance=provenance,
+                trust=str(record["provenance"]),
+                title=title,
+                source=None,
+                timestamp=str(record["updated_at"]),
+                score=score,
+            )
+            record_count += 1
         else:
             same = record["conversation_id"] == conversation_id
             where = "earlier in this conversation" if same else "earlier conversation"

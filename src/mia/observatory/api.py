@@ -63,6 +63,7 @@ from mia.knowledge.document_ingestion import DocumentIngestionError, DocumentIng
 from mia.memory.context import ContextPacket, assemble_memory_context
 from mia.memory.identity import IDENTITY_VERSION, identity_system_prompt
 from mia.memory.store import MemoryStore
+from mia.memory.structured import RecordNotFoundError, RecordStateError
 from mia.observatory.activity import ExperimentActivityCollector
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider
 from mia.voice.tts import Pyttsx3SpeechSynthesizer, SpeechSynthesisError, SpeechSynthesizer
@@ -239,6 +240,34 @@ class MemoryItemInput(BaseModel):
     trust_level: str = Field(default="untrusted", max_length=20)
     tags: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class EvidenceRef(BaseModel):
+    type: str = Field(min_length=1, max_length=20)
+    ref: str = Field(min_length=1, max_length=500)
+
+
+class MemoryRecordInput(BaseModel):
+    record_type: str = Field(min_length=1, max_length=20)
+    title: str = Field(min_length=1, max_length=200)
+    body: str = Field(min_length=1, max_length=20_000)
+    provenance: str = Field(default="owner_provided", max_length=20)
+    confidence: float | None = None
+    evidence: list[EvidenceRef] = Field(default_factory=list, max_length=20)
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class MemoryRecordCorrection(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    body: str | None = Field(default=None, min_length=1, max_length=20_000)
+    details: dict[str, Any] | None = None
+    provenance: str = Field(default="owner_provided", max_length=20)
+    confidence: float | None = None
+    evidence: list[EvidenceRef] = Field(default_factory=list, max_length=20)
+
+
+class MemoryRecordStatus(BaseModel):
+    status: str = Field(min_length=1, max_length=20)
 
 
 def create_app(
@@ -2397,6 +2426,104 @@ def create_app(
     @app.delete("/api/memory/items/{item_id}")
     def delete_memory_item(item_id: str) -> dict[str, bool]:
         return {"deleted": memory_store.delete_item(item_id)}
+
+    def _record_event(event_type: str, summary: str, payload: dict[str, Any]) -> None:
+        observatory.record_event(
+            category="memory",
+            event_type=event_type,
+            summary=summary,
+            outcome="success",
+            layer_id="SPS-05",
+            payload=payload,
+        )
+
+    @app.post("/api/memory/records", status_code=201)
+    def add_memory_record(item: MemoryRecordInput) -> dict[str, Any]:
+        try:
+            record_id, conflicts = memory_store.structured.add(
+                record_type=item.record_type,
+                title=item.title,
+                body=item.body,
+                provenance=item.provenance,
+                confidence=item.confidence,
+                evidence=[ref.model_dump() for ref in item.evidence],
+                details=item.details,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _record_event(
+            "record_created",
+            f"Stored a {item.record_type} memory record ({item.provenance})",
+            {"record_id": record_id, "record_type": item.record_type,
+             "provenance": item.provenance, "conflicts_with": conflicts},
+        )
+        return {"record_id": record_id, "conflicts_with": conflicts}
+
+    @app.get("/api/memory/records")
+    def list_memory_records(
+        record_type: str | None = None, status: str | None = None, limit: int = 100
+    ) -> dict[str, Any]:
+        return {"items": memory_store.structured.list(
+            record_type=record_type, status=status, limit=limit
+        )}
+
+    @app.get("/api/memory/records/{record_id}")
+    def get_memory_record(record_id: str) -> dict[str, Any]:
+        try:
+            history = memory_store.structured.history(record_id)
+        except RecordNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Record not found") from exc
+        record = next(entry for entry in history if entry["record_id"] == record_id)
+        return {"record": record, "history": history}
+
+    @app.post("/api/memory/records/{record_id}/correct", status_code=201)
+    def correct_memory_record(record_id: str, item: MemoryRecordCorrection) -> dict[str, Any]:
+        try:
+            new_id, conflicts = memory_store.structured.supersede(
+                record_id,
+                title=item.title,
+                body=item.body,
+                details=item.details,
+                provenance=item.provenance,
+                confidence=item.confidence,
+                evidence=[ref.model_dump() for ref in item.evidence],
+            )
+        except RecordNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Record not found") from exc
+        except RecordStateError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _record_event(
+            "record_corrected",
+            "Owner correction superseded a memory record; the original is kept in history",
+            {"record_id": new_id, "supersedes_id": record_id, "conflicts_with": conflicts},
+        )
+        return {"record_id": new_id, "supersedes_id": record_id, "conflicts_with": conflicts}
+
+    @app.post("/api/memory/records/{record_id}/status")
+    def set_memory_record_status(record_id: str, item: MemoryRecordStatus) -> dict[str, str]:
+        try:
+            memory_store.structured.set_status(record_id, item.status)
+        except RecordNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Record not found") from exc
+        except RecordStateError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _record_event(
+            "record_status_changed",
+            f"Memory record marked {item.status}",
+            {"record_id": record_id, "status": item.status},
+        )
+        return {"record_id": record_id, "status": item.status}
+
+    @app.delete("/api/memory/records/{record_id}")
+    def delete_memory_record(record_id: str) -> dict[str, bool]:
+        deleted = memory_store.structured.delete(record_id)
+        if deleted:
+            _record_event("record_deleted", "Owner deleted a memory record", {"record_id": record_id})
+        return {"deleted": deleted}
 
     @app.post("/api/approvals/{approval_id}/reject")
     def reject_action_approval(approval_id: str) -> dict[str, str]:
