@@ -96,6 +96,8 @@ Computer file access defaults to Mia's own `workspace` folder. The optional comp
 
 Open Mia at http://127.0.0.1:8765/assistant and the Evolution Observatory at http://127.0.0.1:8765/.
 
+For the supervisor walkthrough, see the [Supervisor Demo Runbook](docs/SUPERVISOR_DEMO.md). On Windows, `run_demo.cmd` starts the local app after setup; then run `python -m mia.supervisor_demo seed` and `python -m mia.supervisor_demo check` in a second terminal to add clearly labelled fictional demo memories and verify the local demo prerequisites.
+
 For local AI, start Ollama and make sure a model is installed. Mia discovers local models through Ollama's native API. The optional gateway extra enables HTTP adapters; no cloud key is needed for the local path.
 
 To connect an already-running **self-hosted** FreeLLMAPI at its default localhost endpoint:
@@ -119,7 +121,7 @@ The Evolution Observatory can capture an immutable Day 0 baseline on the local M
 | 2. AI gateway | Ollama/OpenAI-compatible adapters, free-first routing and price guard | In progress |
 | 3. Voice | Push-to-talk, local STT, optional offline OS TTS and browser fallback | Partial implementation; real Windows voice metadata/latency and wake-word tests remain |
 | 4. Computer intelligence | Scoped filesystem, approved app launch and isolated public-web browser | In progress |
-| 5. Memory and knowledge | Persistent conversations, identity continuity, structured episodic/decision memory, contextual retrieval and source-aware document ingestion | In progress; knowledge retrieval is not yet automatically injected into chat context, and consolidation/structured memory remain open |
+| 5. Memory and knowledge | Persistent conversations, identity continuity, owner-managed structured memory, contextual retrieval and source-aware document ingestion | In progress; bounded FTS5 retrieval across knowledge, older conversations and structured records is injected into chat with provenance. Consolidation, semantic/relationship-aware retrieval, automatic extraction and owner-editable identity remain open |
 | 6. Autonomous digital life and agent runtime | Durable scheduler/queue, curiosity-led bounded exploration, reflection, proactive conversation and governed task execution | Partial foundation only; current background dispatch is limited to approved read-only system checks. Curiosity/social initiative, quiet-hour delivery policy, broader workflows, safe restart continuation and target-device verification remain open |
 | 7. Self-programming | Capability discovery, candidate versioning/lineage, sandbox validation, owner-gated promotion and rollback | Foundation in progress; permission broker, safe plugin execution boundary and Windows verification remain open |
 | 8. 30-day experiment | Immutable Day 0, explicit start, host-verified daily snapshots and optional resource-aware scheduler | Report API/viewer and terminal incomplete handling are implemented; owner-host baseline, real 30-day run and evidence-backed final results remain pending |
@@ -147,13 +149,14 @@ See [Safety and Governance](docs/SAFETY_AND_GOVERNANCE.md).
 ## Repository map
 
 ~~~text
-docs/                  Research, architecture, phases and experiment protocol
-src/mia/               Python application and SPS foundations
+docs/                  Research, architecture, phases, experiment protocol and supervisor demo runbook
+src/mia/               Python application, SPS foundations and demo preflight utility
 src/mia/agent/         Task lifecycle, workload discovery and autonomy gates
 src/mia/evolution/    Versioned capability persistence and validation lifecycle
 src/mia/gateway/       Provider contracts and routing policy
 src/mia/observatory/   SQLite event/metric store and dashboard
 tests/                 Automated tests
+run_demo.cmd           Windows local demo launcher
 config/                Safe non-secret defaults
 workspace/             Runtime-created generated workspaces (gitignored)
 experiment/            Runtime-created experiment data (gitignored)
