@@ -44,6 +44,8 @@ def test_voice_has_stop_commands_and_browser_privacy_disclosure():
     assert "may process microphone audio outside Mia" in source
     assert "Local record" in source
     assert "voicePlaybackCancelled=true;" in source
+    assert "id=\"previewVoice\"" in source
+    assert "Playing a short voice preview" in source
 
 
 def test_memory_references_remain_visible_in_voice_chat_modes():
