@@ -35,6 +35,8 @@ from mia.agent.tasks import (
     TaskTransitionError,
 )
 from mia.agent.tools import ToolRegistry, ToolResult
+from mia.brain.orchestrator import Brain, TurnRequest
+from mia.brain.plan import PlanStore
 from mia.computer.app_discovery import ApplicationDiscovery
 from mia.computer.applications import ApplicationLauncher, ApplicationLaunchError
 from mia.computer.approvals import ApprovalError, ApprovalStore
@@ -67,15 +69,13 @@ from mia.gateway.contracts import (
 from mia.gateway.factory import apply_daily_cap, build_default_registry, paid_route_policy
 from mia.gateway.ledger import UsageLedger
 from mia.gateway.model_registry import ModelRegistry
-from mia.gateway.service import CompletionResult, ModelGateway
+from mia.gateway.service import ModelGateway
 from mia.knowledge.document_ingestion import DocumentIngestionError, DocumentIngestor
 from mia.life.runner import LifeRunner, LifeScheduler
 from mia.life.store import ITEM_STATES, LifeStore
 from mia.life.web import ResearchExplorer, normalise_research_url
 from mia.memory.capture import CaptureService
-from mia.memory.context import ContextPacket, assemble_memory_context
 from mia.memory.identity import (
-    IDENTITY_VERSION,
     identity_system_prompt,
     render_identity_prompt,
 )
@@ -234,6 +234,7 @@ class ChatInput(BaseModel):
     required_capabilities: set[str] = Field(default_factory=set)
     conversation_id: str | None = Field(default=None, min_length=8, max_length=80)
     use_tools: bool = True
+    interface: str = Field(default="text", pattern="^(text|voice)$")
 
 
 class CapabilityPromotionInput(BaseModel):
@@ -3739,102 +3740,62 @@ def create_app(
     def list_tools() -> dict[str, Any]:
         return {"items": tool_registry.definitions()}
 
-    def prepare_chat_context(
-        conversation_id: str,
-        prompt: str,
-        candidates: list[Any],
-        required: set[str],
-    ) -> tuple[list[dict[str, str]], list[dict[str, Any]], list[Any]]:
-        """Retrieve relevant memory and apply the data-egress policy.
-
-        Retrieved knowledge and earlier conversations are the owner's private data.
-        Unless MIA_ALLOW_REMOTE_FILE_CONTEXT is enabled they may only reach a local
-        model: the request is restricted to local candidates, and when none can serve
-        it the memory block is withheld rather than sent to a remote provider.
-        Returns (context messages, reference dicts, candidates to route over).
-        """
-        if os.getenv("MIA_CONTEXT_RETRIEVAL", "true").strip().lower() == "false":
-            return [], [], candidates
-        try:
-            packet: ContextPacket = assemble_memory_context(
-                memory_store, prompt, conversation_id
-            )
-        except Exception:  # retrieval must never block a reply
-            observatory.record_event(
-                category="memory",
-                event_type="context_retrieval_failure",
-                summary="Could not retrieve memory context; continuing without it",
-                outcome="error",
-                layer_id="SPS-05",
-                payload={"conversation_id": conversation_id},
-            )
-            return [], [], candidates
-        if packet.empty or packet.message is None:
-            return [], [], candidates
-
-        references = [ref.to_dict() for ref in packet.references]
-        allow_remote = (
-            os.getenv("MIA_ALLOW_REMOTE_FILE_CONTEXT", "false").strip().lower() == "true"
-        )
-        routed = candidates
-        withheld = False
-        if not allow_remote:
-            local = [
-                c for c in candidates
-                if c.data_local and c.enabled and c.healthy and required <= set(c.capabilities)
-            ]
-            if local:
-                routed = [c for c in candidates if c.data_local]
-            else:
-                withheld = True
-        observatory.record_event(
-            category="memory",
-            event_type="context_withheld" if withheld else "context_assembled",
-            summary=(
-                "Memory context withheld: no local model can serve this request"
-                if withheld
-                else f"Assembled {len(references)} memory reference(s) for the reply"
-            ),
-            outcome="withheld" if withheld else "success",
-            layer_id="SPS-05",
-            payload={
-                "conversation_id": conversation_id,
-                "identity_version": current_identity()[1] or IDENTITY_VERSION,
-                "reference_ids": [ref["ref_id"] for ref in references],
-                "local_only": not allow_remote and not withheld,
-            },
-        )
-        if withheld:
-            return [], [], candidates
-        return [packet.message], references, routed
-
     def record_usage(
-        result: CompletionResult,
+        source: Any,
         task_type: str,
         estimated_input: int,
         estimated_output: int,
+        *,
+        streamed: bool = False,
+        text: str = "",
     ) -> None:
-        try:
-            ledger.record(
-                provider_id=result.provider_id,
-                model_id=result.model_id,
-                task_type=task_type,
-                input_tokens=result.usage.input_tokens if result.usage else None,
-                output_tokens=result.usage.output_tokens if result.usage else None,
-                estimated_input_tokens=estimated_input,
-                estimated_output_tokens=estimated_output,
-                cost_usd=result.cost_usd,
-                free_tier=result.free_tier,
-                data_local=result.data_local,
-                total_ms=result.latency_ms,
-            )
-        except Exception:  # ledger failure must never lose the user's reply
-            observatory.record_event(
-                category="ai_gateway",
-                event_type="usage_ledger_failure",
-                summary="Could not write the usage ledger",
-                outcome="error",
-            )
+        """Usage-ledger adapter for the Brain (CompletionResult or final StreamEvent)."""
+        usage = source.usage
+        ledger.record(
+            provider_id=source.provider_id,
+            model_id=source.model_id,
+            task_type=task_type,
+            input_tokens=usage.input_tokens if usage else None,
+            output_tokens=usage.output_tokens if usage else None,
+            estimated_input_tokens=estimated_input,
+            estimated_output_tokens=estimated_output,
+            cost_usd=source.cost_usd,
+            free_tier=source.free_tier,
+            data_local=source.data_local,
+            streamed=streamed,
+            **(
+                {"first_token_ms": source.first_token_ms, "total_ms": source.total_ms}
+                if streamed
+                else {"total_ms": source.latency_ms}
+            ),
+        )
+
+    plan_store = PlanStore(data_dir / "mia-brain.sqlite3")
+    plan_store.recover_interrupted()
+    brain = Brain(
+        gateway=model_gateway,
+        memory=memory_store,
+        tools=tool_registry,
+        identity=current_identity,
+        observatory=observatory,
+        route_policy=lambda: apply_daily_cap(paid_route_policy(), ledger.spend_today_utc()),
+        usage_recorder=record_usage,
+        plan_store=plan_store,
+        capture=capture_from_message,
+        on_reply=record_reply_usage,
+    )
+    app.state.brain = brain
+
+    def _turn_request(item: ChatInput, conversation_id: str | None = None) -> TurnRequest:
+        return TurnRequest(
+            prompt=item.prompt,
+            task_type=item.task_type,
+            max_output_tokens=item.max_output_tokens,
+            required_capabilities=frozenset(item.required_capabilities),
+            conversation_id=conversation_id or item.conversation_id,
+            use_tools=item.use_tools,
+            interface=item.interface,
+        )
 
     @app.get("/api/gateway/usage")
     def gateway_usage(days: int = 30) -> dict[str, Any]:
@@ -3846,115 +3807,14 @@ def create_app(
             conversation_id = memory_store.ensure_conversation(item.conversation_id)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        user_message_id = memory_store.append_message(conversation_id, "user", item.prompt)
-        capture_result = capture_from_message(conversation_id, user_message_id, item.prompt)
-        recent_messages = memory_store.get_messages(conversation_id, limit=12)
+        turn = _turn_request(item, conversation_id=conversation_id)
 
         def sse(event: str, data: dict[str, Any]) -> str:
             return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
         async def events() -> AsyncIterator[str]:
-            parts: list[str] = []
-            try:
-                candidates = await model_gateway.discover_models()
-                context_messages, context_refs, candidates = prepare_chat_context(
-                    conversation_id,
-                    item.prompt,
-                    candidates,
-                    set(item.required_capabilities),
-                )
-                messages = [
-                    {"role": "system", "content": current_identity()[0]},
-                    *context_messages,
-                    *recent_messages,
-                ]
-                estimated = max(
-                    1, sum(len(str(m.get("content") or "")) for m in messages) // 4
-                )
-                request = ModelRequest(
-                    task_type=item.task_type,
-                    prompt=item.prompt,
-                    estimated_input_tokens=estimated,
-                    max_output_tokens=item.max_output_tokens,
-                    required_capabilities=frozenset(item.required_capabilities),
-                    messages=tuple(messages),
-                )
-                policy = apply_daily_cap(paid_route_policy(), ledger.spend_today_utc())
-                async for event in model_gateway.stream(request, candidates, policy):
-                    if not event.done:
-                        parts.append(event.delta)
-                        yield sse("delta", {"text": event.delta})
-                        continue
-                    text = "".join(parts)
-                    reply_id = memory_store.append_message(conversation_id, "assistant", text)
-                    record_reply_usage(conversation_id, reply_id, context_refs)
-                    try:
-                        ledger.record(
-                            provider_id=event.provider_id,
-                            model_id=event.model_id,
-                            task_type=item.task_type,
-                            input_tokens=event.usage.input_tokens if event.usage else None,
-                            output_tokens=event.usage.output_tokens if event.usage else None,
-                            estimated_input_tokens=estimated,
-                            estimated_output_tokens=max(1, len(text) // 4),
-                            cost_usd=event.cost_usd,
-                            free_tier=event.free_tier,
-                            data_local=event.data_local,
-                            streamed=True,
-                            first_token_ms=event.first_token_ms,
-                            total_ms=event.total_ms,
-                        )
-                    except Exception:
-                        observatory.record_event(
-                            category="ai_gateway",
-                            event_type="usage_ledger_failure",
-                            summary="Could not write the usage ledger",
-                            outcome="error",
-                        )
-                    observatory.record_event(
-                        category="ai_gateway",
-                        event_type="completion",
-                        summary=(
-                            f"Streamed {item.task_type} request with "
-                            f"{event.provider_id}/{event.model_id}"
-                        ),
-                        outcome="success",
-                        payload={
-                            "provider_id": event.provider_id,
-                            "model_id": event.model_id,
-                            "attempted_candidates": list(event.attempted_candidates),
-                            "conversation_id": conversation_id,
-                            "streamed": True,
-                        },
-                    )
-                    yield sse("done", {
-                        "provider_id": event.provider_id,
-                        "model_id": event.model_id,
-                        "attempted_candidates": list(event.attempted_candidates),
-                        "conversation_id": conversation_id,
-                        "finish_reason": event.finish_reason,
-                        "input_tokens": event.usage.input_tokens if event.usage else None,
-                        "output_tokens": event.usage.output_tokens if event.usage else None,
-                        "cost_usd": event.cost_usd,
-                        "first_token_ms": event.first_token_ms,
-                        "total_ms": event.total_ms,
-                        "context_references": context_refs,
-                        "memory_capture": capture_result,
-                        "reply_id": reply_id,
-                    })
-            except (TransientProviderError, PermanentProviderError, RuntimeError, KeyError) as exc:
-                if parts:  # keep what the owner already saw, marked incomplete
-                    memory_store.append_message(
-                        conversation_id, "assistant", "".join(parts) + "\n[response interrupted]"
-                    )
-                retry_after = getattr(exc, "retry_after", None)
-                yield sse("error", {
-                    "detail": str(exc),
-                    "partial": bool(parts),
-                    "retry_after_seconds": (
-                        retry_after if getattr(exc, "rate_limited", False) else None
-                    ),
-                })
+            async for event, data in brain.stream_turn(turn):
+                yield sse(event, data)
 
         return StreamingResponse(
             events(),
@@ -4005,156 +3865,9 @@ def create_app(
     @app.post("/api/gateway/chat")
     async def chat(item: ChatInput) -> dict[str, Any]:
         try:
-            conversation_id = memory_store.ensure_conversation(item.conversation_id)
+            return await brain.run_turn(_turn_request(item))
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-        user_message_id = memory_store.append_message(conversation_id, "user", item.prompt)
-        capture_result = capture_from_message(conversation_id, user_message_id, item.prompt)
-        conversation_messages = memory_store.get_messages(
-            conversation_id,
-            limit=12,
-        )
-        system_message = {"role": "system", "content": current_identity()[0]}
-        working_messages: list[dict[str, Any]] = [
-            system_message,
-            *conversation_messages,
-        ]
-        context_refs: list[dict[str, Any]] = []
-        pending_actions: list[dict[str, Any]] = []
-        attempted_candidates: list[str] = []
-        final_provider = ""
-        final_model = ""
-        final_content = ""
-        tools_available = False
-
-        try:
-            candidates = await model_gateway.discover_models()
-            tools_available = item.use_tools and any(
-                "tools" in candidate.capabilities
-                and candidate.enabled
-                and candidate.healthy
-                for candidate in candidates
-            )
-            tool_schemas = tuple(tool_registry.schemas()) if tools_available else ()
-            required = set(item.required_capabilities)
-            if tools_available:
-                required.add("tools")
-            context_messages, context_refs, candidates = prepare_chat_context(
-                conversation_id, item.prompt, candidates, required
-            )
-            working_messages[1:1] = context_messages
-
-            max_tool_rounds = 4
-            for round_index in range(max_tool_rounds):
-                estimated_tokens = max(
-                    1,
-                    sum(
-                        len(str(message.get("content") or ""))
-                        for message in working_messages
-                    ) // 4,
-                )
-                result = await model_gateway.complete(
-                    ModelRequest(
-                        task_type=item.task_type,
-                        prompt=item.prompt,
-                        estimated_input_tokens=estimated_tokens,
-                        max_output_tokens=item.max_output_tokens,
-                        required_capabilities=frozenset(required),
-                        messages=tuple(working_messages),
-                        tools=tool_schemas,
-                    ),
-                    candidates,
-                    apply_daily_cap(paid_route_policy(), ledger.spend_today_utc()),
-                )
-                record_usage(result, item.task_type, estimated_tokens, item.max_output_tokens)
-                final_provider = result.provider_id
-                final_model = result.model_id
-                attempted_candidates = list(result.attempted_candidates)
-
-                if not result.tool_calls:
-                    final_content = result.content
-                    break
-
-                working_messages.append({
-                    "role": "assistant",
-                    "content": result.content or None,
-                    "tool_calls": list(result.tool_calls),
-                })
-                for call_index, call in enumerate(result.tool_calls[:4]):
-                    call_id = str(call.get("id") or f"mia_tool_{round_index}_{call_index}")
-                    function = call.get("function") or {}
-                    name = str(function.get("name") or "")
-                    raw_arguments = function.get("arguments") or "{}"
-                    try:
-                        arguments = (
-                            json.loads(raw_arguments)
-                            if isinstance(raw_arguments, str)
-                            else raw_arguments
-                        )
-                    except json.JSONDecodeError:
-                        arguments = None
-
-                    allow_remote_file_context = (
-                        os.getenv("MIA_ALLOW_REMOTE_FILE_CONTEXT", "false").strip().lower()
-                        == "true"
-                    )
-                    if (
-                        not result.data_local
-                        and not allow_remote_file_context
-                        and name in {"filesystem.read_text", "memory.search_knowledge"}
-                    ):
-                        execution = ToolResult({
-                            "ok": False,
-                            "error": (
-                                "File and knowledge contents are blocked from non-local "
-                                "model providers by Mia's data-egress policy. Use local Ollama "
-                                "or explicitly enable MIA_ALLOW_REMOTE_FILE_CONTEXT after "
-                                "reviewing the provider."
-                            ),
-                        })
-                    else:
-                        execution = await tool_registry.execute(name, arguments)
-                    if execution.pending_action:
-                        pending_actions.append(execution.pending_action)
-
-                    outcome = (
-                        "approval_required"
-                        if execution.pending_action
-                        else "error" if execution.output.get("error") else "success"
-                    )
-                    observatory.record_event(
-                        category="agent_tool",
-                        event_type="tool_invocation",
-                        summary=f"Model requested tool {name or 'unknown'}",
-                        outcome=outcome,
-                        layer_id="SPS-10",
-                        payload={
-                            "tool_name": name,
-                            "conversation_id": conversation_id,
-                            "approval_id": (
-                                execution.pending_action.get("approval_id")
-                                if execution.pending_action
-                                else None
-                            ),
-                        },
-                    )
-                    working_messages.append({
-                        "role": "tool",
-                        "tool_call_id": call_id,
-                        "content": json.dumps(
-                            execution.output,
-                            ensure_ascii=False,
-                            default=str,
-                        )[:30000],
-                    })
-
-                if round_index == max_tool_rounds - 1:
-                    final_content = (
-                        result.content
-                        or "I reached the safe tool-call limit for this turn. "
-                        "The actions listed below still require your approval."
-                    )
         except TransientProviderError as exc:
             headers = (
                 {"Retry-After": str(max(1, math.ceil(exc.retry_after)))}
@@ -4164,48 +3877,9 @@ def create_app(
             raise HTTPException(status_code=503, detail=str(exc), headers=headers) from exc
         except PermanentProviderError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
-        except RuntimeError as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
-        except KeyError as exc:
+        except (RuntimeError, KeyError) as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-        if not final_content.strip():
-            if pending_actions:
-                final_content = (
-                    "I prepared the requested action(s). Review the approval cards below "
-                    "before anything is changed or launched."
-                )
-            else:
-                final_content = "I could not produce a response for this request."
-
-        reply_id = memory_store.append_message(conversation_id, "assistant", final_content)
-        record_reply_usage(conversation_id, reply_id, context_refs)
-        observatory.record_event(
-            category="ai_gateway",
-            event_type="completion",
-            summary=f"Completed {item.task_type} request with {final_provider}/{final_model}",
-            outcome="success",
-            payload={
-                "provider_id": final_provider,
-                "model_id": final_model,
-                "attempted_candidates": attempted_candidates,
-                "conversation_id": conversation_id,
-                "tool_calls_requested": bool(tools_available),
-                "pending_approval_count": len(pending_actions),
-            },
-        )
-        return {
-            "provider_id": final_provider,
-            "model_id": final_model,
-            "content": final_content,
-            "attempted_candidates": attempted_candidates,
-            "conversation_id": conversation_id,
-            "tools_available": tools_available,
-            "pending_actions": pending_actions,
-            "context_references": context_refs,
-            "memory_capture": capture_result,
-            "reply_id": reply_id,
-        }
 
     return app
 

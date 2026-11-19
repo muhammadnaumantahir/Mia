@@ -62,7 +62,10 @@ _REASON = re.compile(
     r"\b(why|analy[sz]e|trade-?offs?|prove|derive|evaluate|optimi[sz]e|root cause|pros and cons)\b", re.I)
 _TOOL = re.compile(
     r"\b(open|launch|read (the )?file|list (the )?files|search (my|the) (files|documents|knowledge)|"
-    r"browse|navigate to|click|inspect)\b", re.I)
+    r"browse|navigate to|click|inspect)\b"
+    r"|\b[\w\-/]+\.(txt|md|py|json|csv|docx|pdf|xlsx|log|yaml|yml|toml)\b"
+    r"|\b(read|open|list|search|find|inspect|launch|create|prepare|write|show)\b.{0,40}"
+    r"\b(file|files|folder|directory|document|window|windows|app|application|notes?)\b", re.I)
 _MULTI = re.compile(r"\b(and then|then|after that|first|second|finally|also|as well as)\b", re.I)
 _HIGH_IMPACT = re.compile(
     r"\b(delete|remove|erase|wipe|format|uninstall|install|send|email|post|publish|pay|purchase|buy|"
