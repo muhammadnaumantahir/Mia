@@ -16,6 +16,7 @@ import os
 import sys
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 DEMO_PREFIX = "[MIA DEMO]"
@@ -85,6 +86,22 @@ DEMO_RECORDS: tuple[dict[str, Any], ...] = (
         "details": {"demo_only": True, "fictional": True, "dataset": "supervisor-demo"},
     },
 )
+
+
+def validate_local_base_url(value: str) -> str:
+    """Refuse to send demo records to a non-loopback host."""
+    parsed = urlsplit(value)
+    if (
+        parsed.scheme != "http"
+        or parsed.hostname not in {"127.0.0.1", "localhost", "::1"}
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("The supervisor demo utility only supports a local Mia URL (127.0.0.1, localhost or ::1).")
+    return value.rstrip("/")
 
 
 def request_json(
@@ -260,8 +277,9 @@ def main() -> int:
     )
     args = parser.parse_args()
     try:
-        return seed(args.base_url) if args.command == "seed" else check(args.base_url)
-    except RuntimeError as exc:
+        base_url = validate_local_base_url(args.base_url)
+        return seed(base_url) if args.command == "seed" else check(base_url)
+    except (RuntimeError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
