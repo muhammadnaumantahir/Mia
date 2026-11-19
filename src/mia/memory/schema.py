@@ -4,7 +4,8 @@ Schema version 1 is the original layout (conversations, messages, knowledge item
 structured records and their FTS indexes), created with ``CREATE TABLE IF NOT
 EXISTS`` by ``MemoryStore``. Every later version is an additive migration applied
 once, in order, inside a single transaction, and recorded in ``schema_migrations``.
-Migrations never drop or rewrite existing memory rows.
+Migrations never drop or rewrite existing memory rows. They are idempotent, so a run
+interrupted part-way is safe to repeat (SQLite DDL is not reliably transactional here).
 """
 
 from __future__ import annotations
@@ -52,9 +53,82 @@ def _migration_2_identity_and_audit(db: sqlite3.Connection) -> None:
     """)
 
 
+def _add_column(db: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
+    """ALTER TABLE ADD COLUMN that is safe to re-run after a partial failure."""
+    existing = {row[1] for row in db.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column not in existing:
+        db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
+def _migration_3_memory_lifecycle(db: sqlite3.Connection) -> None:
+    for column, ddl in (
+        ("importance", "REAL NOT NULL DEFAULT 0.5"),
+        ("temporary", "INTEGER NOT NULL DEFAULT 0"),
+        ("expires_at", "TEXT"),
+        ("archived_at", "TEXT"),
+        ("origin_json", "TEXT NOT NULL DEFAULT '{}'"),
+        ("last_used_at", "TEXT"),
+        ("use_count", "INTEGER NOT NULL DEFAULT 0"),
+    ):
+        _add_column(db, "structured_memory", column, ddl)
+    _add_column(db, "conversations", "temporary", "INTEGER NOT NULL DEFAULT 0")
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS structured_memory_history (
+            history_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            record_id TEXT NOT NULL,
+            changed_at TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            change_type TEXT NOT NULL,
+            snapshot_json TEXT NOT NULL
+        )
+    """)
+    db.execute("""
+        CREATE INDEX IF NOT EXISTS idx_structured_history_record
+            ON structured_memory_history(record_id, history_id)
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS memory_relationships (
+            relationship_id TEXT PRIMARY KEY,
+            from_id TEXT NOT NULL,
+            to_id TEXT NOT NULL,
+            relation TEXT NOT NULL,
+            visibility TEXT NOT NULL DEFAULT 'normal',
+            note TEXT NOT NULL DEFAULT '',
+            actor TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(from_id, to_id, relation)
+        )
+    """)
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_relationships_from ON memory_relationships(from_id)"
+    )
+    db.execute("CREATE INDEX IF NOT EXISTS idx_relationships_to ON memory_relationships(to_id)")
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS memory_settings (
+            key TEXT PRIMARY KEY,
+            value_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS memory_usage (
+            usage_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id TEXT,
+            reply_id TEXT,
+            ref_type TEXT NOT NULL,
+            ref_id TEXT NOT NULL,
+            ref_label TEXT NOT NULL DEFAULT '',
+            used_at TEXT NOT NULL
+        )
+    """)
+    db.execute("CREATE INDEX IF NOT EXISTS idx_usage_reply ON memory_usage(reply_id)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_usage_ref ON memory_usage(ref_type, ref_id)")
+
+
 # (version, description, function). Append new migrations; never edit applied ones.
 MIGRATIONS: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (2, "identity versions and memory audit log", _migration_2_identity_and_audit),
+    (3, "memory lifecycle, history, relationships, settings and usage", _migration_3_memory_lifecycle),
 ]
 
 LATEST_VERSION = max([BASELINE_VERSION, *[version for version, _, _ in MIGRATIONS]])
@@ -97,6 +171,11 @@ def migrate(db: sqlite3.Connection) -> list[int]:
             (version, description, _now()),
         )
         applied.append(version)
+    # Every migration is idempotent (CREATE ... IF NOT EXISTS / guarded ADD COLUMN), so
+    # re-running them is a cheap layout self-check. It repairs a table that was
+    # recreated in its original shape after its migration was already recorded.
+    for _, _, apply in sorted(MIGRATIONS, key=lambda m: m[0]):
+        apply(db)
     return applied
 
 

@@ -15,8 +15,11 @@ from typing import Any
 
 from mia.memory import schema
 from mia.memory.identity import IdentityStore
+from mia.memory.relationships import RelationshipStore
 from mia.memory.schema import AuditLog
+from mia.memory.settings import SettingsStore
 from mia.memory.structured import StructuredMemory
+from mia.memory.usage import UsageLog
 
 
 def _now() -> str:
@@ -71,6 +74,9 @@ class MemoryStore:
         self.structured = StructuredMemory(self._connection)
         self.audit = AuditLog(self._connection)
         self.identity = IdentityStore(self._connection)
+        self.settings = SettingsStore(self._connection)
+        self.relationships = RelationshipStore(self._connection)
+        self.usage = UsageLog(self._connection)
         self._initialize()
 
     @contextmanager
@@ -297,7 +303,7 @@ class MemoryStore:
                 FROM message_fts
                 JOIN conversation_messages m ON m.rowid = message_fts.rowid
                 JOIN conversations c ON c.conversation_id = m.conversation_id
-                WHERE message_fts MATCH ?
+                WHERE message_fts MATCH ? AND c.temporary = 0
                 ORDER BY relevance
                 LIMIT ?
                 """,
@@ -397,11 +403,40 @@ class MemoryStore:
 
     def delete_conversation(self, conversation_id: str) -> bool:
         with self._connection() as db:
+            db.execute(
+                "DELETE FROM memory_usage WHERE conversation_id = ?", (conversation_id,)
+            )
             cursor = db.execute(
                 "DELETE FROM conversations WHERE conversation_id = ?",
                 (conversation_id,),
             )
         return cursor.rowcount > 0
+
+    def set_conversation_temporary(self, conversation_id: str, temporary: bool) -> bool:
+        """Temporary conversations capture no memory and are never retrieved elsewhere."""
+        with self._connection() as db:
+            cursor = db.execute(
+                "UPDATE conversations SET temporary = ? WHERE conversation_id = ?",
+                (1 if temporary else 0, conversation_id),
+            )
+            if cursor.rowcount:
+                AuditLog.write(
+                    db,
+                    actor="owner",
+                    action="conversation_temporary_set",
+                    target_type="conversation",
+                    target_id=conversation_id,
+                    detail={"temporary": bool(temporary)},
+                )
+        return cursor.rowcount > 0
+
+    def is_conversation_temporary(self, conversation_id: str) -> bool:
+        with self._connection() as db:
+            row = db.execute(
+                "SELECT temporary FROM conversations WHERE conversation_id = ?",
+                (conversation_id,),
+            ).fetchone()
+        return bool(row and row["temporary"])
 
     def add_item(
         self,
@@ -513,6 +548,18 @@ class MemoryStore:
                 return False
             db.execute("DELETE FROM memory_fts WHERE item_id = ?", (item_id,))
             db.execute("DELETE FROM memory_items WHERE item_id = ?", (item_id,))
+            db.execute(
+                "DELETE FROM memory_usage WHERE ref_type = 'knowledge' AND ref_id = ?",
+                (item_id,),
+            )
+            AuditLog.write(
+                db,
+                actor="owner",
+                action="item_deleted",
+                target_type="knowledge_item",
+                target_id=item_id,
+                detail={},
+            )
         return True
 
     def purge_older_than(

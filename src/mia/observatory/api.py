@@ -66,6 +66,7 @@ from mia.memory.identity import (
     identity_system_prompt,
     render_identity_prompt,
 )
+from mia.memory.relationships import RelationshipNotFoundError
 from mia.memory.store import MemoryStore
 from mia.memory.structured import RecordNotFoundError, RecordStateError
 from mia.observatory.activity import ExperimentActivityCollector
@@ -259,6 +260,59 @@ class MemoryRecordInput(BaseModel):
     confidence: float | None = None
     evidence: list[EvidenceRef] = Field(default_factory=list, max_length=20)
     details: dict[str, Any] = Field(default_factory=dict)
+    importance: float | None = None
+    temporary: bool = False
+    expires_at: str | None = Field(default=None, max_length=40)
+
+
+class MemoryRecordEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    body: str | None = Field(default=None, min_length=1, max_length=20_000)
+    details: dict[str, Any] | None = None
+    confidence: float | None = None
+    importance: float | None = None
+
+
+class MemoryRecordTemporary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    temporary: bool
+    expires_at: str | None = Field(default=None, max_length=40)
+
+
+class MemorySettingsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    memory_enabled: bool | None = None
+    capture_mode: str | None = Field(default=None, max_length=20)
+    retrieval_enabled: bool | None = None
+    auto_save_min_confidence: float | None = None
+    pending_retention_days: int | None = None
+    conversation_retention_days: int | None = None
+
+
+class RelationshipInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    from_id: str = Field(min_length=1, max_length=64)
+    to_id: str = Field(min_length=1, max_length=64)
+    relation: str = Field(min_length=1, max_length=30)
+    visibility: str = Field(default="normal", max_length=10)
+    note: str = Field(default="", max_length=300)
+
+
+class RelationshipVisibility(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    visibility: str = Field(min_length=1, max_length=10)
+
+
+class ConversationTemporaryInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    temporary: bool
 
 
 class MemoryRecordCorrection(BaseModel):
@@ -2559,6 +2613,9 @@ def create_app(
                 confidence=item.confidence,
                 evidence=[ref.model_dump() for ref in item.evidence],
                 details=item.details,
+                importance=item.importance,
+                temporary=item.temporary,
+                expires_at=item.expires_at,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -2572,11 +2629,17 @@ def create_app(
 
     @app.get("/api/memory/records")
     def list_memory_records(
-        record_type: str | None = None, status: str | None = None, limit: int = 100
+        record_type: str | None = None,
+        status: str | None = None,
+        q: str | None = None,
+        limit: int = 100,
     ) -> dict[str, Any]:
-        return {"items": memory_store.structured.list(
-            record_type=record_type, status=status, limit=limit
-        )}
+        return {
+            "items": memory_store.structured.list(
+                record_type=record_type, status=status, query=q, limit=limit
+            ),
+            "counts": memory_store.structured.counts(),
+        }
 
     @app.get("/api/memory/records/{record_id}")
     def get_memory_record(record_id: str) -> dict[str, Any]:
@@ -2585,7 +2648,13 @@ def create_app(
         except RecordNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Record not found") from exc
         record = next(entry for entry in history if entry["record_id"] == record_id)
-        return {"record": record, "history": history}
+        return {
+            "record": record,
+            "history": history,
+            "edit_history": memory_store.structured.edit_history(record_id),
+            "relationships": memory_store.relationships.for_record(record_id),
+            "used_in_replies": memory_store.usage.for_memory("record", record_id),
+        }
 
     @app.post("/api/memory/records/{record_id}/correct", status_code=201)
     def correct_memory_record(record_id: str, item: MemoryRecordCorrection) -> dict[str, Any]:
@@ -2630,11 +2699,130 @@ def create_app(
         return {"record_id": record_id, "status": item.status}
 
     @app.delete("/api/memory/records/{record_id}")
-    def delete_memory_record(record_id: str) -> dict[str, bool]:
-        deleted = memory_store.structured.delete(record_id)
+    def delete_memory_record(record_id: str, chain: bool = True) -> dict[str, bool]:
+        deleted = memory_store.structured.delete(record_id, chain=chain)
         if deleted:
             _record_event("record_deleted", "Owner deleted a memory record", {"record_id": record_id})
         return {"deleted": deleted}
+
+    def run_record_operation(operation: Callable[[], Any]) -> Any:
+        try:
+            return operation()
+        except RecordNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Record not found") from exc
+        except RecordStateError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/memory/records/{record_id}/edit")
+    def edit_memory_record(record_id: str, item: MemoryRecordEdit) -> dict[str, Any]:
+        changes = item.model_dump(exclude_unset=True)
+        conflicts = run_record_operation(
+            lambda: memory_store.structured.edit(record_id, **changes)
+        )
+        _record_event("record_edited", "Owner edited a memory record", {"record_id": record_id})
+        return {"record_id": record_id, "conflicts_with": conflicts}
+
+    @app.post("/api/memory/records/{record_id}/approve")
+    def approve_memory_record(record_id: str) -> dict[str, Any]:
+        conflicts = run_record_operation(lambda: memory_store.structured.approve(record_id))
+        _record_event("record_approved", "Owner approved a memory suggestion", {"record_id": record_id})
+        return {"record_id": record_id, "conflicts_with": conflicts}
+
+    @app.post("/api/memory/records/{record_id}/confirm")
+    def confirm_memory_record(record_id: str) -> dict[str, str]:
+        run_record_operation(lambda: memory_store.structured.confirm(record_id))
+        return {"record_id": record_id, "provenance": "owner_provided"}
+
+    @app.post("/api/memory/records/{record_id}/archive")
+    def archive_memory_record(record_id: str) -> dict[str, str]:
+        run_record_operation(lambda: memory_store.structured.archive(record_id))
+        _record_event("record_archived", "Owner archived a memory record", {"record_id": record_id})
+        return {"record_id": record_id, "status": "archived"}
+
+    @app.post("/api/memory/records/{record_id}/outdated")
+    def outdate_memory_record(record_id: str) -> dict[str, str]:
+        run_record_operation(lambda: memory_store.structured.mark_outdated(record_id))
+        return {"record_id": record_id, "status": "outdated"}
+
+    @app.post("/api/memory/records/{record_id}/restore")
+    def restore_memory_record(record_id: str) -> dict[str, Any]:
+        conflicts = run_record_operation(lambda: memory_store.structured.restore(record_id))
+        return {"record_id": record_id, "status": "active", "conflicts_with": conflicts}
+
+    @app.post("/api/memory/records/{record_id}/temporary")
+    def set_memory_record_temporary(
+        record_id: str, item: MemoryRecordTemporary
+    ) -> dict[str, Any]:
+        run_record_operation(
+            lambda: memory_store.structured.set_temporary(
+                record_id, temporary=item.temporary, expires_at=item.expires_at
+            )
+        )
+        return {"record_id": record_id, "temporary": item.temporary}
+
+    @app.get("/api/memory/settings")
+    def get_memory_settings() -> dict[str, Any]:
+        return memory_store.settings.get_all()
+
+    @app.put("/api/memory/settings")
+    def update_memory_settings(item: MemorySettingsInput) -> dict[str, Any]:
+        changes = item.model_dump(exclude_unset=True)
+        try:
+            settings = memory_store.settings.update(changes)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _record_event("settings_changed", "Owner changed memory settings", {"keys": sorted(changes)})
+        return settings
+
+    @app.post("/api/memory/relationships", status_code=201)
+    def add_memory_relationship(item: RelationshipInput) -> dict[str, Any]:
+        try:
+            relationship_id, created = memory_store.relationships.add(
+                item.from_id,
+                item.to_id,
+                item.relation,
+                visibility=item.visibility,
+                note=item.note,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Record not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"relationship_id": relationship_id, "created": created}
+
+    @app.get("/api/memory/records/{record_id}/relationships")
+    def memory_record_relationships(record_id: str) -> dict[str, Any]:
+        return {"relationships": memory_store.relationships.for_record(record_id)}
+
+    @app.post("/api/memory/relationships/{relationship_id}/visibility")
+    def set_relationship_visibility(
+        relationship_id: str, item: RelationshipVisibility
+    ) -> dict[str, str]:
+        try:
+            memory_store.relationships.set_visibility(relationship_id, item.visibility)
+        except RelationshipNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Relationship not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"relationship_id": relationship_id, "visibility": item.visibility}
+
+    @app.delete("/api/memory/relationships/{relationship_id}")
+    def delete_memory_relationship(relationship_id: str) -> dict[str, bool]:
+        return {"deleted": memory_store.relationships.remove(relationship_id)}
+
+    @app.post("/api/conversations/{conversation_id}/temporary")
+    def set_conversation_temporary(
+        conversation_id: str, item: ConversationTemporaryInput
+    ) -> dict[str, Any]:
+        if not memory_store.set_conversation_temporary(conversation_id, item.temporary):
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        return {"conversation_id": conversation_id, "temporary": item.temporary}
+
+    @app.get("/api/memory/replies/{reply_id}/usage")
+    def reply_memory_usage(reply_id: str) -> dict[str, Any]:
+        return {"reply_id": reply_id, "used": memory_store.usage.for_reply(reply_id)}
 
     @app.post("/api/approvals/{approval_id}/reject")
     def reject_action_approval(approval_id: str) -> dict[str, str]:

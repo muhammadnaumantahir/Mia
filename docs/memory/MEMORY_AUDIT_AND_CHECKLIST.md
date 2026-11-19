@@ -56,7 +56,7 @@ behaviour I have not read; items marked *not verified* were not exercised.
 
 - [x] M1 Audit and checklist
 - [x] M2 Persistent versioned identity (storage, API, history, prompt integration, restart/provider-switch tests) — local `pytest` 450 passed, 1 skipped; `ruff` clean
-- [ ] M3 Memory data architecture: unified lifecycle states for knowledge items (schema versioning and audit log tables were delivered with M2)
+- [x] M3 Memory data architecture: record lifecycle (pending/active/completed/outdated/archived/expired/superseded/rejected), importance, temporary+expiry, edit history, relationships with privacy, owner settings, per-reply usage log, temporary conversations, schema v3 — local `pytest` 484 passed, 1 skipped; `ruff` clean. Not done: lifecycle states for knowledge items (`memory_items`), which remain trust-level only
 - [ ] M4 Capture pipeline: explicit commands, settings/consent, pending queue, secret filter, provenance
 - [ ] M5 Retrieval upgrade: lifecycle-aware filtering, confidence weighting, per-reply usage log, optional semantic hook
 - [ ] M6 Maintenance: duplicates, contradictions, archive, expiry, update history
