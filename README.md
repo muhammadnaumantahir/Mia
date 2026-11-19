@@ -47,6 +47,8 @@ The coordinator/runtime connects these existing layers; it is not an additional 
 | Self-programming | Discover gaps; reuse, adapt, compose, create, test, version and activate capabilities |
 | Evolution observatory | Day 0 to Day N timeline, benchmark trends, code lineage, layer health and experiment reports |
 
+See [Proactive Digital Companion Runtime](docs/architecture/DIGITAL_PERSON_RUNTIME.md) for the target architecture, autonomy boundaries and acceptance criteria. It is a design target; the status document distinguishes what is implemented from what remains to be built.
+
 ## Quick start — foundation preview
 
 Requirements: Python 3.11 or newer. Python 3.13 is supported by this starter foundation.
