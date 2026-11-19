@@ -67,6 +67,7 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 .voice-copy{min-width:0}.voice-copy strong{display:block;font-size:11px;color:#d8eee3}.voice-copy small{display:block;font-size:10px;color:#8ba79a;margin-top:3px;line-height:1.4}
 .voice-actions{display:flex;align-items:center;gap:7px;flex:0 0 auto}
 .voice-actions select{max-width:112px}
+.voice-preview-button{border:1px solid #35594a;background:#172923;color:#b9d9c8;border-radius:10px;padding:9px 10px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap}
 .voice-toggle{border:1px solid #39966c;background:linear-gradient(135deg,#4be0a5,#16845f);color:#06291e;border-radius:10px;padding:9px 12px;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap}
 .voice-toggle.active{background:#362522;border-color:#87594d;color:#ffd3c5}
 .voice-toggle:disabled{opacity:.55;cursor:wait}
@@ -109,7 +110,7 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 <form class="composer" id="composer">
  <div class="voice-console">
   <div class="voice-info"><div class="voice-orb" aria-hidden="true">♫</div><div class="voice-copy"><strong>Talk with Mia</strong><small id="voiceStatus" role="status" aria-live="polite">Voice conversation is off · press Start when you're ready</small></div></div>
-  <div class="voice-actions"><select id="voiceLanguage" aria-label="Voice recognition language"><option value="en-US">English</option><option value="ur-PK">Urdu · Pakistan</option></select><button class="voice-toggle" id="voiceMode" type="button" aria-pressed="false">Start voice</button></div>
+  <div class="voice-actions"><select id="voiceLanguage" aria-label="Voice recognition language"><option value="en-US">English</option><option value="ur-PK">Urdu · Pakistan</option></select><button class="voice-preview-button" id="previewVoice" type="button">Test voice</button><button class="voice-toggle" id="voiceMode" type="button" aria-pressed="false">Start voice</button></div>
  </div>
  <div class="voice-preview" id="voicePreview" aria-live="polite"></div>
  <p class="voice-privacy">Hands-free recognition uses your browser's speech service and may require internet; the browser may process microphone audio outside Mia. Mic starts only after you press Start. For local/offline transcription, use Local record below with the optional Faster-Whisper extra.</p>
@@ -849,6 +850,12 @@ $('voiceMode').addEventListener('click',()=>{
  }else{
   startVoiceConversation();
  }
+});
+$('previewVoice').addEventListener('click',async()=>{
+ if(voiceMode){setVoiceStatus('End the active conversation before testing another voice.',true);return;}
+ setVoiceStatus('Playing a short voice preview…');
+ await speakReply("Hello, I'm Mia. I'm ready to talk with you.",{force:true});
+ setVoiceStatus('Voice preview finished. Select your preferred voice and press Start voice.');
 });
 
 $('prompt').addEventListener('keydown',event=>{
