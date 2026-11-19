@@ -38,7 +38,7 @@ If `.env` already exists, do not overwrite it. Review these settings for a safe 
 
 Do not add API keys to `.env` or any repository file. If using Ollama, start it separately and confirm at least one model is already installed. Mia's local provider status should show `online`. For a hosted/self-hosted provider, only use a route you have explicitly configured and checked for cost and data handling.
 
-Hands-free Voice Conversation Mode is the main voice demo and uses Chrome/Edge browser speech recognition plus browser speech synthesis; it does not require the Faster-Whisper or local TTS extras. Browser speech recognition may use an external speech service and needs an available network. For a fully local speech-input fallback, install the voice extra and verify the model has finished downloading before the demo. Offline Windows voice output is optional via the tts extra. Playwright and Docker capability validation are not demo prerequisites.
+Hands-free Voice Conversation Mode is the main voice demo and uses Chrome/Edge browser speech recognition plus browser speech synthesis; it does not require the Faster-Whisper or local TTS extras. Browser speech recognition may use an external speech service and needs an available network. For a fully local speech-input fallback, run `.venv\\Scripts\\python.exe -m pip install -e ".[voice]"` and verify the model has finished downloading before the demo. Offline Windows voice output is optional via `.venv\\Scripts\\python.exe -m pip install -e ".[tts]"`. Test the optional local path before the demo rather than installing/downloading it during the presentation. Playwright and Docker capability validation are not demo prerequisites.
 
 ## 3. Start and preflight
 
@@ -53,11 +53,11 @@ In a second terminal, run:
 
 The seed command adds five fictional, clearly labelled `[MIA DEMO]` records (project, entity, decision, goal and episode) through Mia's own API. It is idempotent: repeating it does not duplicate these exact demo titles. It does not delete, replace or modify unrelated owner memories.
 
-The check command verifies server reachability, AI provider availability, the demo records, the read-only resource tool and optional voice status. Resolve any AI provider warning before relying on live chat. If the API is unreachable, confirm the server window is still running and the port is not already occupied.
+The check command verifies server reachability, AI provider availability, the demo records and the read-only resource tool. It prints a note reminding you that hands-free browser speech must be verified in Chrome/Edge on the actual demo laptop; it cannot prove browser microphone permission from the server. Optional local Whisper and OS TTS status are reported separately. Resolve any AI provider warning before relying on live chat. If the API is unreachable, confirm the server window is still running and the port is not already occupied.
 
 Open both URLs above in the latest Chrome or Edge on the laptop that has the microphone and speakers. Keep the browser window at a readable zoom (90–100%). Close unrelated tabs and notifications. Turn off browser automatic translation. Allow microphone access for the local Mia page and verify the browser is not muted. Keep the laptop plugged in and test speaker volume.
 
-## 4. Suggested 7–10 minute walkthrough
+## 4. Suggested 9–12 minute walkthrough
 
 ### Part A — Introduce the research idea (about 1 minute)
 
