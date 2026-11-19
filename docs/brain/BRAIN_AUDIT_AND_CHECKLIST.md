@@ -65,7 +65,7 @@ Model output is untrusted input at every boundary.
 - [x] M2 Provider orchestration: capability registry (declared vs verified), task profiles (`brain/capabilities.py`)
 - [x] M3 Task-aware routing with explanations, refusal when unsuitable, fallback order (`brain/router.py`, `ModelGateway order_hint`)
 - [x] M4 Intent/reference/ambiguity + budgeted context + memory integration (`brain/intent.py`, `brain/context.py`)
-- [ ] M5 Planning engine with dependencies, checkpoints, persistence
+- [x] M5 Planning engine with dependencies, checkpoints, persistence (`brain/plan.py`, `brain/planning.py`)
 - [ ] M6 Tool broker: selection, validation, permission gate, result interpretation
 - [ ] M7 Verification ledger, output validation, recovery, evaluation scenarios
 - [ ] M8 Single Brain pipeline used by chat, stream and voice endpoints
