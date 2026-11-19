@@ -67,7 +67,7 @@ Model output is untrusted input at every boundary.
 - [x] M4 Intent/reference/ambiguity + budgeted context + memory integration (`brain/intent.py`, `brain/context.py`)
 - [x] M5 Planning engine with dependencies, checkpoints, persistence (`brain/plan.py`, `brain/planning.py`)
 - [x] M6 Tool broker: selection, validation, permission gate, result interpretation (`brain/broker.py`)
-- [ ] M7 Verification ledger, output validation, recovery, evaluation scenarios
+- [x] M7a Verification ledger, output validation, completion-claim checks, recovery advice (`brain/verify.py`); evaluation scenarios land with M8
 - [ ] M8 Single Brain pipeline used by chat, stream and voice endpoints
 - [ ] M9 Diagnostics API/dashboard data
 - [ ] M10 Full regression, docs, STATUS update
