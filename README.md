@@ -94,7 +94,7 @@ The first transcription downloads the selected Faster-Whisper model into the loc
 
 Computer file access defaults to Mia's own `workspace` folder. The optional computer extra includes Playwright and psutil for browser automation and CPU/RAM inspection. To grant additional roots, add a semicolon-separated list to `.env`, for example `MIA_COMPUTER_ROOTS=D:/Projects;D:/Documents`. File writes require a preview, explicit approval and an exact payload match. Copy `config/applications.example.json` to `config/applications.json` to enable the Notepad/Calculator/File Explorer allowlist. Browser navigation uses an isolated profile; clicks need approval. See [Computer Access](docs/architecture/COMPUTER_ACCESS.md).
 
-Open Mia at http://127.0.0.1:8765/assistant and the Evolution Observatory at http://127.0.0.1:8765/.
+Open Mia at http://127.0.0.1:8765/assistant and the Evolution Observatory at http://127.0.0.1:8765/. The Assistant page includes a hands-free browser voice conversation mode; press Start, speak, pause for Mia to reply aloud, and press End or say “stop listening”. Browser recognition may use an external service and is not offline; Local record remains the optional Faster-Whisper path.
 
 For the supervisor walkthrough, see the [Supervisor Demo Runbook](docs/SUPERVISOR_DEMO.md). On Windows, `run_demo.cmd` starts the local app after setup; then run `python -m mia.supervisor_demo seed` and `python -m mia.supervisor_demo check` in a second terminal to add clearly labelled fictional demo memories and verify the local demo prerequisites.
 
@@ -119,7 +119,7 @@ The Evolution Observatory can capture an immutable Day 0 baseline on the local M
 | 0. Research and reuse audit | Source audit, license matrix, architecture and integration decisions | In progress |
 | 1. Foundation | Project skeleton, SPS registry, event store, observatory API, tests | Bootstrap committed |
 | 2. AI gateway | Ollama/OpenAI-compatible adapters, free-first routing and price guard | In progress |
-| 3. Voice | Push-to-talk, local STT, optional offline OS TTS and browser fallback | Partial implementation; real Windows voice metadata/latency and wake-word tests remain |
+| 3. Voice | Hands-free browser conversation with automatic turn-taking and spoken replies; local Whisper push-to-talk fallback; optional offline OS TTS | Partial implementation; browser recognition, target-Windows microphone/voice latency and local model download must be verified on the demo device; no wake word |
 | 4. Computer intelligence | Scoped filesystem, approved app launch and isolated public-web browser | In progress |
 | 5. Memory and knowledge | Persistent conversations, identity continuity, owner-managed structured memory, contextual retrieval and source-aware document ingestion | In progress; bounded FTS5 retrieval across knowledge, older conversations and structured records is injected into chat with provenance. Consolidation, semantic/relationship-aware retrieval, automatic extraction and owner-editable identity remain open |
 | 6. Autonomous digital life and agent runtime | Durable scheduler/queue, curiosity-led bounded exploration, reflection, proactive conversation and governed task execution | Partial foundation only; current background dispatch is limited to approved read-only system checks. Curiosity/social initiative, quiet-hour delivery policy, broader workflows, safe restart continuation and target-device verification remain open |
