@@ -69,14 +69,14 @@ Show the ten layers from `docs/architecture/SPS_LAYERS.md`. The coordinator and 
 
 ### Part B — Live voice conversation (about 2–3 minutes)
 
-1. On the Assistant page, choose **English** in the voice-language selector and press **Start voice**.
+1. On the Assistant page, choose a voice from the **Speech voice** selector in the composer footer. Use **Test voice** to hear a sample, then choose **English** in the voice-language selector and press **Start voice**.
 2. Allow microphone access. Wait until the status says **Listening**.
 3. Say: **“Hi Mia. Please introduce yourself and explain what makes your memory independent of the AI model answering me.”**
 4. Pause naturally. Mia should submit the transcript, answer aloud, and return to Listening after her speech finishes.
 5. Ask a second question by voice: **“For the Atlas Learning Portal, what database decision was recorded? Explain why, and distinguish that from the database Mia uses for her own memory.”**
 6. Stop the session by saying **“stop listening”** or pressing **End conversation**.
 
-For Urdu, end the session, select **Urdu · Pakistan**, start again and speak a short sentence. Browser speech recognition language quality varies; rehearse the language you intend to use.
+For Urdu, end the session, select **Urdu · Pakistan**, start again and speak a short sentence. If a suitable installed female voice is available, choose it in Speech voice and verify it with Test voice; the app only labels local voices as female when OS metadata reports female. Browser speech recognition language quality varies; rehearse the language you intend to use.
 
 **Voice privacy and fallback:** this hands-free mode uses the browser's speech-recognition service and may send microphone audio outside Mia. Do not speak confidential information. If the browser does not support recognition or the service is unavailable, use **Local record** after installing the voice extra and completing the first model download; that fallback transcribes locally and lets you review the text before sending. Do not claim local offline recognition while using the browser mode.
 
