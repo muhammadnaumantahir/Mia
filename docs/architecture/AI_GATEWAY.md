@@ -1,3 +1,5 @@
+> **Architecture decision (owner-approved):** This document describes legacy gateway implementation details and must be read alongside [Independent Mia AI Gateway direction](AI_GATEWAY_DIRECTION.md), which is authoritative. FreeLLMAPI and OmniRoute are **not** approved runtime dependencies, sidecars or control planes. Any existing adapter/configuration for them is legacy migration scope; do not add new dependencies or setup instructions for either. New gateway work must use Mia-owned contracts and direct provider adapters.
+
 # Mia Universal AI Gateway
 
 ## Goal
@@ -56,7 +58,7 @@ Streaming, model-specific capability metadata, monthly cost ledger and benchmark
 - Store provider terms/quotas as versioned policy metadata.
 
 
-Ollama is marked as a local inference provider. An OpenAI-compatible provider, including FreeLLMAPI, is treated as non-local unless `MIA_FREELLMAPI_DATA_LOCAL=true` is explicitly set after checking the complete upstream route. Localhost hosting alone is not proof that the provider will not forward data externally.
+Ollama is marked as a local inference provider. Any remote-compatible provider is treated as non-local unless its data residency and routing are independently verified and explicitly configured. Localhost hosting alone is not proof that the provider will not forward data externally.
 
 The chat tool loop withholds file and knowledge contents from non-local providers by default. `MIA_ALLOW_REMOTE_FILE_CONTEXT=true` is a separate owner opt-in that permits this data egress.
 
@@ -95,7 +97,7 @@ local-only setup needs no keys.
 
 | Variable | Meaning |
 |---|---|
-| `MIA_FREELLMAPI_ENABLED` / `MIA_OMNIROUTE_ENABLED` | Register the provider. Omniroute has **no default URL**; its endpoint is not assumed |
+| `MIA_PROVIDER_<ID>_ENABLED` | Register an independently configured direct provider adapter; do not add FreeLLMAPI/OmniRoute as built-in providers |
 | `..._BASE_URL` | Provider base URL, validated (`gateway/urlpolicy.py`) |
 | `..._ROUTE_FREE` | Treat the route as free (default false) |
 | `..._DATA_LOCAL` | Treat data as staying local (default false) |
