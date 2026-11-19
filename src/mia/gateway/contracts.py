@@ -14,6 +14,7 @@ class ModelRequest:
     required_capabilities: frozenset[str] = frozenset()
     messages: tuple[dict[str, Any], ...] = ()
     tools: tuple[dict[str, Any], ...] = ()
+    sensitive: bool = False  # private content: may be restricted to local models
 
 
 @dataclass(frozen=True, slots=True)
