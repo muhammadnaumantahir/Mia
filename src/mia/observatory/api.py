@@ -229,6 +229,11 @@ class SpeechSynthesisInput(BaseModel):
 CHAT_SYSTEM_PROMPT = identity_system_prompt()
 
 
+class BrainResumeInput(BaseModel):
+    answers: dict[str, str] = Field(default_factory=dict, max_length=8)
+    retry_failed: bool = False
+
+
 class ChatInput(BaseModel):
     prompt: str = Field(min_length=1, max_length=100_000)
     task_type: str = Field(default="chat", min_length=1, max_length=40)
@@ -4108,6 +4113,44 @@ def create_app(
         except (RuntimeError, KeyError) as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
+
+    # ---- AI Brain diagnostics (no prompts, replies, tool arguments or credentials) ----
+    @app.get("/api/brain/diagnostics")
+    def brain_diagnostics(limit: int = 20) -> dict[str, Any]:
+        return {
+            "summary": brain.diagnostics.summary(),
+            "turns": brain.diagnostics.recent(limit),
+            "provider_health": model_gateway.health.snapshot(),
+            "capability_evidence": brain.capabilities.snapshot(),
+            "plans": plan_store.list_plans(limit=10),
+        }
+
+    @app.get("/api/brain/diagnostics/{turn_id}")
+    def brain_turn(turn_id: str) -> dict[str, Any]:
+        trace = brain.diagnostics.get(turn_id)
+        if trace is None:
+            raise HTTPException(status_code=404, detail="Turn trace not found")
+        return trace
+
+    @app.get("/api/brain/plans")
+    def brain_plans(limit: int = 20) -> dict[str, Any]:
+        return {"items": plan_store.list_plans(limit=limit)}
+
+    @app.get("/api/brain/plans/{plan_id}")
+    def brain_plan(plan_id: str) -> dict[str, Any]:
+        plan = plan_store.load(plan_id)
+        if plan is None:
+            raise HTTPException(status_code=404, detail="Plan not found")
+        return {**plan.to_dict(), "checkpoints": plan_store.checkpoints(plan_id)}
+
+    @app.post("/api/brain/plans/{plan_id}/resume")
+    async def brain_plan_resume(plan_id: str, item: BrainResumeInput) -> dict[str, Any]:
+        try:
+            return await brain.resume_plan(
+                plan_id, answers=item.answers, retry_failed=item.retry_failed
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Plan or step not found") from exc
 
     return app
 
