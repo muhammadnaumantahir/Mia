@@ -90,3 +90,13 @@ None of these is marked "verified live".
   and response shapes are **unverified**: the adapter assumes OpenAI-compatible
   `/models` and `/chat/completions`. Local verification: `ruff` clean, `pytest`
   705 passed, 1 skipped (mocked HTTP only).
+- **Milestone 4 (model registry):** `gateway/model_registry.py`, a SQLite registry
+  (`mia-models.sqlite3` in `MIA_DATA_DIR`) holding per-model capability evidence with
+  separate sources (`reported`, `configured`, `tested`); effective capability is
+  tested > configured > reported and unknown is never advertised. Supports manual
+  registration, enable/disable, aliases, preference (-10..10), stale marking (only by
+  a provider whose listing succeeded; owner settings preserved) and removal of stale
+  or manual entries only. `ModelGateway.discover_models` now syncs and applies it, and
+  the API app wires it in. Not yet done: runtime capability *testing* that writes
+  `tested` rows, an HTTP API for registry administration, discovery caching/TTL.
+  Local verification: `ruff` clean, `pytest` 718 passed, 1 skipped (mocked only).

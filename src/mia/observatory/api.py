@@ -66,6 +66,7 @@ from mia.gateway.contracts import (
 )
 from mia.gateway.factory import apply_daily_cap, build_default_registry, paid_route_policy
 from mia.gateway.ledger import UsageLedger
+from mia.gateway.model_registry import ModelRegistry
 from mia.gateway.service import CompletionResult, ModelGateway
 from mia.knowledge.document_ingestion import DocumentIngestionError, DocumentIngestor
 from mia.life.runner import LifeRunner, LifeScheduler
@@ -505,7 +506,10 @@ def create_app(
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
-    model_gateway = gateway or ModelGateway(build_default_registry())
+    model_gateway = gateway or ModelGateway(
+        build_default_registry(),
+        model_registry=ModelRegistry(data_dir / "mia-models.sqlite3"),
+    )
     ledger = usage_ledger or UsageLedger(data_dir / "mia-usage.sqlite3")
     startup_handlers: list[Callable[[], Any]] = []
     shutdown_handlers: list[Callable[[], Any]] = []
