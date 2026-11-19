@@ -131,10 +131,12 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 <form class="composer" id="composer">
  <div class="voice-console">
   <div class="voice-info"><div class="voice-orb" id="voiceOrb" data-state="idle" aria-hidden="true">♫</div><div class="voice-copy"><strong>Talk with Mia <span class="voice-state" id="voiceState">Off</span></strong><small id="voiceStatus" role="status" aria-live="polite">Voice conversation is off · press Start when you're ready</small></div></div>
-  <div class="voice-actions"><select id="voiceLanguage" aria-label="Voice recognition language"><option value="en-US">English</option><option value="ur-PK">Urdu · Pakistan</option></select><button class="voice-preview-button" id="previewVoice" type="button">Test voice</button><button class="voice-toggle" id="voiceMode" type="button" aria-pressed="false">Start voice</button></div>
+  <div class="voice-actions"><select id="voiceLanguage" aria-label="Voice recognition language"><option value="en-US">English</option><option value="ur-PK">Urdu · Pakistan</option><option value="auto">Auto · English + Urdu (local engine)</option></select><button class="voice-preview-button" id="previewVoice" type="button">Test voice</button><button class="voice-toggle" id="voiceMode" type="button" aria-pressed="false">Start voice</button></div>
  </div>
  <div class="voice-controls" id="voiceControls">
   <span class="voice-badge" id="voiceMicBadge" data-on="false" role="status">Mic off</span>
+  <label>Engine <select id="voiceEngine" aria-label="Speech recognition engine"><option value="browser">Browser speech service (online)</option><option value="local">Local Faster-Whisper (offline)</option></select></label>
+  <label>Microphone <select id="micDevice" aria-label="Microphone for the local engine and Local record" title="Used by the local engine and Local record. The browser engine always uses the browser's default microphone."><option value="">System default</option></select></label>
   <label>Input <select id="voiceInputMode" aria-label="Voice input mode"><option value="hands-free">Hands-free</option><option value="ptt">Push-to-talk</option></select></label>
   <button class="voice-small" id="voicePtt" type="button" disabled>Hold to talk</button>
   <button class="voice-small" id="voiceMute" type="button" aria-pressed="false" disabled>Mute mic</button>
@@ -144,11 +146,11 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
   <label class="voice-check"><input id="voiceBargeIn" type="checkbox"> Interrupt by voice (use headphones)</label>
  </div>
  <div class="voice-preview" id="voicePreview" aria-live="polite"></div>
- <p class="voice-privacy">Hands-free recognition uses your browser's speech service and may require internet; the browser may process microphone audio outside Mia. Mic starts only after you press Start. For local/offline transcription, use Local record below with the optional Faster-Whisper extra.</p>
+ <p class="voice-privacy">Browser engine: recognition uses your browser's speech service and may require internet; the browser may process microphone audio outside Mia. Local engine: audio is transcribed on this computer by Faster-Whisper (optional voice extra) and is not stored. The microphone starts only after you press Start voice (or hold the talk button in push-to-talk) and is released when the session ends. The Microphone choice applies to the local engine and Local record; the browser engine uses the browser's default microphone. Esc or Interrupt stops Mia speaking.</p>
  <textarea id="prompt" rows="2" placeholder="Message Mia… (English or Roman Urdu)" aria-label="Message Mia"></textarea>
 <div class="composerfoot"><div class="hint" id="hint">Enter to send · Shift + Enter for a new line</div><div class="actions"><button class="send" id="mic" type="button" title="Record one clip and transcribe locally with Faster-Whisper" style="background:#1c3930;color:#a9ebcb;border:1px solid #356451">Local record</button><select id="taskType" aria-label="Task type"><option value="chat">General</option><option value="reasoning">Reasoning</option><option value="coding">Coding</option><option value="research">Research</option></select><label style="font-size:11px;color:#94aaa2;display:flex;align-items:center;gap:5px"><input id="useTools" type="checkbox" checked> Tools</label><label style="font-size:11px;color:#94aaa2;display:flex;align-items:center;gap:5px"><input id="speakReplies" type="checkbox"> Speak</label><select id="voiceChoice" aria-label="Speech voice" title="Installed browser voices" style="max-width:110px"><option value="">Default voice</option></select><button class="send" id="send" type="submit">Send ↗</button></div></div>
 </form>
-<div class="bottomnote">Voice input is push-to-talk and transcribed locally when the optional voice extra is installed. Speech output can use offline system voices with the optional TTS extra, or browser voices as fallback.<br>Push-to-talk and model-requested tools are optional per message. File and knowledge contents stay local by default; writes, launches and browser clicks always require an approval card. Always-listening wake word is not enabled. Optional background dispatch is off by default and limited to owner-approved read-only system checks. Do not send secrets to cloud models.</div>
+<div class="bottomnote">Voice input can be hands-free or push-to-talk, using the browser speech service or local Faster-Whisper (optional voice extra). Speech output can use offline system voices with the optional TTS extra, or browser voices as fallback.<br>Push-to-talk and model-requested tools are optional per message. File and knowledge contents stay local by default; writes, launches and browser clicks always require an approval card. Always-listening wake word is not enabled. Optional background dispatch is off by default and limited to owner-approved read-only system checks. Do not send secrets to cloud models.</div>
 </section></main></div>
 <script>
 const $=id=>document.getElementById(id);
@@ -680,7 +682,8 @@ async function startRecording(){
   $('hint').textContent='Microphone recording is not supported in this browser.';return;
  }
  try{
-  activeStream=await navigator.mediaDevices.getUserMedia({audio:true});
+  activeStream=await navigator.mediaDevices.getUserMedia(micConstraints());
+  refreshMicDevices();
   const mimeType=['audio/webm;codecs=opus','audio/webm','audio/ogg'].find(type=>MediaRecorder.isTypeSupported(type));
   mediaRecorder=mimeType?new MediaRecorder(activeStream,{mimeType}):new MediaRecorder(activeStream);
   audioChunks=[];
@@ -799,6 +802,179 @@ let voiceBargeActive=false;
 let voiceStartLog=[];
 let voiceLastResultAt=0;
 const SpeechRecognitionAPI=window.SpeechRecognition||window.webkitSpeechRecognition;
+const LOCAL_SILENCE_MS=900;
+const LOCAL_MAX_MS=30000;
+const LOCAL_MIN_VOICED_MS=250;
+function micConstraints(){
+ const audio={echoCancellation:true,noiseSuppression:true,autoGainControl:true};
+ const device=$('micDevice').value;
+ if(device)audio.deviceId={exact:device};
+ return {audio};
+}
+async function refreshMicDevices(){
+ const select=$('micDevice');
+ if(!navigator.mediaDevices?.enumerateDevices)return;
+ try{
+  const current=select.value;
+  const devices=(await navigator.mediaDevices.enumerateDevices()).filter(device=>device.kind==='audioinput'&&device.deviceId);
+  select.replaceChildren(new Option('System default',''));
+  devices.forEach((device,index)=>select.add(new Option(device.label||('Microphone '+(index+1)),device.deviceId)));
+  if(Array.from(select.options).some(option=>option.value===current))select.value=current;
+ }catch(error){}
+}
+function encodeWav16k(frames,sampleRate){
+ let length=0;
+ frames.forEach(frame=>{length+=frame.length;});
+ const merged=new Float32Array(length);
+ let offset=0;
+ frames.forEach(frame=>{merged.set(frame,offset);offset+=frame.length;});
+ const ratio=sampleRate/16000;
+ const outLength=Math.floor(length/ratio);
+ const samples=new Int16Array(outLength);
+ for(let index=0;index<outLength;index++){
+  const start=Math.floor(index*ratio);
+  const end=Math.max(start+1,Math.min(length,Math.floor((index+1)*ratio)));
+  let sum=0;
+  for(let position=start;position<end;position++)sum+=merged[position];
+  const value=Math.max(-1,Math.min(1,sum/(end-start)));
+  samples[index]=value<0?value*0x8000:value*0x7fff;
+ }
+ const buffer=new ArrayBuffer(44+samples.length*2);
+ const view=new DataView(buffer);
+ const write=(position,text)=>{for(let i=0;i<text.length;i++)view.setUint8(position+i,text.charCodeAt(i));};
+ write(0,'RIFF');view.setUint32(4,36+samples.length*2,true);write(8,'WAVE');write(12,'fmt ');
+ view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);
+ view.setUint32(24,16000,true);view.setUint32(28,32000,true);view.setUint16(32,2,true);view.setUint16(34,16,true);
+ write(36,'data');view.setUint32(40,samples.length*2,true);
+ new Int16Array(buffer,44,samples.length).set(samples);
+ return new Blob([buffer],{type:'audio/wav'});
+}
+// Local (offline) recogniser with the same surface as the Web Speech API so the voice session logic is shared.
+// Audio is captured in this page, cut into utterances by a simple energy detector, converted to 16 kHz WAV and
+// sent only to Mia's own loopback API for Faster-Whisper. Nothing is stored; the microphone is released on stop.
+class LocalRecognizer{
+ constructor(){
+  this.continuous=true;this.interimResults=false;this.maxAlternatives=1;this.lang='en-US';
+  this.onstart=null;this.onresult=null;this.onerror=null;this.onend=null;
+  this._stream=null;this._ctx=null;this._node=null;this._source=null;
+  this._running=false;this._stopping=false;this._dead=false;this._ended=false;
+  this._segment=null;this._pre=[];this._silentMs=0;this._noise=0.008;this._pending=0;
+ }
+ _emit(name,arg){try{if(this[name])this[name](arg);}catch(error){console.error(error);}}
+ start(){this._running=true;this._begin();}
+ async _begin(){
+  try{
+   this._stream=await navigator.mediaDevices.getUserMedia(micConstraints());
+  }catch(error){
+   this._running=false;
+   if(this._dead)return;
+   this._emit('onerror',{error:(error.name==='NotAllowedError'||error.name==='SecurityError')?'not-allowed':'audio-capture'});
+   this._finish();
+   return;
+  }
+  if(!this._running||this._dead){this._teardown();return;}
+  try{
+   const AudioCtx=window.AudioContext||window.webkitAudioContext;
+   this._ctx=new AudioCtx();
+   if(this._ctx.state==='suspended')await this._ctx.resume();
+   this._source=this._ctx.createMediaStreamSource(this._stream);
+   this._node=this._ctx.createScriptProcessor(4096,1,1);
+   this._node.onaudioprocess=event=>{if(this._running)this._onFrame(event.inputBuffer.getChannelData(0));};
+   this._source.connect(this._node);
+   this._node.connect(this._ctx.destination);
+  }catch(error){
+   this._running=false;this._teardown();
+   this._emit('onerror',{error:'audio-capture'});this._finish();return;
+  }
+  refreshMicDevices();
+  this._emit('onstart');
+ }
+ _onFrame(data){
+  const frame=new Float32Array(data);
+  let sum=0;
+  for(let i=0;i<frame.length;i++)sum+=frame[i]*frame[i];
+  const rms=Math.sqrt(sum/frame.length);
+  const ms=frame.length/this._ctx.sampleRate*1000;
+  if(!this._segment){
+   this._noise=Math.min(0.05,this._noise*0.95+rms*0.05);
+   this._pre.push(frame);
+   if(this._pre.length>3)this._pre.shift();
+   if(rms>Math.max(0.015,this._noise*3)){
+    this._segment={frames:this._pre,ms:ms*this._pre.length,voicedMs:ms};
+    this._pre=[];this._silentMs=0;
+   }
+   return;
+  }
+  this._segment.frames.push(frame);
+  this._segment.ms+=ms;
+  if(rms>Math.max(0.012,this._noise*2.5)){this._silentMs=0;this._segment.voicedMs+=ms;}else this._silentMs+=ms;
+  if(this._silentMs>=LOCAL_SILENCE_MS||this._segment.ms>=LOCAL_MAX_MS)this._flush();
+ }
+ async _flush(){
+  const segment=this._segment;
+  this._segment=null;this._silentMs=0;
+  if(!segment||segment.voicedMs<LOCAL_MIN_VOICED_MS||!this._ctx)return;
+  const blob=encodeWav16k(segment.frames,this._ctx.sampleRate);
+  const code=(this.lang||'').toLowerCase();
+  const language=code.startsWith('ur')?'ur':code.startsWith('en')?'en':'';
+  const query='?filename=utterance.wav'+(language?'&language='+language:'');
+  this._pending++;
+  try{
+   const response=await fetch('/api/voice/transcribe'+query,{method:'POST',headers:{'Content-Type':'audio/wav'},body:blob});
+   let result={};
+   try{result=await response.json();}catch(error){}
+   if(this._dead)return;
+   if(!response.ok){
+    this._emit('onerror',{error:'local-unavailable',message:result.detail||'Local speech recognition is unavailable.'});
+    return;
+   }
+   const text=String(result.text||'').trim();
+   if(text){
+    const entry=[{transcript:text}];entry.isFinal=true;
+    this._emit('onresult',{resultIndex:0,results:[entry]});
+   }
+  }catch(error){
+   if(!this._dead)this._emit('onerror',{error:'local-unavailable',message:'Could not reach Mia’s local speech service.'});
+  }finally{
+   this._pending--;
+   this._maybeFinish();
+  }
+ }
+ _teardown(){
+  try{if(this._node){this._node.onaudioprocess=null;this._node.disconnect();}}catch(error){}
+  try{this._source?.disconnect();}catch(error){}
+  try{this._ctx?.close();}catch(error){}
+  this._stream?.getTracks().forEach(track=>track.stop());
+  this._node=null;this._source=null;this._ctx=null;this._stream=null;
+ }
+ _maybeFinish(){if(this._stopping&&this._pending===0)this._finish();}
+ _finish(){
+  this._teardown();
+  if(this._ended||this._dead)return;
+  this._ended=true;
+  this._emit('onend');
+ }
+ stop(){
+  if(this._stopping||this._ended)return;
+  this._stopping=true;this._running=false;
+  if(this._segment)this._flush();
+  this._teardownCaptureOnly();
+  this._maybeFinish();
+ }
+ _teardownCaptureOnly(){
+  try{if(this._node){this._node.onaudioprocess=null;this._node.disconnect();}}catch(error){}
+  try{this._source?.disconnect();}catch(error){}
+  this._stream?.getTracks().forEach(track=>track.stop());
+  this._stream=null;
+ }
+ abort(){
+  this._dead=true;this._running=false;this._stopping=true;
+  this._teardown();
+ }
+}
+let voiceEngineName='browser';
+function recognitionEngine(){return $('voiceEngine').value==='local'?LocalRecognizer:SpeechRecognitionAPI;}
+function engineBadgeLabel(){return voiceEngineName==='local'?'local Faster-Whisper (this PC)':'browser speech service';}
 const END_PHRASES=['stop listening','stop voice','goodbye mia','sleep mia','end conversation'];
 const STOP_SPEAKING_PHRASES=['stop speaking','stop talking','be quiet'];
 function normalizeCommandText(text){
@@ -879,6 +1055,8 @@ function stopVoiceConversation(message='Voice conversation stopped.',isError=fal
  $('voiceMode').setAttribute('aria-pressed','false');
  $('voiceLanguage').disabled=false;
  $('voiceInputMode').disabled=false;
+ $('voiceEngine').disabled=false;
+ $('micDevice').disabled=false;
  $('voiceMute').disabled=true;
  $('voiceMute').textContent='Mute mic';
  $('voiceMute').setAttribute('aria-pressed','false');
@@ -939,7 +1117,8 @@ function finishVoiceUtterance(){
 }
 function startVoiceRecognition(){
  if(!voiceMode||voiceBusy||voiceFinalizing||voiceMuted||voiceRecognitionActive||voiceStarting)return;
- if(!SpeechRecognitionAPI){
+ const Engine=voiceEngineName==='local'?LocalRecognizer:SpeechRecognitionAPI;
+ if(!Engine){
   stopVoiceConversation('Hands-free speech recognition is not supported here. Use Chrome or Edge, or use Local record.',true);
   return;
  }
@@ -950,18 +1129,19 @@ function startVoiceRecognition(){
   stopVoiceConversation('The microphone keeps stopping, so I ended the session to avoid a restart loop. Check the microphone and try again.',true);
   return;
  }
- const recognition=new SpeechRecognitionAPI();
+ const recognition=new Engine();
  voiceRecognition=recognition;
  recognition.continuous=true;
  recognition.interimResults=true;
  recognition.maxAlternatives=1;
- recognition.lang=$('voiceLanguage').value||'en-US';
+ const chosenLanguage=$('voiceLanguage').value||'en-US';
+ recognition.lang=chosenLanguage==='auto'?(voiceEngineName==='local'?'':'en-US'):chosenLanguage;
  voiceStarting=true;
  recognition.onstart=()=>{
   if(!voiceMode||voiceRecognition!==recognition)return;
   voiceStarting=false;
   voiceRecognitionActive=true;
-  setMicBadge(true,'browser speech service');
+  setMicBadge(true,engineBadgeLabel());
   if(!voiceBusy){
    setVoiceState('listening');
    setVoiceStatus(voicePushToTalk?'Listening… release the button when you finish.':'Listening… speak naturally. I will answer and listen again.');
@@ -1003,7 +1183,7 @@ function startVoiceRecognition(){
    $('voicePreview').textContent='Hearing: '+preview;
    $('voicePreview').classList.add('visible');
   }
-  if(voiceFinalTranscript.trim()&&!voicePushToTalk)voiceSilenceTimer=setTimeout(finishVoiceUtterance,1250);
+  if(voiceFinalTranscript.trim()&&!voicePushToTalk)voiceSilenceTimer=setTimeout(finishVoiceUtterance,voiceEngineName==='local'?150:1250);
  };
  recognition.onerror=event=>{
   voiceStarting=false;
@@ -1016,6 +1196,7 @@ function startVoiceRecognition(){
    'network':'Browser speech recognition needs a working network connection.',
    'language-not-supported':'This speech service does not support the selected language. Try English.'
   };
+  messages['local-unavailable']=event.message||'Local speech recognition is unavailable. Install the optional voice extra.';
   const message=messages[event.error]||('Speech recognition error: '+event.error);
   stopVoiceConversation(message,true);
  };
@@ -1049,14 +1230,31 @@ function startVoiceRecognition(){
   stopVoiceConversation('Could not start microphone recognition: '+error.message,true);
  }
 }
-function startVoiceConversation(){
+async function startVoiceConversation(){
  if(chatBusy){setVoiceStatus('Wait for the current reply to finish before starting voice mode.',true);return;}
- if(!SpeechRecognitionAPI){
-  setVoiceStatus('Hands-free speech recognition is not supported by this browser. Use Chrome/Edge or Local record.',true);
+ if(recording){setVoiceStatus('Stop the local recording before starting voice mode.',true);return;}
+ const wantLocal=$('voiceEngine').value==='local';
+ if(wantLocal){
+  if(!navigator.mediaDevices?.getUserMedia||!(window.AudioContext||window.webkitAudioContext)){
+   setVoiceStatus('This browser cannot capture microphone audio for the local engine.',true);setVoiceState('error');return;
+  }
+  setVoiceStatus('Checking the local speech engine…');
+  try{
+   const status=await (await fetch('/api/voice/status')).json();
+   if(status.speech_to_text!=='ready'){
+    setVoiceStatus('Local speech recognition is not installed. Run: pip install -e ".[voice]" (the model downloads on first use), or switch to the browser engine.',true);
+    setVoiceState('error');return;
+   }
+  }catch(error){
+   setVoiceStatus('Could not reach Mia’s local speech service.',true);setVoiceState('error');return;
+  }
+ }else if(!SpeechRecognitionAPI){
+  setVoiceStatus('Hands-free speech recognition is not supported by this browser. Use Chrome/Edge, the local engine, or Local record.',true);
   setVoiceState('error');
   return;
  }
- if(recording){setVoiceStatus('Stop the local recording before starting voice mode.',true);return;}
+ if(voiceMode||chatBusy)return;
+ voiceEngineName=wantLocal?'local':'browser';
  voiceMode=true;
  voiceSessionError=false;
  voiceFinalTranscript='';
@@ -1074,6 +1272,8 @@ function startVoiceConversation(){
  $('voiceMode').setAttribute('aria-pressed','true');
  $('voiceLanguage').disabled=true;
  $('voiceInputMode').disabled=true;
+ $('voiceEngine').disabled=true;
+ $('micDevice').disabled=true;
  $('voiceMute').disabled=false;
  $('voicePtt').disabled=!voicePushToTalk;
  if(voicePushToTalk){
@@ -1149,9 +1349,9 @@ document.addEventListener('keyup',event=>{
  }
 });
 window.addEventListener('offline',()=>{
- if(voiceMode)stopVoiceConversation('Network connection lost. Browser speech recognition needs internet, so the session was stopped. Reconnect and start again, or use Local record.',true);
+ if(voiceMode&&voiceEngineName==='browser')stopVoiceConversation('Network connection lost. Browser speech recognition needs internet, so the session was stopped. Reconnect and start again, or use Local record.',true);
 });
-['voiceRate','voiceVolume','voiceLanguage','voiceInputMode','voiceBargeIn'].forEach(id=>{
+['voiceRate','voiceVolume','voiceLanguage','voiceInputMode','voiceBargeIn','voiceEngine'].forEach(id=>{
  try{
   const saved=localStorage.getItem('mia.voice.'+id);
   if(saved!==null){
@@ -1198,6 +1398,8 @@ $('purgeConfirm').addEventListener('click',async()=>{
 window.addEventListener('pagehide',()=>{if(voiceMode)stopVoiceConversation('Voice session ended.');cancelSpeech();});
 $('refreshMemory').addEventListener('click',loadMemoryRecords);
 refreshVoices();
+refreshMicDevices();
+if(navigator.mediaDevices?.addEventListener)navigator.mediaDevices.addEventListener('devicechange',refreshMicDevices);
 if('speechSynthesis' in window)window.speechSynthesis.onvoiceschanged=refreshVoices;
 refreshProviders();
 loadCurrentConversation();

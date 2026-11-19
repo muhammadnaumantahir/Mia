@@ -20,10 +20,10 @@ implemented and covered by a test that was actually run.
 - [x] Speech speed and volume controls for browser and local voices (tested for browser voices)
 - [x] Long replies are spoken sentence-chunk by sentence-chunk with a spoken-length cap (tested)
 - [x] Distinct ready/listening/thinking/speaking/muted/stopped/error states with animated orb, mic badge, mute control (tested)
-- [ ] No microphone device selection
-- [ ] Hands-free mode has no local/offline option (only single-clip Local record)
-- [x] 26 real-Chromium lifecycle tests with a fake recogniser/synthesiser against the real app (tests/test_voice_browser.py)
-- [ ] Wake word: evaluated, not enabled (see VOICE.md); decision to be recorded
+- [x] Microphone device selection for the local engine and Local record (browser engine cannot choose a device; documented; tested)
+- [x] Local Faster-Whisper engine works hands-free and push-to-talk (mic capture, utterance detection, WAV upload tested with a fake microphone; real Whisper not run here)
+- [x] 34 real-Chromium lifecycle tests with a fake recogniser/synthesiser against the real app (tests/test_voice_browser.py)
+- [x] Wake word: evaluated and deliberately not enabled; rationale and requirements in VOICE.md
 
 ## Milestones
 1. Audit checklist (this file)
