@@ -250,12 +250,27 @@ def check(base_url: str) -> int:
     except RuntimeError as exc:
         report("Read-only resource tool", str(exc), "WARN")
 
+    report(
+        "Hands-free browser voice",
+        "requires a live Chrome/Edge test for SpeechRecognition, microphone permission and network access",
+        "NOTE",
+    )
     try:
         voice = request_json(base_url, "/api/voice/status")
         stt = voice.get("speech_to_text", "not reported")
-        report("Voice input", f"speech-to-text status: {stt}", "OK" if stt == "ready" else "WARN")
+        report(
+            "Local Whisper fallback",
+            f"speech-to-text status: {stt}",
+            "OK" if stt == "ready" else "WARN",
+        )
+        local_tts = voice.get("local_text_to_speech", "not reported")
+        report(
+            "Local offline voice output",
+            f"status: {local_tts} (browser speech synthesis remains the fallback)",
+            "OK" if local_tts == "ready" else "NOTE",
+        )
     except RuntimeError as exc:
-        report("Voice input", str(exc), "WARN")
+        report("Optional local voice adapters", str(exc), "WARN")
 
     print(f"\nPreflight result: {failures} failure(s), {warnings} warning(s).")
     if failures:
