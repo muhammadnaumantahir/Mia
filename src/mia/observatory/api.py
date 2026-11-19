@@ -19,7 +19,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, Response, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from mia.agent.discovery import DiscoveryFinding, WorkloadDiscovery
 from mia.agent.executor import TaskExecutionError, TaskToolExecutor
@@ -61,7 +61,11 @@ from mia.gateway.ledger import UsageLedger
 from mia.gateway.service import CompletionResult, ModelGateway
 from mia.knowledge.document_ingestion import DocumentIngestionError, DocumentIngestor
 from mia.memory.context import ContextPacket, assemble_memory_context
-from mia.memory.identity import IDENTITY_VERSION, identity_system_prompt
+from mia.memory.identity import (
+    IDENTITY_VERSION,
+    identity_system_prompt,
+    render_identity_prompt,
+)
 from mia.memory.store import MemoryStore
 from mia.memory.structured import RecordNotFoundError, RecordStateError
 from mia.observatory.activity import ExperimentActivityCollector
@@ -270,6 +274,36 @@ class MemoryRecordStatus(BaseModel):
     status: str = Field(min_length=1, max_length=20)
 
 
+class CommunicationStyleInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tone: str | None = Field(default=None, max_length=200)
+    verbosity: str | None = Field(default=None, max_length=40)
+    language: str | None = Field(default=None, max_length=100)
+
+
+class IdentityUpdateInput(BaseModel):
+    """Partial identity change. Omitted fields keep their current value."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, max_length=200)
+    purpose: str | None = Field(default=None, max_length=2000)
+    personality: list[str] | None = Field(default=None, max_length=50)
+    principles: list[str] | None = Field(default=None, max_length=50)
+    communication_style: CommunicationStyleInput | None = None
+    owner_relationship: str | None = Field(default=None, max_length=2000)
+    interaction_preferences: list[str] | None = Field(default=None, max_length=50)
+    reason: str = Field(default="", max_length=300)
+
+
+class IdentityRollbackInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: int = Field(ge=1)
+    reason: str = Field(default="", max_length=300)
+
+
 def create_app(
     store: ObservatoryStore | None = None,
     gateway: ModelGateway | None = None,
@@ -344,6 +378,26 @@ def create_app(
     app.state.application_launcher = app_launcher
     memory_store = memory or MemoryStore(data_dir / "mia-memory.sqlite3")
     app.state.memory = memory_store
+
+    def current_identity() -> tuple[str, int | None]:
+        """The stored identity prompt and version; the factory default if unreadable.
+
+        Identity lives in the memory database, so it is the same whichever provider
+        or model answers. A storage failure must not break ordinary chat.
+        """
+        try:
+            record = memory_store.identity.active()
+            return render_identity_prompt(record["profile"]), record["version"]
+        except Exception:
+            observatory.record_event(
+                category="memory",
+                event_type="identity_load_failure",
+                summary="Could not load the stored identity; using the factory default",
+                outcome="error",
+                layer_id="SPS-05",
+                payload={},
+            )
+            return CHAT_SYSTEM_PROMPT, None
     document_ingestor = DocumentIngestor(computer_files, memory_store)
     app.state.document_ingestor = document_ingestor
     browser_controller = browser or BrowserController(headless=True)
@@ -2437,6 +2491,63 @@ def create_app(
             payload=payload,
         )
 
+    @app.get("/api/identity")
+    def get_identity() -> dict[str, Any]:
+        record = memory_store.identity.active()
+        return {**record, "prompt_preview": render_identity_prompt(record["profile"])}
+
+    @app.get("/api/identity/history")
+    def identity_history(limit: int = 50) -> dict[str, Any]:
+        return {"versions": memory_store.identity.history(limit)}
+
+    @app.put("/api/identity")
+    def update_identity(item: IdentityUpdateInput) -> dict[str, Any]:
+        changes = item.model_dump(exclude_unset=True, exclude={"reason"})
+        if "communication_style" in changes and changes["communication_style"] is not None:
+            changes["communication_style"] = {
+                key: value
+                for key, value in changes["communication_style"].items()
+                if value is not None
+            }
+        changes = {k: v for k, v in changes.items() if v is not None}
+        try:
+            record = memory_store.identity.update(changes, source="owner", reason=item.reason)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if record["changed"]:
+            _record_event(
+                "identity_updated",
+                f"Owner updated Mia's identity (version {record['version']})",
+                {"version": record["version"], "parent_version": record["parent_version"]},
+            )
+        return {**record, "prompt_preview": render_identity_prompt(record["profile"])}
+
+    @app.post("/api/identity/rollback")
+    def rollback_identity(item: IdentityRollbackInput) -> dict[str, Any]:
+        try:
+            record = memory_store.identity.rollback(
+                item.version, source="owner", reason=item.reason
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Identity version not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if record["changed"]:
+            _record_event(
+                "identity_rolled_back",
+                f"Owner restored an earlier identity as version {record['version']}",
+                {"version": record["version"], "restored_from": item.version},
+            )
+        return {**record, "prompt_preview": render_identity_prompt(record["profile"])}
+
+    @app.get("/api/memory/audit")
+    def memory_audit(
+        target_type: str | None = None, target_id: str | None = None, limit: int = 100
+    ) -> dict[str, Any]:
+        return {"entries": memory_store.audit.list(
+            target_type=target_type, target_id=target_id, limit=limit
+        )}
+
     @app.post("/api/memory/records", status_code=201)
     def add_memory_record(item: MemoryRecordInput) -> dict[str, Any]:
         try:
@@ -2716,7 +2827,7 @@ def create_app(
             layer_id="SPS-05",
             payload={
                 "conversation_id": conversation_id,
-                "identity_version": IDENTITY_VERSION,
+                "identity_version": current_identity()[1] or IDENTITY_VERSION,
                 "reference_ids": [ref["ref_id"] for ref in references],
                 "local_only": not allow_remote and not withheld,
             },
@@ -2780,7 +2891,7 @@ def create_app(
                     set(item.required_capabilities),
                 )
                 messages = [
-                    {"role": "system", "content": CHAT_SYSTEM_PROMPT},
+                    {"role": "system", "content": current_identity()[0]},
                     *context_messages,
                     *recent_messages,
                 ]
@@ -2927,7 +3038,7 @@ def create_app(
             conversation_id,
             limit=12,
         )
-        system_message = {"role": "system", "content": CHAT_SYSTEM_PROMPT}
+        system_message = {"role": "system", "content": current_identity()[0]}
         working_messages: list[dict[str, Any]] = [
             system_message,
             *conversation_messages,

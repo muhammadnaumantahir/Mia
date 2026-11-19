@@ -13,6 +13,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from mia.memory import schema
+from mia.memory.identity import IdentityStore
+from mia.memory.schema import AuditLog
 from mia.memory.structured import StructuredMemory
 
 
@@ -66,6 +69,8 @@ class MemoryStore:
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self.structured = StructuredMemory(self._connection)
+        self.audit = AuditLog(self._connection)
+        self.identity = IdentityStore(self._connection)
         self._initialize()
 
     @contextmanager
@@ -153,6 +158,9 @@ class MemoryStore:
                     SELECT rowid, message_id, conversation_id, content
                     FROM conversation_messages
                 """)
+            # Additive, versioned migrations; existing memories are never rewritten.
+            schema.migrate(db)
+            IdentityStore.seed(db)
 
     def ensure_conversation(self, conversation_id: str | None = None) -> str:
         conversation_id = conversation_id or uuid.uuid4().hex

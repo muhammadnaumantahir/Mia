@@ -34,7 +34,7 @@ SQLite FTS5 provides local full-text search. The database does not require a clo
 
 Every chat request (`POST /api/gateway/chat` and `/api/gateway/chat/stream`) is built independently of the serving model:
 
-1. **Canonical identity** (`mia.memory.identity`): one versioned identity prompt (`IDENTITY_VERSION`) plus the tool/data-safety policy. It names no model and is identical whichever provider answers. It is a code-defined constant, not yet an owner-editable persisted profile.
+1. **Canonical identity** (`mia.memory.identity`): a persisted, versioned profile (see *Persistent identity* below) rendered with the fixed honesty core and the tool/data-safety policy. It names no model and is identical whichever provider answers.
 2. **Retrieval** (`mia.memory.context`): the prompt is reduced to distinctive terms (stopwords and short words dropped) and matched with SQLite FTS5 over knowledge items *and* over all past conversation messages (a `message_fts` index kept in sync by triggers, including cascade deletes and retention purges; existing databases are backfilled on startup). Candidates must match at least two distinctive terms (one, if the prompt has only one). Ranking blends normalised bm25 relevance, trust (owner-provided > trusted > untrusted), kind (preference/fact) and recency. Messages in the 12-turn recent window are excluded so nothing is repeated.
 3. **Bounded block**: at most 5 knowledge items and 4 past messages, 700 characters each and 5,000 in total, deduplicated. Each entry carries a label (`[M1]`), provenance, date and source: *owner-provided*, *trusted source*, *untrusted external content*, *owner statement (not independently verified)* or *Mia's earlier reply (model-generated, unverified)*. Model output is never promoted to trusted memory.
 4. **Injection resistance**: the block is a separate system message that states its contents are data, not instructions; tag-like text inside stored content that could close the block or imitate a role (`</memory_data>`, `<system>`, `<assistant>` ...) is defanged.
@@ -44,6 +44,25 @@ Every chat request (`POST /api/gateway/chat` and `/api/gateway/chat/stream`) is 
 `MIA_CONTEXT_RETRIEVAL=false` disables retrieval. Retrieval failures never block a reply (`context_retrieval_failure` event).
 
 Known limits: lexical (FTS5) matching only, so paraphrases with no shared words are missed; no entity/relationship graph; no consolidation or summarisation of old conversations; no automatic conflict detection; the web UI does not yet display `context_references`.
+
+## Persistent identity (implemented 2026-11-19)
+
+Mia's identity is stored data in the memory database (`identity_versions`), not source code and not rebuilt from conversations.
+
+- **Profile fields:** `name`, `purpose`, `personality[]`, `principles[]`, `communication_style{tone, verbosity, language}`, `owner_relationship`, `interaction_preferences[]`. The factory default (version 1, created on first start) contains no owner details and renders to exactly the original prompt text.
+- **Fixed core:** the honesty/AI-status rules and the tool and data-safety policy are always included and cannot be edited through the profile.
+- **Versioning:** every change appends an immutable version with `source`, `reason`, `parent_version` and a SHA-256 of the profile. A request that changes nothing creates no version. Rollback restores an earlier profile as a *new* version; history is never rewritten. Updates run in a `BEGIN IMMEDIATE` transaction, so concurrent updates serialise.
+- **Control:** only the owner API (`source` of `owner`, `system` or `import`) can change identity; nothing in the chat or capture path can. Text fields reject credential-shaped content (`mia.memory.safety`), unknown fields and over-long values.
+- **Model independence:** both chat endpoints read the stored identity on every request, so an edit applies to the next reply and the same prompt is sent whichever provider or model answers. If the identity cannot be read, chat continues with the factory default and an `identity_load_failure` Observatory event is recorded.
+- **Audit:** `identity_created`, `identity_updated` and `identity_rolled_back` entries are written to `memory_audit_log` in the same transaction as the change, holding version numbers and changed field names, never the profile text.
+
+Endpoints: `GET /api/identity`, `GET /api/identity/history`, `PUT /api/identity` (partial update plus `reason`), `POST /api/identity/rollback`, `GET /api/memory/audit`.
+
+## Schema versioning (implemented 2026-11-19)
+
+`schema_migrations` records applied versions. Version 1 is the original layout; version 2 adds `identity_versions` and `memory_audit_log`. Migrations are additive, run once inside one transaction and never rewrite memory rows. A database whose schema is newer than the running build is refused rather than opened.
+
+Verified with local automated tests only (mocked providers, no live model): restart persistence, provider/model switch with identical prompts, migration of a schema-1 database with existing items, messages and records, concurrent updates, and failure fallback.
 
 ## Structured memory records (implemented 2026-11-19)
 
