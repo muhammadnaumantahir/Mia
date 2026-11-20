@@ -75,6 +75,7 @@ from mia.gateway.contracts import (
 from mia.gateway.factory import (\n    apply_daily_cap,\n    apply_monthly_cap,\n    build_default_registry,\n    paid_route_policy,\n)
 from mia.gateway.ledger import UsageLedger
 from mia.gateway.model_registry import ModelRegistry, ModelRegistryError
+from mia.gateway.selection import DecisionLog
 from mia.gateway.service import ModelGateway
 from mia.knowledge.document_ingestion import DocumentIngestionError, DocumentIngestor
 from mia.life.capture import capture_from_message as capture_curiosity_from_message
@@ -640,6 +641,7 @@ def create_app(
     model_gateway = gateway or ModelGateway(
         build_default_registry(),
         model_registry=ModelRegistry(data_dir / "mia-models.sqlite3"),
+        decisions=DecisionLog(database_path=data_dir / "mia-routing.sqlite3"),
     )
     ledger = usage_ledger or UsageLedger(data_dir / "mia-usage.sqlite3")
     if isinstance(ledger, UsageLedger):
