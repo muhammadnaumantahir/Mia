@@ -40,3 +40,15 @@ speakers working. Optional extras installed for sections C and D:
 ## E. Echo / barge-in (optional)
 With headphones, enable **Interrupt by voice**, let Mia start a long answer, then speak: she should stop and take
 your sentence as the next turn. Without headphones expect self-interruption; leave the option off.
+
+
+## F. Opt-in Hey Mia wake phrase (browser engine only)
+
+1. Engine = Browser, Input = Hands-free. Press **Enable Hey Mia** and allow microphone access.
+2. Confirm the visible state says **Listening for 'Hey Mia'** and the Mic on badge remains visible while armed.
+3. Say an unrelated sentence without the wake phrase. Mia must not submit it to chat or speak a reply.
+4. Say **“Hey Mia”** followed by a question. Mia should remove the wake phrase, submit only the question, answer, and re-arm for the next wake phrase.
+5. Select Urdu (Pakistan), enable wake phrase, say “Hey Mia”, then speak a short Urdu sentence. Confirm the recognition language switches to Urdu after activation.
+6. Press **Mute mic**; recognition must stop and the state must show Muted. Unmute should return to waiting for “Hey Mia”, not continue the previous active turn.
+7. Press **Disable Hey Mia** or **End conversation**. Confirm Mic off and that no recognition session restarts.
+8. Confirm the browser's recording indicator and permission state match Mia's visible Mic badge. Wake phrase mode uses the browser speech service and is **not offline local wake-word detection**.
