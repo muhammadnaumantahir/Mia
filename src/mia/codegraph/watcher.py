@@ -49,7 +49,10 @@ class CodeGraphWatcher:
         thread = self._thread
         if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=max(2.0, self.interval_seconds + 1.0))
-        self._thread = None
+            if not thread.is_alive():
+                self._thread = None
+        elif thread is None:
+            self._thread = None
 
     def check_once(self, *, force: bool = False) -> bool:
         """Check for changes and rebuild once; exposed for deterministic tests."""
