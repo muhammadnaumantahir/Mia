@@ -99,3 +99,7 @@ The integration branch now contains the first repository-wide Code Graph impleme
 ## Conversation-first identity editor
 
 The persistent, model-independent identity backend already provides versioned owner updates, immutable history, rollback, audit events and prompt injection shared by text/streaming chat and provider switches. This branch adds the missing owner-facing Identity page, linked from the Assistant sidebar, with profile editing, prompt preview, version history and rollback. A route smoke test is included. Automated verification for this UI addition is pending CI; do not treat the feature as fully accepted until its route and interaction tests pass.
+
+## Multilingual memory capture
+
+Automatic memory capture and explicit remember/forget commands now recognize common English, Roman Urdu and Urdu-script preference, decision, goal, project and basic profile statements. Confidence/provenance, pending-by-default owner approval, conflict handling and duplicate checks are unchanged. Sensitive-category, uncertainty and temporary-context screening includes the corresponding common Roman Urdu and Urdu terms. Regression tests cover both scripts and confirm sensitive/recent/uncertain statements remain uncaptured. Automated CI verification is pending; this is conservative pattern-based extraction, not model-assisted semantic extraction.
