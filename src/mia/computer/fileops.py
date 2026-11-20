@@ -55,7 +55,7 @@ class FileOperations:
 
     # ---- helpers ------------------------------------------------------------------------
     def _rel(self, root_id: str, path: Path) -> str:
-        return str(path.relative_to(self.fs.roots[root_id]))
+        return path.relative_to(self.fs.roots[root_id]).as_posix()
 
     def _reject_recovery(self, rel: str) -> None:
         if Path(rel).parts[:1] == (RECOVERY_DIR,):
@@ -161,7 +161,7 @@ class FileOperations:
             for number, line in enumerate(text.splitlines(), start=1):
                 if needle in line.casefold():
                     snippet = "[redacted: possible secret]" if find_secret(line) else line.strip()[:200]
-                    hits.append({"relative_path": str(item.relative_to(root)), "line": number,
+                    hits.append({"relative_path": item.relative_to(root).as_posix(), "line": number,
                                  "text": snippet})
                     if len(hits) >= max(1, min(limit, 200)):
                         return hits
