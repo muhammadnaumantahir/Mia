@@ -118,3 +118,29 @@ def test_config_files_are_indexed_but_secret_material_is_excluded(tmp_path):
     assert ".env.example" in paths
     assert ".env.local" not in paths
     assert "secrets/credentials.json" not in paths
+
+
+def test_literal_config_reads_and_writes_are_source_grounded(tmp_path):
+    root = make_repo(tmp_path)
+    config = root / "config"
+    config.mkdir()
+    (config / "settings.yaml").write_text("mode: local\n", encoding="utf-8")
+    (config / "output.json").write_text("{}", encoding="utf-8")
+    (root / "src" / "mia" / "config_reader.py").write_text(
+        "from pathlib import Path\n"
+        "def load_config():\n"
+        "    return Path('config/settings.yaml').read_text()\n"
+        "def save_config():\n"
+        "    with open('config/output.json', 'w') as handle:\n"
+        "        handle.write('{}')\n",
+        encoding="utf-8",
+    )
+    graph = build_graph(root)
+    source = next(n["id"] for n in graph["nodes"]
+                  if n["kind"] == "file" and n["path"] == "src/mia/config_reader.py")
+    targets = {n["id"]: n.get("path") for n in graph["nodes"] if n["kind"] == "file"}
+    edges = [e for e in graph["edges"] if e["source"] == source]
+    assert any(e["type"] == "READS_FROM" and targets[e["target"]] == "config/settings.yaml"
+               and e["confidence"] == "confirmed" for e in edges)
+    assert any(e["type"] == "WRITES_TO" and targets[e["target"]] == "config/output.json"
+               and e["confidence"] == "confirmed" for e in edges)
