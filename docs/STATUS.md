@@ -103,3 +103,7 @@ The persistent, model-independent identity backend already provides versioned ow
 ## Multilingual memory capture
 
 Automatic memory capture and explicit remember/forget commands now recognize common English, Roman Urdu and Urdu-script preference, decision, goal, project and basic profile statements. Confidence/provenance, pending-by-default owner approval, conflict handling and duplicate checks are unchanged. Sensitive-category, uncertainty and temporary-context screening includes the corresponding common Roman Urdu and Urdu terms. Regression tests cover both scripts and confirm sensitive/recent/uncertain statements remain uncaptured. Automated CI verification is pending; this is conservative pattern-based extraction, not model-assisted semantic extraction.
+
+## Multilingual contextual recall
+
+The memory context assembler now recognizes common Roman Urdu and Urdu-script references to prior projects/progress, decisions, preferences, problems and goals. Intent-aware retrieval can therefore pull the appropriate structured memory even when the question shares few or no keywords with the saved record. Regression tests cover both scripts and verify goal retrieval. Automated CI verification is pending; this does not claim full Urdu semantic understanding.
