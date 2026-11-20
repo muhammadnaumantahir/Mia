@@ -4469,8 +4469,30 @@ def create_app(
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Plan or step not found") from exc
 
+    def _authorize_code_graph_request(request: Request) -> None:
+        # The graph exposes internal module names and architecture. Keep it
+        # loopback-only unless the owner explicitly enables a strong token.
+        client_host = request.client.host if request.client else ""
+        forwarded = bool(request.headers.get("forwarded") or request.headers.get("x-forwarded-for"))
+        try:
+            loopback = ipaddress.ip_address(client_host).is_loopback
+        except ValueError:
+            loopback = client_host == "testclient"
+        if loopback and not forwarded:
+            return
+        configured = os.getenv("MIA_CODE_GRAPH_TOKEN", "")
+        supplied = request.headers.get("x-mia-code-graph-token", "")
+        remote_enabled = os.getenv("MIA_CODE_GRAPH_ALLOW_REMOTE", "false").strip().lower() == "true"
+        if remote_enabled and len(configured) >= 24 and hmac.compare_digest(supplied, configured):
+            return
+        raise HTTPException(
+            status_code=403,
+            detail="Code Graph is local-only; remote access requires explicit enablement and a configured token.",
+        )
+
     @app.get("/api/code-graph")
-    def code_graph() -> dict[str, Any]:
+    def code_graph(request: Request) -> dict[str, Any]:
+        _authorize_code_graph_request(request)
         root = Path(__file__).resolve().parents[3]
         output = root / "docs" / "code-graph" / "graph.json"
         try:
@@ -4485,11 +4507,12 @@ def create_app(
             raise HTTPException(status_code=503, detail=f"Code Graph indexing failed: {type(exc).__name__}") from exc
 
     @app.post("/api/code-graph/refresh")
-    def refresh_code_graph() -> dict[str, Any]:
-        return code_graph()
+    def refresh_code_graph(request: Request) -> dict[str, Any]:
+        return code_graph(request)
 
     @app.get("/api/code-graph/status")
-    def code_graph_status() -> dict[str, Any]:
+    def code_graph_status(request: Request) -> dict[str, Any]:
+        _authorize_code_graph_request(request)
         watcher = app.state.code_graph_watcher
         return {
             "watcher_enabled": watcher is not None,
