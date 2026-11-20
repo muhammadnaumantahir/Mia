@@ -367,6 +367,7 @@ class LifeRunner:
             sources=outcome.sources,
             actions=outcome.actions,
             resource=outcome.resource,
+            result=outcome.result,
             duration_ms=duration_ms,
             next_follow_up=None if outcome.item_state == "done" else "Item kept for the owner to review",
         )
