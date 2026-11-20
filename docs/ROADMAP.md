@@ -128,6 +128,7 @@ Work:
 - Scoped filesystem search/read/write/move, versioned edits and document operations.
 - A central permission broker enforced at every execution boundary, including Brain, Voice, browser, desktop, filesystem, plugins and background tasks.
 - A Windows-capable runtime and verified sandbox with filesystem, process, network and resource restrictions.
+- A paired local companion agent for remote deployments: if Mia's Brain runs on Oracle Cloud, host-side adapters control the VM only. To control the owner's Windows PC, pair a local agent over an outbound-only authenticated channel with device-scoped capabilities, owner-visible activity, per-action approvals, revocation and emergency stop.
 - Action plans, dry-run/previews, explicit approval for destructive or externally visible actions, audit history, cancellation and recovery.
 - Task recording/replay and undo for reversible actions.
 - Voice control of computer tasks using the same Brain and permissions as text.
@@ -136,6 +137,7 @@ Work:
 Exit criteria:
 - Every tool declares schema, permissions, side effects, time/resource bounds and recovery behaviour.
 - Permission checks occur at execution time, not only in the UI or planner.
+- Remote Mia can control the owner's local PC only through the paired local agent; no public inbound desktop-control port is exposed.
 - Generated code and untrusted browser/document content cannot access secrets or escape the sandbox.
 - Sensitive/destructive actions require explicit owner approval by default.
 - Actions are auditable, cancellable and recoverable where technically possible; target Windows verification is separately identified as owner verification.
