@@ -185,7 +185,9 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
                     target_path = modules.get(prefix)
                     if target_path is not None:
                         break
-                    if "." in prefix:
+                    if "." in prefix and (
+                        prefix.startswith("mia.") or prefix.startswith("src.mia.")
+                    ):
                         suffix_matches = [
                             candidate for module, candidate in modules.items()
                             if module.endswith("." + prefix)
