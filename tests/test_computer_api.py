@@ -84,7 +84,6 @@ def test_computer_api_blocks_path_traversal(tmp_path):
 
 def test_direct_filesystem_write_can_use_a_scoped_owner_grant(tmp_path):
     from mia.computer.capabilities import PermissionLevel
-    from mia.computer.permissions import PermissionPolicy
 
     approvals = ApprovalStore(tmp_path / "grant-approvals.sqlite3")
     root = tmp_path / "grant-allowed"
