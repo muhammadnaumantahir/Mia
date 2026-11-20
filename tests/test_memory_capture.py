@@ -510,3 +510,46 @@ def test_same_sentence_is_one_memory_whether_suggested_or_stated_explicitly(tmp_
     explicit = say(store, service, conv, "Remember that I always review pull requests before lunch.")
     assert explicit["saved"] == [] and explicit["skipped"][0]["reason"] == "duplicate"
     assert len(records(store)) == 1 and records(store)[0]["provenance"] == "owner_provided"
+
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Mujhe yaad rakhna ke meri pasandeeda zaban Python hai.", "preference"),
+        ("Yaad rakhna ke mera maqsad Mia ko complete karna hai.", "goal"),
+        ("یاد رکھنا کہ میرا مقصد میا مکمل کرنا ہے۔", "goal"),
+        ("یاد رکھنا کہ میری پسندیدہ زبان پائتھن ہے۔", "preference"),
+    ],
+)
+def test_explicit_memory_commands_support_roman_urdu_and_urdu(tmp_path, text, expected):
+    store, service, conv = make(tmp_path)
+    result = say(store, service, conv, text)
+    assert result["explicit"] is True
+    assert result["saved"][0]["status"] == "active"
+    record = store.structured.get(result["saved"][0]["record_id"])
+    assert record["provenance"] == "owner_provided"
+    assert record["record_type"] == expected
+
+
+@pytest.mark.parametrize(
+    ("remember_text", "forget_text"),
+    [
+        ("Yaad rakhna ke my project codename is Falcon.", "Bhool jao my project codename"),
+        ("یاد رکھنا کہ پروجیکٹ کا نام فالکن ہے۔", "بھول جاؤ پروجیکٹ کا نام فالکن"),
+    ],
+)
+def test_explicit_forget_commands_support_roman_urdu_and_urdu(
+    tmp_path, remember_text, forget_text
+):
+    store, service, conv = make(tmp_path)
+    saved = say(store, service, conv, remember_text)
+    assert saved["saved"]
+    forgotten = say(store, service, conv, forget_text)
+    assert forgotten["forgotten"]
+    assert store.structured.get(saved["saved"][0]["record_id"]) is None
+
+
+def test_memory_similarity_tokenizes_urdu_script():
+    score = similarity("میرا پسندیدہ ایڈیٹر نوویم ہے", "میرا پسندیدہ ایڈیٹر ہیلکس ہے")
+    assert 0.2 < score < 1.0
