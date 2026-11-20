@@ -65,7 +65,7 @@ function render(data){
  budgetLine(budgets,'Daily UTC',b.daily,b.spent_today_utc_usd);
  budgetLine(budgets,'Monthly UTC',b.monthly,b.spent_month_utc_usd);
  const providers=$('providers');providers.replaceChildren();
- for(const p of data.providers||[]){const card=node('article','card provider '+p.status);const name=node('strong','',p.provider_id);const state=node('span','label',p.status);const dot=node('span','dot');state.prepend(dot);card.append(name,state);providers.append(card)}
+ for(const p of data.providers||[]){const card=node('article','card provider '+p.status);const top=node('div','provider');const name=node('strong','',p.provider_id);const state=node('span','label',p.status);const dot=node('span','dot');state.prepend(dot);top.append(name,state);card.append(top);const test=node('button','compact','Test connection');test.addEventListener('click',async()=>{test.disabled=true;try{const response=await fetch('/api/gateway/providers/'+encodeURIComponent(p.provider_id)+'/test',{method:'POST'});const result=await response.json();if(!response.ok)throw new Error(result.detail||'Provider test failed');state.textContent=result.ok?'connected · '+result.model_count+' models':result.status+': '+result.detail;state.prepend(node('span','dot'));}catch(e){$('error').textContent=e.message}finally{test.disabled=false}});card.append(test);providers.append(card)}
  if(!(data.providers||[]).length)providers.append(node('div','empty','No providers registered'));
  const tbody=$('models');tbody.replaceChildren();
  for(const m of data.models||[]){
