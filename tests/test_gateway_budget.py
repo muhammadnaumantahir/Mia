@@ -53,3 +53,19 @@ def test_month_spend_uses_utc_calendar_month_start(tmp_path):
     now = datetime(2026, 12, 1, 2, 0, tzinfo=timezone(timedelta(hours=4)))
     assert ledger.spend_month_utc(now) == pytest.approx(3.25)
     assert observed == [datetime(2026, 11, 1, 0, 0, tzinfo=UTC)]
+
+def test_daily_cap_is_required_and_fail_closed_when_missing(monkeypatch):
+    from mia.gateway.factory import apply_daily_cap
+
+    monkeypatch.delenv("MIA_MAX_DAILY_SPEND_USD", raising=False)
+    policy = apply_daily_cap(RoutePolicy(allow_paid=True, max_request_cost_usd=2.0), 0.0)
+    assert policy.allow_paid is False
+
+
+def test_daily_cap_respects_remaining_budget(monkeypatch):
+    from mia.gateway.factory import apply_daily_cap
+
+    monkeypatch.setenv("MIA_MAX_DAILY_SPEND_USD", "5")
+    policy = apply_daily_cap(RoutePolicy(allow_paid=True, max_request_cost_usd=4.0), 3.5)
+    assert policy.allow_paid is True
+    assert policy.max_request_cost_usd == pytest.approx(1.5)
