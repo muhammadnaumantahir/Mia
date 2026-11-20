@@ -115,6 +115,7 @@ class Brain:
         run_policy: RunPolicy = RunPolicy(),
         capture: Callable[[str, str, str], dict[str, Any] | None] | None = None,
         on_reply: Callable[[str, str, list[dict[str, Any]]], None] | None = None,
+        approval_status: Callable[[str], str | None] | None = None,
     ) -> None:
         self.gateway, self.memory, self.tools, self.identity = gateway, memory, tools, identity
         self.observatory = observatory
@@ -132,6 +133,7 @@ class Brain:
         self.run_policy = run_policy
         self.capture = capture
         self.on_reply = on_reply
+        self.approval_status = approval_status
 
     # ------------------------------------------------------------------ events
     def _event(self, **kwargs: Any) -> None:
@@ -511,6 +513,18 @@ class Brain:
             step = plan.step(step_id)
             if step.status == "awaiting_input":
                 step.status, step.result_summary, step.error = "completed", scrub(answer, 1000), ""
+        if self.approval_status is not None:
+            for step in plan.steps:
+                if step.status != "awaiting_approval":
+                    continue
+                approval_id = ((step.evidence or {}).get("pending_action") or {}).get("approval_id")
+                state = self.approval_status(approval_id) if approval_id else None
+                if state == "consumed":  # the owner approved and the action was executed
+                    step.status, step.error, step.error_class = "completed", "", ""
+                    step.result_summary = "Owner approved and the action was executed (outcome not observed by the Brain)."
+                elif state in {"rejected", "expired", None}:
+                    step.status, step.error_class = "failed", "permission"
+                    step.error = f"approval {state or 'not found'}"
         if retry_failed:
             for s in plan.steps:
                 if s.status in {"failed", "blocked"} and s.error_class in {"transient", ""}:

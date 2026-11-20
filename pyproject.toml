@@ -62,6 +62,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "mia.observatory" = ["dashboard.html", "assistant.html"]
+"mia.brain" = ["diagnostics.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mia - Brain diagnostics</title>
+<style>
+:root{color-scheme:light dark;--bg:#fff;--fg:#1a1a1a;--mut:#666;--line:#ddd;--ok:#0a7d33;--bad:#b3261e}
+@media(prefers-color-scheme:dark){:root{--bg:#141414;--fg:#eee;--mut:#9a9a9a;--line:#333;--ok:#4cc27a}}
+body{font:14px system-ui,sans-serif;background:var(--bg);color:var(--fg);margin:0;padding:16px;max-width:1000px}
+h1{font-size:18px}h2{font-size:15px;margin:20px 0 6px}
+.card{border:1px solid var(--line);border-radius:8px;padding:10px;margin:8px 0}
+.mut{color:var(--mut)}.ok{color:var(--ok)}.bad{color:var(--bad)}
+code{font-family:ui-monospace,monospace;font-size:12px}
+button{padding:4px 10px}
+</style></head><body>
+<h1>Brain diagnostics</h1>
+<p class="mut">Model choices, reasons, retries, plans and tool outcomes. Prompts, replies and secrets are never shown.
+<button id="r">Refresh</button></p>
+<div id="sum" class="card"></div>
+<h2>Recent turns</h2><div id="turns"></div>
+<h2>Plans</h2><div id="plans"></div>
+<h2>Provider health</h2><div id="health"></div>
+<script>
+const $=id=>document.getElementById(id);
+function add(parent,text,cls){const d=document.createElement("div");if(cls)d.className=cls;d.textContent=text;parent.appendChild(d);return d}
+async function load(){
+  let data;
+  try{const r=await fetch("/api/brain/diagnostics?limit=20");if(!r.ok)throw new Error(r.status);data=await r.json()}
+  catch(e){$("sum").textContent="Could not load diagnostics ("+e.message+")";return}
+  const s=data.summary;$("sum").textContent="";
+  add($("sum"),"Turns: "+s.turns+" | with fallback: "+s.turns_with_fallback+" | refused tool calls: "+s.refused_tool_calls);
+  add($("sum"),"Outcomes: "+JSON.stringify(s.outcomes),"mut");add($("sum"),"Models: "+JSON.stringify(s.models),"mut");
+  $("turns").textContent="";
+  for(const t of data.turns){
+    const c=document.createElement("div");c.className="card";$("turns").appendChild(c);
+    add(c,t.started_at+"  ["+t.interface+"]  "+t.outcome+"  "+t.duration_ms+" ms",t.outcome==="error"?"bad":"ok");
+    add(c,"Intent: "+t.intent.category+" / "+t.intent.complexity+(t.intent.needs_clarification?" (clarification)":""));
+    if(t.route&&t.route.selected){add(c,"Model: "+t.route.selected+" - "+(t.route.reasons||[]).join("; "));
+      if((t.route.rejected||[]).length)add(c,"Rejected: "+t.route.rejected.map(x=>x.candidate+": "+x.reason).join("; "),"mut")}
+    const att=(t.execution||{}).attempted||[];if(att.length>1)add(c,"Fallback chain: "+att.join(" -> "),"bad");
+    if(t.context)add(c,"Memory refs: "+(t.context.memory_references||0)+(t.context.memory_withheld?" (withheld)":"")+" | tools offered: "+(t.context.tools_offered||[]).length,"mut");
+    for(const x of t.tools||[])add(c,"Tool "+x.tool+": "+x.status+(x.stage?" ("+x.stage+")":"")+(x.verified?" verified":""),x.status==="refused"||x.status==="failed"?"bad":"");
+    if(t.plan)add(c,"Plan "+t.plan.id+": "+t.plan.status+" "+t.plan.progress.done+"/"+t.plan.progress.total);
+    const v=t.verification||{};if(v.issues&&v.issues.length)add(c,"Verification: "+v.confidence+" - "+v.issues.map(i=>i.code).join(", "),"bad");
+    if(t.error)add(c,"Error: "+t.error,"bad");
+  }
+  $("plans").textContent="";
+  for(const p of data.plans){const c=document.createElement("div");c.className="card";$("plans").appendChild(c);
+    add(c,p.id+": "+p.status+" ("+p.progress.done+"/"+p.progress.total+")");
+    for(const st of p.steps)add(c,st.id+". ["+st.status+"] "+st.title,"mut")}
+  $("health").textContent="";add($("health"),JSON.stringify(data.provider_health),"mut").style.wordBreak="break-all";
+}
+$("r").onclick=load;load();
+</script></body></html>

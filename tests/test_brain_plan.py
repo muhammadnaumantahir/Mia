@@ -267,3 +267,36 @@ def test_heuristic_plan_is_valid_and_linear():
     plan = heuristic_plan("do things")
     plan.validate()
     assert isinstance(plan, Plan) and plan.ready_steps()[0].id == "1"
+
+
+async def test_resume_follows_approval_outcomes(tmp_path):
+    from mia.agent.tools import ToolRegistry
+    from mia.brain.orchestrator import Brain
+    from mia.gateway.registry import ProviderRegistry
+    from mia.gateway.service import ModelGateway
+    from mia.memory.store import MemoryStore
+
+    states = {"a1": "pending"}
+    store = PlanStore(tmp_path / "p.db")
+    brain = Brain(gateway=ModelGateway(ProviderRegistry()), memory=MemoryStore(tmp_path / "m.db"),
+                  tools=ToolRegistry(), identity=lambda: ("x", 1), plan_store=store,
+                  approval_status=lambda a: states.get(a))
+
+    def make():
+        plan = new_plan("g", steps(("1",), ("2", "1")))
+        plan.step("1").status = "completed"
+        plan.step("2").status = "awaiting_approval"
+        plan.step("2").evidence = {"pending_action": {"approval_id": "a1"}}
+        plan.recompute_status()
+        store.save(plan)
+        return plan.id
+
+    pid = make()
+    assert (await brain.resume_plan(pid))["status"] == "awaiting_approval"  # still pending
+    states["a1"] = "consumed"
+    done = await brain.resume_plan(pid)
+    assert done["status"] == "completed" and "not observed" in done["steps"][1]["result_summary"]
+    pid = make()
+    states["a1"] = "rejected"
+    rejected = await brain.resume_plan(pid)
+    assert rejected["steps"][1]["status"] == "failed" and rejected["status"] == "partial"

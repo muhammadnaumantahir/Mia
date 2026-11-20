@@ -11,8 +11,10 @@ never grants a capability.
 from __future__ import annotations
 
 import re
+import sqlite3
 import threading
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from mia.gateway.contracts import ModelCandidate
 from mia.gateway.health import candidate_key
@@ -126,8 +128,34 @@ class CapabilityRegistry:
     """Runtime capability evidence per model. Thread-safe, in-memory."""
 
     refute_after_failures: int = 2
+    db_path: Path | None = None  # optional: evidence then survives restarts
     _obs: dict[tuple[str, str], _Observation] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def __post_init__(self) -> None:
+        if self.db_path is None:
+            return
+        self.db_path = Path(self.db_path)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(self.db_path) as db:
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS capability_evidence(candidate TEXT, capability TEXT, "
+                "successes INTEGER, failures INTEGER, last_error TEXT, PRIMARY KEY(candidate, capability))")
+            for cand, cap, ok, bad, err in db.execute(
+                    "SELECT candidate, capability, successes, failures, last_error FROM capability_evidence"):
+                self._obs[(cand, cap)] = _Observation(ok, bad, err)
+
+    def _persist(self, key: tuple[str, str], obs: _Observation) -> None:
+        if self.db_path is None:
+            return
+        try:
+            with sqlite3.connect(self.db_path) as db:
+                db.execute(
+                    "INSERT INTO capability_evidence VALUES(?,?,?,?,?) ON CONFLICT(candidate, capability) "
+                    "DO UPDATE SET successes=excluded.successes, failures=excluded.failures, "
+                    "last_error=excluded.last_error", (*key, obs.successes, obs.failures, obs.last_error))
+        except sqlite3.Error:
+            pass  # evidence is advisory; never break a reply
 
     def record(self, candidate: ModelCandidate, capability: str, ok: bool, error: str = "") -> None:
         key = (candidate_key(candidate), capability)
@@ -139,6 +167,7 @@ class CapabilityRegistry:
             else:
                 obs.failures += 1
                 obs.last_error = error[:200]
+            self._persist(key, obs)
 
     def view(self, candidate: ModelCandidate) -> CapabilityView:
         ck = candidate_key(candidate)

@@ -264,3 +264,23 @@ def test_loop_guard_run_turn_cancellation_is_traced(tmp_path):
 
     asyncio.run(go())
     assert brain.diagnostics.recent(1)[0]["outcome"] == "cancelled"
+
+
+def test_diagnostics_page_served_and_uses_no_innerhtml(tmp_path, monkeypatch):
+    client, _, _ = client_for(tmp_path, monkeypatch, Scripted())
+    page = client.get("/brain")
+    assert page.status_code == 200 and "Brain diagnostics" in page.text
+    assert "innerHTML" not in page.text  # all dynamic text is inserted as text, never markup
+
+
+def test_capability_evidence_survives_restart(tmp_path):
+    from mia.brain.capabilities import CapabilityRegistry
+    cand = ModelCandidate("p", "m", frozenset({"chat", "tools"}), 8192, True, True, True)
+    db = tmp_path / "caps.sqlite3"
+    reg = CapabilityRegistry(db_path=db)
+    reg.record(cand, "tools", False, "bad call")
+    reg.record(cand, "tools", False, "bad call")
+    again = CapabilityRegistry(db_path=db)
+    assert "tools" in again.view(cand).refuted
+    again.record(cand, "tools", True)
+    assert "tools" not in CapabilityRegistry(db_path=db).view(cand).refuted
