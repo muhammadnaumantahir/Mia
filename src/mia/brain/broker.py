@@ -76,7 +76,7 @@ class OwnerPermissionEvaluator(DefaultPermissionEvaluator):
         "filesystem.read_text": "filesystem.read",
         "desktop.list_windows": "desktop.observe",
         "desktop.inspect_window": "desktop.observe",
-        "applications.list": "apps.list",
+        "applications.list": "apps.discover",
         "system.read_resources": "system.status",
         "system.list_processes": "process.top",
         "browser.search_web": "browser.navigate",
