@@ -43,7 +43,14 @@ _STOPWORDS = frozenset(
     "the and for with that this from have has had are was were will would can could "
     "you your our their his her its but not all any been being into onto than then "
     "them they what when where which who whom whose about over under also just only "
-    "very more most some such out too".split()
+    "very more most some such out too "
+    # Common Roman Urdu conversational words; keep content-bearing nouns searchable.
+    "mujhe mera meri mere main mein hum ham hai hain hy he hoon hun tha thi the "
+    "ke ki ka ko se par per aur yeh ye woh wo ne ny bhi bas sirf liye karo kar "
+    "raha rahi rahe hain hoon hun kya kyun kahan kab kaun is us ek aik "
+    # Common Urdu-script function words.
+    "مجھے میرا میری میرے میں ہے ہیں تھا تھی تھے کے کی کا کو سے پر اور یہ وہ ہم نے "
+    "بھی بس صرف لیے کریں کرو کر رہا رہی رہے ہوں کیا کیوں کہاں کب کون اس ایک".split()
 )
 
 _REMEMBER = re.compile(
@@ -68,12 +75,14 @@ _GENERIC_REF = re.compile(r"^(?:this|that|it|this\s+one|the\s+above|everything)?
 _UNCERTAIN = re.compile(
     r"\b(?:maybe|might|perhaps|probably|possibly|i\s+think|i\s+guess|i\s+suppose|not\s+sure|"
     r"could\s+be|hypothetically|what\s+if|supposing|if\s+i|if\s+we|i\s+wonder|should\s+i|"
-    r"would\s+it)\b",
+    r"would\s+it|shayad|mumkin|lagta\s+hai|mera\s+khayal|soch\s+raha|soch\s+rahi)\b|"
+    r"شاید|ممکن|لگتا\s+ہے|میرا\s+خیال|سوچ\s+رہا|سوچ\s+رہی",
     re.IGNORECASE,
 )
 _TEMPORARY = re.compile(
     r"\b(?:right\s+now|at\s+the\s+moment|for\s+now|just\s+for\s+today|for\s+today|this\s+time|"
-    r"tonight|this\s+session|temporarily)\b",
+    r"tonight|this\s+session|temporarily|abhi|filhal|is\s+waqt|aaj|aj|aaj\s+raat|sirf\s+aaj|waqti)\b|"
+    r"ابھی|فی\s+الحال|آج|اس\s+وقت|عارضی",
     re.IGNORECASE,
 )
 _SENSITIVE = re.compile(
@@ -90,6 +99,31 @@ _CODE_FENCE = re.compile(r"```.*?```", re.DOTALL)
 
 # (pattern, record_type, base confidence, subject group name or None)
 _AUTO_PATTERNS: tuple[tuple[re.Pattern[str], str, float, str | None], ...] = (
+    # Roman Urdu and Urdu-script statements are supported alongside English.
+    (re.compile(r"\bmujhe\s+(?P<value>.+?)\s+pasand\s+(?:hai|hain|hy|he)\\b", re.I),
+     "preference", 0.7, None),
+    (re.compile(r"\b(?:main|mein)\s+(?:hamesha|aksar|aam\\s+tor\\s+par)\\s+(?P<value>.+?)\\s+(?:karta|karti|karte)\\s+(?:hoon|hun|hain)\\b", re.I),
+     "preference", 0.7, None),
+    (re.compile(r"\b(?:hum|ham)\s+(?:ne|ny)\s+(?P<value>.+?)\s+(?:ka\\s+)?(?:faisla|decision)\\s+(?:kiya|kar\\s+liya)\\b", re.I),
+     "decision", 0.75, None),
+    (re.compile(r"\b(?:mera|meri)\s+(?:goal|maqsad|hadaf)\s+(?P<value>.+?)\s+(?:hai|hy|he)\\b", re.I),
+     "goal", 0.75, None),
+    (re.compile(r"\b(?:main|mein)\s+(?P<value>.+?)\s+par\\s+(?:kaam|work)\\s+kar\\s+(?:raha|rahi|rahe)\\s+(?:hoon|hun|hain)\\b", re.I),
+     "project", 0.65, None),
+    (re.compile(r"\b(?:mera|meri)\s+(?P<subject>naam|role|company|team|shehar|city)\s+(?P<value>.+?)\s+(?:hai|hy|he)\\b", re.I),
+     "fact", 0.8, "subject"),
+    (re.compile(r"مجھے\\s+(?P<value>.+?)\\s+پسند\\s+(?:ہے|ہیں)", re.I),
+     "preference", 0.7, None),
+    (re.compile(r"میں\\s+ہمیشہ\\s+(?P<value>.+?)\\s+(?:کرتا|کرتی|کرتے)\\s+ہوں", re.I),
+     "preference", 0.7, None),
+    (re.compile(r"ہم\\s+نے\\s+(?P<value>.+?)\\s+(?:کا\\s+)?فیصلہ\\s+کیا", re.I),
+     "decision", 0.75, None),
+    (re.compile(r"میرا\\s+(?:مقصد|ہدف)\\s+(?P<value>.+?)\\s+ہے", re.I),
+     "goal", 0.75, None),
+    (re.compile(r"میں\\s+(?P<value>.+?)\\s+پر\\s+کام\\s+کر\\s+رہا\\s+ہوں", re.I),
+     "project", 0.65, None),
+    (re.compile(r"میرا\\s+(?P<subject>نام|کردار|شہر)\\s+(?P<value>.+?)\\s+ہے", re.I),
+     "fact", 0.8, "subject"),
     (re.compile(r"\bmy\s+(?:favou?rite|preferred)\s+(?P<subject>[\w\s-]{2,40}?)\s+is\s+(?P<value>.+)$", re.I),
      "preference", 0.8, "subject"),
     (re.compile(r"\bi\s+(?:always|usually|generally|never)\s+(?P<value>.+)$", re.I),
@@ -130,7 +164,7 @@ _IMPORTANCE = {
 
 def tokens(text: str) -> set[str]:
     return {
-        word for word in re.findall(r"[a-z0-9]+", text.lower())
+        word for word in re.findall(r"[^\\W_]+", text.lower(), flags=re.UNICODE)
         if len(word) >= 3 and word not in _STOPWORDS
     }
 
