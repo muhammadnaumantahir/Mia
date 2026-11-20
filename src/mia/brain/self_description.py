@@ -93,6 +93,12 @@ def render_runtime_manifest(manifest: dict[str, Any]) -> str:
     tools = ", ".join(manifest.get("tools", [])) or "none registered"
     providers = ", ".join(manifest.get("providers", [])) or "none registered"
     computer = ", ".join(manifest.get("computer_tools", [])) or "none registered"
+    sps = manifest.get("sps_framework", {})
+    layers = sps.get("layers", [])
+    layer_summary = ", ".join(
+        f"{layer.get('id', '?')} {layer.get('name', 'unknown')}"
+        for layer in layers
+    ) or "not registered"
     return "\n".join([
         "LIVE RUNTIME EVIDENCE (generated from Mia's current application registries):",
         f"- Registered tools ({manifest.get('tool_count', 0)}): {tools}",
