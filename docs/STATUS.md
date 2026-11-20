@@ -83,3 +83,16 @@ No Day 0 or daily growth data may be fabricated. Daily snapshots require local h
 
 A phase is complete only after roadmap exit criteria, relevant Windows/Linux tests, target-device checks, security/license review, and evidence tied to the exact commit and successful workflow run.
 - 2026-11-19: voice completion pass on `main`: session state machine with interrupt, mute, push-to-talk, restart-loop guard, chunked TTS with speed/volume, local offline hands-free engine and microphone selection; 34 real-browser tests added (found and fixed a stale `onstart` bug). Real-device microphone/speaker tests are NOT done; see docs/voice/OWNER_VERIFICATION.md.
+
+ 
+## Code Graph implementation (2026-11-20)
+
+A first implementation is being developed on `feature/code-graph-foundation`:
+- Deterministic Python-AST indexer; source files are never imported or executed.
+- Repository/directory/file, Python class/function and FastAPI endpoint nodes.
+- Confirmed import/declaration/direct-call/route relationships; heuristic SPS-layer and test-name edges are explicitly labelled inferred.
+- Stable hash identifiers, source digest, Git commit metadata, parser error reporting and atomic graph artifact writes.
+- Local `/code-graph` UI with search, type/relationship/evidence filters, selection details, pan and zoom; Assistant and Observatory navigation links.
+- API rebuilds/validates the source digest when graph data is requested; CLI supports regeneration and stale checks.
+
+**Verification state:** source has been added, but this branch has not yet been run in a local Python environment. The generated graph has not yet been produced from an actual checkout, so node/edge counts and parser coverage are not claimed. Browser usability, API integration and the full test suite remain unverified. The first pass currently parses Python symbols and indexes other supported file types as file nodes; full language-specific frontend/database/runtime relationship analysis remains future work.
