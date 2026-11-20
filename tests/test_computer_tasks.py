@@ -801,3 +801,25 @@ def test_directory_scoped_grant_does_not_cover_an_outside_path(tmp_path):
     assert engine.plan_summary(task["task_id"])[0]["needs_approval"] is True
     waiting = run(engine.advance(task["task_id"]))
     assert waiting["status"] == "awaiting_approval"
+
+
+def test_non_idempotent_task_without_permission_spec_fails_closed(tmp_path):
+    approvals = ApprovalStore(tmp_path / "unknown-approvals.sqlite3")
+    fake = Fakes(approvals)
+    policy = PermissionPolicy(tmp_path / "unknown-permissions.sqlite3")
+    engine = TaskEngine(
+        tmp_path / "unknown-tasks.sqlite3",
+        approvals,
+        fake.handlers(),
+        permission_policy=policy,
+        capability_registry=default_registry(),
+    )
+    task = engine.create_task("Unregistered side effect", [step("danger", v=42)])
+    plan = engine.plan_summary(task["task_id"])
+    assert plan[0]["needs_approval"] is True
+    assert "PERMISSION DENIED" in plan[0]["summary"]
+
+    result = run(engine.advance(task["task_id"]))
+    assert result["status"] == "failed"
+    assert fake.runs.get("danger") is None
+    assert any(event["kind"] == "permission_denied" for event in engine.events(task["task_id"]))
