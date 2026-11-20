@@ -714,8 +714,13 @@ def create_app(
         """Evaluate the shared owner policy; unknown capabilities fail closed."""
         try:
             spec = capability_registry.get(capability)
-        except KeyError:
-            return True
+        except KeyError as exc:
+            # Unknown capabilities are never implicitly approvable; callers may
+            # otherwise ignore the boolean approval hint and execute anyway.
+            raise HTTPException(
+                status_code=403,
+                detail="computer capability is not registered on this Mia runtime",
+            ) from exc
         decision = policy.authorize(spec, path=path)
         if not decision.allowed:
             raise HTTPException(status_code=403, detail=decision.reason)
