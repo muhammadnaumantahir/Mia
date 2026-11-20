@@ -99,6 +99,10 @@ def render_runtime_manifest(manifest: dict[str, Any]) -> str:
         f"{layer.get('id', '?')} {layer.get('name', 'unknown')}"
         for layer in layers
     ) or "not registered"
+    layer_responsibilities = "; ".join(
+        f"{layer.get('id', '?')}: {layer.get('responsibility', 'not specified')}"
+        for layer in layers
+    ) or "not registered"
     return "\n".join([
         "LIVE RUNTIME EVIDENCE (generated from Mia's current application registries):",
         f"- Registered tools ({manifest.get('tool_count', 0)}): {tools}",
@@ -112,6 +116,7 @@ def render_runtime_manifest(manifest: dict[str, Any]) -> str:
         f"- Code Graph API: {manifest.get('code_graph', 'unknown')}",
         f"- Wake-word route/tool: {manifest.get('wake_word', 'unknown')}",
         f"- Architecture: {sps.get('name', 'unknown')} with {sps.get('layer_count', 0)} canonical layers: {layer_summary}",
+        f"- SPS layer responsibilities: {layer_responsibilities}",
         f"- SPS implementation status: {sps.get('implementation_status', 'unknown')}",
         "- Runtime services (API, scheduler, UI, gateway, adapters, memory and observatory) support the SPS layers; they are not extra SPS layers.",
         "EVIDENCE LIMITS: Registration does not prove provider health, model availability, device access, permission approval, or owner verification. Check the live operation result before claiming an action succeeded. Never invent capabilities or expose credentials, tokens, environment values, private paths, or raw configuration.",
