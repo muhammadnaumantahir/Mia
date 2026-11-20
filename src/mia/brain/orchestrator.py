@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import os
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -114,7 +114,7 @@ class Brain:
         allow_remote_file_context: Callable[[], bool] | None = None,
         max_tool_rounds: int = 4,
         run_policy: RunPolicy = RunPolicy(),
-        capture: Callable[[str, str, str], dict[str, Any] | None] | None = None,
+        capture: Callable[[str, str, str], dict[str, Any] | None | Awaitable[dict[str, Any] | None]] | None = None,
         on_reply: Callable[[str, str, list[dict[str, Any]]], None] | None = None,
         approval_status: Callable[[str], str | None] | None = None,
     ) -> None:
