@@ -224,6 +224,19 @@ class ApprovalStore:
         if expired:
             raise ApprovalError("Approval has expired")
 
+    def status(self, approval_id: str) -> str | None:
+        """Current state of one approval (pending/approved/rejected/consumed/expired) or None."""
+        with self._connection() as db:
+            row = db.execute(
+                "SELECT status, expires_at FROM action_approvals WHERE approval_id = ?",
+                (approval_id,),
+            ).fetchone()
+        if not row:
+            return None
+        if row["status"] in {"pending", "approved"} and row["expires_at"] <= _now().isoformat():
+            return "expired"
+        return str(row["status"])
+
     def list_pending(self) -> list[dict[str, str]]:
         with self._connection() as db:
             rows = db.execute("""

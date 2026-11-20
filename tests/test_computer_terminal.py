@@ -313,3 +313,19 @@ def test_terminal_api(tmp_path):
     assert final["status"] == "cancelled"
     assert client.post("/api/computer/terminal/executions/nope/cancel").status_code == 404
     assert client.post("/api/computer/stop-all").json()["status"] == "stopped"
+
+
+def test_live_output_is_available_while_command_is_still_running(setup):
+    term, approvals, _, _, _ = setup
+    cmd = "echo started; sleep 20"
+    preview = term.preview(cmd, root_id="root_1")
+    approvals.approve(preview["approval_id"])
+    ex = term.start(cmd, root_id="root_1", approval_id=preview["approval_id"])
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and "started" not in term.live_output(ex.execution_id)["stdout"]:
+        time.sleep(0.05)
+    assert ex.status == "running"
+    assert term.live_output(ex.execution_id)["stdout"].strip() == "started"
+    term.cancel(ex.execution_id)
+    term.wait(ex.execution_id, 5)
+    assert ex.status == "cancelled"

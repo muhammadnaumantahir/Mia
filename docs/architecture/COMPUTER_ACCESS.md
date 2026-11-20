@@ -261,3 +261,39 @@ sub-requests, goes through the URL policy (public web only; loopback/private/res
 **Verification status:** all desktop logic is tested with a fake UI Automation tree (17 tests). **Nothing has been run
 against a real Windows desktop**, real pywinauto element behavior (invoke patterns, toggle/selection state, scroll, `type_keys`
 quoting), or a real UAC prompt. Manual Windows verification is required before relying on this.
+
+## Multi-step computer tasks (Feature 4, M8)
+
+`computer/tasks.py` (engine), `computer/task_handlers.py` (step handlers), API under `/api/computer/tasks*`. This is a
+dedicated durable ledger for computer work (tables `computer_tasks`, `computer_task_steps`, `computer_task_events`); the
+general `agent/tasks.py` store is unchanged.
+
+- **Plan:** an ordered list of up to 20 steps; each names a registered capability (`filesystem.*`, `terminal.run`,
+  `process.*`, `apps.*`, `browser.*`, and on Windows `desktop.*`) and arguments. Unknown capabilities, missing arguments,
+  unknown fields and forward references are rejected up front. A step may reference an earlier step's recorded result with
+  `${steps.N.path}` (for example a recovery id or a found element reference). `GET /api/computer/tasks/capabilities` lists what
+  can be planned on this machine. A plan cannot grant permission and cannot carry approvals.
+- **Execution:** `POST /api/computer/tasks/{id}/run` runs steps until the task finishes or needs the owner. Before each step the
+  handler re-inspects the *current* state (revalidation). A consequential step creates its own approval through the same
+  preview/approve/execute code as the direct API (or is covered by an active owner grant), then stops with status
+  `awaiting_approval`; approving one step never approves another. If the world changed after approval the approval no longer
+  matches, the step does nothing and asks for a fresh approval.
+- **Checkpoints and restart:** every transition is written to SQLite. After a restart, tasks that were running become
+  `interrupted`, the step that was in flight becomes *outcome unknown* and is not re-run. `run` will not continue past an
+  unknown consequential step; the owner must `retry-step`, which clears its approval so it is re-validated and re-approved.
+  An interrupted read-only step is simply re-run. Completed steps are never repeated.
+- **Control:** `pause` (before the next step), `cancel` (also cancels the running terminal command of that task), `retry-step`,
+  and the global `stop-all` (tasks pause instead of running). Retries apply only to idempotent read-only steps, at most
+  3 attempts, only for transient failures. Consequential steps are never retried automatically.
+- **Verification and reporting:** each step stores `verified` true/false/unknown from the adapter (file hashes, process gone,
+  UI re-observed, page effect, expected terminal output). Terminal exit code 0 alone is recorded as *not independently
+  verifiable* unless an `expect_output` pattern matched. The task outcome is `verified`, `partially_verified`, `unverified`,
+  `failed` or `cancelled`, and `GET .../report` renders only recorded data.
+- **Dev server:** a `terminal.run` step with `ready_pattern` waits for that text in the live output and reports ready while the
+  process keeps running; if it never appears, the process is cancelled and the step fails.
+- A defect found and fixed while testing this milestone: the terminal reader used a blocking `read(4096)`, so output only appeared
+  when the command exited. It now uses `read1`, and a regression test covers live output.
+- **Verification status:** tested with fake handlers (ordering, approvals, retries, pause/cancel, restart recovery) and with
+  real adapters on Linux: file workflows, delete/restore via templating, terminal failure halts, dev-server readiness, process
+  termination, cancel of a running command, and a real browser find/approved-click/extract workflow. Desktop steps are
+  registered only on Windows and are unverified there.

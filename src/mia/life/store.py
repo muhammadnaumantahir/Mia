@@ -29,6 +29,7 @@ OUTCOMES = frozenset(
     {"completed", "no_op", "deferred", "rejected", "failed", "cancelled", "awaiting_approval"}
 )
 TRIGGERS = frozenset({"schedule", "event", "owner"})
+OUTREACH_STATES = frozenset({"pending", "read", "acted", "dismissed"})
 LEASE_SECONDS = 300
 
 
@@ -61,6 +62,11 @@ class LifeSettings:
     quiet_start_minute: int = 22 * 60  # local minutes after midnight
     quiet_end_minute: int = 7 * 60
     utc_offset_minutes: int = 0
+    outreach_enabled: bool = False  # proactive messages are opt-in
+    max_outreach_per_day: int = 2
+    min_outreach_gap_minutes: int = 240
+    outreach_cooldown_days: int = 7
+    max_unanswered_outreach: int = 3
 
 
 _SETTING_RANGES: dict[str, tuple[int, int]] = {
@@ -74,8 +80,12 @@ _SETTING_RANGES: dict[str, tuple[int, int]] = {
     "quiet_start_minute": (0, 1439),
     "quiet_end_minute": (0, 1439),
     "utc_offset_minutes": (-720, 840),
+    "max_outreach_per_day": (0, 20),
+    "min_outreach_gap_minutes": (0, 10_080),
+    "outreach_cooldown_days": (1, 365),
+    "max_unanswered_outreach": (1, 50),
 }
-_BOOL_SETTINGS = {"paused", "emergency_stop", "quiet_hours_enabled"}
+_BOOL_SETTINGS = {"paused", "emergency_stop", "quiet_hours_enabled", "outreach_enabled"}
 
 
 def validate_settings(values: dict[str, Any]) -> dict[str, Any]:
@@ -221,6 +231,28 @@ class LifeStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_journal_started
                     ON activity_journal(started_at DESC);
+                CREATE TABLE IF NOT EXISTS life_outreach (
+                    message_id TEXT PRIMARY KEY,
+                    kind TEXT NOT NULL,
+                    topic_key TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    evidence_json TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_outreach_created
+                    ON life_outreach(created_at DESC);
+                CREATE TABLE IF NOT EXISTS life_reflections (
+                    reflection_id TEXT PRIMARY KEY,
+                    created_at TEXT NOT NULL,
+                    window_start TEXT,
+                    window_end TEXT NOT NULL,
+                    cycles_reviewed INTEGER NOT NULL,
+                    observations_json TEXT NOT NULL,
+                    evidence_json TEXT NOT NULL
+                );
             """)
 
     # --------------------------------------------------------------- settings
@@ -457,7 +489,7 @@ class LifeStore:
                     cycle_id, trigger, trigger_detail[:500], goal[:500], item_id,
                     rationale[:2000], _iso(now), permission_level,
                     json.dumps(policy, sort_keys=True, default=str),
-                    "none: proactive delivery is not implemented",
+                    "none: no outreach evaluated for this cycle",
                     self.instance_id,
                     _iso(now + timedelta(seconds=LEASE_SECONDS)),
                 ),
@@ -578,6 +610,139 @@ class LifeStore:
             return None
         moment = row["ended_at"] if row["status"] == "finished" and row["ended_at"] else row["started_at"]
         return datetime.fromisoformat(moment)
+
+    def set_notification_decision(self, cycle_id: str, decision: str) -> None:
+        with self._connection() as db:
+            cursor = db.execute(
+                "UPDATE activity_journal SET notification_decision = ? WHERE cycle_id = ?",
+                (decision[:300], cycle_id),
+            )
+        if cursor.rowcount == 0:
+            raise KeyError(cycle_id)
+
+    def finished_cycles_since(self, since: datetime | None, limit: int = 200) -> list[dict[str, Any]]:
+        """Finished, non-coalesced cycles that ended after `since`, oldest first."""
+        query = "SELECT * FROM activity_journal WHERE status = 'finished'"
+        params: list[Any] = []
+        if since is not None:
+            query += " AND ended_at > ?"
+            params.append(_iso(since))
+        query += " ORDER BY ended_at ASC LIMIT ?"
+        params.append(max(1, min(int(limit), 500)))
+        with self._connection() as db:
+            rows = db.execute(query, params).fetchall()
+        return [self._decode_cycle(row) for row in rows]
+
+    # --------------------------------------------------------------- outreach
+
+    def add_outreach(
+        self, *, kind: str, topic_key: str, title: str, body: str, evidence: list[dict[str, Any]]
+    ) -> str:
+        if not evidence:
+            raise ValueError("an outreach message needs evidence")
+        if not title.strip() or not body.strip():
+            raise ValueError("title and body are required")
+        message_id = uuid.uuid4().hex
+        now = _iso(utc_now())
+        with self._connection() as db:
+            db.execute(
+                "INSERT INTO life_outreach (message_id, kind, topic_key, title, body, "
+                "evidence_json, state, created_at, updated_at) VALUES (?,?,?,?,?,?, 'pending', ?, ?)",
+                (message_id, kind[:40], topic_key[:300], title.strip()[:200], body.strip()[:2000],
+                 json.dumps(evidence, ensure_ascii=False), now, now),
+            )
+        return message_id
+
+    @staticmethod
+    def _decode_outreach(row: sqlite3.Row) -> dict[str, Any]:
+        result = dict(row)
+        result["evidence"] = json.loads(result.pop("evidence_json"))
+        return result
+
+    def get_outreach(self, message_id: str) -> dict[str, Any] | None:
+        with self._connection() as db:
+            row = db.execute("SELECT * FROM life_outreach WHERE message_id = ?", (message_id,)).fetchone()
+        return self._decode_outreach(row) if row else None
+
+    def list_outreach(self, state: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+        query, params = "SELECT * FROM life_outreach", []
+        if state:
+            query += " WHERE state = ?"
+            params.append(state)
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(max(1, min(int(limit), 200)))
+        with self._connection() as db:
+            rows = db.execute(query, params).fetchall()
+        return [self._decode_outreach(row) for row in rows]
+
+    def set_outreach_state(self, message_id: str, state: str) -> None:
+        if state not in OUTREACH_STATES - {"pending"}:
+            raise ValueError("state must be read, acted or dismissed")
+        with self._connection() as db:
+            cursor = db.execute(
+                "UPDATE life_outreach SET state = ?, updated_at = ? WHERE message_id = ?",
+                (state, _iso(utc_now()), message_id),
+            )
+        if cursor.rowcount == 0:
+            raise KeyError(message_id)
+
+    def outreach_sent_since(self, since: datetime) -> int:
+        with self._connection() as db:
+            row = db.execute(
+                "SELECT COUNT(*) AS n FROM life_outreach WHERE created_at >= ?", (_iso(since),)
+            ).fetchone()
+        return int(row["n"])
+
+    def last_outreach_at(self) -> datetime | None:
+        with self._connection() as db:
+            row = db.execute("SELECT MAX(created_at) AS at FROM life_outreach").fetchone()
+        return datetime.fromisoformat(row["at"]) if row and row["at"] else None
+
+    def unanswered_outreach(self) -> int:
+        """Messages the owner has not yet opened, answered or dismissed."""
+        with self._connection() as db:
+            row = db.execute("SELECT COUNT(*) AS n FROM life_outreach WHERE state = 'pending'").fetchone()
+        return int(row["n"])
+
+    def topic_history(self, topic_key: str, since: datetime) -> list[str]:
+        """States of messages on this topic created since `since`."""
+        with self._connection() as db:
+            rows = db.execute(
+                "SELECT state FROM life_outreach WHERE topic_key = ? AND created_at >= ?",
+                (topic_key, _iso(since)),
+            ).fetchall()
+        return [str(row["state"]) for row in rows]
+
+    # ------------------------------------------------------------ reflections
+
+    def add_reflection(
+        self, *, window_start: datetime | None, window_end: datetime, cycles_reviewed: int,
+        observations: list[str], evidence: list[str],
+    ) -> str:
+        reflection_id = uuid.uuid4().hex
+        with self._connection() as db:
+            db.execute(
+                "INSERT INTO life_reflections (reflection_id, created_at, window_start, window_end, "
+                "cycles_reviewed, observations_json, evidence_json) VALUES (?,?,?,?,?,?,?)",
+                (reflection_id, _iso(utc_now()), _iso(window_start) if window_start else None,
+                 _iso(window_end), cycles_reviewed,
+                 json.dumps(observations, ensure_ascii=False), json.dumps(evidence)),
+            )
+        return reflection_id
+
+    def list_reflections(self, limit: int = 20) -> list[dict[str, Any]]:
+        with self._connection() as db:
+            rows = db.execute(
+                "SELECT * FROM life_reflections ORDER BY created_at DESC LIMIT ?",
+                (max(1, min(int(limit), 100)),),
+            ).fetchall()
+        out = []
+        for row in rows:
+            item = dict(row)
+            item["observations"] = json.loads(item.pop("observations_json"))
+            item["evidence"] = json.loads(item.pop("evidence_json"))
+            out.append(item)
+        return out
 
     def recover_interrupted(self, *, at_startup: bool = False) -> list[str]:
         """Fail running cycles left by an earlier process; requeue their item.

@@ -30,7 +30,7 @@ from mia.memory.safety import find_secret
 
 from .approvals import ApprovalError, ApprovalStore
 from .capabilities import CapabilitySpec, RiskLevel
-from .control import AutomationControl
+from .control import CURRENT_TASK_ID, AutomationControl
 from .filesystem import FilesystemAdapter
 from .permissions import PermissionPolicy
 
@@ -215,7 +215,9 @@ class Execution:
     error: str | None = None
     approval_id: str | None = None
     authorized_by: str = "approval"
+    task_id: str | None = field(default=None, repr=False)
     _activity: str | None = field(default=None, repr=False)
+    _buffers: dict | None = field(default=None, repr=False)
     _proc: Any = field(default=None, repr=False)
     _cancel: threading.Event = field(default_factory=threading.Event, repr=False)
     _done: threading.Event = field(default_factory=threading.Event, repr=False)
@@ -337,7 +339,7 @@ class TerminalExecutor:
                 execution_id=uuid.uuid4().hex, command=plan["command"], shell=plan["shell"],
                 root_id=root_id, cwd=plan["cwd"], risk=plan["risk"], timeout=plan["timeout"],
                 started_at=datetime.now(UTC).isoformat(), approval_id=approval_id,
-                authorized_by=authorized_by)
+                authorized_by=authorized_by, task_id=CURRENT_TASK_ID.get())
             if self.control is not None:
                 execution._activity = self.control.begin(
                     "terminal.run", f"Running: {redact_output(plan['command'])[:80]}")
@@ -356,6 +358,7 @@ class TerminalExecutor:
     # ---- running ---------------------------------------------------------------------------
     def _run(self, ex: Execution, directory: Path) -> None:
         buffers = {"stdout": bytearray(), "stderr": bytearray()}
+        ex._buffers = buffers
         threads: list[threading.Thread] = []
         try:
             kwargs: dict[str, Any] = {}
@@ -372,7 +375,7 @@ class TerminalExecutor:
 
             def drain(stream: Any, name: str) -> None:
                 buf = buffers[name]
-                while chunk := stream.read(4096):
+                while chunk := stream.read1(4096):  # read1: return what is available, do not wait to fill
                     room = self.MAX_OUTPUT_BYTES - len(buf)
                     if room > 0:
                         buf.extend(chunk[:room])
@@ -447,6 +450,14 @@ class TerminalExecutor:
                 pass
 
     # ---- control ---------------------------------------------------------------------------
+    def live_output(self, execution_id: str) -> dict[str, str]:
+        """Redacted output captured so far (works while the command is still running)."""
+        ex = self.get(execution_id)
+        if ex.status != "running" or ex._buffers is None:
+            return {"stdout": ex.stdout, "stderr": ex.stderr}
+        return {name: redact_output(bytes(buf).decode("utf-8", errors="replace"))
+                for name, buf in ex._buffers.items()}
+
     def get(self, execution_id: str) -> Execution:
         try:
             return self._executions[execution_id]
@@ -464,6 +475,15 @@ class TerminalExecutor:
             return False
         ex._cancel.set()
         return True
+
+    def cancel_task(self, task_id: str) -> int:
+        """Cancel running commands that were started by one computer task."""
+        count = 0
+        for ex in list(self._executions.values()):
+            if ex.status == "running" and ex.task_id == task_id:
+                ex._cancel.set()
+                count += 1
+        return count
 
     def stop_all(self) -> int:
         count = 0
