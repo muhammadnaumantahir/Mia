@@ -80,6 +80,7 @@ from mia.gateway.selection import DecisionLog
 from mia.gateway.service import ModelGateway
 from mia.knowledge.document_ingestion import DocumentIngestionError, DocumentIngestor
 from mia.life.capture import capture_from_message as capture_curiosity_from_message
+from mia.life.reflect import Reflector
 from mia.life.runner import LifeRunner, LifeScheduler
 from mia.life.store import ITEM_STATES, LifeStore
 from mia.life.web import ResearchExplorer, normalise_research_url
@@ -1410,6 +1411,15 @@ def create_app(
         ResearchExplorer(life_store, memory_store, life_fetcher),
         resource_snapshot=resource_monitor_service.snapshot,
         on_cycle=record_life_cycle,
+        reflector=Reflector(
+            life_store,
+            gateway=model_gateway,
+            usage_recorder=record_usage,
+            model_enabled=os.getenv(
+                "MIA_LIFE_MODEL_REFLECTION_ENABLED", "false"
+            ).strip().lower() == "true",
+            model_timeout_seconds=float(os.getenv("MIA_LIFE_MODEL_REFLECTION_TIMEOUT_SECONDS", "12")),
+        ),
     )
     life_scheduler = LifeScheduler(
         life_runner, interval_seconds=float(os.getenv("MIA_LIFE_INTERVAL_SECONDS", "300"))
