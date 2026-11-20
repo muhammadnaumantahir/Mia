@@ -33,7 +33,7 @@ Exit criteria:
 ### Work
 
 **Identity and self-understanding**
-- Maintain one canonical Mia identity, purpose, personality, operating instructions and truthful capability inventory independent of the selected model. The persistent owner-editable profile, version history, rollback, audit and shared prompt path are implemented; the owner-facing editor UI is in a separate draft integration change.
+- Maintain one canonical Mia identity, purpose, personality, operating instructions and truthful capability inventory independent of the selected model. The persistent owner-editable profile, version history, rollback, audit and shared prompt path are implemented; the owner-facing editor UI was merged into the development integration branch in PR #16.
 - Let Mia answer questions about who it is, how it works, its ten-layer SPS architecture, enabled tools, current state, limits and unavailable features using live, maintained application evidence.
 - Separate known facts, inferred facts, unknowns and unavailable runtime information. Never invent memories, tools, actions, emotions or system status.
 - Make personality and response style configurable without allowing personality settings to override security or factuality.
