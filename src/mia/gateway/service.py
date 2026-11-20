@@ -606,6 +606,12 @@ class ModelGateway:
                     reservation_id=reservation_id,
                 )
                 return
+            except (asyncio.CancelledError, GeneratorExit):
+                # A dispatched paid stream may have incurred input/output charges
+                # even when the consumer cancels before the final usage event.
+                # Retain its reservation until TTL rather than silently refunding it.
+                keep_reservation = reservation_id is not None
+                raise
             except AuthenticationProviderError as exc:
                 self.breaker.record_auth_failure(provider_id)
                 settled = True
