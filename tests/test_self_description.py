@@ -40,6 +40,8 @@ def test_runtime_manifest_uses_live_registries_and_reports_limits():
     assert "SPS-02: Permissions, policy, risk, budgets and approvals." in prompt
     assert "SPS-09: Checks, tests, security validation and benchmarks." in prompt
     assert "not extra SPS layers" in prompt
+    assert "SELF-DESCRIPTION RULE" in prompt
+    assert "separate registered capabilities from unavailable or planned features" in prompt
     assert "Browser wake phrase: available" in prompt
     assert "Offline wake-word detection: not registered" in prompt
 
