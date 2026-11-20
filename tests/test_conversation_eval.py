@@ -5,7 +5,6 @@ from mia.brain.self_description import build_runtime_manifest, render_runtime_ma
 from mia.memory.context import assemble_memory_context, detect_context_intent
 from mia.memory.store import MemoryStore, extract_query_terms
 
-
 FIXTURE = Path(__file__).parent / "fixtures" / "conversation_eval.json"
 
 
