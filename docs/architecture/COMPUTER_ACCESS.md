@@ -6,16 +6,23 @@ Give Mia useful access to the user's Windows computer through a catalog of typed
 
 ## Current foundation
 
-The first adapter is scoped filesystem access:
-- Configured roots are read/write boundaries.
-- If `MIA_COMPUTER_ROOTS` is unset, the only root is Mia's `./workspace`.
-- Paths are resolved and checked against the selected root to prevent traversal and symlink escapes.
-- Directory listings are bounded to 200 entries.
-- UTF-8 reads and writes are bounded to 2 MB.
-- Writes to credential/key/certificate files, environment files and Git metadata are blocked.
-- Reads are immediate; writes use preview → approval → execute.
-- Approval is one-time and bound to action, root, relative path, previous file hash and new content hash.
-- The audit ledger records successful writes, but not file contents.
+The original filesystem-only foundation has expanded into a permissioned computer capability catalogue:
+- Configured roots are read/write boundaries. If `MIA_COMPUTER_ROOTS` is unset, the only root is Mia's `./workspace`.
+- Paths are resolved and checked against the selected root to prevent traversal and symlink/junction escapes.
+- Read-only file inventory, metadata, text search, project inspection, comparison and duplicate detection are available.
+- Mutations (write, mkdir, rename, copy, move, delete and restore) use preview → owner approval → execute. Delete is a recoverable move into `.mia-recovery`; existing destinations are never overwritten.
+- Application discovery is read-only. Launching requires an owner allowlist, fixed arguments, `shell=False`, preview and approval.
+- Browser automation uses Mia's isolated Playwright context. Read/observe operations are separate from consequential interactions, which are approval-bound.
+- Windows desktop UI Automation and process management are implemented behind OS/availability checks and risk-based approvals.
+- A restricted terminal executor classifies commands, blocks administrative/security/credential operations, confines working directories to owner-configured roots and redacts output.
+- A durable multi-step TaskEngine records each step, approval, verification result and recovery state. A global stop switch halts automation.
+- The audit ledger records action metadata and verification, not file contents or raw secrets.
+
+## Deployment boundary: remote Mia server versus the owner's computer
+
+Computer adapters execute on the machine running the Mia process. If Mia is deployed on Oracle Cloud, filesystem, process, application, browser and desktop capabilities target the Oracle VM—not the owner's Windows laptop or phone. Windows UI Automation is unavailable on a typical Linux cloud VM.
+
+**A paired local companion agent is not implemented yet.** To control the owner's laptop while Mia's Brain runs remotely, Mia will need an outbound-only, authenticated local agent/bridge with device pairing, scoped capabilities, owner-visible activity, exact per-action approvals and an emergency stop. Do not expose the current local computer API directly to the public internet as a workaround. The server API remains loopback-only until remote authentication, CSRF protection, owner identity and audit controls are complete.
 
 ## API
 
@@ -30,30 +37,34 @@ The first adapter is scoped filesystem access:
 
 The service remains bound to localhost. Remote access must not be enabled until authentication, CSRF protection, audit controls and user identity are implemented.
 
-## Permission catalogue (planned)
+## Current permission catalogue
 
-| Permission | Scope | Default |
+Only capabilities with working adapters are registered. The exact live list is available from `GET /api/computer/capabilities`; optional dependencies, OS and display availability can make a capability unavailable.
+
+| Capability | Current scope | Control |
 |---|---|---|
-| filesystem.read | Read/list/search within an allowed root | Allowed for configured roots |
-| filesystem.write | Create/replace file within an allowed root | Approval required |
-| filesystem.delete | Delete a file/folder | Not implemented; approval required |
-| process.inspect | Read process metadata | Not implemented |
-| process.launch | Launch one allowlisted application | Not implemented; approval required |
-| process.terminate | Stop a process | Not implemented; approval required |
-| browser.navigate | Navigate an isolated browser context | Not implemented |
-| browser.interact | Click/type/upload/download in a browser context | Not implemented; risk-based approval |
-| system.settings.read | Read system configuration | Not implemented |
-| system.settings.write | Change system configuration | Not implemented; approval required |
-| shell.execute | Run a command in a constrained worker | Disabled; not available to the main assistant |
+| `filesystem.read/list/search` | Read/list/search inside configured roots | Low-risk reads; path and size limits |
+| `filesystem.write` | Create or replace bounded text files | Exact preview and owner approval; sensitive paths blocked |
+| `filesystem.mkdir/rename/copy/move/delete/restore` | Scoped file/folder mutations | Exact preview, one-time approval and verification; delete is recoverable |
+| `apps.list/discover` | Owner allowlist and installed-app inventory | Read-only; no launch during discovery |
+| `apps.launch` | Launch one owner-allowlisted app with fixed arguments | Preview and approval; `shell=False`; shells/script hosts blocked |
+| `browser.navigate/observe/find/extract` | Public web in Mia's isolated Playwright context | Read-oriented; private/loopback/reserved hosts blocked |
+| `browser.fill/select/check/scroll/tabs/screenshot` | Prepare low-risk browser interactions | Requires the relevant owner grant at the API/task boundary; no password/payment/OTP fields |
+| `browser.click/download/upload` | Consequential browser interaction | Per-action approval bound to page state and exact target; executable downloads blocked |
+| `desktop.*` | Windows UI Automation: observe, click, toggle, select, keys, scroll, screenshot, window actions | Windows/display required; preview and per-action approval; protected security windows refused |
+| `process.top/info`, `system.status/resources` | Read process and system metadata | Read-only; no command lines or environment variables |
+| `process.terminate` | Stop an owner's process | Preview and approval bound to PID/name/start time; protected processes refused |
+| `terminal.run` | Restricted command execution inside configured roots | Per-command risk classification; high risk always needs approval; administrative/security/credential commands blocked |
+| `computer.tasks` | Durable multi-step plans over registered capabilities | Each step is revalidated and separately authorized; consequential steps are never auto-retried |
 
-## Next integrations
+## Remaining integrations
 
-1. Windows application catalog and launch adapter with explicit allowlist.
-2. Browser adapter using Playwright with a dedicated browser context and download policy.
-3. Document adapters for PDF, DOCX, XLSX and PPTX, with read/write previews.
-4. Expand Windows UI Automation to carefully scoped browser/app interactions with per-action approvals.
-5. Task orchestrator to combine actions and resume safely after failures.
-6. Restricted worker process for approved scripts; no arbitrary code in the privileged process.
+1. **Local companion agent:** pair the remote Brain with the owner's Windows desktop using an outbound-only authenticated channel. This is required for local computer control when Mia is hosted on Oracle Cloud.
+2. **Remote access security:** implement authenticated owner identity, CSRF protection, device pairing, revocation and remote audit before exposing any computer API beyond loopback.
+3. **Adapter hardening:** move shared permission checks deeper into every adapter method so alternate call paths cannot bypass the API/task/Brain boundary checks.
+4. **Cross-platform UI control:** validate the Windows adapter on real Windows hardware and decide whether macOS/Linux desktop adapters are worth maintaining.
+5. **Sandboxed code execution:** add an isolated worker for explicitly approved scripts; do not turn the restricted terminal into unrestricted shell access.
+6. **Browser session improvements:** retain the current isolated Mia-only profile and explicit login boundaries; never import the owner's default browser cookies or bypass CAPTCHA/access controls.
 
 ## Non-negotiable safety boundaries
 
@@ -93,16 +104,15 @@ The URL filter is a defense-in-depth control, not a complete network sandbox. DN
 
 ## Windows desktop UI Automation
 
-The optional Windows adapter uses pywinauto's UI Automation backend:
-- It can enumerate visible windows and expose only title, handle, process ID and window class.
-- It can inspect a selected window's visible, enabled, non-password text-control metadata (AutomationId, control type, label and class), never the control's current text value.
-- Text entry is limited to visible, enabled controls with a stable AutomationId and one of the supported text-control types.
-- The preview is bound to the exact window handle/title, control ID/type and text SHA-256.
-- The approval card displays the proposed text and its hash; no typing occurs before approval.
-- Execution re-resolves the same window/control and consumes the one-time approval before replacing text.
-- Arbitrary keystrokes, mouse clicks, menu selection, button activation, password controls, shell access and process termination are not implemented.
+The optional Windows adapter uses pywinauto's UI Automation backend and requires a Windows host with an interactive display:
+- It can list visible windows and inspect non-password controls. Password controls are skipped; edit-control values are not returned during observation.
+- Supported approved actions include click/invoke, toggle, select, whitelisted keys/literal text, scroll, coordinate click as a last resort, one-window screenshot and focus/minimize/maximize/restore/close.
+- Every action is previewed and bound to the window identity (handle, title, process, class) plus the target control/state. The adapter re-resolves the target before execution and verifies the resulting UI state.
+- Ambiguous or disabled targets are refused. Security/administration windows (UAC, Windows Security, regedit, mmc, Task Manager) are blocked. Close is refused when the title suggests unsaved work unless the owner explicitly acknowledges the risk; the title heuristic cannot inspect unsaved state inside the app.
+- Arbitrary raw mouse/keyboard control, OCR, password entry, UAC elevation and administrator operations are not implemented.
+- Install on Windows with `python -m pip install -e ".[computer]"`. UI Automation support varies by application and elevated windows may not be accessible to a non-elevated Mia process.
 
-Install on Windows with `python -m pip install -e ".[computer]"`. This adapter is Windows-only; the other core tests remain cross-platform. UI Automation support varies by application, and elevated/admin windows may not be accessible to a non-elevated Mia process.
+**Verification status:** desktop logic is tested with fake UI Automation trees. No real Windows desktop, physical application or UAC prompt has been validated yet; owner-side Windows testing remains required.
 
 ## Unified capability contract, environment and permission policy (Feature 4, M2)
 
@@ -120,8 +130,8 @@ Install on Windows with `python -m pip install -e ".[computer]"`. This adapter i
   `POST /api/computer/permissions/revoke-all`, `GET /api/computer/permissions/history`. The API is localhost-only;
   authenticated owner identity is still required before any remote exposure.
 - 2026-11-20: `TaskEngine` now consults `PermissionPolicy` for registered capabilities whose adapters expose an approval callback. Matching medium-risk grants can replace the extra approval prompt while the adapter still receives its exact one-time preview approval; high-risk actions always require per-action approval. Directory grants are checked against resolved filesystem paths.
-- The main direct API boundaries for file operations/writes, app launch, browser click/download/upload, browser preparation, process termination and desktop actions now consult `PermissionPolicy`. Actions without an approval-preview mechanism (browser fill/select/check/scroll/tabs/screenshot) require an active matching owner grant; consequential browser and desktop actions continue to require a one-time per-action approval.
-- Still not done: enforcement is not yet embedded inside every adapter method, window management remains on adapter-specific approval only, and AI Brain tool execution plus Voice-to-computer actions are not yet routed through one shared permission broker.
+- Direct API boundaries for file operations/writes, app launch, browser click/download/upload, browser preparation, process termination and desktop actions consult `PermissionPolicy`. Actions without an approval-preview mechanism (browser fill/select/check/scroll/tabs/screenshot) require an active matching owner grant; consequential browser and desktop actions continue to require a one-time per-action approval.
+- Remaining hardening: shared permission checks are enforced at TaskEngine, direct API and Brain tool-broker boundaries, but are not yet embedded inside every adapter method. Adapter-specific exact-payload approvals remain the final side-effect guard.
 
 ## File operations (Feature 4, M3)
 
