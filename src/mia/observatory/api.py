@@ -389,6 +389,17 @@ class LifeSettingsInput(BaseModel):
     quiet_start_minute: int | None = None
     quiet_end_minute: int | None = None
     utc_offset_minutes: int | None = None
+    outreach_enabled: bool | None = None
+    max_outreach_per_day: int | None = None
+    min_outreach_gap_minutes: int | None = None
+    outreach_cooldown_days: int | None = None
+    max_unanswered_outreach: int | None = None
+
+
+class OutreachStateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    state: str = Field(min_length=1, max_length=20)
 
 
 class LifeSourceInput(BaseModel):
@@ -1489,6 +1500,26 @@ def create_app(
     @app.post("/api/life/cycle")
     async def run_life_cycle() -> dict[str, Any]:
         return await run_in_threadpool(life_runner.run_cycle, "owner", "owner requested a cycle")
+
+    @app.get("/api/life/outreach")
+    def list_life_outreach(state: str | None = None, limit: int = 50) -> dict[str, Any]:
+        return {"messages": life_store.list_outreach(state=state, limit=limit)}
+
+    @app.post("/api/life/outreach/{message_id}/state")
+    def set_life_outreach_state(message_id: str, item: OutreachStateInput) -> dict[str, str]:
+        try:
+            life_store.set_outreach_state(message_id, item.state)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Message not found") from exc
+        _life_event("outreach_state_changed", f"Owner marked an inbox message {item.state}",
+                    {"message_id": message_id, "state": item.state})
+        return {"message_id": message_id, "state": item.state}
+
+    @app.get("/api/life/reflections")
+    def list_life_reflections(limit: int = 20) -> dict[str, Any]:
+        return {"reflections": life_store.list_reflections(limit=limit)}
 
     @app.get("/api/life/journal")
     def life_journal(limit: int = 50, outcome: str | None = None) -> dict[str, Any]:

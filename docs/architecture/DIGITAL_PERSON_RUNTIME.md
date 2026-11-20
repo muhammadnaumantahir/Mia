@@ -216,3 +216,7 @@ The digital-companion runtime is not complete until evidence demonstrates that:
 8. Evaluate the combined system with fixed tests and the actual 30-day SPS experiment.
 
 Each step requires implementation, tests, documentation and evidence on the exact commit. This target architecture must not be reported as implemented until its acceptance criteria pass.
+
+## Implemented: reflection and inbox outreach (2026-11-20)
+
+`mia.life.reflect.Reflector` writes a deterministic digest after every 5 new real cycles (counts, hosts, failures, message decisions, cited cycle ids). `mia.life.outreach` builds candidates from journal facts only: completed owner research with a stored untrusted note, blocked owner items, and stale-goal check-ins. Housekeeping items never contact the owner and page text is never echoed. Delivery is opt-in and inbox-only, evaluated in this order: emergency stop, outreach disabled, pause, quiet hours, daily cap, minimum gap (the last three bypassed for owner-requested cycles), unanswered backpressure, 30-day dismissed-topic memory, per-topic cooldown. Each cycle's `notification_decision` records `sent`, `suppressed: <reason>` or `none`. API: `GET /api/life/outreach`, `POST /api/life/outreach/{id}/state` (read, acted, dismissed), `GET /api/life/reflections`.

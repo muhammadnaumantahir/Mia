@@ -20,6 +20,8 @@ from datetime import datetime, timedelta
 from time import monotonic
 from typing import Any, Protocol
 
+from mia.life.outreach import OutreachEngine
+from mia.life.reflect import Reflector
 from mia.life.store import LifeSettings, LifeStore, in_quiet_hours, utc_now
 from mia.memory.store import MemoryStore, extract_query_terms
 
@@ -170,6 +172,8 @@ class LifeRunner:
         resource_snapshot: Callable[[], dict[str, Any]] | None = None,
         clock: Callable[[], datetime] = utc_now,
         on_cycle: Callable[[dict[str, Any]], None] | None = None,
+        outreach: OutreachEngine | None = None,
+        reflector: Reflector | None = None,
     ) -> None:
         self.store = store
         self.memory = memory
@@ -177,6 +181,8 @@ class LifeRunner:
         self.resource_snapshot = resource_snapshot
         self.clock = clock
         self.on_cycle = on_cycle
+        self.outreach = outreach or OutreachEngine(store)
+        self.reflector = reflector or Reflector(store)
         self._lock = threading.Lock()
         self._state = threading.Lock()
         self._last_result: dict[str, Any] | None = None
@@ -200,7 +206,9 @@ class LifeRunner:
             "research_sources": [source["host"] for source in self.store.list_sources()],
             "external_research_enabled": bool(self.store.list_sources())
             and self.explorer.permission_level >= 1,
-            "proactive_delivery_enabled": False,
+            "proactive_delivery_enabled": settings.outreach_enabled,
+            "delivery_channel": "inbox",
+            "unanswered_outreach": self.store.unanswered_outreach(),
         }
 
     # ------------------------------------------------------------------ cycle
@@ -243,12 +251,26 @@ class LifeRunner:
             self._lock.release()
         with self._state:
             self._last_result = {**result, "at": self.clock().isoformat()}
+        if result.get("cycle_id") and result.get("status") != "skipped":
+            self._after_cycle(result["cycle_id"])
         if self.on_cycle is not None and result.get("status") != "skipped":
             try:
                 self.on_cycle({**result, "trigger": trigger})
             except Exception:  # observability must never break scheduling
                 pass
         return result
+
+    def _after_cycle(self, cycle_id: str) -> None:
+        """Decide on owner contact, then reflect; faults here never affect the cycle."""
+        now = self.clock()
+        try:
+            self.outreach.consider(cycle_id, now)
+        except Exception:
+            pass
+        try:
+            self.reflector.reflect(now)
+        except Exception:
+            pass
 
     def _permission_for(self, item: dict[str, Any]) -> int:
         chooser = getattr(self.explorer, "permission_for", None)
