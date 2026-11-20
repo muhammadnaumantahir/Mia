@@ -362,7 +362,8 @@ class UsageLedger:
                 SELECT provider_id, model_id, COUNT(*) AS requests,
                        SUM(input_tokens) AS input_tokens,
                        SUM(output_tokens) AS output_tokens,
-                       COALESCE(SUM(cost_usd), 0) AS cost_usd,
+                       COALESCE(SUM(CASE WHEN free_tier=0 THEN cost_usd ELSE 0 END), 0) AS cost_usd,
+                       SUM(CASE WHEN free_tier=0 AND cost_usd IS NULL THEN 1 ELSE 0 END) AS unknown_cost_rows,
                        SUM(token_source = 'estimated') AS estimated_rows,
                        MAX(free_tier) AS free_tier, MAX(data_local) AS data_local,
                        AVG(total_ms) AS avg_total_ms, AVG(first_token_ms) AS avg_first_token_ms
