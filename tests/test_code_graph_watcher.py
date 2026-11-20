@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 
@@ -41,6 +42,7 @@ def test_watcher_detects_content_change_when_size_and_timestamp_are_unchanged(tm
     output = tmp_path / "docs" / "code-graph" / "graph.json"
     watcher = CodeGraphWatcher(tmp_path, output, interval_seconds=1.0)
     assert watcher.check_once(force=True) is True
+    first_graph = json.loads(output.read_text(encoding="utf-8"))
 
     original = source.stat()
     source.write_text("def value():\n    return 2\n", encoding="utf-8")
@@ -49,4 +51,5 @@ def test_watcher_detects_content_change_when_size_and_timestamp_are_unchanged(tm
     assert source.stat().st_size == original.st_size
     assert source.stat().st_mtime_ns == original.st_mtime_ns
     assert watcher.check_once() is True
-    assert '"return 2"' in output.read_text(encoding="utf-8") or "return 2" in output.read_text(encoding="utf-8")
+    second_graph = json.loads(output.read_text(encoding="utf-8"))
+    assert second_graph["source_digest"] != first_graph["source_digest"]
