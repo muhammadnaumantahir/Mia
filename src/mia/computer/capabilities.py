@@ -453,12 +453,6 @@ def default_registry() -> CapabilityRegistry:
             side_effects=("ui_text_entry",),
         ),
         CapabilitySpec(
-            "apps.discover", "List installed application names (never launches them).", V, low, 30,
-            "Names come from Start Menu, installed-program registry or desktop entries.",
-            _obj(query=_S), _obj(items={"type": "array"}),
-            constraints=("Names only; launching needs an owner allowlist entry.",),
-        ),
-        CapabilitySpec(
             "system.status", "CPU, RAM, disk space, uptime and network interface state.", V, low, 15,
             "Values are read from OS counters at call time; no network traffic is generated.",
             _obj(), _obj(cpu_percent={"type": "number"}), requires_modules=("psutil",),
