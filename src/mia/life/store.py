@@ -223,6 +223,7 @@ class LifeStore:
                     permission_level INTEGER NOT NULL,
                     policy_json TEXT NOT NULL,
                     resource_json TEXT NOT NULL,
+                    result_json TEXT,
                     duration_ms INTEGER,
                     error TEXT,
                     next_follow_up TEXT,
@@ -256,6 +257,11 @@ class LifeStore:
                     evidence_json TEXT NOT NULL
                 );
             """)
+        # Backward-compatible migration for existing local life databases.
+        with self._connection() as db:
+            columns = {row["name"] for row in db.execute("PRAGMA table_info(activity_journal)")}
+            if "result_json" not in columns:
+                db.execute("ALTER TABLE activity_journal ADD COLUMN result_json TEXT")
 
     # --------------------------------------------------------------- settings
 
@@ -510,6 +516,7 @@ class LifeStore:
         duration_ms: int | None = None,
         error: str | None = None,
         next_follow_up: str | None = None,
+        result: dict[str, Any] | None = None,
     ) -> None:
         if outcome not in OUTCOMES:
             raise ValueError("unknown outcome")
@@ -518,8 +525,9 @@ class LifeStore:
                 """
                 UPDATE activity_journal
                 SET status = 'finished', ended_at = ?, outcome = ?, summary = ?,
-                    sources_json = ?, actions_json = ?, resource_json = ?, duration_ms = ?,
-                    error = ?, next_follow_up = ?, lease_owner = NULL, lease_expires_at = NULL
+                    sources_json = ?, actions_json = ?, resource_json = ?, result_json = ?,
+                    duration_ms = ?, error = ?, next_follow_up = ?, lease_owner = NULL,
+                    lease_expires_at = NULL
                 WHERE cycle_id = ? AND status = 'running'
                 """,
                 (
@@ -527,6 +535,8 @@ class LifeStore:
                     json.dumps(sources or [], ensure_ascii=False),
                     json.dumps(actions or [], ensure_ascii=False),
                     json.dumps(resource or {}, sort_keys=True, default=str),
+                    json.dumps(result, ensure_ascii=False, sort_keys=True, default=str)
+                    if result is not None else None,
                     duration_ms, error[:500] if error else None, next_follow_up,
                     cycle_id,
                 ),
@@ -803,4 +813,6 @@ class LifeStore:
         result = dict(row)
         for column in ("sources", "actions", "policy", "resource"):
             result[column] = json.loads(result.pop(f"{column}_json"))
+        raw_result = result.pop("result_json", None)
+        result["result"] = json.loads(raw_result) if raw_result else None
         return result
