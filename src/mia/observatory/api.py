@@ -37,7 +37,9 @@ from mia.agent.tasks import (
 from mia.agent.tools import ToolRegistry, ToolResult
 from mia.brain.capabilities import CapabilityRegistry
 from mia.brain.broker import OwnerPermissionEvaluator, ToolBroker
-from mia.brain.orchestrator import Brain, TurnRequest
+from mia.brain.orchestrator import Brain
+from mia.brain.self_description import build_runtime_manifest, render_runtime_manifest
+from mia.memory.semantic import LocalOllamaEmbeddingReranker, TurnRequest
 from mia.brain.plan import PlanStore
 from mia.computer.app_discovery import ApplicationDiscovery
 from mia.computer.applications import ApplicationLauncher, ApplicationLaunchError
@@ -751,14 +753,11 @@ def create_app(
     app.state.memory = memory_store
 
     def current_identity() -> tuple[str, int | None]:
-        """The stored identity prompt and version; the factory default if unreadable.
-
-        Identity lives in the memory database, so it is the same whichever provider
-        or model answers. A storage failure must not break ordinary chat.
-        """
+        """Combine the owner-editable profile with factual live runtime evidence."""
         try:
             record = memory_store.identity.active()
-            return render_identity_prompt(record["profile"]), record["version"]
+            identity_text = render_identity_prompt(record["profile"])
+            identity_version = record["version"]
         except Exception:
             observatory.record_event(
                 category="memory",
@@ -768,7 +767,34 @@ def create_app(
                 layer_id="SPS-05",
                 payload={},
             )
-            return CHAT_SYSTEM_PROMPT, None
+            identity_text = CHAT_SYSTEM_PROMPT
+            identity_version = None
+
+        try:
+            definitions = tool_registry.definitions()
+            tool_names = [
+                item.get("name") if isinstance(item, dict) else getattr(item, "name", None)
+                for item in definitions
+            ]
+            route_paths = [
+                route.path for route in app.routes
+                if isinstance(getattr(route, "path", None), str)
+            ]
+            manifest = build_runtime_manifest(
+                tool_names=tool_names,
+                provider_ids=model_gateway.providers.keys(),
+                route_paths=route_paths,
+                memory_enabled=memory_store is not None,
+                semantic_memory_enabled=(
+                    LocalOllamaEmbeddingReranker.from_env(cache=memory_store) is not None
+                ),
+                permission_broker_enabled=brain_broker is not None,
+                capability_registry_enabled=brain_capabilities is not None,
+            )
+            return identity_text + "\n\n" + render_runtime_manifest(manifest), identity_version
+        except Exception:
+            # Runtime evidence is supplemental; registry inspection must never break chat.
+            return identity_text, identity_version
 
     capture_service = CaptureService(memory_store)
     try:  # expired temporary memories are already excluded from retrieval; tidy their status
