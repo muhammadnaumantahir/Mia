@@ -33,7 +33,7 @@ Exit criteria:
 ### Work
 
 **Identity and self-understanding**
-- Maintain one canonical Mia identity, purpose, personality, operating instructions and truthful capability inventory independent of the selected model. The persistent owner-editable profile, version history, rollback, audit and shared prompt path are implemented; the owner-facing editor UI was merged into the development integration branch in PR #16.
+- Maintain one canonical Mia identity, purpose, personality, operating instructions and truthful capability inventory independent of the selected model. The persistent owner-editable profile, version history, rollback, audit and shared prompt path are implemented; the owner-facing editor UI is merged into main through core integration PR #3 (original UI PR #16).
 - Let Mia answer questions about who it is, how it works, its ten-layer SPS architecture, enabled tools, current state, limits and unavailable features using live, maintained application evidence.
 - Separate known facts, inferred facts, unknowns and unavailable runtime information. Never invent memories, tools, actions, emotions or system status.
 - Make personality and response style configurable without allowing personality settings to override security or factuality.
@@ -185,7 +185,7 @@ Exit criteria:
 
 ### Mia Code Graph
 
-The Code Graph is mandatory and begins in Priority 0; it remains incrementally updated in every phase. It must represent actual source evidence for packages, files, classes, functions, imports, calls, APIs, database models, tests, SPS layers, gateway, Brain, Memory, Voice, Computer, permissions, scheduler, workflows and self-programming.
+The Code Graph is mandatory and begins in Priority 0; its content-digest watcher automatically refreshes the complete graph after source changes in every phase. File-level incremental parsing is a future optimization. It must represent actual source evidence for packages, files, classes, functions, imports, calls, APIs, database models, tests, SPS layers, gateway, Brain, Memory, Voice, Computer, permissions, scheduler, workflows and self-programming.
 
 Use typed relationships including IMPORTS, CALLS, DEPENDS_ON, IMPLEMENTS, EXTENDS, USES, EXPOSES_API, READS_FROM, WRITES_TO, TESTED_BY, PROTECTED_BY, BELONGS_TO_LAYER, ROUTES_TO, ACTIVATES and TRIGGERS. Mark confirmed/inferred/documented edges separately; never invent links. Provide search, filters, node details, dependency/execution paths, impact analysis, circular/orphan detection, test/permission mapping, architecture-drift indicators and graph history. Full and incremental indexing must work in the local Git/development workflow without relying on CI. Graph generation is deterministic, testable, secret-safe and read-only with respect to source files. Maintain schema, data and changelog under docs/code-graph/ or the established equivalent.
 
