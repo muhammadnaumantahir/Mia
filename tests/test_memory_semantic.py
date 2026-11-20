@@ -29,6 +29,7 @@ def test_local_embedding_reranker_prefers_semantically_closer_records():
 @pytest.mark.parametrize("url", [
     "https://example.com",
     "http://192.168.1.20:11434",
+    "http://localhost:11434",
     "http://metadata.google.internal",
 ])
 def test_semantic_reranker_rejects_non_loopback_endpoints(url):
@@ -70,3 +71,46 @@ def test_embedding_cache_rejects_invalid_vectors(tmp_path):
     content_hash = hashlib.sha256(b"private text").hexdigest()
     with pytest.raises(ValueError):
         store.set_embedding_cache("model", content_hash, [float("nan")])
+
+
+def test_semantic_embedding_cache_is_cleared_when_memory_is_forgotten(tmp_path):
+    import hashlib
+
+    from mia.memory.store import MemoryStore
+
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    conversation = store.ensure_conversation("conversation-cache")
+    store.append_message(conversation, "user", "Remember a private sentence")
+    digest = hashlib.sha256(b"private sentence").hexdigest()
+    store.set_embedding_cache("model", digest, [0.1, 0.9])
+    assert store.get_embedding_cache("model", digest) == [0.1, 0.9]
+    store.delete_conversation(conversation)
+    assert store.get_embedding_cache("model", digest) is None
+
+
+def test_semantic_embedding_cache_is_cleared_when_conversation_becomes_temporary(tmp_path):
+    import hashlib
+
+    from mia.memory.store import MemoryStore
+
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    conversation = store.ensure_conversation("conversation-temp")
+    digest = hashlib.sha256(b"temporary sentence").hexdigest()
+    store.set_embedding_cache("model", digest, [0.2, 0.8])
+    store.set_conversation_temporary(conversation, True)
+    assert store.get_embedding_cache("model", digest) is None
+
+
+def test_semantic_embedding_cache_is_cleared_when_structured_record_is_deleted(tmp_path):
+    import hashlib
+
+    from mia.memory.store import MemoryStore
+
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    record_id, _ = store.structured.add(
+        record_type="fact", title="Private fact", body="Private text"
+    )
+    digest = hashlib.sha256(b"private text").hexdigest()
+    store.set_embedding_cache("model", digest, [0.3, 0.7])
+    assert store.structured.delete(record_id)
+    assert store.get_embedding_cache("model", digest) is None
