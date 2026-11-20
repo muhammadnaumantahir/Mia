@@ -77,8 +77,9 @@ A development phase is complete when its code-side acceptance criteria are imple
 
 - Independent gateway: paid budget reservations and atomic settlement, fail-closed unknown-price handling (including historical NULL-cost ledger rows), cancellation-safe reservation retention, provider health/routing improvements and console updates.
 - Memory: opt-in local Ollama semantic reranking with bounded recent conversation/knowledge/structured candidates and content-addressed embedding cache. Disabled by default; no cloud embeddings or model auto-download.
+- Self-description: Brain now appends a deterministic live-runtime manifest derived from registered tools, provider adapters, memory, permission broker, capability registry and available voice/Code Graph routes. It explicitly distinguishes registration from health, permission and owner verification; secret-like identifiers are filtered.
 - Permissions: shared permission policy across TaskEngine, direct computer routes and Brain broker; unregistered capabilities fail closed.
 - Regression tests have been added, but the latest gateway, semantic-memory and permission changes have **not been run locally**. Historical test counts in earlier status entries do not verify this current diff.
 - PR #3 remains draft. No changes from it have been merged into main. CI is reported separately and is not a development gate.
 
-Remaining Priority 1 development includes full-history semantic retrieval/evaluation, model-assisted memory extraction/consolidation, owner-editable identity, quality-based model escalation, multilingual conversation evaluation and complete shared Brain/Voice conversation verification.
+Remaining Priority 1 development includes full-history semantic retrieval/evaluation, model-assisted memory extraction/consolidation, richer self-description of architecture/limitations, quality-based model escalation, multilingual conversation evaluation and complete shared Brain/Voice conversation verification.
