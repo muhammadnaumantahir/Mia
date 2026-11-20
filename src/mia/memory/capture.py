@@ -524,7 +524,7 @@ class CaptureService:
         if not isinstance(title, str) or not title.strip() or len(title) > MAX_TITLE:
             return None
         if (isinstance(confidence, bool) or not isinstance(confidence, (int, float))
-                or not 0.0 <= confidence <= 0.85):
+                or not 0.4 <= confidence <= 0.85):
             return None
         if find_secret(body):
             return None
