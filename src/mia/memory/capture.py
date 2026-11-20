@@ -118,7 +118,7 @@ _AUTO_PATTERNS: tuple[tuple[re.Pattern[str], str, float, str | None], ...] = (
      "fact", 0.8, "subject"),
     (re.compile(r"مجھے\s+(?P<value>.+?)\s+پسند\s+(?:ہے|ہیں)", re.I),
      "preference", 0.7, None),
-    (re.compile(r"میں\s+ہمیشہ\s+(?P<value>.+?)\s+(?:کرتا|کرتی|کرتے|لیتا|لیتی|لیتے|رکھتا|رکھتی|رکھتے|جاتا|جاتی|جاتے)\s+ہوں", re.I),
+    (re.compile(r"میں\s+ہمیشہ\s+(?P<value>.+?)\s+(?:کرتا|کرتی|کرتے|لیتا|لیتی|لیتے|رکھتا|رکھتی|رکھتے|جاتا|جاتی|جاتے|پڑھتا|پڑھتی|پڑھتے)\s+ہوں", re.I),
      "preference", 0.7, None),
     (re.compile(r"ہم\s+نے\s+(?P<value>.+?)\s+(?:کا\s+)?فیصلہ\s+کیا", re.I),
      "decision", 0.75, None),
