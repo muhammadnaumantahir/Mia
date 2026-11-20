@@ -70,6 +70,7 @@ def build_runtime_manifest(
         "voice_routes": "registered" if voice_registered else "not registered",
         "code_graph": "registered" if code_graph_registered else "not registered",
         "wake_word": "registered" if wake_word_registered else "not registered",
+        "wake_word_mode": "browser opt-in; online speech recognition; active only while the Assistant page is open and armed; not an offline OS-level always-on service",
         "sps_layers": [
             {"id": layer_id, "name": name, "responsibility": responsibility}
             for layer_id, name, responsibility in SPS_LAYERS
@@ -94,6 +95,7 @@ def render_runtime_manifest(manifest: dict[str, Any]) -> str:
         f"- Voice API routes: {manifest.get('voice_routes', 'unknown')}",
         f"- Code Graph API: {manifest.get('code_graph', 'unknown')}",
         f"- Wake-word route/tool: {manifest.get('wake_word', 'unknown')}",
+        f"- Wake-phrase implementation: {manifest.get('wake_word_mode', 'unknown')}",
         "CANONICAL SPS ARCHITECTURE (design map, not a feature-completion report):",
         *[
             f"- {layer['id']} {layer['name']}: {layer['responsibility']}"
