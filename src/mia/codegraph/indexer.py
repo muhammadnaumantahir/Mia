@@ -81,6 +81,19 @@ def _python_files(root: Path) -> list[Path]:
     return sorted(found, key=lambda p: p.relative_to(root).as_posix())
 
 
+def source_snapshot(root: str | Path) -> tuple[tuple[str, int, int], ...]:
+    """Cheap filesystem snapshot used by the watcher to detect source changes."""
+    root = Path(root).resolve()
+    snapshot = []
+    for path in _python_files(root):
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        snapshot.append((path.relative_to(root).as_posix(), stat.st_mtime_ns, stat.st_size))
+    return tuple(snapshot)
+
+
 def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[str, Any]:
     """Build a deterministic graph from repository source and documentation."""
     root = Path(root).resolve()
