@@ -74,7 +74,7 @@ from mia.gateway.contracts import (
 )
 from mia.gateway.factory import (\n    apply_daily_cap,\n    apply_monthly_cap,\n    build_default_registry,\n    paid_route_policy,\n)
 from mia.gateway.ledger import UsageLedger
-from mia.gateway.model_registry import ModelRegistry
+from mia.gateway.model_registry import ModelRegistry, ModelRegistryError
 from mia.gateway.service import ModelGateway
 from mia.knowledge.document_ingestion import DocumentIngestionError, DocumentIngestor
 from mia.life.capture import capture_from_message as capture_curiosity_from_message
@@ -248,6 +248,14 @@ class ChatInput(BaseModel):
     conversation_id: str | None = Field(default=None, min_length=8, max_length=80)
     use_tools: bool = True
     interface: str = Field(default="text", pattern="^(text|voice)$")
+
+class GatewayModelSettingsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool | None = None
+    preference: int | None = Field(default=None, ge=-10, le=10)
+    alias: str | None = Field(default=None, max_length=64)
+    change_alias: bool = False
 
 
 class CapabilityPromotionInput(BaseModel):
@@ -1597,6 +1605,13 @@ def create_app(
         page = Path(__file__).with_name("dashboard.html")
         if not page.exists():
             raise HTTPException(status_code=404, detail="Dashboard asset not found")
+        return FileResponse(page, media_type="text/html")
+
+    @app.get("/gateway")
+    def gateway_page() -> FileResponse:
+        page = Path(__file__).resolve().parents[1] / "gateway" / "dashboard.html"
+        if not page.is_file():
+            raise HTTPException(status_code=404, detail="Gateway dashboard asset not found")
         return FileResponse(page, media_type="text/html")
 
     @app.get("/api/observatory/summary")
@@ -4329,6 +4344,104 @@ def create_app(
     @app.get("/api/gateway/usage")
     def gateway_usage(days: int = 30) -> dict[str, Any]:
         return ledger.summary(days)
+
+    @app.get("/api/gateway/overview")
+    async def gateway_overview() -> dict[str, Any]:
+        """Privacy-safe owner snapshot for the local gateway console."""
+        registry = model_gateway.model_registry
+        models_snapshot = []
+        if registry is not None:
+            for record in registry.list(include_stale=True):
+                item = asdict(record)
+                item["key"] = record.key
+                item["effective_capabilities"] = sorted(record.effective_capabilities())
+                item["verification"] = record.verification()
+                models_snapshot.append(item)
+
+        providers_snapshot = []
+        for provider in model_gateway.providers.values():
+            try:
+                status = "online" if await provider.health() else "offline"
+            except Exception:
+                status = "unavailable"
+            providers_snapshot.append({"provider_id": provider.provider_id, "status": status})
+
+        def budget_limit(name: str) -> dict[str, Any]:
+            raw = os.getenv(name, "").strip()
+            if not raw:
+                return {"configured": False, "valid": False, "limit_usd": None}
+            try:
+                value = float(raw)
+            except ValueError:
+                return {"configured": True, "valid": False, "limit_usd": None}
+            valid = math.isfinite(value) and value >= 0
+            return {
+                "configured": True,
+                "valid": valid,
+                "limit_usd": value if valid else None,
+            }
+
+        request_budget = budget_limit("MIA_MAX_REQUEST_SPEND_USD")
+        daily_budget = budget_limit("MIA_MAX_DAILY_SPEND_USD")
+        monthly_budget = budget_limit("MIA_MAX_MONTHLY_SPEND_USD")
+        paid_requested = os.getenv("MIA_ALLOW_PAID", "false").strip().lower() == "true"
+        paid_available = (
+            paid_requested
+            and request_budget["valid"]
+            and daily_budget["valid"]
+            and monthly_budget["valid"]
+        )
+        return {
+            "usage": ledger.summary(30),
+            "budgets": {
+                "paid_requested": paid_requested,
+                "paid_routing_available": paid_available,
+                "request": request_budget,
+                "daily": daily_budget,
+                "monthly": monthly_budget,
+                "spent_today_utc_usd": ledger.spend_today_utc(),
+                "spent_month_utc_usd": ledger.spend_month_utc(),
+            },
+            "providers": providers_snapshot,
+            "health": model_gateway.health.snapshot(),
+            "models": models_snapshot,
+            "decisions": [
+                decision.to_dict() for decision in model_gateway.decisions.recent(20)
+            ],
+        }
+
+    @app.post("/api/gateway/models/{provider_id}/{model_id}/settings")
+    def update_gateway_model_settings(
+        provider_id: str, model_id: str, item: GatewayModelSettingsInput
+    ) -> dict[str, Any]:
+        registry = model_gateway.model_registry
+        if registry is None:
+            raise HTTPException(status_code=503, detail="Persistent model registry is unavailable")
+        if item.enabled is None and item.preference is None and not item.change_alias:
+            raise HTTPException(status_code=422, detail="No model setting was supplied")
+        try:
+            if item.enabled is not None:
+                registry.set_enabled(provider_id, model_id, item.enabled)
+            if item.preference is not None:
+                registry.set_preference(provider_id, model_id, item.preference)
+            if item.change_alias:
+                registry.set_alias(provider_id, model_id, item.alias)
+            record = registry.get(provider_id, model_id)
+            if record is None:
+                raise ModelRegistryError("unknown model")
+        except ModelRegistryError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        result = asdict(record)
+        result["key"] = record.key
+        result["effective_capabilities"] = sorted(record.effective_capabilities())
+        result["verification"] = record.verification()
+        return result
+
+    @app.get("/api/gateway/decisions")
+    def gateway_decisions(limit: int = 20) -> dict[str, Any]:
+        return {
+            "items": [decision.to_dict() for decision in model_gateway.decisions.recent(limit)]
+        }
 
     @app.post("/api/gateway/chat/stream")
     async def chat_stream(item: ChatInput) -> StreamingResponse:
