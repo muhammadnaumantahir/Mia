@@ -47,6 +47,8 @@ Exit criteria:
 - Every event includes timestamp, experiment/day context, event type, outcome and structured payload.
 - The experiment baseline can be exported and cryptographically hashed.
 
+> **2026-11-20 implementation update:** Ollama plus generic direct OpenAI-compatible provider registration, persistent model metadata/owner settings, persisted routing preferences, provider health/connection checks, a local `/gateway` console, append-only usage records and fail-closed request/daily/monthly budget checks are implemented in the current development branch. No FreeLLMAPI or OmniRoute sidecar is required. Remaining gateway work includes atomic in-flight budget reservations, quota-header ingestion, persistent health/decision history, semantic caching, benchmark-based quality routing and full multimodal/embedding paths. Paid routing stays off until atomic reservations are implemented. See [Gateway audit](gateway/GATEWAY_AUDIT.md).
+
 ## Phase 2 — Universal AI gateway
 
 **Goal:** One independently owned, policy-controlled Mia gateway for all model providers. FreeLLMAPI and OmniRoute are not runtime dependencies or required sidecars. Follow [Independent AI Gateway direction](architecture/AI_GATEWAY_DIRECTION.md).
