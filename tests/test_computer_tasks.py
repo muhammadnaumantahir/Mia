@@ -824,3 +824,27 @@ def test_non_idempotent_task_without_permission_spec_fails_closed(tmp_path):
     assert result["status"] == "failed"
     assert fake.runs.get("danger") is None
     assert any(event["kind"] == "permission_denied" for event in engine.events(task["task_id"]))
+
+
+def test_unregistered_read_capability_fails_closed_with_shared_policy(tmp_path):
+    approvals = ApprovalStore(tmp_path / "unknown-capability-approvals.sqlite3")
+    policy = PermissionPolicy(tmp_path / "unknown-capability-permissions.sqlite3")
+    handler = StepHandler(
+        "unregistered.read",
+        lambda _args: Inspection("read unknown resource", "low"),
+        lambda _args, _approval: Outcome(True, True, {"ok": True}),
+        idempotent=True,
+    )
+    engine = TaskEngine(
+        tmp_path / "unknown-capability-tasks.sqlite3",
+        approvals,
+        {"unregistered.read": handler},
+        permission_policy=policy,
+        capability_registry=default_registry(),
+    )
+    decision = engine._permission_decision(
+        "unregistered.read", {}, Inspection("read unknown resource", "low")
+    )
+    assert decision is not None
+    assert decision.allowed is False
+    assert "not registered" in decision.reason
