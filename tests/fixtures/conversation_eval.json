@@ -7,27 +7,63 @@
       "language": "en",
       "prompt": "What did we decide about the billing database?",
       "expected_intent": "decision",
-      "expected_memory": "PostgreSQL"
+      "expected_memory": "PostgreSQL",
+      "expected_title": "Billing database decision"
     },
     {
       "id": "roman-urdu-decision-recall",
       "language": "roman-urdu",
       "prompt": "Billing service ke liye hum ne kya faisla kiya tha?",
       "expected_intent": "decision",
-      "expected_memory": "PostgreSQL"
+      "expected_memory": "PostgreSQL",
+      "expected_title": "Billing database decision"
     },
     {
       "id": "urdu-decision-recall",
       "language": "ur",
       "prompt": "بلنگ سروس کے لیے ہم نے کیا فیصلہ کیا تھا؟",
       "expected_intent": "decision",
-      "expected_memory": "PostgreSQL"
+      "expected_memory": "PostgreSQL",
+      "expected_title": "Billing database decision"
+    },
+    {
+      "id": "roman-urdu-goal-recall",
+      "language": "roman-urdu",
+      "prompt": "Mera maqsad kya hai?",
+      "expected_intent": "goal",
+      "expected_memory": "natural conversational assistant",
+      "expected_title": "Mia conversation goal"
+    },
+    {
+      "id": "urdu-goal-recall",
+      "language": "ur",
+      "prompt": "میرا مقصد کیا ہے؟",
+      "expected_intent": "goal",
+      "expected_memory": "natural conversational assistant",
+      "expected_title": "Mia conversation goal"
+    },
+    {
+      "id": "roman-urdu-project-continuity",
+      "language": "roman-urdu",
+      "prompt": "Hum kahan tak pohanchay thay?",
+      "expected_intent": "project",
+      "expected_memory": "natural conversational assistant",
+      "expected_title": "Mia conversation goal"
+    },
+    {
+      "id": "urdu-project-continuity",
+      "language": "ur",
+      "prompt": "ہم کہاں تک پہنچے تھے؟",
+      "expected_intent": "project",
+      "expected_memory": "natural conversational assistant",
+      "expected_title": "Mia conversation goal"
     },
     {
       "id": "runtime-self-description",
       "language": "en",
       "prompt": "What capabilities are currently registered?",
-      "expected_manifest_phrase": "LIVE RUNTIME EVIDENCE"
+      "expected_manifest_phrase": "LIVE RUNTIME EVIDENCE",
+      "expected_architecture_phrase": "SPS-01 Software DNA Core"
     }
   ]
 }
