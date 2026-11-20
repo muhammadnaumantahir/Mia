@@ -8,6 +8,7 @@ from mia.evolution.capabilities import (
     CapabilityLifecycleError,
     CapabilityStore,
 )
+from mia.computer.capabilities import PermissionLevel
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
 
@@ -84,11 +85,57 @@ def test_activate_requires_registered_status_and_approval_details(tmp_path):
         promote(store, "9.9.9")
 
 
-def test_permissioned_capability_cannot_be_activated(tmp_path):
+def test_permissioned_capability_needs_a_broker_authorization_snapshot(tmp_path):
     store = make_store(tmp_path)
-    registered(store, "0.1.0", permissions=["files.read"])
-    with pytest.raises(CapabilityActivationBlocked, match="permission broker"):
+    registered(store, "0.1.0", permissions=["filesystem.write"])
+    with pytest.raises(CapabilityActivationBlocked, match="active owner grant"):
         promote(store, "0.1.0")
+
+    activated = store.activate(
+        "hello-tool",
+        "0.1.0",
+        approved_by="owner",
+        reason="reviewed permission scope",
+        permission_authorizations={"filesystem.write": "grant-id-from-owner-policy"},
+    )
+    assert activated["status"] == "active"
+    event = store.list_events("hello-tool", "0.1.0")[-1]
+    assert '"filesystem.write":"grant-id-from-owner-policy"' in event["payload_json"]
+
+
+def test_api_permissioned_activation_requires_a_matching_live_owner_grant(tmp_path):
+    store = make_store(tmp_path)
+    registered(store, "0.1.0", permissions=["filesystem.write"])
+    client = TestClient(
+        create_app(
+            store=ObservatoryStore(tmp_path / "owner-grant-observatory.sqlite3"),
+            capability_store=store,
+        )
+    )
+    body = {"approved_by": "owner", "reason": "reviewed permission declaration"}
+
+    denied = client.post("/api/capabilities/hello-tool/0.1.0/activate", json=body)
+    assert denied.status_code == 403
+    assert store.get_active("hello-tool") is None
+
+    grant = client.app.state.permission_policy.grant(
+        granted_by="owner",
+        capabilities=["filesystem.write"],
+        level=PermissionLevel.WRITE,
+        directory=str(tmp_path / "allowed-files"),
+        kind="session",
+    )
+    activated = client.post("/api/capabilities/hello-tool/0.1.0/activate", json=body)
+    assert activated.status_code == 200, activated.text
+    assert activated.json()["status"] == "active"
+    activation_event = store.list_events("hello-tool", "0.1.0")[-1]
+    assert grant["grant_id"] in activation_event["payload_json"]
+
+    client.app.state.permission_policy.revoke(grant["grant_id"])
+    no_longer_authorized = client.post(
+        "/api/capabilities/hello-tool/0.1.0/activate", json=body
+    )
+    assert no_longer_authorized.status_code == 409
 
 
 def test_tampered_source_blocks_activation(tmp_path):
