@@ -46,7 +46,11 @@ _CONTEXT_INTENTS: tuple[tuple[re.Pattern[str], frozenset[str]], ...] = (
      frozenset({"project", "goal", "decision"})),
     (re.compile(
         r"\bwhat\s+did\s+we\s+(?:decide|agree|choose)\b|\bwhat\s+was\s+decided\b"
-        r"|\b(?:our|the|last|previous|earlier)\s+decisions?\b", re.I),
+        r"|\b(?:our|the|last|previous|earlier)\s+decisions?\b"
+        r"|\bhum\s+ne\s+(?:kya\s+)?(?:faisla|tay|decide|chuna|choose)\b"
+        r"|\b(?:kya\s+)?(?:faisla|decision)\s+(?:kiya|hua)\b"
+        r"|ہم\s+نے\s+کیا\s+(?:فیصلہ|طے)\s+کیا|کیا\s+(?:فیصلہ|طے)\s+ہوا"
+        r"|(?:پچھلا|آخری)\s+فیصلہ", re.I),
      frozenset({"decision"})),
     (re.compile(
         r"\b(?:as\s+usual|my\s+usual|my\s+(?:usual\s+)?preferences?|my\s+preferred|"
