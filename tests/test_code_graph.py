@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from mia.codegraph.impact import analyze_graph_impact
 from mia.codegraph.indexer import build_graph
 
 
@@ -171,3 +172,18 @@ def test_api_route_is_linked_to_the_actual_qualified_function_node(tmp_path):
         and edge["target"] == endpoint["id"]
         for edge in graph["edges"]
     )
+
+
+
+def test_impact_analysis_finds_import_dependents_and_related_tests(tmp_path):
+    graph = build_graph(make_repo(tmp_path))
+    impact = analyze_graph_impact(graph, ["src/mia/helpers.py", "docs/notes.md"])
+
+    helper = next(item for item in impact["items"] if item["path"] == "src/mia/helpers.py")
+    assert helper["indexed"] is True
+    assert helper["direct_dependents"] == ["src/mia/service.py"]
+    assert helper["related_tests"] == ["tests/test_service.py"]
+
+    unknown = next(item for item in impact["items"] if item["path"] == "docs/notes.md")
+    assert unknown["indexed"] is False
+    assert impact["dependent_files"] == ["src/mia/service.py"]
