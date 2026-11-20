@@ -541,7 +541,7 @@ async function loadConversationList(){
  try{
   const response=await fetch('/api/conversations');
   const data=await response.json();
-  const box=$('recentList');box.innerHTML='';
+  const box=$('recentList');box.replaceChildren();
   (data.items||[]).forEach(item=>{
    const link=document.createElement('a');
    link.href='/assistant?conversation_id='+encodeURIComponent(item.conversation_id);
