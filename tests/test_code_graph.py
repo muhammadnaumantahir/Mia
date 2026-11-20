@@ -68,3 +68,20 @@ def test_parse_errors_are_reported_without_fabricating_symbols(tmp_path):
     graph = build_graph(root)
     assert graph["summary"]["parse_errors"] == 1
     assert graph["index_errors"][0]["path"] == "src/mia/broken.py"
+
+ 
+def test_import_cycles_are_reported_as_static_diagnostics(tmp_path):
+    root = make_repo(tmp_path)
+    (root / "src" / "mia" / "helpers.py").write_text(
+        "from mia.service import Service\ndef helper(value):\n    return value\n",
+        encoding="utf-8",
+    )
+    graph = build_graph(root)
+    assert graph["diagnostics"]["circular_imports"]
+    assert "not proof of dead code" in graph["diagnostics"]["note"]
+
+
+def test_unreferenced_candidates_are_explicitly_conservative(tmp_path):
+    graph = build_graph(make_repo(tmp_path))
+    assert isinstance(graph["diagnostics"]["unreferenced_static_candidates"], list)
+    assert "not proof of dead code" in graph["diagnostics"]["note"]
