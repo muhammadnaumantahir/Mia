@@ -82,7 +82,10 @@ function render(data){
   const alias=node('button','compact','Set alias');alias.addEventListener('click',()=>{const value=window.prompt('Model alias (leave blank to clear):',m.alias||'');if(value!==null)updateModel(m,{alias:value.trim()||null,change_alias:true},alias)});controls.append(alias);tr.append(controls);
   tbody.append(tr)
  }
- if(!(data.models||[]).length)tbody.append(node('tr','', '')).firstChild?.append(node('td','empty','No models discovered yet. Refresh models from Mia before configuring them.'));
+ if(!(data.models||[]).length){
+  const tr=node('tr');const td=node('td','empty','No models discovered yet. Use Discover models to refresh the provider catalog.');
+  td.colSpan=7;tr.append(td);tbody.append(tr)
+ }
  const decisions=$('decisions');decisions.replaceChildren();
  for(const d of data.decisions||[]){const block=node('div','decision');block.append(node('strong','',d.selected||'No eligible model'));block.append(node('p','',d.task_type+' · '+d.mode+' · '+d.reason));if((d.overrides||[]).length)block.append(node('p','',d.overrides.join(' · ')));decisions.append(block)}
  if(!(data.decisions||[]).length)decisions.append(node('div','empty','No routing decisions recorded in this process yet.'));
