@@ -49,7 +49,7 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
 </main>
 <script>
 const $=id=>document.getElementById(id);
-const money=n=>n===null||n===undefined?'Unknown':Number.isFinite(Number(n))?'
+const money=n=>n===null||n===undefined?'Unknown':Number.isFinite(Number(n))?'$'+Number(n).toFixed(4):'Unknown';
 function node(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=String(text);return e}
 function budgetLine(host,name,entry,spent){const row=node('div','budget-row');row.append(node('span','muted',name));const detail=entry.valid?money(entry.limit_usd)+' limit · '+money(spent)+' spent':(entry.configured?'Invalid configuration':'Not configured')+' · paid routes blocked';row.append(node('strong',entry.valid?'status-good':'status-warn',detail));host.append(row)}
 function render(data){
