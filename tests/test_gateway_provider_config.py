@@ -89,8 +89,8 @@ def test_invalid_timeouts_use_default(raw):
 
 def test_header_validation_rejects_injection():
     for bad in (
-        {"A\\r\\nB": "x"},
-        {"X": "a\\r\\nInjected: 1"},
+        {"A\r\nB": "x"},
+        {"X": "a\r\nInjected: 1"},
         {"Host": "evil"},
         {"Content-Type": "x"},
     ):
