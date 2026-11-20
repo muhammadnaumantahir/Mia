@@ -81,3 +81,14 @@ def test_missing_daily_cap_fails_closed(monkeypatch):
         spent_today_usd=0.0,
     )
     assert policy.allow_paid is False
+
+
+def test_unknown_ledger_spend_disables_daily_and_monthly_paid_routes(monkeypatch):
+    from mia.gateway.contracts import RoutePolicy
+    from mia.gateway.factory import apply_daily_cap, apply_monthly_cap
+
+    monkeypatch.setenv("MIA_MAX_DAILY_SPEND_USD", "1")
+    monkeypatch.setenv("MIA_MAX_MONTHLY_SPEND_USD", "5")
+    policy = RoutePolicy(allow_paid=True, max_request_cost_usd=1.0)
+    assert apply_daily_cap(policy, None).allow_paid is False
+    assert apply_monthly_cap(policy, None).allow_paid is False
