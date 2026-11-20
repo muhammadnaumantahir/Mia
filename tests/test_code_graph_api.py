@@ -28,3 +28,13 @@ def test_forwarded_remote_request_requires_explicit_token(monkeypatch):
         headers={**headers, "X-Mia-Code-Graph-Token": "a-very-long-owner-generated-token-32chars"},
     )
     assert allowed.status_code == 200
+
+
+
+def test_code_graph_impact_endpoint_rejects_option_like_base_reference():
+    client = TestClient(create_app())
+    response = client.get(
+        "/api/code-graph/impact",
+        params={"base": "--upload-pack=malicious"},
+    )
+    assert response.status_code == 400
