@@ -85,3 +85,14 @@ def test_unreferenced_candidates_are_explicitly_conservative(tmp_path):
     graph = build_graph(make_repo(tmp_path))
     assert isinstance(graph["diagnostics"]["unreferenced_static_candidates"], list)
     assert "not proof of dead code" in graph["diagnostics"]["note"]
+
+
+def test_generated_graph_history_does_not_change_source_digest(tmp_path):
+    root = make_repo(tmp_path)
+    history = root / "docs" / "code-graph" / "CHANGELOG.md"
+    history.parent.mkdir(parents=True)
+    history.write_text("# History\n", encoding="utf-8")
+    first = build_graph(root)["source_digest"]
+    history.write_text("# History\n\nA new generated record.\n", encoding="utf-8")
+    second = build_graph(root)["source_digest"]
+    assert first == second
