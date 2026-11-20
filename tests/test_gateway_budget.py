@@ -69,3 +69,15 @@ def test_daily_cap_respects_remaining_budget(monkeypatch):
     policy = apply_daily_cap(RoutePolicy(allow_paid=True, max_request_cost_usd=4.0), 3.5)
     assert policy.allow_paid is True
     assert policy.max_request_cost_usd == pytest.approx(1.5)
+
+
+def test_missing_daily_cap_fails_closed(monkeypatch):
+    from mia.gateway.contracts import RoutePolicy
+    from mia.gateway.factory import apply_daily_cap
+
+    monkeypatch.delenv("MIA_MAX_DAILY_SPEND_USD", raising=False)
+    policy = apply_daily_cap(
+        RoutePolicy(allow_paid=True, max_request_cost_usd=1.0),
+        spent_today_usd=0.0,
+    )
+    assert policy.allow_paid is False
