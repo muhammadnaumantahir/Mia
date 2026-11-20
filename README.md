@@ -166,3 +166,8 @@ Read [AGENTS.md](AGENTS.md) before making changes. Keep implementation modular, 
 ## License
 
 No project-wide license is declared yet. The project is completing an upstream dependency and code-reuse audit first. Do not assume that every component or model used by Mia has the same license.
+
+
+## Mia Code Graph
+
+Open **http://127.0.0.1:8765/code-graph** to inspect the source-grounded code graph. It indexes repository structure, Python symbols, imports, resolvable calls and FastAPI route declarations. Confirmed source relationships are distinguished from inferred layer/test heuristics. The index is regenerated on graph access when the source digest or commit changes; use `python scripts/update_code_graph.py` to write the graph artifact and `python scripts/update_code_graph.py --check` to detect stale output. See [Code Graph documentation](docs/code-graph/README.md). The initial implementation is not yet a complete runtime trace or multi-language architecture graph.
