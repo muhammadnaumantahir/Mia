@@ -145,7 +145,12 @@ class LocalOllamaEmbeddingReranker:
             else:
                 missing.append((index, digest, text))
         if missing:
-            fresh = self._embed([text for _, _, text in missing])
+            # Keep Ollama requests small even when the owner's retained history
+            # contains many uncached messages (for example after first upgrade).
+            fresh: list[list[float]] = []
+            for offset in range(0, len(missing), 64):
+                batch = missing[offset : offset + 64]
+                fresh.extend(self._embed([text for _, _, text in batch]))
             for (index, digest, _), vector in zip(missing, fresh, strict=True):
                 document_vectors[index] = vector
                 if self.cache is not None:
