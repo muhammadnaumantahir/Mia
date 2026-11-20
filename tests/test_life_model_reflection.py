@@ -6,7 +6,6 @@ from mia.life.runner import ExplorationResult, LifeRunner
 from mia.life.store import LifeStore
 from mia.memory.store import MemoryStore
 
-
 NOW_RESOURCES = {"cpu_percent": 5.0, "memory_percent": 12.0}
 
 
