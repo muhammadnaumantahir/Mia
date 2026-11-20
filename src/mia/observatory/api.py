@@ -3112,6 +3112,169 @@ def create_app(
             "automatic_dispatch": autonomy_runtime.running,
         }
 
+    def _validate_capability_permissions(permissions: list[str]) -> list[str]:
+        """Allow only implemented non-admin, non-high-risk host capabilities."""
+        if len(permissions) > 10:
+            raise HTTPException(status_code=422, detail="A capability may declare at most 10 permissions")
+        clean = sorted(set(permissions))
+        for name in clean:
+            if not isinstance(name, str) or name not in task_engine.handlers:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Capability permission is not an implemented Mia task action: {name}",
+                )
+            try:
+                spec = capability_registry.get(name)
+            except KeyError as exc:
+                raise HTTPException(
+                    status_code=422, detail=f"Unknown computer permission: {name}"
+                ) from exc
+            if spec.permission >= PermissionLevel.ADMINISTRATIVE or spec.risk >= RiskLevel.HIGH:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"{name} is administrative or high-risk and cannot be delegated to generated capabilities",
+                )
+        return clean
+
+    def _capability_permission_authorizations(candidate: dict[str, Any]) -> dict[str, str]:
+        """Require active owner grants for every declared write/execute/interact scope.
+
+        Directory-bound grants are accepted here as a capability envelope; the
+        TaskEngine resolves the actual target path and rechecks scope at execution.
+        """
+        permissions = _validate_capability_permissions(candidate.get("permissions") or [])
+        grants = policy.active_grants()
+        authorizations: dict[str, str] = {}
+        for name in permissions:
+            spec = capability_registry.get(name)
+            if not spec.requires_approval_by_default:
+                authorizations[name] = "default-low-risk-read"
+                continue
+            matching = [
+                grant for grant in grants
+                if not grant["admin"]
+                and name in grant["capabilities"]
+                and PermissionLevel[grant["level"].upper()] >= spec.permission
+            ]
+            if not matching:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Capability permission {name} needs an active owner grant before activation or execution",
+                )
+            authorizations[name] = ",".join(sorted(grant["grant_id"] for grant in matching))
+        return authorizations
+
+    def _schema_type_matches(value: Any, schema: dict[str, Any]) -> bool:
+        expected = schema.get("type")
+        if expected == "string":
+            return isinstance(value, str)
+        if expected == "integer":
+            return isinstance(value, int) and not isinstance(value, bool)
+        if expected == "number":
+            return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+        if expected == "boolean":
+            return isinstance(value, bool)
+        if expected == "array":
+            if not isinstance(value, list):
+                return False
+            item_schema = schema.get("items")
+            return item_schema is None or all(
+                _schema_type_matches(item, item_schema) for item in value
+            )
+        if expected == "object":
+            if not isinstance(value, dict):
+                return False
+            properties = schema.get("properties") or {}
+            if schema.get("additionalProperties") is False and any(
+                key not in properties for key in value
+            ):
+                return False
+            if any(key not in value for key in schema.get("required", [])):
+                return False
+            return all(
+                key not in properties or _schema_type_matches(item, properties[key])
+                for key, item in value.items()
+            )
+        if expected == "null":
+            return value is None
+        return True
+
+    def _capability_action_tasks(
+        candidate: dict[str, Any], raw_actions: Any
+    ) -> list[dict[str, Any]]:
+        """Turn sandbox action requests into owner-reviewable TaskEngine plans only."""
+        if raw_actions is None:
+            return []
+        if not isinstance(raw_actions, list) or len(raw_actions) > 8:
+            raise HTTPException(
+                status_code=502, detail="Capability _mia_actions must be a list of at most 8 requests"
+            )
+        if raw_actions and not candidate.get("permissions"):
+            raise HTTPException(
+                status_code=403, detail="A permission-free capability cannot request host actions"
+            )
+        declared = set(candidate.get("permissions") or [])
+        prepared: list[dict[str, Any]] = []
+        for index, action in enumerate(raw_actions, start=1):
+            if not isinstance(action, dict) or set(action) - {"capability", "args", "description"}:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Capability action {index} must contain only capability, args and description",
+                )
+            name = action.get("capability")
+            args = action.get("args", {})
+            if not isinstance(name, str) or name not in declared:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Capability action {index} requests an undeclared permission",
+                )
+            if not isinstance(args, dict):
+                raise HTTPException(status_code=502, detail=f"Capability action {index} args must be an object")
+            try:
+                spec = capability_registry.get(name)
+                handler = task_engine.handlers[name]
+            except (KeyError, TypeError) as exc:
+                raise HTTPException(
+                    status_code=422, detail=f"Capability action {name} is unavailable on this runtime"
+                ) from exc
+            if not _schema_type_matches(args, spec.input_schema):
+                raise HTTPException(
+                    status_code=422, detail=f"Capability action {name} does not match its input schema"
+                )
+            missing = [key for key in handler.required if key not in args]
+            if missing:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Capability action {name} is missing required inputs: {', '.join(missing)}",
+                )
+            description = action.get("description", f"Requested by {candidate['name']}")
+            if not isinstance(description, str):
+                raise HTTPException(status_code=502, detail="Capability action description must be text")
+            prepared.append({
+                "capability": name,
+                "args": args,
+                "description": description[:200],
+            })
+
+        plans: list[dict[str, Any]] = []
+        for index, action in enumerate(prepared, start=1):
+            try:
+                task = task_engine.create_task(
+                    f"Capability {candidate['name']}: action {index}",
+                    [action],
+                    source="brain",
+                )
+            except TaskPlanError as exc:
+                raise HTTPException(status_code=422, detail=f"Could not create governed action task: {exc}") from exc
+            plans.append({
+                "task_id": task["task_id"],
+                "status": "planned_owner_review",
+                "task": task,
+                "plan": task_engine.plan_summary(task["task_id"]),
+                "run_endpoint": f"/api/computer/tasks/{task['task_id']}/run",
+            })
+        return plans
+
     @app.post("/api/capabilities/draft", status_code=200)
     async def draft_capability(item: CapabilityDraftInput) -> dict[str, Any]:
         if not item.name.strip() or not item.objective.strip():
