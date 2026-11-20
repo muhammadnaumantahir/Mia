@@ -84,16 +84,16 @@ class CodeGraphWatcher:
         history = self.root / "docs" / "code-graph" / "CHANGELOG.md"
         history.parent.mkdir(parents=True, exist_ok=True)
         if not history.exists():
-            history.write_text("# Code Graph history\\n", encoding="utf-8")
+            history.write_text("# Code Graph history\n", encoding="utf-8")
         entry = (
-            f"\\n## {datetime.now(UTC).isoformat()}\\n\\n"
-            f"- Commit: `{graph.get('commit', 'unknown')}`\\n"
-            f"- Source digest: `{graph.get('source_digest', 'unknown')}`\\n"
-            f"- Nodes: {graph.get('summary', {}).get('nodes', 0)}\\n"
-            f"- Edges: {graph.get('summary', {}).get('edges', 0)}\\n"
-            f"- Parse errors: {graph.get('summary', {}).get('parse_errors', 0)}\\n"
+            f"\n## {datetime.now(UTC).isoformat()}\n\n"
+            f"- Commit: `{graph.get('commit', 'unknown')}`\n"
+            f"- Source digest: `{graph.get('source_digest', 'unknown')}`\n"
+            f"- Nodes: {graph.get('summary', {}).get('nodes', 0)}\n"
+            f"- Edges: {graph.get('summary', {}).get('edges', 0)}\n"
+            f"- Parse errors: {graph.get('summary', {}).get('parse_errors', 0)}\n"
         )
-        with history.open("a", encoding="utf-8", newline="\\n") as stream:
+        with history.open("a", encoding="utf-8", newline="\n") as stream:
             stream.write(entry)
 
     def _run(self) -> None:
