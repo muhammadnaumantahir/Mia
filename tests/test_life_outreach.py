@@ -13,7 +13,7 @@ from mia.memory.store import MemoryStore
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
 
-NOW = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
+NOW = datetime.now(UTC) + timedelta(minutes=5)
 
 
 def ok():
