@@ -84,23 +84,24 @@ class CodeGraphWatcher:
             return False
 
     def _append_history(self, graph: dict[str, object]) -> None:
-        history = self.root / "docs" / "code-graph" / "CHANGELOG.md"
+        # Generated history belongs in ignored runtime data, never tracked docs.
+        history = self.root / "data" / "code-graph" / "history.jsonl"
         history.parent.mkdir(parents=True, exist_ok=True)
-        if not history.exists():
-            history.write_text("# Code Graph history\n", encoding="utf-8")
         summary = graph.get("summary")
         if not isinstance(summary, dict):
             summary = {}
-        entry = (
-            f"\n## {datetime.now(UTC).isoformat()}\n\n"
-            f"- Commit: `{graph.get('commit', 'unknown')}`\n"
-            f"- Source digest: `{graph.get('source_digest', 'unknown')}`\n"
-            f"- Nodes: {summary.get('nodes', 0)}\n"
-            f"- Edges: {summary.get('edges', 0)}\n"
-            f"- Parse errors: {summary.get('parse_errors', 0)}\n"
-        )
-        with history.open("a", encoding="utf-8", newline="\n") as stream:
-            stream.write(entry)
+        entry = {
+            "generated_at": datetime.now(UTC).isoformat(),
+            "commit": graph.get("commit", "unknown"),
+            "source_digest": graph.get("source_digest", "unknown"),
+            "summary": {
+                "nodes": summary.get("nodes", 0),
+                "edges": summary.get("edges", 0),
+                "parse_errors": summary.get("parse_errors", 0),
+            },
+        }
+        with history.open("a", encoding="utf-8", newline="\\n") as stream:
+            stream.write(json.dumps(entry, sort_keys=True) + "\\n")
 
     def _run(self) -> None:
         # Validate the existing artifact on startup as well as watching later edits.
