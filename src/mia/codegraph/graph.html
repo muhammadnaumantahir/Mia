@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
+<title>Mia — Code Graph</title>
+<style>
+:root{font-family:Inter,Segoe UI,system-ui,sans-serif;color:#e8f1ef;background:#0c1214}*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at 8% 0%,#15352e 0,transparent 36%),#0c1214;min-height:100vh}
+header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:20px 26px;border-bottom:1px solid #263a36}
+.brand{display:flex;align-items:center;gap:12px}.mark{width:40px;height:40px;border-radius:13px;background:linear-gradient(145deg,#34d399,#0e6653);display:grid;place-items:center;color:#05241c;font-weight:900;font-size:21px}
+h1{font-size:20px;margin:0}.muted{color:#8fa7a0;font-size:12px}.actions{display:flex;gap:8px;flex-wrap:wrap}
+a,button,select,input{font:inherit}a,button{border:1px solid #34564c;background:#14231f;color:#d9f5e9;border-radius:9px;padding:9px 12px;text-decoration:none;cursor:pointer}button.primary{background:#176c53;border-color:#248568}
+main{max-width:1600px;margin:auto;padding:18px;display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px}
+.panel{background:#111c1b;border:1px solid #263d37;border-radius:14px;overflow:hidden}.toolbar{padding:12px;display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid #263d37}
+input,select{background:#0b1413;border:1px solid #345047;color:#e8f1ef;border-radius:8px;padding:9px;min-width:130px}.toolbar input{flex:1;min-width:190px}
+#stage{height:calc(100vh - 190px);min-height:520px;position:relative;overflow:hidden;background-image:radial-gradient(#34534a 1px,transparent 1px);background-size:24px 24px}
+svg{width:100%;height:100%;touch-action:none;cursor:grab}svg:active{cursor:grabbing}
+.edge{stroke:#45675c;stroke-width:1.1;opacity:.55}.edge.inferred{stroke-dasharray:4 4;opacity:.38}.edge.selected-edge{stroke:#e5fff1;stroke-width:2.6;opacity:1}
+.node{cursor:pointer;stroke:#a9c8bc;stroke-width:1.1}.node.selected{stroke:#fff;stroke-width:3}.node-label{fill:#dcebe5;font-size:10px;pointer-events:none}
+#details{padding:16px;max-height:calc(100vh - 130px);overflow:auto}#details h2{font-size:16px;margin:0 0 6px;overflow-wrap:anywhere}
+#details h3{font-size:12px;color:#8fd8b8;margin:18px 0 6px;text-transform:uppercase;letter-spacing:.08em}
+#details p,#details li{font-size:12px;color:#c3d2cd;line-height:1.5;overflow-wrap:anywhere}
+#details ul{padding-left:17px}.pill{display:inline-block;border:1px solid #36594d;border-radius:20px;padding:3px 7px;margin:3px 4px 3px 0;font-size:10px;color:#a8d9c2}
+#status{padding:10px 14px;color:#91aaa0;font-size:12px;border-top:1px solid #263d37}
+.legend{display:flex;gap:10px;flex-wrap:wrap;padding:9px 13px;color:#9fb3ab;font-size:11px}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
+@media(max-width:950px){main{grid-template-columns:1fr}#stage{height:60vh;min-height:420px}#details{max-height:none}}
+</style></head>
+<body>
+<header><div class="brand"><div class="mark">M</div><div><h1>Mia Code Graph</h1><div class="muted">Source-grounded architecture intelligence</div></div></div>
+<div class="actions"><a href="/">Observatory</a><a href="/assistant">Assistant</a><a href="/brain">Brain</a><a href="/life">Digital Life</a><button class="primary" id="refresh">↻ Refresh graph</button></div></header>
+<main><section class="panel"><div class="toolbar">
+<input id="search" placeholder="Search files, functions, classes, endpoints…" aria-label="Search graph">
+<input id="accessToken" type="password" placeholder="Remote token (not saved)" aria-label="Remote access token" autocomplete="off">
+<input id="impactBase" placeholder="Impact base (e.g. main)" aria-label="Git base reference for impact analysis">
+<button id="analyzeImpact">Analyze changes</button>
+<select id="kind"><option value="">All node types</option></select>
+<select id="relation"><option value="">All relationships</option></select>
+<select id="confidence"><option value="">All evidence</option><option value="confirmed">Confirmed</option><option value="inferred">Inferred</option></select>
+<select id="detailMode"><option value="beginner">Beginner view</option><option value="developer">Developer view</option></select>
+<button id="showAll">Show all nodes</button>
+</div><div id="stage"><svg id="graph" viewBox="0 0 1100 760" role="img" aria-label="Interactive code dependency graph"><g id="viewport"></g></svg></div>
+<div class="legend"><span><i class="dot" style="background:#45c79a"></i>File</span><span><i class="dot" style="background:#69a8e8"></i>Function</span><span><i class="dot" style="background:#c49af0"></i>Class</span><span><i class="dot" style="background:#e9b66c"></i>API</span><span>Solid = confirmed · dashed = inferred</span></div><div id="status">Loading graph…</div></section>
+<aside class="panel" id="details"><h2>Explore Mia's code</h2><p>Choose a node to inspect its responsibilities, source location, dependencies, callers and evidence.</p><p class="muted">Graph relationships distinguish confirmed source-code evidence from inferred heuristics.</p></aside></main>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id), svg=$('graph'), view=$('viewport');
+let graph=null, selected=null, focusId=null, detailMode='beginner', scale=1, tx=0, ty=0, dragging=false, last=null, visible=[];
+const colors={repository:'#d7e8df',directory:'#55776b',file:'#45c79a',function:'#69a8e8',class:'#c49af0',api_endpoint:'#e9b66c',sps_layer:'#ef8c9b'};
+const esc=s=>String(s??'');
+function el(tag,attrs={},parent=view){const n=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);parent.appendChild(n);return n}
+function options(id,values){const keep=$(id).value;$(id).replaceChildren(new Option('All '+(id==='kind'?'node types':'relationships'),''));values.forEach(v=>$(id).add(new Option(v,v)));if(values.includes(keep))$(id).value=keep}
+function fitNodes(){const query=$('search').value.toLowerCase(), kind=$('kind').value, rel=$('relation').value, confidence=$('confidence').value;
+let candidates=graph.nodes.filter(n=>(!kind||n.kind===kind)&&(!query||[n.label,n.key,n.path,n.qualified_name].some(v=>esc(v).toLowerCase().includes(query))));
+if(rel||confidence){const allowed=new Set(graph.edges.filter(e=>(!rel||e.type===rel)&&(!confidence||e.confidence===confidence)).flatMap(e=>[e.source,e.target]));candidates=candidates.filter(n=>allowed.has(n.id))}
+if(focusId){const neighborhood=new Set([focusId]);graph.edges.forEach(e=>{if(e.source===focusId)neighborhood.add(e.target);if(e.target===focusId)neighborhood.add(e.source)});candidates=candidates.filter(n=>neighborhood.has(n.id))}
+visible=candidates.slice(0,420);draw();$('status').textContent=visible.length+' of '+graph.nodes.length+' nodes shown · '+graph.edges.length+' relationships · '+graph.summary.parse_errors+' parse errors · '+(graph.diagnostics?.circular_imports?.length||0)+' import cycles · '+(graph.diagnostics?.unreferenced_static_candidates?.length||0)+' unreferenced candidates'+(candidates.length>420?' · view capped at 420 nodes':'')}
+function draw(){view.replaceChildren();const ids=new Set(visible.map(n=>n.id)),positions=new Map();const cx=550,cy=380,rx=470,ry=315;
+visible.forEach((n,i)=>{const angle=2*Math.PI*i/Math.max(1,visible.length);positions.set(n.id,{x:cx+Math.cos(angle)*rx,y:cy+Math.sin(angle)*ry})});
+const edges=graph.edges.filter(e=>ids.has(e.source)&&ids.has(e.target)&&(!$('relation').value||e.type===$('relation').value)&&(!$('confidence').value||e.confidence===$('confidence').value));
+edges.slice(0,3000).forEach(e=>{const a=positions.get(e.source),b=positions.get(e.target),active=selected&&(e.source===selected||e.target===selected);el('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,class:'edge '+(e.confidence==='inferred'?'inferred ':'')+(active?'selected-edge':'')})});
+visible.forEach(n=>{const p=positions.get(n.id),g=el('g',{transform:'translate('+p.x+' '+p.y+')','data-id':n.id});const c=el('circle',{r:n.id===selected?10:6.5,fill:colors[n.kind]||'#8ca9a0',class:'node '+(n.id===selected?'selected':'')},g);c.addEventListener('click',()=>select(n));const label=n.label||n.key.split(':').pop();if(visible.length<160||n.id===selected){const t=el('text',{x:10,y:3,class:'node-label'},g);t.textContent=label.length>28?label.slice(0,26)+'…':label}g.addEventListener('click',()=>select(n))});
+view.setAttribute('transform','translate('+tx+' '+ty+') scale('+scale+')')}
+function select(n){selected=n.id;const outgoing=graph.edges.filter(e=>e.source===n.id),incoming=graph.edges.filter(e=>e.target===n.id);
+const nodeById=new Map(graph.nodes.map(x=>[x.id,x]));const d=$('details');d.replaceChildren();
+const h=document.createElement('h2');h.textContent=n.label||n.key;d.append(h);
+const meta=document.createElement('p');meta.textContent=n.kind+' · '+(n.path||n.key);d.append(meta);
+const focus=document.createElement('button');focus.textContent='Focus this component';focus.addEventListener('click',()=>{focusId=n.id;fitNodes()});d.append(focus);
+if(n.line){const line=document.createElement('p');line.textContent='Line '+n.line+(n.end_line?'–'+n.end_line:'');d.append(line)}
+const add=(title,items)=>{const h3=document.createElement('h3');h3.textContent=title+' ('+items.length+')';d.append(h3);const ul=document.createElement('ul');items.slice(0,80).forEach(e=>{const li=document.createElement('li'),other=nodeById.get(e.source===n.id?e.target:e.source);li.textContent=e.type+' → '+(other?.label||other?.key||'Unknown')+' · '+e.confidence+' · '+e.evidence;ul.append(li)});if(!items.length){const p=document.createElement('p');p.textContent='No indexed relationships.';d.append(p)}else d.append(ul)};
+const desc=document.createElement('p');desc.textContent=n.kind==='api_endpoint'?'HTTP API endpoint identified from a FastAPI route decorator.':n.kind==='function'?'Python function or method declared in this source file.':n.kind==='class'?'Python class declaration.':n.kind==='file'?'Indexed source or documentation file.':'Repository structure node. Choose Focus to inspect its immediate connections.';d.append(desc);
+if(detailMode==='developer'){add('SPS layer',outgoing.filter(e=>e.type==='BELONGS_TO_LAYER'));add('Tests covering this component',outgoing.filter(e=>e.type==='TESTED_BY'));add('Outgoing',outgoing);add('Incoming',incoming);const perm=[...outgoing,...incoming].filter(e=>e.type==='PROTECTED_BY'||/permission|approval|policy/.test(e.evidence));add('Permission evidence',perm);const history=document.createElement('p');history.textContent='Latest indexed repository commit: '+graph.commit+'. Per-file commit history is not indexed yet.';d.append(history)}draw()}
+async function analyzeImpact(){const base=$('impactBase').value.trim()||'HEAD~1';$('status').textContent='Analyzing changed files and affected dependencies since '+base+'…';try{const headers={'Accept':'application/json'},token=$('accessToken').value;if(token)headers['X-Mia-Code-Graph-Token']=token;const url='/api/code-graph/impact?base='+encodeURIComponent(base);const r=await fetch(url,{headers});const data=await r.json();if(!r.ok)throw Error(data.detail||'Impact analysis failed');const d=$('details');d.replaceChildren();const h=document.createElement('h2');h.textContent='Change impact · '+data.base_ref;d.append(h);const summary=document.createElement('p');summary.textContent=data.changed_files+' changed paths · '+data.indexed_changed_files+' indexed · '+data.dependent_files.length+' dependent files · '+data.related_tests.length+' related tests';d.append(summary);const add=(title,items)=>{const h3=document.createElement('h3');h3.textContent=title+' ('+items.length+')';d.append(h3);const ul=document.createElement('ul');items.forEach(item=>{const li=document.createElement('li');li.textContent=item;ul.append(li)});if(!items.length){const p=document.createElement('p');p.textContent='No matches found.';d.append(p)}else d.append(ul)};add('Dependent files',data.dependent_files);add('Related tests',data.related_tests);add('Changed paths',data.items.map(item=>item.path+(item.indexed?'':' · not indexed')));add('Analysis limitations',data.limitations);$('status').textContent='Impact analysis complete · '+data.changed_files+' changed paths · '+data.dependent_files.length+' dependents · '+data.related_tests.length+' related tests'}catch(e){$('status').textContent='Impact analysis unavailable: '+e.message}}
+async function load(refresh=false){$('status').textContent=refresh?'Rebuilding graph from repository files…':'Checking source digest and loading graph…';try{const headers={'Accept':'application/json'},token=$('accessToken').value;if(token)headers['X-Mia-Code-Graph-Token']=token;const r=await fetch(refresh?'/api/code-graph/refresh':'/api/code-graph',{method:refresh?'POST':'GET',headers});const data=await r.json();if(!r.ok)throw Error(data.detail||'Graph request failed');graph=data;options('kind',[...new Set(graph.nodes.map(n=>n.kind))].sort());options('relation',[...new Set(graph.edges.map(e=>e.type))].sort());fitNodes();let watcher='';try{const sr=await fetch('/api/code-graph/status',{headers});const ws=await sr.json();watcher=ws.watcher_running?' · automatic sync on':' · automatic sync off';if(ws.last_error)watcher+=' · watcher error: '+ws.last_error}catch{}$('status').textContent='Indexed '+graph.summary.files+' files · '+graph.summary.nodes+' nodes · '+graph.summary.edges+' edges · commit '+graph.commit.slice(0,10)+' · '+new Date(graph.generated_at).toLocaleString()+watcher}catch(e){$('status').textContent='Code Graph unavailable: '+e.message+' · enter a remote token if enabled; previous graph data is preserved on disk.'}}
+$('refresh').addEventListener('click',()=>load(true));$('analyzeImpact').addEventListener('click',analyzeImpact);$('impactBase').addEventListener('keydown',e=>{if(e.key==='Enter')analyzeImpact()});$('accessToken').addEventListener('change',()=>load());$('showAll').addEventListener('click',()=>{focusId=null;fitNodes()});$('detailMode').addEventListener('change',e=>{detailMode=e.target.value;if(selected){const node=graph.nodes.find(n=>n.id===selected);if(node)select(node)}});['search','kind','relation','confidence'].forEach(id=>$(id).addEventListener(id==='search'?'input':'change',fitNodes));
+svg.addEventListener('pointerdown',e=>{dragging=true;last={x:e.clientX,y:e.clientY};svg.setPointerCapture(e.pointerId)});svg.addEventListener('pointermove',e=>{if(!dragging||!last)return;tx+=e.clientX-last.x;ty+=e.clientY-last.y;last={x:e.clientX,y:e.clientY};view.setAttribute('transform','translate('+tx+' '+ty+') scale('+scale+')')});svg.addEventListener('pointerup',()=>{dragging=false;last=null});svg.addEventListener('wheel',e=>{e.preventDefault();scale=Math.max(.25,Math.min(3,scale*(e.deltaY<0?1.1:.9)));view.setAttribute('transform','translate('+tx+' '+ty+') scale('+scale+')')},{passive:false});
+load();
+})();
+</script></body></html>
