@@ -161,11 +161,11 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
   <label class="voice-check"><input id="voiceBargeIn" type="checkbox"> Interrupt by voice (use headphones)</label>
  </div>
  <div class="voice-preview" id="voicePreview" aria-live="polite"></div>
- <p class="voice-privacy">Browser engine: recognition uses your browser's speech service and may require internet; the browser may process microphone audio outside Mia. Local engine: audio is transcribed on this computer by Faster-Whisper (optional voice extra) and is not stored. The microphone starts only after you press Start voice (or hold the talk button in push-to-talk) and is released when the session ends. The Microphone choice applies to the local engine and Local record; the browser engine uses the browser's default microphone. Esc or Interrupt stops Mia speaking.</p>
+ <p class="voice-privacy">Browser engine: recognition uses your browser's speech service and may require internet; the browser may process microphone audio outside Mia. Local engine: audio is transcribed on this computer by Faster-Whisper (optional voice extra) and is not stored. The microphone starts only after you press Start voice, Enable Hey Mia, or hold the talk button in push-to-talk, and is released when the session ends. Hey Mia is an explicit opt-in browser wake phrase; browser recognition stays active while armed, the Mic on indicator remains visible, and Stop voice or Mute mic stops listening. The Microphone choice applies to the local engine and Local record; the browser engine uses the browser's default microphone. Esc or Interrupt stops Mia speaking.</p>
  <textarea id="prompt" rows="2" placeholder="Message Mia… (English or Roman Urdu)" aria-label="Message Mia"></textarea>
 <div class="composerfoot"><div class="hint" id="hint">Enter to send · Shift + Enter for a new line</div><div class="actions"><button class="send" id="mic" type="button" title="Record one clip and transcribe locally with Faster-Whisper" style="background:#1c3930;color:#a9ebcb;border:1px solid #356451">Local record</button><select id="taskType" aria-label="Task type"><option value="chat">General</option><option value="reasoning">Reasoning</option><option value="coding">Coding</option><option value="research">Research</option></select><label style="font-size:11px;color:#94aaa2;display:flex;align-items:center;gap:5px"><input id="useTools" type="checkbox" checked> Tools</label><label style="font-size:11px;color:#94aaa2;display:flex;align-items:center;gap:5px"><input id="speakReplies" type="checkbox"> Speak</label><select id="voiceChoice" aria-label="Speech voice" title="Installed browser voices" style="max-width:110px"><option value="">Default voice</option></select><button class="send" id="send" type="submit">Send ↗</button></div></div>
 </form>
-<div class="bottomnote">Voice input can be hands-free or push-to-talk, using the browser speech service or local Faster-Whisper (optional voice extra). Speech output can use offline system voices with the optional TTS extra, or browser voices as fallback.<br>Push-to-talk and model-requested tools are optional per message. File and knowledge contents stay local by default; writes, launches and browser clicks always require an approval card. Always-listening wake word is not enabled. Optional background dispatch is off by default and limited to owner-approved read-only system checks. Do not send secrets to cloud models.</div>
+<div class="bottomnote">Voice input can be hands-free or push-to-talk, using the browser speech service or local Faster-Whisper (optional voice extra). Speech output can use offline system voices with the optional TTS extra, or browser voices as fallback.<br>Push-to-talk and model-requested tools are optional per message. File and knowledge contents stay local by default; writes, launches and browser clicks always require an approval card. Hey Mia wake phrase mode is opt-in and uses the browser speech service (not offline local wake-word detection). Optional background dispatch is off by default and limited to owner-approved read-only system checks. Do not send secrets to cloud models.</div>
 </section></main></div>
 <script>
 const $=id=>document.getElementById(id);
@@ -1243,7 +1243,7 @@ function startVoiceRecognition(){
  const now=Date.now();
  voiceStartLog=voiceStartLog.filter(time=>now-time<6000);
  voiceStartLog.push(now);
- if(voiceStartLog.length>=5&&voiceLastResultAt<voiceStartLog[0]){
+ if(voiceStartLog.length>=(voiceWakeMode?12:5)&&voiceLastResultAt<voiceStartLog[0]){
   stopVoiceConversation('The microphone keeps stopping, so I ended the session to avoid a restart loop. Check the microphone and try again.',true);
   return;
  }
@@ -1274,6 +1274,7 @@ function startVoiceRecognition(){
   if(voiceWakeMode&&!voiceWakeActive){
    const finalWakeText=fresh.filter(result=>result.isFinal).map(result=>result[0]?.transcript||'').join(' ').trim();
    if(!finalWakeText)return;
+   voiceLastResultAt=Date.now();
    const wakeMatch=/\bhey\s+mia\b/i.exec(finalWakeText);
    if(!wakeMatch){setVoiceStatus("Listening for 'Hey Mia'.");return;}
    voiceWakeActive=true;
@@ -1457,6 +1458,7 @@ function toggleVoiceMute(){
  $('voiceMute').setAttribute('aria-pressed',String(voiceMuted));
  $('voiceMute').textContent=voiceMuted?'Unmute mic':'Mute mic';
  if(voiceMuted){
+  if(voiceWakeMode){voiceWakeActive=false;voiceFinalTranscript='';voiceInterimTranscript='';}
   clearTimeout(voiceSilenceTimer);
   clearTimeout(voiceRestartTimer);
   stopRecognitionQuietly();
@@ -1468,6 +1470,10 @@ function toggleVoiceMute(){
  }else if(voicePushToTalk){
   setVoiceState('ready');
   setVoiceStatus('Push-to-talk ready · hold the button or Space and speak.');
+ }else if(voiceWakeMode){
+  setVoiceState('listening');
+  setVoiceStatus("Microphone unmuted. Listening for 'Hey Mia'.");
+  queueVoiceRestart(100);
  }else{
   setVoiceState('ready');
   setVoiceStatus('Microphone unmuted.');
