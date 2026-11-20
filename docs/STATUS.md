@@ -118,6 +118,6 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 
 - Added a store query that returns all messages from retained, non-temporary conversations rather than limiting semantic candidates to the latest 12/100 messages.
 - Semantic retrieval now considers this full retained history; temporary conversations remain excluded and the final prompt context remains governed by the existing message/character budgets.
-- Cached embeddings continue to use content-addressed hashes. First-time cache population is split into batches of 64 to avoid oversized Ollama embedding requests; subsequent retrieval reuses cached vectors.
+- Cached embeddings continue to use content-addressed hashes. Cache reads/writes use batched SQLite operations rather than one connection per message. First-time cache population is split into batches of 64 to avoid oversized Ollama embedding requests; subsequent retrieval reuses cached vectors.
 - Added regression tests for old messages outside the recent window and exclusion of temporary conversations.
 - Tests have been authored but not run in this session. CI is intentionally skipped per owner direction. The first query after upgrade may incur additional local embedding work proportional to uncached retained history; the configured local Ollama reranker remains opt-in.
