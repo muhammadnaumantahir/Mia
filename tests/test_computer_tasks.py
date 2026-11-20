@@ -10,13 +10,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from mia.computer.approvals import ApprovalError, ApprovalStore
-from mia.computer.capabilities import PermissionLevel, default_registry
-from mia.computer.permissions import PermissionPolicy
 from mia.computer.browser import BrowserAccessError, BrowserController
 from mia.computer.browser_actions import BrowserActions
+from mia.computer.capabilities import PermissionLevel, default_registry
 from mia.computer.control import AutomationControl
 from mia.computer.fileops import FileOperations
 from mia.computer.filesystem import FilesystemAdapter
+from mia.computer.permissions import PermissionPolicy
 from mia.computer.processes import ProcessManager
 from mia.computer.task_handlers import build_handlers
 from mia.computer.tasks import Inspection, Outcome, StepHandler, TaskEngine, TaskPlanError
@@ -660,7 +660,7 @@ def test_owner_permission_grant_covers_medium_task_without_extra_approval(tmp_pa
     target = tmp_path / "workspace" / "allowed.txt"
     target.parent.mkdir()
 
-    grant = policy.grant(
+    policy.grant(
         granted_by="owner",
         capabilities=["filesystem.write"],
         level=PermissionLevel.WRITE,
