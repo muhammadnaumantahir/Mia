@@ -29,6 +29,7 @@ from mia.memory.store import MemoryStore
 MAX_BYTES = 500_000
 MAX_NOTE_CHARS = 20_000
 MAX_REDIRECTS = 3
+MAX_FOLLOWUP_PAGES = 2
 ALLOWED_CONTENT_TYPES = ("text/html", "text/plain", "application/xhtml+xml")
 PERMANENT_FAILURES = frozenset({
     "source_not_permitted", "redirect_not_permitted", "blocked_target", "unsupported_content_type",
@@ -151,6 +152,37 @@ class HttpxFetcher:
         raise FetchError("too_many_redirects")
 
 
+class _LinkExtractor(HTMLParser):
+    """Extract plain anchor URLs only; page content is never interpreted."""
+
+    def __init__(self, *, limit: int = 20) -> None:
+        super().__init__(convert_charrefs=True)
+        self.limit = limit
+        self.links: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag != "a" or len(self.links) >= self.limit:
+            return
+        href = next((value for key, value in attrs if key.lower() == "href" and value), None)
+        if href:
+            self.links.append(href.strip())
+
+
+def extract_links(page: FetchedPage, *, limit: int = 20) -> list[str]:
+    """Return a bounded list of raw anchor hrefs from HTML pages only."""
+    if limit < 1 or not page.content_type.startswith(("text/html", "application/xhtml+xml")):
+        return []
+    charset_match = re.search(r"charset=([\\w-]+)", page.content_type)
+    try:
+        raw = page.body.decode(charset_match.group(1) if charset_match else "utf-8", errors="replace")
+    except LookupError:
+        raw = page.body.decode("utf-8", errors="replace")
+    parser = _LinkExtractor(limit=limit)
+    parser.feed(raw)
+    parser.close()
+    return parser.links
+
+
 class _TextExtractor(HTMLParser):
     _SKIP = frozenset({"script", "style", "noscript", "template", "svg", "iframe", "head"})
 
@@ -229,6 +261,74 @@ class WebExplorer:
             result={"external_research": True, "failure": reason},
         )
 
+    def _store_page(
+        self, item: dict[str, Any], page: FetchedPage
+    ) -> tuple[dict[str, Any] | None, bool, str, str]:
+        title, text = extract_text(page)
+        if len(text) < 40:
+            return None, False, title, text
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        for existing in self.memory.list_items(limit=500):
+            if (
+                existing.get("source_uri") == page.url
+                and (existing.get("metadata") or {}).get("sha256") == digest
+            ):
+                return {
+                    "type": "url",
+                    "ref": page.url,
+                    "host": urlsplit(page.url).hostname,
+                    "sha256": digest,
+                    "stored_item_id": existing["item_id"],
+                    "new": False,
+                    "trust": "untrusted",
+                }, False, title, text
+        final_host = urlsplit(page.url).hostname or ""
+        stored = self.memory.add_item(
+            kind="research",
+            title=(title or f"Page from {final_host}")[:200],
+            content=text,
+            source_uri=page.url,
+            source_title=title or None,
+            trust_level="untrusted",
+            tags=["autonomous-research"],
+            metadata={
+                "sha256": digest,
+                "life_item_id": item["item_id"],
+                "bytes": len(page.body),
+                "truncated": page.truncated,
+                "reviewed": False,
+            },
+        )
+        return {
+            "type": "url",
+            "ref": page.url,
+            "host": final_host,
+            "bytes": len(page.body),
+            "sha256": digest,
+            "stored_item_id": stored,
+            "trust": "untrusted",
+            "new": True,
+            "truncated": page.truncated,
+        }, True, title, text
+
+    def _same_host_links(self, page: FetchedPage, root_host: str) -> list[str]:
+        """Choose only same-host HTTPS links; never expand the owner's trust boundary."""
+        selected: list[str] = []
+        seen = {page.url}
+        for raw in extract_links(page, limit=20):
+            try:
+                candidate = normalise_research_url(urljoin(page.url, raw))
+            except (ValueError, TypeError):
+                continue
+            parsed = urlsplit(candidate)
+            if parsed.hostname != root_host or candidate in seen:
+                continue
+            seen.add(candidate)
+            selected.append(candidate)
+            if len(selected) >= MAX_FOLLOWUP_PAGES:
+                break
+        return selected
+
     def explore(self, item: dict[str, Any], context: CycleContext) -> ExplorationResult:
         raw_url = item_url(item) or ""
         try:
@@ -258,47 +358,100 @@ class WebExplorer:
                 exc.reason, f"Fetch from {host} did not complete ({exc.reason}).", [f"http.get:{host}"]
             )
 
-        title, text = extract_text(page)
-        final_host = urlsplit(page.url).hostname or host
-        actions = [f"http.get:{final_host}"]
-        if len(text) < 40:
-            return self._blocked("no_readable_text", f"{final_host} returned no readable text.", actions)
+        root_source, root_new, title, text = self._store_page(item, page)
+        if root_source is None:
+            return self._blocked(
+                "no_readable_text", f"{host} returned no readable text.", [f"http.get:{host}"]
+            )
 
-        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
-        for existing in self.memory.list_items(limit=500):
-            if existing.get("source_uri") == page.url and (existing.get("metadata") or {}).get("sha256") == digest:
+        sources = [root_source]
+        actions = [f"http.get:{host}"]
+        if root_new:
+            actions.append("memory.add_item:research(untrusted)")
+        new_notes = int(root_new)
+        pages_visited = 1
+        failures: list[str] = []
+        final_host = urlsplit(page.url).hostname or host
+
+        # One-level expansion only: at most two same-host links, never recursive
+        # crawling or links to another hostname. Every fetch rechecks allowlist,
+        # DNS/network safety, remaining time and the owner stop signal.
+        for next_url in self._same_host_links(page, host):
+            if context.should_stop():
                 return ExplorationResult(
-                    outcome="completed",
-                    item_state="done",
-                    summary=f"{final_host} is unchanged since the stored note; nothing new was added.",
-                    sources=[{"type": "url", "ref": page.url, "host": final_host,
-                              "sha256": digest, "stored_item_id": existing["item_id"], "new": False}],
+                    outcome="deferred",
+                    item_state="deferred",
+                    summary="Stopped early before all bounded research pages were checked",
+                    sources=sources,
                     actions=actions,
-                    result={"external_research": True, "stored_item_id": existing["item_id"], "new": False},
+                    result={"external_research": True, "pages_visited": pages_visited,
+                            "new_notes": new_notes, "stopped": True},
                 )
-        stored = self.memory.add_item(
-            kind="research",
-            title=(title or f"Page from {final_host}")[:200],
-            content=text,
-            source_uri=page.url,
-            source_title=title or None,
-            trust_level="untrusted",
-            tags=["autonomous-research"],
-            metadata={"sha256": digest, "life_item_id": item["item_id"], "bytes": len(page.body),
-                      "truncated": page.truncated, "reviewed": False},
-        )
-        actions.append("memory.add_item:research(untrusted)")
+            remaining = context.deadline - monotonic()
+            if remaining < 1.0:
+                failures.append("time_budget_exhausted")
+                break
+            next_host = urlsplit(next_url).hostname or host
+            try:
+                next_page = self.fetcher.fetch(
+                    next_url,
+                    host_allowed=self.life.source_allowed,
+                    timeout=min(10.0, remaining - 0.5),
+                    should_stop=context.should_stop,
+                )
+            except FetchError as exc:
+                if exc.reason == "stopped":
+                    return ExplorationResult(
+                        outcome="deferred",
+                        item_state="deferred",
+                        summary="Stopped early while following a same-host research link",
+                        sources=sources,
+                        actions=actions,
+                        result={"external_research": True, "pages_visited": pages_visited,
+                                "new_notes": new_notes, "stopped": True},
+                    )
+                failures.append(f"{next_host}:{exc.reason}")
+                continue
+            pages_visited += 1
+            actions.append(f"http.get:{next_host}")
+            source, is_new, _, page_text = self._store_page(item, next_page)
+            if source is None:
+                failures.append(f"{next_host}:no_readable_text")
+                continue
+            sources.append(source)
+            if is_new:
+                new_notes += 1
+                actions.append("memory.add_item:research(untrusted)")
+
+        if pages_visited == 1 and not root_new:
+            summary = (
+                f"{final_host} is unchanged since the stored note; nothing new was added."
+                if not failures else
+                f"{final_host} is unchanged; linked pages were not fully checked ({'; '.join(failures)})."
+            )
+        else:
+            summary = (
+                f"Reviewed {pages_visited} same-host page(s) from {host}; stored {new_notes} new "
+                f"untrusted research note(s)."
+            )
+            if failures:
+                summary += f" Some linked pages were skipped ({'; '.join(failures)})."
+            if new_notes:
+                summary += " Their content has not been reviewed or verified."
         return ExplorationResult(
             outcome="completed",
             item_state="done",
-            summary=(
-                f"Fetched {final_host}: {len(page.body)} bytes{' (truncated)' if page.truncated else ''}, "
-                "stored as an untrusted research note. Its content has not been reviewed or verified."
-            ),
-            sources=[{"type": "url", "ref": page.url, "host": final_host, "bytes": len(page.body),
-                      "sha256": digest, "stored_item_id": stored, "trust": "untrusted", "new": True}],
+            summary=summary,
+            sources=sources,
             actions=actions,
-            result={"external_research": True, "stored_item_id": stored, "new": True, "sha256": digest},
+            resource=dict(NO_MODEL_RESOURCE),
+            result={
+                "external_research": True,
+                "pages_visited": pages_visited,
+                "new_notes": new_notes,
+                "followup_pages": max(0, pages_visited - 1),
+                "failures": failures,
+            },
         )
 
 
