@@ -189,3 +189,53 @@ def test_token_usage_rejects_negative_or_boolean_provider_counts():
         TokenUsage(input_tokens=-1, output_tokens=10)
     with pytest.raises(ValueError):
         TokenUsage(input_tokens=True, output_tokens=10)
+
+
+def test_cancelled_paid_stream_retains_budget_reservation(tmp_path, monkeypatch):
+    import asyncio
+
+    from mia.gateway.contracts import StreamChunk
+
+    monkeypatch.setenv("MIA_MAX_DAILY_SPEND_USD", "1")
+    monkeypatch.setenv("MIA_MAX_MONTHLY_SPEND_USD", "5")
+
+    candidate = ModelCandidate(
+        provider_id="cloud", model_id="model", capabilities=frozenset({"chat"}),
+        context_window=4096, free_tier=False, healthy=True, enabled=True,
+        input_cost_per_million_usd=1.0, output_cost_per_million_usd=1.0,
+    )
+
+    class StreamingProvider:
+        provider_id = "cloud"
+
+        async def health(self):
+            return True
+
+        async def list_models(self):
+            return [candidate]
+
+        async def complete(self, candidate, request):
+            return "unused"
+
+        async def stream(self, candidate, request):
+            yield StreamChunk(delta="partial")
+            await asyncio.Event().wait()
+
+    async def scenario():
+        registry = ProviderRegistry()
+        registry.register(StreamingProvider())
+        ledger = UsageLedger(tmp_path / "cancelled-stream.sqlite3")
+        gateway = ModelGateway(registry)
+        gateway.usage_ledger = ledger
+        gateway.require_budget_reservations = True
+        request = ModelRequest(task_type="chat", prompt="hello", estimated_input_tokens=100,
+                               max_output_tokens=100)
+        stream = gateway.stream(
+            request, [candidate], RoutePolicy(allow_paid=True, max_request_cost_usd=0.001)
+        )
+        first = await anext(stream)
+        assert first.delta == "partial"
+        await stream.aclose()
+        assert ledger.reservation_summary()["active_count"] == 1
+
+    asyncio.run(scenario())
