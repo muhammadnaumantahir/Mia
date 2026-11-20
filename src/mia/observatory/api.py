@@ -1716,6 +1716,13 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok", "service": "mia"}
 
+    @app.get("/identity")
+    def identity_page() -> FileResponse:
+        page = Path(__file__).with_name("identity.html")
+        if not page.is_file():
+            raise HTTPException(status_code=404, detail="Identity page is not installed")
+        return FileResponse(page, media_type="text/html")
+
     @app.get("/memory")
     def memory_page() -> FileResponse:
         page = Path(__file__).with_name("memory.html")
