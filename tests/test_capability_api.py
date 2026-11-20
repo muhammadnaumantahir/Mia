@@ -342,6 +342,7 @@ def test_registered_permission_free_capability_executes_through_isolated_runner(
 
 def test_permissioned_capability_brokers_action_into_owner_reviewed_task(tmp_path):
     root = tmp_path / "workspace-root"
+    root.mkdir()
     approvals = ApprovalStore(tmp_path / "computer-approvals.sqlite3")
     filesystem = FilesystemAdapter([root], approvals)
     store = CapabilityStore(
@@ -375,10 +376,10 @@ def test_permissioned_capability_brokers_action_into_owner_reviewed_task(tmp_pat
     )
 
     source = (
-        "def run(input_data):\\n"
-        "    return {'summary': input_data.get('summary', 'done')}\\n"
+        "def run(input_data):\n"
+        "    return {'summary': input_data.get('summary', 'done')}\n"
     )
-    tests = "from candidate import run\\ndef test_run(): assert run({'summary': 'ok'}) == {'summary': 'ok'}\\n"
+    tests = "from candidate import run\ndef test_run(): assert run({'summary': 'ok'}) == {'summary': 'ok'}\n"
     created = client.post("/api/capabilities", json={
         "capability_id": "report-writer",
         "version": "0.1.0",
@@ -442,8 +443,8 @@ def test_permissioned_capability_cannot_execute_after_owner_grant_is_revoked(tmp
         directory=str(tmp_path),
         kind="session",
     )
-    source = "def run(input_data):\\n    return {'ok': True}\\n"
-    tests = "from candidate import run\\ndef test_run(): assert run({}) == {'ok': True}\\n"
+    source = "def run(input_data):\n    return {'ok': True}\n"
+    tests = "from candidate import run\ndef test_run(): assert run({}) == {'ok': True}\n"
     created = client.post("/api/capabilities", json={
         "capability_id": "revocable-capability",
         "version": "0.1.0",
