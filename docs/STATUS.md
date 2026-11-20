@@ -86,3 +86,12 @@ Voice: an explicit opt-in “Hey Mia” wake phrase mode is implemented using th
 - Conversation evaluation: a deterministic fixture and runner cover English, Urdu and Roman Urdu decision recall plus runtime self-description. This tests context assembly, not live model translation quality; tests are added but not run.
 
 Remaining Priority 1 development includes full-history semantic retrieval/evaluation, model-assisted memory extraction/consolidation, richer self-description of architecture/limitations, quality-based model escalation, reasoning-quality evaluation and full text/voice acceptance verification.
+
+
+## Code Graph (Priority 0 cross-cutting developer capability)
+
+The integration branch now contains the first repository-wide Code Graph implementation: deterministic Python AST indexing, stable node/edge IDs, source digests, Git commit metadata, a browser explorer, CLI refresh/stale checks, local API endpoints and Git-diff impact analysis. The background watcher detects edits using file-content digests, including same-size edits with preserved timestamps, and atomically rebuilds the full graph. The explorer is linked from the Assistant and Observatory navigation.
+
+**Important limits:** the watcher currently performs full graph rebuilds rather than true file-level incremental indexing. Impact analysis reports confirmed static-import relationships and likely test candidates; it cannot prove dynamic imports, dependency injection or all runtime call paths. The graph endpoints are loopback-only by default; remote access needs explicit opt-in and a strong token.
+
+**Verification:** graph unit/API/watcher tests are included in the integration branch, but they have not yet passed a complete CI run. Treat this as implemented foundation awaiting automated verification, not as a completed acceptance gate. The graph must refresh and be used for impact review throughout subsequent development.
