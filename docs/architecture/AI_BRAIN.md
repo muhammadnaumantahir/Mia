@@ -33,7 +33,7 @@ input -> intent -> context+memory -> route -> [plan] -> tool offer -> permission
 
 ## Diagnostics API
 `GET /api/brain/diagnostics[?limit=]`, `GET /api/brain/diagnostics/{turn_id}`, `GET /api/brain/plans`,
-`GET /api/brain/plans/{id}`, `POST /api/brain/plans/{id}/resume` (`answers`, `retry_failed`).
+`GET /api/brain/plans/{id}`, page at `/brain`, `POST /api/brain/plans/{id}/resume` (`answers`, `retry_failed`).
 Traces hold model choice and reasons, rejections, fallbacks, intent, plan/step state, tool outcomes and
 verification. They never hold prompts, replies, tool arguments or outputs, memory content or credentials.
 
@@ -43,7 +43,7 @@ verification. They never hold prompts, replies, tool arguments or outputs, memor
 `MIA_CONTEXT_RETRIEVAL=false` to disable retrieval.
 
 ## Known limits
-- Capability evidence is in memory and resets on restart.
+- Capability evidence persists in `mia-brain-capabilities.sqlite3` (advisory; a write failure never breaks a reply).
 - Verification is structural and deterministic; there is no model judge by design.
-- Resuming a plan does not yet observe approval execution automatically; approved steps must be resumed by the owner.
-- No diagnostics web page yet (JSON API only). Only mocked providers were exercised in tests; no live Ollama run.
+- Resuming a plan (`POST /api/brain/plans/{id}/resume`) reads the approval store: a consumed approval completes the step ("outcome not observed" - the Brain does not verify the executed action), rejected/expired approvals fail it, pending/approved stay paused. The owner still triggers the resume.
+- The diagnostics page (`/brain`) is plain HTML over the JSON API and has not been checked in a real browser. Only mocked providers were exercised in tests; no live Ollama run.

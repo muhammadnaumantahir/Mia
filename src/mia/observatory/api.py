@@ -35,6 +35,7 @@ from mia.agent.tasks import (
     TaskTransitionError,
 )
 from mia.agent.tools import ToolRegistry, ToolResult
+from mia.brain.capabilities import CapabilityRegistry
 from mia.brain.orchestrator import Brain, TurnRequest
 from mia.brain.plan import PlanStore
 from mia.computer.app_discovery import ApplicationDiscovery
@@ -1573,6 +1574,13 @@ def create_app(
         page = Path(__file__).resolve().parents[1] / "assistant.html"
         if not page.exists():
             raise HTTPException(status_code=404, detail="Assistant asset not found")
+        return FileResponse(page, media_type="text/html")
+
+    @app.get("/brain")
+    def brain_page() -> FileResponse:
+        page = Path(__file__).resolve().parents[1] / "brain" / "diagnostics.html"
+        if not page.exists():
+            raise HTTPException(status_code=404, detail="Brain diagnostics asset not found")
         return FileResponse(page, media_type="text/html")
 
     @app.get("/")
@@ -4267,6 +4275,7 @@ def create_app(
         )
 
     plan_store = PlanStore(data_dir / "mia-brain.sqlite3")
+    brain_capabilities = CapabilityRegistry(db_path=data_dir / "mia-brain-capabilities.sqlite3")
     plan_store.recover_interrupted()
     brain = Brain(
         gateway=model_gateway,
@@ -4277,8 +4286,10 @@ def create_app(
         route_policy=lambda: apply_daily_cap(paid_route_policy(), ledger.spend_today_utc()),
         usage_recorder=record_usage,
         plan_store=plan_store,
+        capabilities=brain_capabilities,
         capture=capture_from_message,
         on_reply=record_reply_usage,
+        approval_status=approval_store.status,
     )
     app.state.brain = brain
 
