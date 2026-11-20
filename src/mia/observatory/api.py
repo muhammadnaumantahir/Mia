@@ -45,7 +45,7 @@ from mia.computer.browser import BrowserAccessError, BrowserController
 from mia.computer.browser_actions import BrowserActions
 from mia.computer.capabilities import PermissionLevel, default_registry
 from mia.computer.control import AutomationControl, AutomationStopped
-from mia.computer.desktop_control import DesktopController, make_window_guard
+from mia.computer.desktop_control import DesktopController, _CONSEQUENTIAL, make_window_guard
 from mia.computer.environment import detect_environment
 from mia.computer.fileops import FileOperationError, FileOperations
 from mia.computer.filesystem import FilesystemAccessError, FilesystemAdapter
@@ -2317,22 +2317,26 @@ def create_app(
     @app.post("/api/desktop/actions/execute")
     def desktop_action_execute(item: DesktopActionExecution) -> dict[str, Any]:
         try:
-            preview = desktop_ctl.preview(
-                item.action, item.window_handle, window_title=item.window_title,
-                automation_id=item.automation_id, control_type=item.control_type,
-                name=item.name, params=item.params)
+            _, _, info, _ = desktop_ctl._plan(
+                item.action, item.window_handle, item.window_title, item.automation_id,
+                item.control_type, item.name, item.params,
+            )
+            force_approval = (
+                item.action in {"keys", "click_at", "screenshot"}
+                or bool(info and _CONSEQUENTIAL.search(str(info.get("name", ""))))
+            )
             requires_approval = _computer_permission_requires_approval(
-                f"desktop.{item.action}",
-                force_approval=(
-                    item.action in {"keys", "click_at", "screenshot"}
-                    or str(preview.get("summary", "")).startswith("CONSEQUENTIAL")
-                ),
+                f"desktop.{item.action}", force_approval=force_approval
             )
             approval_id = item.approval_id
             if approval_id is None:
                 if requires_approval:
                     raise HTTPException(status_code=409, detail="This desktop action needs its own owner approval")
-                approval_id = preview["approval_id"]
+                approval_id = desktop_ctl.preview(
+                    item.action, item.window_handle, window_title=item.window_title,
+                    automation_id=item.automation_id, control_type=item.control_type,
+                    name=item.name, params=item.params,
+                )["approval_id"]
             result = desktop_ctl.execute(
                 approval_id, item.action, item.window_handle, item.window_title,
                 automation_id=item.automation_id, control_type=item.control_type,
@@ -2819,7 +2823,7 @@ def create_app(
                 "root_id": item.root_id,
                 "sha256": result["sha256"],
                 "size_bytes": result["size_bytes"],
-                "approval_id": item.approval_id,
+                "approval_id": approval_id,
             },
         )
         return result
