@@ -120,7 +120,8 @@ Install on Windows with `python -m pip install -e ".[computer]"`. This adapter i
   `POST /api/computer/permissions/revoke-all`, `GET /api/computer/permissions/history`. The API is localhost-only;
   authenticated owner identity is still required before any remote exposure.
 - 2026-11-20: `TaskEngine` now consults `PermissionPolicy` for registered capabilities whose adapters expose an approval callback. Matching medium-risk grants can replace the extra approval prompt while the adapter still receives its exact one-time preview approval; high-risk actions always require per-action approval. Directory grants are checked against resolved filesystem paths.
-- Still not done: direct single-action API endpoints do not yet consult `PermissionPolicy`; browser preparation steps without an approval callback remain on their existing constrained path; Brain tool execution and Voice-to-computer actions are not yet unified with this policy.
+- The main direct API boundaries for file operations/writes, app launch, browser click/download/upload, browser preparation, process termination and desktop actions now consult `PermissionPolicy`. Actions without an approval-preview mechanism (browser fill/select/check/scroll/tabs/screenshot) require an active matching owner grant; consequential browser and desktop actions continue to require a one-time per-action approval.
+- Still not done: enforcement is not yet embedded inside every adapter method, window management remains on adapter-specific approval only, and AI Brain tool execution plus Voice-to-computer actions are not yet routed through one shared permission broker.
 
 ## File operations (Feature 4, M3)
 
