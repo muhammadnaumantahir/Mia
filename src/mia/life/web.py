@@ -172,7 +172,7 @@ def extract_links(page: FetchedPage, *, limit: int = 20) -> list[str]:
     """Return a bounded list of raw anchor hrefs from HTML pages only."""
     if limit < 1 or not page.content_type.startswith(("text/html", "application/xhtml+xml")):
         return []
-    charset_match = re.search(r"charset=([\\w-]+)", page.content_type)
+    charset_match = re.search(r"charset=([\w-]+)", page.content_type)
     try:
         raw = page.body.decode(charset_match.group(1) if charset_match else "utf-8", errors="replace")
     except LookupError:
@@ -358,7 +358,7 @@ class WebExplorer:
                 exc.reason, f"Fetch from {host} did not complete ({exc.reason}).", [f"http.get:{host}"]
             )
 
-        root_source, root_new, title, text = self._store_page(item, page)
+        root_source, root_new, _, _ = self._store_page(item, page)
         if root_source is None:
             return self._blocked(
                 "no_readable_text", f"{host} returned no readable text.", [f"http.get:{host}"]
@@ -414,7 +414,7 @@ class WebExplorer:
                 continue
             pages_visited += 1
             actions.append(f"http.get:{next_host}")
-            source, is_new, _, page_text = self._store_page(item, next_page)
+            source, is_new, _, _ = self._store_page(item, next_page)
             if source is None:
                 failures.append(f"{next_host}:no_readable_text")
                 continue
