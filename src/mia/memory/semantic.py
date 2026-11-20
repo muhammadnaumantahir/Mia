@@ -131,15 +131,22 @@ class LocalOllamaEmbeddingReranker:
             return {}
         query_vector = self._embed([query[:6000]])[0]
         document_vectors: list[list[float] | None] = [None] * len(selected)
+        digests = [hashlib.sha256(text.encode("utf-8")).hexdigest() for _, text in selected]
+        cached_vectors: dict[str, list[float]] = {}
+        if self.cache is not None:
+            try:
+                if hasattr(self.cache, "get_embedding_cache_many"):
+                    cached_vectors = self.cache.get_embedding_cache_many(self.model, digests)
+                else:
+                    cached_vectors = {
+                        digest: vector for digest in digests
+                        if (vector := self.cache.get_embedding_cache(self.model, digest)) is not None
+                    }
+            except Exception:
+                cached_vectors = {}
         missing: list[tuple[int, str, str]] = []
-        for index, (key, text) in enumerate(selected):
-            digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
-            cached = None
-            if self.cache is not None:
-                try:
-                    cached = self.cache.get_embedding_cache(self.model, digest)
-                except Exception:
-                    cached = None
+        for index, ((_, text), digest) in enumerate(zip(selected, digests, strict=True)):
+            cached = cached_vectors.get(digest)
             if cached is not None and len(cached) == len(query_vector):
                 document_vectors[index] = cached
             else:
@@ -151,13 +158,19 @@ class LocalOllamaEmbeddingReranker:
             for offset in range(0, len(missing), 64):
                 batch = missing[offset : offset + 64]
                 fresh.extend(self._embed([text for _, _, text in batch]))
+            pending_cache: dict[str, list[float]] = {}
             for (index, digest, _), vector in zip(missing, fresh, strict=True):
                 document_vectors[index] = vector
-                if self.cache is not None:
-                    try:
-                        self.cache.set_embedding_cache(self.model, digest, vector)
-                    except Exception:
-                        pass
+                pending_cache[digest] = vector
+            if self.cache is not None and pending_cache:
+                try:
+                    if hasattr(self.cache, "set_embedding_cache_many"):
+                        self.cache.set_embedding_cache_many(self.model, pending_cache)
+                    else:
+                        for digest, vector in pending_cache.items():
+                            self.cache.set_embedding_cache(self.model, digest, vector)
+                except Exception:
+                    pass
         similarities = [
             (key, _cosine(query_vector, vector or []))
             for (key, _), vector in zip(selected, document_vectors, strict=True)
