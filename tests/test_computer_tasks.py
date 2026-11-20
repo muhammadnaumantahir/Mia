@@ -712,7 +712,8 @@ def test_owner_permission_grant_covers_medium_task_without_extra_approval(tmp_pa
     assert completed["status"] == "completed"
     assert executed == [str(target)]
     assert approvals.list_pending() == []
-    assert policy.history()[0]["outcome"] in {"allowed", "created"}
+    assert any(event["event"] == "authorize" and event["outcome"] == "allowed"
+               for event in policy.history())
 
 
 def test_high_risk_task_still_requires_per_action_approval_despite_grant(tmp_path):
