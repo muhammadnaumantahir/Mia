@@ -46,3 +46,27 @@ def test_semantic_reranker_requires_an_explicit_model(monkeypatch):
     monkeypatch.setenv("MIA_MEMORY_SEMANTIC_RERANK_ENABLED", "true")
     monkeypatch.delenv("MIA_MEMORY_EMBEDDING_MODEL", raising=False)
     assert LocalOllamaEmbeddingReranker.from_env() is None
+
+
+def test_embedding_cache_round_trips_across_memory_store_instances(tmp_path):
+    import hashlib
+
+    from mia.memory.store import MemoryStore
+
+    path = tmp_path / "memory.sqlite3"
+    first = MemoryStore(path)
+    content_hash = hashlib.sha256(b"Billing decision text").hexdigest()
+    first.set_embedding_cache("nomic-embed-text", content_hash, [0.25, 0.75])
+    reopened = MemoryStore(path)
+    assert reopened.get_embedding_cache("nomic-embed-text", content_hash) == [0.25, 0.75]
+
+
+def test_embedding_cache_rejects_invalid_vectors(tmp_path):
+    import hashlib
+
+    from mia.memory.store import MemoryStore
+
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    content_hash = hashlib.sha256(b"private text").hexdigest()
+    with pytest.raises(ValueError):
+        store.set_embedding_cache("model", content_hash, [float("nan")])
