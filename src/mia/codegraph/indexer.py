@@ -14,8 +14,14 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-EXCLUDED = {".git", ".venv", "venv", "__pycache__", "node_modules", ".mypy_cache", ".pytest_cache", ".ruff_cache", "dist", "build"}
-SOURCE_SUFFIXES = {".py", ".html", ".js", ".ts", ".tsx", ".jsx", ".css", ".toml", ".sql", ".md"}
+EXCLUDED = {".git", ".venv", "venv", "__pycache__", "node_modules", ".mypy_cache", ".pytest_cache", ".ruff_cache", "dist", "build", "secrets", "credentials", "private_keys"}
+SENSITIVE_FILES = {".env", ".env.local", ".env.production", "secrets.json", "credentials.json",
+                   "service-account.json", "id_rsa", "id_ed25519"}
+SOURCE_SUFFIXES = {
+    ".py", ".html", ".js", ".ts", ".tsx", ".jsx", ".css", ".toml", ".sql", ".md",
+    ".json", ".yaml", ".yml", ".ini", ".cfg", ".properties", ".xml", ".sh", ".ps1",
+    ".bat", ".txt",
+}
 LAYER_HINTS = {
     "SPS-01": ("config", "contracts"),
     "SPS-02": ("permission", "governance", "approval", "policy", "budget"),
@@ -76,7 +82,11 @@ def _python_files(root: Path) -> list[Path]:
             # Generated graph history must not become its own indexing input.
             if relative in {"docs/code-graph/CHANGELOG.md", "docs/code-graph/graph.json"}:
                 continue
-            if path.suffix.lower() in SOURCE_SUFFIXES and name != ".env":
+            if name.lower() in SENSITIVE_FILES or (
+                name.lower().startswith(".env.") and name.lower() != ".env.example"
+            ):
+                continue
+            if path.suffix.lower() in SOURCE_SUFFIXES or name in {"Dockerfile", "Makefile", ".env.example"}:
                 found.append(path)
     return sorted(found, key=lambda p: p.relative_to(root).as_posix())
 
