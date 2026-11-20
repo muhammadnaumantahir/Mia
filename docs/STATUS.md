@@ -95,3 +95,7 @@ The integration branch now contains the first repository-wide Code Graph impleme
 **Important limits:** the watcher currently performs full graph rebuilds rather than true file-level incremental indexing. Impact analysis reports confirmed static-import relationships and likely test candidates; it cannot prove dynamic imports, dependency injection or all runtime call paths. The graph endpoints are loopback-only by default; remote access needs explicit opt-in and a strong token.
 
 **Verification:** graph unit/API/watcher tests are included in the integration branch, but they have not yet passed a complete CI run. Treat this as implemented foundation awaiting automated verification, not as a completed acceptance gate. The graph must refresh and be used for impact review throughout subsequent development.
+
+## Conversation-first identity editor
+
+The persistent, model-independent identity backend already provides versioned owner updates, immutable history, rollback, audit events and prompt injection shared by text/streaming chat and provider switches. This branch adds the missing owner-facing Identity page, linked from the Assistant sidebar, with profile editing, prompt preview, version history and rollback. A route smoke test is included. Automated verification for this UI addition is pending CI; do not treat the feature as fully accepted until its route and interaction tests pass.
