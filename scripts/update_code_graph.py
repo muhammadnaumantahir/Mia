@@ -34,7 +34,7 @@ def main() -> int:
             return 1
         print(f"Code Graph current: {graph['summary']['nodes']} nodes, {graph['summary']['edges']} edges")
         return 0
-    if previous and previous.get("source_digest") == current_digest:
+    if (previous and previous.get("source_digest") == current_digest\n            and previous.get("commit") == graph["commit"]):
         print(f"Code Graph unchanged at {graph['commit']}")
         return 0
     build_graph(ROOT, output=OUTPUT)
