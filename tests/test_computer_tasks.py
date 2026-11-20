@@ -847,4 +847,4 @@ def test_unregistered_read_capability_fails_closed_with_shared_policy(tmp_path):
     )
     assert decision is not None
     assert decision.allowed is False
-    assert "not registered" in decision.reason
+    assert "registered owner permission specification" in decision.reason
