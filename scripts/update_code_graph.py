@@ -28,7 +28,7 @@ def main() -> int:
             previous = None
     current_digest = graph["source_digest"]
     if args.check:
-        if not previous or previous.get("source_digest") != current_digest:
+        if (not previous or previous.get("source_digest") != current_digest\n                or previous.get("commit") != graph["commit"]):
             print("Code Graph is missing or stale; run python scripts/update_code_graph.py")
             return 1
         print(f"Code Graph current: {graph['summary']['nodes']} nodes, {graph['summary']['edges']} edges")
