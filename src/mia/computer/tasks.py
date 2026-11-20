@@ -255,8 +255,6 @@ class TaskEngine:
         ):
             return None
         handler = self.handlers[capability]
-        if not handler.idempotent and handler.request_approval is None:
-            return None
         try:
             spec = self.capability_registry.get(capability)
         except KeyError:
@@ -270,6 +268,20 @@ class TaskEngine:
                 decision,
                 requires_approval=True,
                 reason="this target is high risk; per-action approval is mandatory",
+            )
+        # A capability without a one-time approval adapter cannot use a
+        # permission prompt to authorize its side effect. It must have an active
+        # matching owner grant; otherwise fail closed before the handler runs.
+        if (
+            decision.allowed
+            and decision.requires_approval
+            and not handler.idempotent
+            and handler.request_approval is None
+        ):
+            decision = replace(
+                decision,
+                allowed=False,
+                reason="this capability needs an owner grant; no per-action approval adapter is available",
             )
         return decision
 
