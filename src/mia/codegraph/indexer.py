@@ -26,7 +26,7 @@ LAYER_HINTS = {
     "SPS-07": ("routing", "adaptation", "workflow", "selection"),
     "SPS-08": ("evolution", "capability", "plugin"),
     "SPS-09": ("test", "verify", "validation", "sandbox"),
-    "SPS-10": ("computer", "execution", "runtime", "voice", "gateway"),
+    "SPS-10": ("computer", "execution", "runtime", "voice"),
 }
 LAYER_NAMES = {
     "SPS-01": "Software DNA Core", "SPS-02": "Governance Core",
@@ -69,7 +69,7 @@ def _module_path(path: Path, root: Path) -> str:
 def _python_files(root: Path) -> list[Path]:
     found = []
     for base, dirs, files in os.walk(root):
-        dirs[:] = sorted(d for d in dirs if d not in EXCLUDED and not d.startswith("."))
+        dirs[:] = sorted(d for d in dirs if d not in EXCLUDED)
         for name in sorted(files):
             path = Path(base) / name
             if path.suffix.lower() in SOURCE_SUFFIXES and name != ".env":
@@ -153,12 +153,6 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
                                              f"base expression {base.id}", item.lineno)
                         visit_scope(item.body, key.split(":", 1)[1])
                     else:
-                        for child in ast.walk(item):
-                            if isinstance(child, ast.Call) and isinstance(child.func, ast.Name):
-                                for target in symbol_index.get(child.func.id, []):
-                                    if target != sid:
-                                        add_edge(sid, target, "CALLS", "confirmed",
-                                                 f"ast-call:{rel}:{child.lineno}", child.lineno)
                         visit_scope(item.body, key.split(":", 1)[1])
                 elif isinstance(item, (ast.If, ast.For, ast.AsyncFor, ast.While, ast.With,
                                         ast.AsyncWith, ast.Try)):
@@ -210,6 +204,41 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
                                 function_id = _node_id("function", f"{rel}:{node.name}")
                                 add_edge(function_id, route_id, "EXPOSES_API", "confirmed",
                                          f"fastapi-decorator:{rel}:{decorator.lineno}", decorator.lineno)
+
+    # Resolve direct calls only when the target is unique in the same file.
+    # Cross-file calls via DI, aliases and dynamic imports are intentionally unresolved.
+    for path, tree in parsed.items():
+        rel = path.relative_to(root).as_posix()
+        for function in (n for n in ast.walk(tree)
+                         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))):
+            matches = [n for n in nodes.values() if n["kind"] == "function"
+                       and n["path"] == rel and n.get("line") == function.lineno]
+            if len(matches) != 1:
+                continue
+            caller_id = matches[0]["id"]
+            class CallVisitor(ast.NodeVisitor):
+                def __init__(self, root_function: ast.AST) -> None:
+                    self.root_function = root_function
+                    self.calls: list[ast.Call] = []
+                def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+                    if node is self.root_function:
+                        self.generic_visit(node)
+                def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+                    if node is self.root_function:
+                        self.generic_visit(node)
+                def visit_Call(self, node: ast.Call) -> None:
+                    self.calls.append(node)
+                    self.generic_visit(node)
+            visitor = CallVisitor(function)
+            visitor.visit(function)
+            for call in visitor.calls:
+                if not isinstance(call.func, ast.Name):
+                    continue
+                targets = [sid for sid in symbol_index.get(call.func.id, [])
+                           if nodes.get(sid, {}).get("path") == rel and sid != caller_id]
+                if len(targets) == 1:
+                    add_edge(caller_id, targets[0], "CALLS", "confirmed",
+                             f"ast-call:{rel}:{call.lineno}", call.lineno)
 
     # Tests are linked only by a conservative exact-name convention and marked inferred.
     declared = {n["id"]: n for n in nodes.values() if n["kind"] == "function"}
