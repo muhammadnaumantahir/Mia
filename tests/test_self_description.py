@@ -18,11 +18,24 @@ def test_runtime_manifest_uses_live_registries_and_reports_limits():
     assert manifest["wake_word"] == "not registered"
     assert manifest["memory_store"] == "active"
     assert manifest["semantic_memory"] == "disabled"
+    framework = manifest["sps_framework"]
+    assert framework["name"] == "Self Programming Software (SPS)"
+    assert framework["layer_count"] == 10
+    assert [layer["id"] for layer in framework["layers"]] == [
+        f"SPS-{number:02d}" for number in range(1, 11)
+    ]
+    assert framework["layers"][0]["name"] == "Software DNA Core"
+    assert framework["layers"][-1]["name"] == "Execution Core"
+    assert "partial" in framework["implementation_status"]
 
     prompt = render_runtime_manifest(manifest)
     assert "EVIDENCE LIMITS" in prompt
     assert "sk-proj-123456789" not in prompt
     assert "never invent capabilities" in prompt.lower()
+    assert "Self Programming Software (SPS)" in prompt
+    assert "SPS-01 Software DNA Core" in prompt
+    assert "SPS-10 Execution Core" in prompt
+    assert "not extra SPS layers" in prompt
 
 
 def test_runtime_manifest_is_deterministic():
