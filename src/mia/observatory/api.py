@@ -811,7 +811,7 @@ def create_app(
             ]
             manifest = build_runtime_manifest(
                 tool_names=tool_names,
-                provider_ids=model_gateway.providers.keys(),
+                provider_ids=model_gateway.providers.ids(),
                 route_paths=route_paths,
                 memory_enabled=memory_store is not None,
                 semantic_memory_enabled=(
@@ -1715,6 +1715,13 @@ def create_app(
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok", "service": "mia"}
+
+    @app.get("/identity")
+    def identity_page() -> FileResponse:
+        page = Path(__file__).with_name("identity.html")
+        if not page.is_file():
+            raise HTTPException(status_code=404, detail="Identity page is not installed")
+        return FileResponse(page, media_type="text/html")
 
     @app.get("/memory")
     def memory_page() -> FileResponse:
