@@ -40,6 +40,13 @@ _STOPWORDS = frozenset(
     any all our ours out off its it's i'm i've i'll don't doesn't didn't isn't aren't wasn't
     please tell give let know want need get got make made use using been being been once again
     mia hey hello thanks thank
+    # Common Roman Urdu conversational words.
+    hai hain tha thi the ke ki ka ko mein main se par per yeh ye woh wo kya kyun kyu kab
+    kahan kaun hum ham ne nahi nahin mujhe aap ap mera meri mere is us un in ek aik bhi
+    bas sirf liye karo karna karte kar raha rahi rahe kaunsa konsa kis batao bataye
+    # Common Urdu-script stopwords.
+    اور ہے ہیں تھا تھی تھے کے کی کا کو میں سے پر یہ وہ کیا کب کہاں کون ہم نے آپ
+    میرا میری میرے اس ان ایک بھی نہیں مجھے لیے کریں کرو طے
     """.split()
 )
 
