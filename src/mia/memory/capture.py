@@ -55,12 +55,15 @@ _STOPWORDS = frozenset(
 
 _REMEMBER = re.compile(
     r"^\s*(?:please\s+)?(?:remember|don'?t\s+forget|do\s+not\s+forget|keep\s+in\s+mind|"
-    r"make\s+a\s+note|note\s+that)\b\s*(?:that|this|:|,|-)?\s*(?P<body>.*)$",
+    r"make\s+a\s+note|note\s+that|yaad\s+rakhna|yaad\s+rakh\s+lo|yaad\s+rakho|yaad\s+rakhein|"
+    r"yaad\s+rakhain|یاد\s+رکھنا|یاد\s+رکھیں|یاد\s+رکھو)\b\s*"
+    r"(?:that|this|ke|kay|کہ|یہ|:|,|-)?\s*(?P<body>.*)$",
     re.IGNORECASE | re.DOTALL,
 )
 _FORGET = re.compile(
-    r"^\s*(?:please\s+)?(?:forget|stop\s+remembering)\b\s*"
-    r"(?:about|that|what\s+(?:i|you)\s+(?:said|know|remember)\s+about|everything\s+about)?\s*"
+    r"^\s*(?:please\s+)?(?:forget|stop\s+remembering|bhool\s+jao|bhool\s+jana|bhool\s+jaein|"
+    r"yaad\s+na\s+rakhna|بھول\s+جاؤ|بھول\s+جائیں|یاد\s+نہ\s+رکھنا)\b\s*"
+    r"(?:about|that|what\s+(?:i|you)\s+(?:said|know|remember)\s+about|everything\s+about|ke|kay|کہ)?\s*"
     r"(?P<body>.*)$",
     re.IGNORECASE | re.DOTALL,
 )
