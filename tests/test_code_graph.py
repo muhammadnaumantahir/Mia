@@ -94,11 +94,11 @@ def test_unreferenced_candidates_are_explicitly_conservative(tmp_path):
 
 def test_generated_graph_history_does_not_change_source_digest(tmp_path):
     root = make_repo(tmp_path)
-    history = root / "docs" / "code-graph" / "CHANGELOG.md"
+    history = root / "data" / "code-graph" / "history.jsonl"
     history.parent.mkdir(parents=True)
-    history.write_text("# History\n", encoding="utf-8")
+    history.write_text('{"source_digest":"first"}\n', encoding="utf-8")
     first = build_graph(root)["source_digest"]
-    history.write_text("# History\n\nA new generated record.\n", encoding="utf-8")
+    history.write_text('{"source_digest":"first"}\n{"source_digest":"second"}\n', encoding="utf-8")
     second = build_graph(root)["source_digest"]
     assert first == second
 
