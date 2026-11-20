@@ -100,3 +100,21 @@ def test_generated_graph_history_does_not_change_source_digest(tmp_path):
     history.write_text("# History\n\nA new generated record.\n", encoding="utf-8")
     second = build_graph(root)["source_digest"]
     assert first == second
+
+
+def test_config_files_are_indexed_but_secret_material_is_excluded(tmp_path):
+    root = make_repo(tmp_path)
+    config = root / "config" / "settings.yaml"
+    config.parent.mkdir()
+    config.write_text("service: mia\n", encoding="utf-8")
+    (root / ".env.example").write_text("API_KEY=replace-me\n", encoding="utf-8")
+    (root / ".env.local").write_text("API_KEY=real-secret\n", encoding="utf-8")
+    secrets = root / "secrets"
+    secrets.mkdir()
+    (secrets / "credentials.json").write_text('{"token":"real-secret"}', encoding="utf-8")
+    graph = build_graph(root)
+    paths = {node.get("path") for node in graph["nodes"] if node["kind"] == "file"}
+    assert "config/settings.yaml" in paths
+    assert ".env.example" in paths
+    assert ".env.local" not in paths
+    assert "secrets/credentials.json" not in paths
