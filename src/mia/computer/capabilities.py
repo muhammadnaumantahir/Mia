@@ -286,6 +286,12 @@ def default_registry() -> CapabilityRegistry:
             "Entries come from the owner allowlist file.", _obj(), _obj(items={"type": "array"}),
         ),
         CapabilitySpec(
+            "apps.discover", "Discover installed applications for local inventory.", V, low, 15,
+            "Results come from a fresh local application inventory scan.",
+            _obj(query=_S), _obj(items={"type": "array"}),
+            constraints=("Discovery is read-only and does not launch applications.",),
+        ),
+        CapabilitySpec(
             "apps.launch", "Launch one allowlisted application with fixed arguments.", X, med, 30,
             "Process ID returned and process existence is checked after launch.",
             _obj(app_id=_S), _obj(process_id=_I),
