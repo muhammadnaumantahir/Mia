@@ -92,7 +92,11 @@ _SENSITIVE = re.compile(
     r"orientation|ethnic\w*|race|racial|immigra\w*|visa|citizenship|union\s+member|"
     r"health|diagnos\w*|disease|illness|cancer|diabet\w*|medication|prescri\w*|"
     r"depress\w*|anxiety|disorder|therapy|pregnan\w*|disabilit\w*|criminal|convict\w*|"
-    r"arrest\w*|salary|income|debt|ssn|passport)\b",
+    r"arrest\w*|salary|income|debt|ssn|passport|"
+    r"mazhab|deen|namaz|roza|masjid|allah|dua|siyasat|siyasi|vote|sehat|bimari|dawa|ilaaj|"
+    r"tankhwa|qarz|hamal|nasha|qaum|"
+    r"مسلمان|عیسائی|ہندو|یہودی|مذہب|دین|نماز|روزہ|مسجد|قرآن|اللہ|دعا|سیاست|ووٹ|"
+    r"صحت|بیماری|کینسر|ذیابیطس|دوا|علاج|ڈپریشن|اضطراب|حمل|معذوری|گرفتاری|تنخواہ|آمدنی|قرض|پاسپورٹ|ویزا)\b",
     re.IGNORECASE,
 )
 _CODE_FENCE = re.compile(r"```.*?```", re.DOTALL)
@@ -100,29 +104,29 @@ _CODE_FENCE = re.compile(r"```.*?```", re.DOTALL)
 # (pattern, record_type, base confidence, subject group name or None)
 _AUTO_PATTERNS: tuple[tuple[re.Pattern[str], str, float, str | None], ...] = (
     # Roman Urdu and Urdu-script statements are supported alongside English.
-    (re.compile(r"\bmujhe\s+(?P<value>.+?)\s+pasand\s+(?:hai|hain|hy|he)\\b", re.I),
+    (re.compile(r"\bmujhe\s+(?P<value>.+?)\s+pasand\s+(?:hai|hain|hy|he)\b", re.I),
      "preference", 0.7, None),
-    (re.compile(r"\b(?:main|mein)\s+(?:hamesha|aksar|aam\\s+tor\\s+par)\\s+(?P<value>.+?)\\s+(?:karta|karti|karte)\\s+(?:hoon|hun|hain)\\b", re.I),
+    (re.compile(r"\b(?:main|mein)\s+(?:hamesha|aksar|aam\s+tor\s+par)\s+(?P<value>.+?)\s+(?:karta|karti|karte)\s+(?:hoon|hun|hain)\b", re.I),
      "preference", 0.7, None),
-    (re.compile(r"\b(?:hum|ham)\s+(?:ne|ny)\s+(?P<value>.+?)\s+(?:ka\\s+)?(?:faisla|decision)\\s+(?:kiya|kar\\s+liya)\\b", re.I),
+    (re.compile(r"\b(?:hum|ham)\s+(?:ne|ny)\s+(?P<value>.+?)\s+(?:ka\s+)?(?:faisla|decision)\s+(?:kiya|kar\s+liya)\b", re.I),
      "decision", 0.75, None),
-    (re.compile(r"\b(?:mera|meri)\s+(?:goal|maqsad|hadaf)\s+(?P<value>.+?)\s+(?:hai|hy|he)\\b", re.I),
+    (re.compile(r"\b(?:mera|meri)\s+(?:goal|maqsad|hadaf)\s+(?P<value>.+?)\s+(?:hai|hy|he)\b", re.I),
      "goal", 0.75, None),
-    (re.compile(r"\b(?:main|mein)\s+(?P<value>.+?)\s+par\\s+(?:kaam|work)\\s+kar\\s+(?:raha|rahi|rahe)\\s+(?:hoon|hun|hain)\\b", re.I),
+    (re.compile(r"\b(?:main|mein)\s+(?P<value>.+?)\s+par\s+(?:kaam|work)\s+kar\s+(?:raha|rahi|rahe)\s+(?:hoon|hun|hain)\b", re.I),
      "project", 0.65, None),
-    (re.compile(r"\b(?:mera|meri)\s+(?P<subject>naam|role|company|team|shehar|city)\s+(?P<value>.+?)\s+(?:hai|hy|he)\\b", re.I),
+    (re.compile(r"\b(?:mera|meri)\s+(?P<subject>naam|role|company|team|shehar|city)\s+(?P<value>.+?)\s+(?:hai|hy|he)\b", re.I),
      "fact", 0.8, "subject"),
-    (re.compile(r"مجھے\\s+(?P<value>.+?)\\s+پسند\\s+(?:ہے|ہیں)", re.I),
+    (re.compile(r"مجھے\s+(?P<value>.+?)\s+پسند\s+(?:ہے|ہیں)", re.I),
      "preference", 0.7, None),
-    (re.compile(r"میں\\s+ہمیشہ\\s+(?P<value>.+?)\\s+(?:کرتا|کرتی|کرتے)\\s+ہوں", re.I),
+    (re.compile(r"میں\s+ہمیشہ\s+(?P<value>.+?)\s+(?:کرتا|کرتی|کرتے)\s+ہوں", re.I),
      "preference", 0.7, None),
-    (re.compile(r"ہم\\s+نے\\s+(?P<value>.+?)\\s+(?:کا\\s+)?فیصلہ\\s+کیا", re.I),
+    (re.compile(r"ہم\s+نے\s+(?P<value>.+?)\s+(?:کا\s+)?فیصلہ\s+کیا", re.I),
      "decision", 0.75, None),
-    (re.compile(r"میرا\\s+(?:مقصد|ہدف)\\s+(?P<value>.+?)\\s+ہے", re.I),
+    (re.compile(r"میرا\s+(?:مقصد|ہدف)\s+(?P<value>.+?)\s+ہے", re.I),
      "goal", 0.75, None),
-    (re.compile(r"میں\\s+(?P<value>.+?)\\s+پر\\s+کام\\s+کر\\s+رہا\\s+ہوں", re.I),
+    (re.compile(r"میں\s+(?P<value>.+?)\s+پر\s+کام\s+کر\s+رہا\s+ہوں", re.I),
      "project", 0.65, None),
-    (re.compile(r"میرا\\s+(?P<subject>نام|کردار|شہر)\\s+(?P<value>.+?)\\s+ہے", re.I),
+    (re.compile(r"میرا\s+(?P<subject>نام|کردار|شہر)\s+(?P<value>.+?)\s+ہے", re.I),
      "fact", 0.8, "subject"),
     (re.compile(r"\bmy\s+(?:favou?rite|preferred)\s+(?P<subject>[\w\s-]{2,40}?)\s+is\s+(?P<value>.+)$", re.I),
      "preference", 0.8, "subject"),
@@ -146,14 +150,15 @@ _AUTO_PATTERNS: tuple[tuple[re.Pattern[str], str, float, str | None], ...] = (
 )
 
 _TYPE_HINTS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"\b(?:decid\w*|decision|we\s+chose|going\s+with|agreed\s+(?:to|on))\b", re.I), "decision"),
-    (re.compile(r"\b(?:lesson|learn(?:ed|t)|mistake|next\s+time|root\s+cause)\b", re.I), "lesson"),
-    (re.compile(r"\b(?:goal|aim\s+to|plan\s+to|target|deadline)\b", re.I), "goal"),
+    (re.compile(r"\b(?:decid\w*|decision|we\s+chose|going\s+with|agreed\s+(?:to|on)|faisla|decide\s+kiya|tay\s+kiya)\b|فیصلہ|منتخب\s+کیا", re.I), "decision"),
+    (re.compile(r"\b(?:lesson|learn(?:ed|t)|mistake|next\s+time|root\s+cause|sabaq|seekha)\b|سبق|غلطی", re.I), "lesson"),
+    (re.compile(r"\b(?:goal|aim\s+to|plan\s+to|target|deadline|maqsad|hadaf)\b|مقصد|ہدف", re.I), "goal"),
     (re.compile(r"\b(?:prefer\w*|favou?rite|always\s+use|i\s+(?:always|usually|generally|never)|"
-                r"i\s+like\s+to)\b", re.I), "preference"),
-    (re.compile(r"\b(?:project|milestone|requirement|feature|repo(?:sitory)?|working\s+on|building)\b", re.I), "project"),
-    (re.compile(r"\b(?:happened|met\s+with|yesterday|last\s+(?:week|month)|we\s+(?:discussed|talked))\b", re.I), "episode"),
-    (re.compile(r"\bmy\s+(?:friend|colleague|manager|brother|sister|wife|husband|partner|client|mentor)\b", re.I), "entity"),
+                r"i\s+like\s+to|pasand|tarjeeh|hamesha)\b|پسند|ترجیح", re.I), "preference"),
+    (re.compile(r"\b(?:project|milestone|requirement|feature|repo(?:sitory)?|working\s+on|building|kaam\s+kar)\b|منصوبہ|کام\s+کر", re.I), "project"),
+    (re.compile(r"\b(?:happened|met\s+with|yesterday|last\s+(?:week|month)|we\s+(?:discussed|talked)|waqia|mulaqat)\b|واقعہ|ملاقات", re.I), "episode"),
+    (re.compile(r"\bmy\s+(?:friend|colleague|manager|brother|sister|wife|husband|partner|client|mentor)\b|"
+                r"\b(?:mera|meri)\s+(?:dost|colleague|manager|team)\b|میرا\s+دوست|میری\s+ٹیم", re.I), "entity"),
 )
 
 _IMPORTANCE = {
@@ -164,7 +169,7 @@ _IMPORTANCE = {
 
 def tokens(text: str) -> set[str]:
     return {
-        word for word in re.findall(r"[^\\W_]+", text.lower(), flags=re.UNICODE)
+        word for word in re.findall(r"[^\W_]+", text.lower(), flags=re.UNICODE)
         if len(word) >= 3 and word not in _STOPWORDS
     }
 
