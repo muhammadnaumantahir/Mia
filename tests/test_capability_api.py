@@ -4,6 +4,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from mia.agent.resources import ResourceMonitor
+from mia.computer.approvals import ApprovalStore
+from mia.computer.capabilities import PermissionLevel
+from mia.computer.filesystem import FilesystemAdapter
 from mia.evolution.capabilities import CapabilityStore
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
@@ -22,10 +25,11 @@ class FakePsutil:
 
 
 class FakeSandboxRunner:
-    def __init__(self, *, passing=True, available=True, execution_error=None):
+    def __init__(self, *, passing=True, available=True, execution_error=None, action_requests=None):
         self.passing = passing
         self.available = available
         self.execution_error = execution_error
+        self.action_requests = action_requests
         self.calls = []
         self.execution_calls = []
 
@@ -40,8 +44,11 @@ class FakeSandboxRunner:
         })
         if self.execution_error is not None:
             raise self.execution_error
+        result = {"echo": input_data.get("value", 0)}
+        if self.action_requests is not None:
+            result["_mia_actions"] = self.action_requests
         return {
-            "result": {"echo": input_data.get("value", 0)},
+            "result": result,
             "source_sha256": source_sha256,
             "image_id": "sha256:test-image",
             "runner": "docker-capability-execution-v1",
@@ -333,6 +340,137 @@ def test_registered_permission_free_capability_executes_through_isolated_runner(
     )
 
 
+def test_permissioned_capability_brokers_action_into_owner_reviewed_task(tmp_path):
+    root = tmp_path / "workspace-root"
+    approvals = ApprovalStore(tmp_path / "computer-approvals.sqlite3")
+    filesystem = FilesystemAdapter([root], approvals)
+    store = CapabilityStore(
+        tmp_path / "capabilities.sqlite3", tmp_path / "generated", activation_enabled=True
+    )
+    runner = FakeSandboxRunner(
+        action_requests=[{
+            "capability": "filesystem.write",
+            "args": {
+                "root_id": "root_1",
+                "relative_path": "notes/result.txt",
+                "content": "created by a governed capability request",
+            },
+            "description": "Save the generated report",
+        }]
+    )
+    client = TestClient(create_app(
+        store=ObservatoryStore(tmp_path / "observatory.sqlite3"),
+        capability_store=store,
+        sandbox_runner=runner,
+        resource_monitor=ResourceMonitor(psutil_module=FakePsutil()),
+        filesystem=filesystem,
+        approvals=approvals,
+    ))
+    grant = client.app.state.permission_policy.grant(
+        granted_by="owner",
+        capabilities=["filesystem.write"],
+        level=PermissionLevel.WRITE,
+        directory=str(root),
+        kind="session",
+    )
+
+    source = (
+        "def run(input_data):\\n"
+        "    return {'summary': input_data.get('summary', 'done')}\\n"
+    )
+    tests = "from candidate import run\\ndef test_run(): assert run({'summary': 'ok'}) == {'summary': 'ok'}\\n"
+    created = client.post("/api/capabilities", json={
+        "capability_id": "report-writer",
+        "version": "0.1.0",
+        "name": "Report writer",
+        "source_code": source,
+        "test_source_code": tests,
+        "rationale": "Create a report and request its storage through Mia.",
+        "permissions": ["filesystem.write"],
+    })
+    assert created.status_code == 201, created.text
+    assert client.post("/api/capabilities/report-writer/0.1.0/validate/start").status_code == 200
+    assert client.post("/api/capabilities/report-writer/0.1.0/validate").json()["status"] == "validated"
+    assert client.post("/api/capabilities/report-writer/0.1.0/register").json()["status"] == "registered"
+    activated = client.post(
+        "/api/capabilities/report-writer/0.1.0/activate",
+        json={"approved_by": "owner", "reason": "approved report writer scope"},
+    )
+    assert activated.status_code == 200, activated.text
+
+    executed = client.post(
+        "/api/capabilities/report-writer/0.1.0/execute",
+        json={"input_data": {"summary": "prepared"}},
+    )
+    assert executed.status_code == 200, executed.text
+    payload = executed.json()
+    assert payload["activated"] is True
+    assert payload["actions_executed"] is False
+    assert payload["execution_policy"] == "docker-pure-data-with-owner-reviewed-task-requests"
+    assert payload["result"] == {"echo": 0}
+    assert len(payload["action_tasks"]) == 1
+    action_task = payload["action_tasks"][0]
+    assert action_task["status"] == "planned_owner_review"
+    assert action_task["plan"][0]["capability"] == "filesystem.write"
+    assert action_task["plan"][0]["needs_approval"] is False
+    assert not (root / "notes" / "result.txt").exists()
+
+    run = client.post(f"/api/computer/tasks/{action_task['task_id']}/run")
+    assert run.status_code == 200, run.text
+    assert run.json()["status"] == "completed"
+    assert (root / "notes" / "result.txt").read_text(encoding="utf-8") == (
+        "created by a governed capability request"
+    )
+    client.app.state.permission_policy.revoke(grant["grant_id"])
+
+
+def test_permissioned_capability_cannot_execute_after_owner_grant_is_revoked(tmp_path):
+    store = CapabilityStore(
+        tmp_path / "revoked.sqlite3", tmp_path / "revoked-generated", activation_enabled=True
+    )
+    runner = FakeSandboxRunner()
+    client = TestClient(create_app(
+        store=ObservatoryStore(tmp_path / "revoked-observatory.sqlite3"),
+        capability_store=store,
+        sandbox_runner=runner,
+        resource_monitor=ResourceMonitor(psutil_module=FakePsutil()),
+    ))
+    grant = client.app.state.permission_policy.grant(
+        granted_by="owner",
+        capabilities=["filesystem.write"],
+        level=PermissionLevel.WRITE,
+        directory=str(tmp_path),
+        kind="session",
+    )
+    source = "def run(input_data):\\n    return {'ok': True}\\n"
+    tests = "from candidate import run\\ndef test_run(): assert run({}) == {'ok': True}\\n"
+    created = client.post("/api/capabilities", json={
+        "capability_id": "revocable-capability",
+        "version": "0.1.0",
+        "name": "Revocable capability",
+        "source_code": source,
+        "test_source_code": tests,
+        "rationale": "Verify grant revocation is immediate.",
+        "permissions": ["filesystem.write"],
+    })
+    assert created.status_code == 201
+    client.post("/api/capabilities/revocable-capability/0.1.0/validate/start")
+    client.post("/api/capabilities/revocable-capability/0.1.0/validate")
+    client.post("/api/capabilities/revocable-capability/0.1.0/register")
+    activated = client.post(
+        "/api/capabilities/revocable-capability/0.1.0/activate",
+        json={"approved_by": "owner", "reason": "approved"},
+    )
+    assert activated.status_code == 200
+    client.app.state.permission_policy.revoke(grant["grant_id"])
+
+    response = client.post(
+        "/api/capabilities/revocable-capability/0.1.0/execute",
+        json={"input_data": {}},
+    )
+    assert response.status_code == 403
+    assert runner.execution_calls == []
+
 def store_events(client):
     response = client.get("/api/observatory/events?limit=50")
     assert response.status_code == 200
@@ -381,7 +519,7 @@ def test_capability_execution_requires_registration_and_empty_permissions(tmp_pa
         "/api/capabilities/scoped-capability/0.1.0/execute",
         json={"input_data": {}},
     )
-    assert blocked.status_code == 403
+    assert blocked.status_code == 409
     assert runner.execution_calls == []
 
 
