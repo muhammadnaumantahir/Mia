@@ -64,6 +64,7 @@ where = ["src"]
 "mia.observatory" = ["dashboard.html", "assistant.html", "memory.html"]
 "mia.brain" = ["diagnostics.html"]
 "mia.life" = ["life.html"]
+"mia.gateway" = ["dashboard.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
