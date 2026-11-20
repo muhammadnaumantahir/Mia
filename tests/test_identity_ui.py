@@ -14,5 +14,5 @@ def test_identity_page_serves_owner_profile_editor(tmp_path, monkeypatch):
     assert 'id="save"' in response.text
     assert 'id="preview"' in response.text
     assert 'id="history"' in response.text
-    assert 'fetch("/api/identity"' in response.text
-    assert 'fetch("/api/identity/history?limit=50")' in response.text
+    assert 'request("/api/identity")' in response.text
+    assert 'request("/api/identity/history?limit=50")' in response.text
