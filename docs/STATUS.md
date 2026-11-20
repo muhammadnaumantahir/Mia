@@ -100,3 +100,8 @@ The integration branch now contains the first repository-wide Code Graph impleme
 ## Conversation-first identity editor
 
 The persistent, model-independent identity backend provides versioned owner updates, immutable history, rollback, audit events and a shared prompt across text/streaming chat and provider switches. The owner-facing /identity page now provides profile editing, prompt preview, version history and rollback, linked from the Assistant sidebar. A route smoke test is included; owner interaction testing remains separate.
+
+
+## Mia self-description and SPS architecture
+
+The Brain runtime manifest now includes the canonical ten-layer SPS architecture (layer IDs, names and concise responsibilities) alongside live registry-derived tools, providers, memory, voice and permission status. It explicitly labels the layer list as an architecture map—not proof that every layer capability is implemented or enabled. Automated tests cover all ten layers and the evidence limitation.
