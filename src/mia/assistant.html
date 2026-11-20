@@ -146,7 +146,7 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 <form class="composer" id="composer">
  <div class="voice-console">
   <div class="voice-info"><div class="voice-orb" id="voiceOrb" data-state="idle" aria-hidden="true">♫</div><div class="voice-copy"><strong>Talk with Mia <span class="voice-state" id="voiceState">Off</span></strong><small id="voiceStatus" role="status" aria-live="polite">Voice conversation is off · press Start when you're ready</small></div></div>
-  <div class="voice-actions"><select id="voiceLanguage" aria-label="Voice recognition language"><option value="en-US">English</option><option value="ur-PK">Urdu · Pakistan</option><option value="auto">Auto · English + Urdu (local engine)</option></select><button class="voice-preview-button" id="previewVoice" type="button">Test voice</button><button class="voice-toggle" id="voiceMode" type="button" aria-pressed="false">Start voice</button></div>
+  <div class="voice-actions"><select id="voiceLanguage" aria-label="Voice recognition language"><option value="en-US">English</option><option value="ur-PK">Urdu · Pakistan</option><option value="auto">Auto · English + Urdu (local engine)</option></select><button class="voice-preview-button" id="previewVoice" type="button">Test voice</button><button class="voice-toggle" id="voiceMode" type="button" aria-pressed="false">Start voice</button><button class="voice-preview-button" id="wakeWordMode" type="button" aria-pressed="false" title="Opt-in browser wake phrase mode">Enable Hey Mia</button></div>
  </div>
  <div class="voice-controls" id="voiceControls">
   <span class="voice-badge" id="voiceMicBadge" data-on="false" role="status">Mic off</span>
@@ -890,6 +890,8 @@ $('composer').addEventListener('submit',async event=>{
 });
 
 let voiceMode=false;
+let voiceWakeMode=false;
+let voiceWakeActive=false;
 let voiceRecognition=null;
 let voiceRecognitionActive=false;
 let voiceStarting=false;
@@ -1142,6 +1144,10 @@ function queueVoiceRestart(delay=550){
 }
 function stopVoiceConversation(message='Voice conversation stopped.',isError=false){
  voiceMode=false;
+ voiceWakeMode=false;
+ voiceWakeActive=false;
+ $('wakeWordMode').textContent='Enable Hey Mia';
+ $('wakeWordMode').setAttribute('aria-pressed','false');
  clearTimeout(voiceSilenceTimer);
  clearTimeout(voiceRestartTimer);
  voiceFinalTranscript='';
@@ -1211,6 +1217,13 @@ function finishVoiceUtterance(){
      setVoiceStatus('Push-to-talk ready · hold the button or Space and speak.');
     }else if(voiceMuted){
      setVoiceState('muted');
+    }else if(voiceWakeMode){
+     voiceWakeActive=false;
+     voiceFinalTranscript='';
+     voiceInterimTranscript='';
+     setVoiceState('listening');
+     setVoiceStatus("Listening for 'Hey Mia'. Say the wake phrase to start.");
+     queueVoiceRestart(650);
     }else{
      setVoiceState('ready');
      if(voiceFinalTranscript.trim())setTimeout(finishVoiceUtterance,300);
@@ -1240,7 +1253,7 @@ function startVoiceRecognition(){
  recognition.interimResults=true;
  recognition.maxAlternatives=1;
  const chosenLanguage=$('voiceLanguage').value||'en-US';
- recognition.lang=chosenLanguage==='auto'?(voiceEngineName==='local'?'':'en-US'):chosenLanguage;
+ recognition.lang=voiceWakeMode&&!voiceWakeActive?'en-US':(chosenLanguage==='auto'?(voiceEngineName==='local'?'':'en-US'):chosenLanguage);
  voiceStarting=true;
  recognition.onstart=()=>{
   if(!voiceMode||voiceRecognition!==recognition)return;
@@ -1249,13 +1262,35 @@ function startVoiceRecognition(){
   setMicBadge(true,engineBadgeLabel());
   if(!voiceBusy){
    setVoiceState('listening');
-   setVoiceStatus(voicePushToTalk?'Listening… release the button when you finish.':'Listening… speak naturally. I will answer and listen again.');
+   setVoiceStatus(voiceWakeMode&&!voiceWakeActive
+    ?"Listening for 'Hey Mia'. Say the wake phrase to start."
+    :(voicePushToTalk?'Listening… release the button when you finish.':'Listening… speak naturally. I will answer and listen again.'));
   }
  };
  recognition.onresult=event=>{
   if(!voiceMode||voiceMuted||voiceRecognition!==recognition)return;
   const fresh=[];
   for(let index=event.resultIndex;index<event.results.length;index++)fresh.push(event.results[index]);
+  if(voiceWakeMode&&!voiceWakeActive){
+   const finalWakeText=fresh.filter(result=>result.isFinal).map(result=>result[0]?.transcript||'').join(' ').trim();
+   if(!finalWakeText)return;
+   const wakeMatch=/\\bhey\\s+mia\\b/i.exec(finalWakeText);
+   if(!wakeMatch){setVoiceStatus("Listening for 'Hey Mia'.");return;}
+   voiceWakeActive=true;
+   const remainder=finalWakeText.slice(wakeMatch.index+wakeMatch[0].length).replace(/^[\\s,.:;!?-]+/,'').trim();
+   voiceFinalTranscript=remainder;
+   voiceInterimTranscript='';
+   setVoiceState('listening');
+   setVoiceStatus(remainder?'Hey Mia detected. Processing your request…':"Hey Mia detected. I'm listening.");
+   const selectedLanguage=$('voiceLanguage').value||'en-US';
+   const activeLanguage=selectedLanguage==='auto'?'en-US':selectedLanguage;
+   if(activeLanguage&&recognition.lang!==activeLanguage){
+    recognition.lang=activeLanguage;
+    try{recognition.stop();}catch(error){}
+   }
+   if(remainder)voiceSilenceTimer=setTimeout(finishVoiceUtterance,450);
+   return;
+  }
   if(voiceBusy&&!voiceBargeActive){
    if(voiceSpeaking&&$('voiceBargeIn').checked){
     const heard=fresh.map(result=>result[0]?.transcript||'').join(' ').trim();
@@ -1335,7 +1370,13 @@ function startVoiceRecognition(){
   stopVoiceConversation('Could not start microphone recognition: '+error.message,true);
  }
 }
-async function startVoiceConversation(){
+async function startVoiceConversation({wakeWord=false}={}){
+ if(wakeWord&&$('voiceEngine').value==='local'){
+  setVoiceStatus("Hey Mia wake phrase mode currently uses the browser speech service. Select Browser speech service first.",true);return;
+ }
+ if(wakeWord&&$('voiceInputMode').value==='ptt'){
+  setVoiceStatus("Hey Mia wake phrase mode requires Hands-free input. Select Hands-free first.",true);return;
+ }
  if(chatBusy){setVoiceStatus('Wait for the current reply to finish before starting voice mode.',true);return;}
  if(recording){setVoiceStatus('Stop the local recording before starting voice mode.',true);return;}
  const wantLocal=$('voiceEngine').value==='local';
@@ -1361,6 +1402,8 @@ async function startVoiceConversation(){
  if(voiceMode||chatBusy)return;
  voiceEngineName=wantLocal?'local':'browser';
  voiceMode=true;
+ voiceWakeMode=wakeWord;
+ voiceWakeActive=!wakeWord;
  voiceSessionError=false;
  voiceFinalTranscript='';
  voiceInterimTranscript='';
@@ -1375,6 +1418,8 @@ async function startVoiceConversation(){
  $('voiceMode').textContent='End conversation';
  $('voiceMode').classList.add('active');
  $('voiceMode').setAttribute('aria-pressed','true');
+ $('wakeWordMode').textContent=wakeWord?'Disable Hey Mia':'Enable Hey Mia';
+ $('wakeWordMode').setAttribute('aria-pressed',wakeWord?'true':'false');
  $('voiceLanguage').disabled=true;
  $('voiceInputMode').disabled=true;
  $('voiceEngine').disabled=true;
@@ -1436,6 +1481,12 @@ $('voiceMode').addEventListener('click',()=>{
   startVoiceConversation();
  }
 });
+$('wakeWordMode').addEventListener('click',()=>{
+ if(voiceWakeMode){stopVoiceConversation('Hey Mia wake phrase listening stopped.');return;}
+ if(voiceMode){setVoiceStatus('End the current voice session before enabling Hey Mia.',true);return;}
+ startVoiceConversation({wakeWord:true});
+});
+if(!SpeechRecognitionAPI){$('wakeWordMode').disabled=true;$('wakeWordMode').title='Wake phrase mode requires browser speech recognition.'}
 $('voiceInterrupt').addEventListener('click',interruptSpeech);
 $('voiceMute').addEventListener('click',toggleVoiceMute);
 $('voicePtt').addEventListener('pointerdown',event=>{event.preventDefault();try{event.target.setPointerCapture(event.pointerId);}catch(error){}pttDown();});
