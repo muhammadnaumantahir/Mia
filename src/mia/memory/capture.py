@@ -240,7 +240,8 @@ class CaptureService:
     # ------------------------------------------------------------------ public
 
     def process_message(
-        self, conversation_id: str, message_id: str, text: str
+        self, conversation_id: str, message_id: str, text: str, *,
+        model_candidates: dict[str, dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Process one user message. Never raises for content problems."""
         result = self._empty()
@@ -296,7 +297,8 @@ class CaptureService:
             result["skipped"].append({"reason": "capture_off"})
             return result
         result["processed"] = True
-        self._automatic(body, settings, origin_base, result)
+        self._automatic(body, settings, origin_base, result,
+                        model_candidates=model_candidates)
         return result
 
     def remember(
@@ -423,6 +425,8 @@ class CaptureService:
     def _automatic(
         self, body: str, settings: dict[str, Any], origin_base: dict[str, Any],
         result: dict[str, Any],
+        *,
+        model_candidates: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         seen: set[str] = set()
         for sentence in re.split(r"(?<=[.!?])\s+|\n+", body):
@@ -439,7 +443,7 @@ class CaptureService:
             model_assisted = False
             model_title: str | None = None
             if candidate is None:
-                candidate = self._match_model(sentence)
+                candidate = self._match_model(sentence, (model_candidates or {}).get(sentence))
                 model_assisted = candidate is not None
                 if model_assisted:
                     rtype, confidence, model_title = candidate
@@ -488,18 +492,21 @@ class CaptureService:
             if conflicts:
                 result["conflicts"].extend(c["record_id"] for c in conflicts)
 
-    def _match_model(self, sentence: str) -> tuple[str, float, str] | None:
+    def _match_model(
+        self, sentence: str, candidate: dict[str, Any] | None = None
+    ) -> tuple[str, float, str] | None:
         """Validate one model suggestion; require an exact source quote and approval.
 
-        The model is an extractor, not an authority: it cannot invent or paraphrase
-        stored facts, set provenance, choose lifecycle state, or write to the store.
+        Candidates may be precomputed asynchronously by the Brain/Gateway integration.
+        The model is never an authority: it cannot invent stored facts or write memory.
         """
-        if self.model_extractor is None:
-            return None
-        try:
-            candidate = self.model_extractor(sentence)
-        except Exception:
-            return None
+        if candidate is None:
+            if self.model_extractor is None:
+                return None
+            try:
+                candidate = self.model_extractor(sentence)
+            except Exception:
+                return None
         if not isinstance(candidate, dict):
             return None
         record_type = candidate.get("record_type")
