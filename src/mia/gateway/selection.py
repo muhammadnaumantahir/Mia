@@ -11,11 +11,14 @@ arguments, URLs or credentials.
 
 from __future__ import annotations
 
+import json
 import math
+import sqlite3
 from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from enum import StrEnum
 
 from .contracts import ModelCandidate, ModelRequest, RoutePolicy
@@ -67,16 +70,86 @@ class RoutingDecision:
 
 
 class DecisionLog:
-    """Bounded in-memory log of recent routing decisions."""
+    """Bounded route-decision history, optionally persisted without prompt content."""
 
-    def __init__(self, capacity: int = 100) -> None:
-        self._items: deque[RoutingDecision] = deque(maxlen=max(1, capacity))
+    def __init__(
+        self,
+        capacity: int = 100,
+        database_path: str | Path | None = None,
+    ) -> None:
+        self.capacity = max(1, min(int(capacity), 10_000))
+        self.database_path = Path(database_path) if database_path is not None else None
+        self._items: deque[RoutingDecision] = deque(maxlen=self.capacity)
+        if self.database_path is not None:
+            self.database_path.parent.mkdir(parents=True, exist_ok=True)
+            with self._connect() as db:
+                db.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS routing_decisions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        created_at TEXT NOT NULL,
+                        decision_json TEXT NOT NULL
+                    )
+                    """
+                )
+                db.execute(
+                    "CREATE INDEX IF NOT EXISTS routing_decisions_time "
+                    "ON routing_decisions(created_at)"
+                )
+
+    def _connect(self):
+        if self.database_path is None:
+            raise RuntimeError("persistent decision storage is not configured")
+        db = sqlite3.connect(self.database_path, timeout=10)
+        db.row_factory = sqlite3.Row
+        return db
+
+    @staticmethod
+    def _decode(payload: str) -> RoutingDecision:
+        data = json.loads(payload)
+        return RoutingDecision(
+            task_type=str(data["task_type"]),
+            mode=str(data["mode"]),
+            required_capabilities=tuple(str(v) for v in data.get("required_capabilities", [])),
+            selected=data.get("selected"),
+            reason=str(data["reason"]),
+            ranked=tuple(str(v) for v in data.get("ranked", [])),
+            rejected=tuple(
+                (str(item["model"]), str(item["reason"]))
+                for item in data.get("rejected", [])
+            ),
+            overrides=tuple(str(v) for v in data.get("overrides", [])),
+            created_at=str(data["created_at"]),
+        )
 
     def add(self, decision: RoutingDecision) -> None:
         self._items.append(decision)
+        if self.database_path is not None:
+            payload = json.dumps(
+                decision.to_dict(), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            )
+            with self._connect() as db:
+                db.execute(
+                    "INSERT INTO routing_decisions(created_at, decision_json) VALUES (?, ?)",
+                    (decision.created_at, payload),
+                )
+                db.execute(
+                    "DELETE FROM routing_decisions WHERE id NOT IN "
+                    "(SELECT id FROM routing_decisions ORDER BY id DESC LIMIT ?)",
+                    (self.capacity,),
+                )
 
     def recent(self, limit: int = 20) -> list[RoutingDecision]:
-        return list(self._items)[-max(0, limit):][::-1]
+        safe_limit = max(0, min(int(limit), 10_000))
+        if self.database_path is not None:
+            with self._connect() as db:
+                rows = db.execute(
+                    "SELECT decision_json FROM routing_decisions "
+                    "ORDER BY id DESC LIMIT ?",
+                    (safe_limit,),
+                ).fetchall()
+            return [self._decode(row["decision_json"]) for row in rows]
+        return list(self._items)[-safe_limit:][::-1] if safe_limit else []
 
 
 def _key(candidate: ModelCandidate) -> str:
