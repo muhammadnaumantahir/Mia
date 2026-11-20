@@ -39,6 +39,7 @@ from mia.brain.capabilities import CapabilityRegistry
 from mia.brain.orchestrator import Brain, TurnRequest
 from mia.brain.plan import PlanStore
 from mia.computer.app_discovery import ApplicationDiscovery
+from mia.codegraph.indexer import build_graph
 from mia.computer.applications import ApplicationLauncher, ApplicationLaunchError
 from mia.computer.approvals import ApprovalError, ApprovalStore
 from mia.computer.browser import BrowserAccessError, BrowserController
@@ -4447,6 +4448,27 @@ def create_app(
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Plan or step not found") from exc
+
+    @app.get("/api/code-graph")
+    def code_graph() -> dict[str, Any]:
+        root = Path(__file__).resolve().parents[3]
+        output = root / "docs" / "code-graph" / "graph.json"
+        try:
+            return build_graph(root, output=output)
+        except Exception as exc:
+            # Keep prior graph artifacts intact; never disguise index failure as an empty graph.
+            raise HTTPException(status_code=503, detail=f"Code Graph indexing failed: {type(exc).__name__}") from exc
+
+    @app.post("/api/code-graph/refresh")
+    def refresh_code_graph() -> dict[str, Any]:
+        return code_graph()
+
+    @app.get("/code-graph")
+    def code_graph_page() -> FileResponse:
+        page = Path(__file__).resolve().parents[1] / "codegraph" / "graph.html"
+        if not page.is_file():
+            raise HTTPException(status_code=404, detail="Code Graph interface is not installed")
+        return FileResponse(page, media_type="text/html")
 
     return app
 
