@@ -642,6 +642,12 @@ def create_app(
         model_registry=ModelRegistry(data_dir / "mia-models.sqlite3"),
     )
     ledger = usage_ledger or UsageLedger(data_dir / "mia-usage.sqlite3")
+    if isinstance(ledger, UsageLedger):
+        # This app is a single local server; reservations from a previous crashed
+        # process cannot represent work still running and are released on restart.
+        ledger.clear_reservations_on_startup()
+        model_gateway.usage_ledger = ledger
+        model_gateway.require_budget_reservations = True
     startup_handlers: list[Callable[[], Any]] = []
     shutdown_handlers: list[Callable[[], Any]] = []
 
@@ -4291,6 +4297,7 @@ def create_app(
             free_tier=source.free_tier,
             data_local=source.data_local,
             streamed=streamed,
+            reservation_id=getattr(source, "reservation_id", None),
             **(
                 {"first_token_ms": source.first_token_ms, "total_ms": source.total_ms}
                 if streamed
@@ -4404,6 +4411,7 @@ def create_app(
                 "monthly": monthly_budget,
                 "spent_today_utc_usd": ledger.spend_today_utc(),
                 "spent_month_utc_usd": ledger.spend_month_utc(),
+                "reservations": ledger.reservation_summary(),
             },
             "providers": providers_snapshot,
             "health": model_gateway.health.snapshot(),
