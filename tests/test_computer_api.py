@@ -80,3 +80,62 @@ def test_computer_api_blocks_path_traversal(tmp_path):
         params={"root_id": "root_1", "relative_path": "../"},
     )
     assert response.status_code == 403
+
+
+def test_direct_filesystem_write_can_use_a_scoped_owner_grant(tmp_path):
+    from mia.computer.capabilities import PermissionLevel
+    from mia.computer.permissions import PermissionPolicy
+
+    approvals = ApprovalStore(tmp_path / "grant-approvals.sqlite3")
+    root = tmp_path / "grant-allowed"
+    filesystem = FilesystemAdapter([root], approvals)
+    app = create_app(
+        store=ObservatoryStore(tmp_path / "grant-observatory.sqlite3"),
+        filesystem=filesystem,
+        approvals=approvals,
+    )
+    client = TestClient(app)
+    grant = app.state.permission_policy.grant(
+        granted_by="owner",
+        capabilities=["filesystem.write"],
+        level=PermissionLevel.WRITE,
+        directory=str(root),
+        kind="session",
+    )
+    preview = client.post(
+        "/api/computer/files/write/preview",
+        json={"root_id": "root_1", "relative_path": "notes.txt", "content": "Granted write"},
+    )
+    assert preview.status_code == 201
+    assert preview.json()["requires_approval"] is False
+
+    executed = client.post(
+        "/api/computer/files/write/execute",
+        json={"root_id": "root_1", "relative_path": "notes.txt", "content": "Granted write"},
+    )
+    assert executed.status_code == 200
+    assert (root / "notes.txt").read_text(encoding="utf-8") == "Granted write"
+    assert app.state.permission_policy.revoke(grant["grant_id"])
+
+
+def test_direct_filesystem_write_without_grant_still_requires_approval(tmp_path):
+    approvals = ApprovalStore(tmp_path / "no-grant-approvals.sqlite3")
+    filesystem = FilesystemAdapter([tmp_path / "no-grant-root"], approvals)
+    client = TestClient(
+        create_app(
+            store=ObservatoryStore(tmp_path / "no-grant-observatory.sqlite3"),
+            filesystem=filesystem,
+            approvals=approvals,
+        )
+    )
+    preview = client.post(
+        "/api/computer/files/write/preview",
+        json={"root_id": "root_1", "relative_path": "notes.txt", "content": "Must approve"},
+    )
+    assert preview.status_code == 201
+    assert preview.json()["requires_approval"] is True
+    blocked = client.post(
+        "/api/computer/files/write/execute",
+        json={"root_id": "root_1", "relative_path": "notes.txt", "content": "Must approve"},
+    )
+    assert blocked.status_code == 409
