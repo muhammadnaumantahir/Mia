@@ -353,7 +353,7 @@ def test_identity_is_identical_across_restart_and_provider_switch(tmp_path, monk
     assert memory_b is not memory_a
     reply = client_b.post("/api/gateway/chat", json={"prompt": "hello again", "use_tools": False})
     assert reply.status_code == 200
-    identity_marker = "\\n\\nLIVE RUNTIME EVIDENCE"
+    identity_marker = "\n\nLIVE RUNTIME EVIDENCE"
     assert provider_b.system_prompt.split(identity_marker, 1)[0] == prompt_a.split(identity_marker, 1)[0]
     assert "Configured provider adapters (1): local-b" in provider_b.system_prompt
     for model_label in ("model-alpha", "model-beta", "local-a", "local-b"):
