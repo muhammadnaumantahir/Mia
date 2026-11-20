@@ -1405,6 +1405,15 @@ def create_app(
             },
         )
 
+    try:
+        life_reflection_timeout = float(
+            os.getenv("MIA_LIFE_MODEL_REFLECTION_TIMEOUT_SECONDS", "12")
+        )
+    except ValueError:
+        life_reflection_timeout = 12.0
+    if not 1.0 <= life_reflection_timeout <= 30.0:
+        life_reflection_timeout = 12.0
+
     life_runner = LifeRunner(
         life_store,
         memory_store,
@@ -1418,7 +1427,7 @@ def create_app(
             model_enabled=os.getenv(
                 "MIA_LIFE_MODEL_REFLECTION_ENABLED", "false"
             ).strip().lower() == "true",
-            model_timeout_seconds=float(os.getenv("MIA_LIFE_MODEL_REFLECTION_TIMEOUT_SECONDS", "12")),
+            model_timeout_seconds=life_reflection_timeout,
         ),
     )
     life_scheduler = LifeScheduler(
