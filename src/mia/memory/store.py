@@ -643,6 +643,69 @@ class MemoryStore:
         except (TypeError, ValueError, json.JSONDecodeError):
             return None
 
+    def get_embedding_cache_many(
+        self, model_id: str, content_hashes: Iterable[str]
+    ) -> dict[str, list[float]]:
+        """Read many cached vectors with a bounded number of SQLite queries."""
+        hashes = list(dict.fromkeys(
+            value for value in content_hashes
+            if isinstance(value, str) and re.fullmatch(r"[a-f0-9]{64}", value)
+        ))
+        found: dict[str, list[float]] = {}
+        with self._connection() as db:
+            for offset in range(0, len(hashes), 900):
+                chunk = hashes[offset : offset + 900]
+                if not chunk:
+                    continue
+                placeholders = ",".join("?" for _ in chunk)
+                rows = db.execute(
+                    "SELECT content_sha256,embedding_json FROM memory_embedding_cache "
+                    "WHERE model_id=? AND content_sha256 IN (" + placeholders + ")",
+                    [model_id, *chunk],
+                ).fetchall()
+                for row in rows:
+                    try:
+                        vector = json.loads(row["embedding_json"])
+                        if (isinstance(vector, list) and vector and len(vector) <= 4096
+                                and all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                                        and math.isfinite(v) for v in vector)):
+                            found[str(row["content_sha256"])] = [float(v) for v in vector]
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        continue
+        return found
+
+    def set_embedding_cache_many(
+        self, model_id: str, entries: dict[str, list[float]], *, max_entries: int = 5000
+    ) -> None:
+        """Persist a batch of validated vectors in one transaction."""
+        if not isinstance(model_id, str) or not model_id or len(model_id) > 120:
+            raise ValueError("invalid embedding model id")
+        rows: list[tuple[str, str, str]] = []
+        for digest, vector in entries.items():
+            if (not re.fullmatch(r"[a-f0-9]{64}", digest)
+                    or not isinstance(vector, list) or not vector or len(vector) > 4096
+                    or not all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                               and math.isfinite(v) for v in vector)):
+                raise ValueError("invalid embedding cache entry")
+            rows.append((model_id, digest, json.dumps([float(v) for v in vector])))
+        if not rows:
+            return
+        safe_limit = max(100, min(int(max_entries), 20000))
+        now = _now()
+        with self._connection() as db:
+            db.executemany(
+                "INSERT INTO memory_embedding_cache(model_id,content_sha256,embedding_json,created_at) "
+                "VALUES(?,?,?,?) ON CONFLICT(model_id,content_sha256) DO UPDATE SET "
+                "embedding_json=excluded.embedding_json,created_at=excluded.created_at",
+                [(model, digest, encoded, now) for model, digest, encoded in rows],
+            )
+            db.execute(
+                "DELETE FROM memory_embedding_cache WHERE rowid IN ("
+                "SELECT rowid FROM memory_embedding_cache ORDER BY created_at DESC "
+                "LIMIT -1 OFFSET ?)",
+                (safe_limit,),
+            )
+
     def set_embedding_cache(
         self, model_id: str, content_sha256: str, vector: list[float], *, max_entries: int = 5000
     ) -> None:
