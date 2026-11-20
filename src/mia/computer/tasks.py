@@ -29,6 +29,7 @@ from typing import Any
 
 from .approvals import ApprovalError, ApprovalStore
 from .control import CURRENT_TASK_ID, AutomationControl, AutomationStopped
+from .permissions import Decision
 
 MAX_STEPS = 20
 TERMINAL_TASK_STATES = {"completed", "failed", "cancelled"}
@@ -258,7 +259,13 @@ class TaskEngine:
         try:
             spec = self.capability_registry.get(capability)
         except KeyError:
-            return None
+            if handler.idempotent:
+                return None
+            return Decision(
+                allowed=False,
+                requires_approval=True,
+                reason="capability has no registered owner permission specification",
+            )
         path = self.permission_path(capability, args) if self.permission_path else None
         decision = self.permission_policy.authorize(spec, path=path)
         # Adapter inspection can identify a consequential target more precisely
