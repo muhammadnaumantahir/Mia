@@ -2,13 +2,11 @@ import json
 import sqlite3
 from datetime import UTC, datetime, timedelta
 
-
 from mia.agent.tasks import TaskStore
 from mia.evolution.capabilities import CapabilityStore
 from mia.gateway.ledger import UsageLedger
 from mia.observatory.activity import ExperimentActivityCollector
 from mia.observatory.snapshot_capture import ExperimentSnapshotCapturer
-
 from tests.test_experiment_scheduler import FakeResources, create_due_experiment, passing_manifest
 
 
