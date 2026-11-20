@@ -69,3 +69,12 @@ def test_brain_app_list_uses_the_declared_discovery_capability(tmp_path):
         {},
     )
     assert result.allowed is True
+
+
+def test_application_inventory_tool_has_a_registered_owner_capability():
+    from mia.computer.capabilities import default_registry
+
+    spec = default_registry().get("apps.discover")
+    assert spec.permission.name.lower() == "observe"
+    assert spec.risk.name.lower() == "low"
+    assert spec.requires_approval_by_default is False
