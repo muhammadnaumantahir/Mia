@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import sqlite3
+import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -67,6 +68,19 @@ class UsageLedger:
                 """
             )
             db.execute("CREATE INDEX IF NOT EXISTS usage_time ON usage(recorded_at)")
+            db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS budget_reservations (
+                    reservation_id TEXT PRIMARY KEY,
+                    reserved_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    provider_id TEXT NOT NULL,
+                    model_id TEXT NOT NULL,
+                    reserved_usd REAL NOT NULL CHECK (reserved_usd >= 0)
+                )
+                """
+            )
+            db.execute("CREATE INDEX IF NOT EXISTS reservations_time ON budget_reservations(reserved_at, expires_at)")
             columns = {row["name"] for row in db.execute("PRAGMA table_info(usage)").fetchall()}
             for column in ("first_token_ms", "total_ms"):
                 if column not in columns:
@@ -98,6 +112,7 @@ class UsageLedger:
         streamed: bool = False,
         first_token_ms: float | None = None,
         total_ms: float | None = None,
+        reservation_id: str | None = None,
     ) -> None:
         # Latency is stored only when it is a finite, non-negative measurement.
         first_token_ms = _valid_ms(first_token_ms)
@@ -129,6 +144,11 @@ class UsageLedger:
                     total_ms,
                 ),
             )
+            if reservation_id:
+                db.execute(
+                    "DELETE FROM budget_reservations WHERE reservation_id = ?",
+                    (reservation_id,),
+                )
 
     def spend_since(self, since: datetime) -> float:
         """Total recorded USD since `since`. Unknown-cost rows add nothing but are
@@ -154,6 +174,124 @@ class UsageLedger:
         moment = moment.replace(tzinfo=UTC) if moment.tzinfo is None else moment.astimezone(UTC)
         month_start = moment.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         return self.spend_since(month_start)
+
+
+    def reserve_budget(
+        self,
+        *,
+        provider_id: str,
+        model_id: str,
+        reserved_usd: float,
+        per_request_limit_usd: float,
+        daily_limit_usd: float,
+        monthly_limit_usd: float,
+        now: datetime | None = None,
+        ttl_seconds: int = 21_600,
+    ) -> str | None:
+        """Atomically reserve a paid request against actual spend and other live reservations.
+
+        Reservations share the same SQLite database and write transaction as usage
+        rows. The caller releases on failure or passes the ID to record() so the
+        actual usage row and reservation removal commit together.
+        """
+        values = (reserved_usd, per_request_limit_usd, daily_limit_usd, monthly_limit_usd)
+        if any(
+            isinstance(value, bool) or not isinstance(value, (int, float))
+            or not math.isfinite(value) or value < 0
+            for value in values
+        ):
+            return None
+        if ttl_seconds < 60 or ttl_seconds > 86_400 or reserved_usd <= 0:
+            return None
+        if reserved_usd > per_request_limit_usd:
+            return None
+
+        moment = now or _utc_now()
+        moment = moment.replace(tzinfo=UTC) if moment.tzinfo is None else moment.astimezone(UTC)
+        today_start = moment.replace(hour=0, minute=0, second=0, microsecond=0)
+        month_start = moment.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        now_text = moment.isoformat()
+        reservation_id = uuid.uuid4().hex
+        expires_at = (moment + timedelta(seconds=ttl_seconds)).isoformat()
+
+        try:
+            with self._connection() as db:
+                db.execute("BEGIN IMMEDIATE")
+                db.execute("DELETE FROM budget_reservations WHERE expires_at <= ?", (now_text,))
+                actual_daily = db.execute(
+                    "SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE recorded_at >= ?",
+                    (today_start.isoformat(),),
+                ).fetchone()[0]
+                actual_month = db.execute(
+                    "SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE recorded_at >= ?",
+                    (month_start.isoformat(),),
+                ).fetchone()[0]
+                reserved_daily = db.execute(
+                    "SELECT COALESCE(SUM(reserved_usd), 0) FROM budget_reservations "
+                    "WHERE reserved_at >= ? AND expires_at > ?",
+                    (today_start.isoformat(), now_text),
+                ).fetchone()[0]
+                reserved_month = db.execute(
+                    "SELECT COALESCE(SUM(reserved_usd), 0) FROM budget_reservations "
+                    "WHERE reserved_at >= ? AND expires_at > ?",
+                    (month_start.isoformat(), now_text),
+                ).fetchone()[0]
+                epsilon = 1e-12
+                if float(actual_daily) + float(reserved_daily) + reserved_usd > daily_limit_usd + epsilon:
+                    return None
+                if float(actual_month) + float(reserved_month) + reserved_usd > monthly_limit_usd + epsilon:
+                    return None
+                db.execute(
+                    "INSERT INTO budget_reservations "
+                    "(reservation_id,reserved_at,expires_at,provider_id,model_id,reserved_usd) "
+                    "VALUES (?,?,?,?,?,?)",
+                    (reservation_id, now_text, expires_at, provider_id, model_id, reserved_usd),
+                )
+        except sqlite3.Error:
+            return None
+        return reservation_id
+
+    def release_reservation(self, reservation_id: str | None) -> bool:
+        if not reservation_id:
+            return False
+        with self._connection() as db:
+            changed = db.execute(
+                "DELETE FROM budget_reservations WHERE reservation_id = ?",
+                (reservation_id,),
+            ).rowcount
+        return changed > 0
+
+    def clear_reservations_on_startup(self) -> int:
+        """Remove leases left behind by a previous single-server process."""
+        with self._connection() as db:
+            return db.execute("DELETE FROM budget_reservations").rowcount
+
+    def reservation_summary(self) -> dict[str, Any]:
+        moment = _utc_now()
+        today = moment.replace(hour=0, minute=0, second=0, microsecond=0)
+        month = moment.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        with self._connection() as db:
+            row = db.execute(
+                "SELECT COUNT(*) AS count, COALESCE(SUM(reserved_usd),0) AS reserved "
+                "FROM budget_reservations WHERE expires_at > ?",
+                (moment.isoformat(),),
+            ).fetchone()
+            daily = db.execute(
+                "SELECT COALESCE(SUM(reserved_usd),0) FROM budget_reservations "
+                "WHERE reserved_at >= ? AND expires_at > ?",
+                (today.isoformat(), moment.isoformat()),
+            ).fetchone()[0]
+            monthly = db.execute(
+                "SELECT COALESCE(SUM(reserved_usd),0) FROM budget_reservations "
+                "WHERE reserved_at >= ? AND expires_at > ?",
+                (month.isoformat(), moment.isoformat()),
+            ).fetchone()[0]
+        return {
+            "active_count": int(row["count"]),
+            "active_reserved_usd": float(row["reserved"]),
+            "reserved_today_utc_usd": float(daily),
+            "reserved_month_utc_usd": float(monthly),
+        }
 
     def window_summary(self, since: str, until: str) -> dict[str, Any]:
         """Totals for recorded_at in [since, until); ISO-8601 UTC strings."""
