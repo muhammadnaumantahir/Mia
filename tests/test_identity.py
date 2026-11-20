@@ -409,4 +409,5 @@ def test_text_and_streaming_chat_receive_canonical_sps_self_description(
     assert "CANONICAL SPS ARCHITECTURE" in prompt
     assert "SPS-01 Software DNA Core" in prompt
     assert "SPS-10 Execution Core" in prompt
+    assert "Configured provider adapters (1): local-a" in prompt
     assert "does not prove every feature is implemented or enabled" in prompt
