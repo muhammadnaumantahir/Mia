@@ -11,6 +11,7 @@ It is not an eleventh layer. Model output is untrusted at every boundary.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import os
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field, replace
@@ -161,6 +162,8 @@ class Brain:
         if self.capture is not None:
             try:  # capture failures must never break the reply
                 capture_result = self.capture(conversation_id, user_message_id, request.prompt)
+                if inspect.isawaitable(capture_result):
+                    capture_result = await capture_result
             except Exception:
                 capture_result = None
         recent = self.memory.get_messages(conversation_id, limit=12)
