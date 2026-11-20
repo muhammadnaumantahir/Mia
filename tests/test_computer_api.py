@@ -107,10 +107,16 @@ def test_direct_filesystem_write_can_use_a_scoped_owner_grant(tmp_path):
     )
     assert preview.status_code == 201
     assert preview.json()["requires_approval"] is False
+    assert preview.json()["status"] == "approved"
 
     executed = client.post(
         "/api/computer/files/write/execute",
-        json={"root_id": "root_1", "relative_path": "notes.txt", "content": "Granted write"},
+        json={
+            "root_id": "root_1",
+            "relative_path": "notes.txt",
+            "content": "Granted write",
+            "approval_id": preview.json()["approval_id"],
+        },
     )
     assert executed.status_code == 200
     assert (root / "notes.txt").read_text(encoding="utf-8") == "Granted write"
