@@ -8,11 +8,16 @@ calls ``resume``. Nothing here grants permission; it can only restrict.
 
 from __future__ import annotations
 
+import contextvars
 import threading
 import uuid
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any
+
+#: Set by the task engine while it runs a step, so adapters can tag work with its task.
+CURRENT_TASK_ID: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "computer_task_id", default=None)
 
 
 class AutomationStopped(PermissionError):

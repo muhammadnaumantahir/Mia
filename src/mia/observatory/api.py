@@ -50,6 +50,8 @@ from mia.computer.fileops import FileOperationError, FileOperations
 from mia.computer.filesystem import FilesystemAccessError, FilesystemAdapter
 from mia.computer.permissions import PermissionError_, PermissionPolicy
 from mia.computer.processes import ProcessAccessError, ProcessManager
+from mia.computer.task_handlers import build_handlers
+from mia.computer.tasks import TaskEngine, TaskPlanError
 from mia.computer.terminal import CommandRefused, TerminalExecutor
 from mia.computer.windows_ui import DesktopAccessError, WindowsUIAdapter
 from mia.evolution.capabilities import (
@@ -519,6 +521,28 @@ class WindowActionInput(BaseModel):
     acknowledge_unsaved_risk: bool = False
 
 
+class ComputerTaskStep(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    capability: str = Field(min_length=3, max_length=60)
+    args: dict[str, Any] = Field(default_factory=dict)
+    description: str = Field(default="", max_length=200)
+
+
+class ComputerTaskCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=200)
+    steps: list[ComputerTaskStep] = Field(min_length=1, max_length=20)
+    source: str = Field(default="text", pattern="^(text|voice|brain)$")
+
+
+class ComputerTaskRetry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    step: int = Field(ge=1, le=20)
+
+
 class DesktopActionInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -593,6 +617,7 @@ def create_app(
     permission_policy: PermissionPolicy | None = None,
     process_manager: ProcessManager | None = None,
     automation_control: AutomationControl | None = None,
+    computer_tasks: TaskEngine | None = None,
     desktop_controller: DesktopController | None = None,
     terminal: TerminalExecutor | None = None,
     app_discovery: ApplicationDiscovery | None = None,
@@ -2163,6 +2188,109 @@ def create_app(
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     file_ops = FileOperations(computer_files, control=control)
+
+    task_handlers = build_handlers(
+        fs=computer_files, file_ops=file_ops, processes=processes, launcher=app_launcher,
+        discovery=discovery, terminal=terminal_executor, browser=browser_controller,
+        browser_actions=browser_actions, desktop=desktop_ctl, desktop_adapter=desktop_adapter,
+        os_family=_env.os_family)
+    task_engine = computer_tasks or TaskEngine(
+        data_dir / "computer-tasks.sqlite3", approval_store, task_handlers, control=control)
+    task_engine.recover()
+    task_engine.on_cancel(terminal_executor.cancel_task)
+    app.state.task_engine = task_engine
+
+    def _task_error(exc: Exception) -> HTTPException:
+        if isinstance(exc, KeyError):
+            return HTTPException(status_code=404, detail="Unknown task")
+        return HTTPException(status_code=422, detail=str(exc))
+
+    @app.get("/api/computer/tasks/capabilities")
+    def computer_task_capabilities() -> dict[str, Any]:
+        return {"items": sorted(task_engine.handlers)}
+
+    @app.post("/api/computer/tasks", status_code=201)
+    def computer_task_create(item: ComputerTaskCreate) -> dict[str, Any]:
+        try:
+            task = task_engine.create_task(
+                item.title, [step.model_dump() for step in item.steps], source=item.source)
+        except TaskPlanError as exc:
+            raise _task_error(exc) from exc
+        observatory.record_event(
+            category="computer", event_type="task_created",
+            summary=f"Computer task planned: {item.title[:80]} ({len(item.steps)} steps)",
+            outcome="success", layer_id="SPS-10",
+            payload={"task_id": task["task_id"], "source": item.source})
+        return {"task": task, "plan": task_engine.plan_summary(task["task_id"])}
+
+    @app.get("/api/computer/tasks")
+    def computer_task_list(limit: int = 50) -> dict[str, Any]:
+        return {"items": task_engine.list_tasks(limit)}
+
+    @app.get("/api/computer/tasks/{task_id}")
+    def computer_task_get(task_id: str) -> dict[str, Any]:
+        try:
+            return task_engine.get_task(task_id)
+        except KeyError as exc:
+            raise _task_error(exc) from exc
+
+    @app.get("/api/computer/tasks/{task_id}/events")
+    def computer_task_events(task_id: str) -> dict[str, Any]:
+        try:
+            task_engine.get_task(task_id)
+        except KeyError as exc:
+            raise _task_error(exc) from exc
+        return {"items": task_engine.events(task_id)}
+
+    @app.get("/api/computer/tasks/{task_id}/report")
+    def computer_task_report(task_id: str) -> dict[str, Any]:
+        try:
+            task = task_engine.get_task(task_id)
+        except KeyError as exc:
+            raise _task_error(exc) from exc
+        return {"status": task["status"], "outcome": task["outcome"],
+                "report": task_engine.report(task_id)}
+
+    @app.post("/api/computer/tasks/{task_id}/run")
+    async def computer_task_run(task_id: str, background: bool = False) -> dict[str, Any]:
+        try:
+            if background:
+                task_engine.start_background(task_id)
+                return {"status": "started", "task_id": task_id}
+            task = await task_engine.advance(task_id)
+        except (KeyError, TaskPlanError) as exc:
+            raise _task_error(exc) from exc
+        if task["status"] in {"completed", "failed", "cancelled"}:
+            observatory.record_event(
+                category="computer", event_type="task_finished",
+                summary=f"Computer task {task['status']} ({task['outcome']})",
+                outcome="success" if task["status"] == "completed" else "failure",
+                layer_id="SPS-10", payload={"task_id": task_id, "outcome": task["outcome"]})
+        return task
+
+    @app.post("/api/computer/tasks/{task_id}/pause")
+    def computer_task_pause(task_id: str) -> dict[str, Any]:
+        try:
+            task_engine.pause(task_id)
+        except (KeyError, TaskPlanError) as exc:
+            raise _task_error(exc) from exc
+        return {"status": "pause_requested"}
+
+    @app.post("/api/computer/tasks/{task_id}/cancel")
+    def computer_task_cancel(task_id: str) -> dict[str, Any]:
+        try:
+            task_engine.cancel(task_id)
+        except (KeyError, TaskPlanError) as exc:
+            raise _task_error(exc) from exc
+        return {"status": "cancel_requested"}
+
+    @app.post("/api/computer/tasks/{task_id}/retry-step")
+    def computer_task_retry(task_id: str, item: ComputerTaskRetry) -> dict[str, Any]:
+        try:
+            task_engine.retry_step(task_id, item.step)
+        except (KeyError, TaskPlanError) as exc:
+            raise _task_error(exc) from exc
+        return task_engine.get_task(task_id)
     app.state.file_ops = file_ops
 
     def _file_error(exc: Exception) -> HTTPException:

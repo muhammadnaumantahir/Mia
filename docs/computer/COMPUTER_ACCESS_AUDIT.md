@@ -35,7 +35,7 @@ Status is updated as milestones are pushed. Nothing is ticked without a test or 
 - [x] M5 Terminal execution: validation, risk classification, approval, timeout, stdout/stderr, redaction (tested with real bash on Linux; PowerShell and cmd.exe execution NOT verified on Windows)
 - [x] M6 Browser: tabs, forms, scroll, structured extraction, downloads/uploads to approved folders, verification (tested against a real headless Chromium 131 on Linux and a local test server; session persistence across restarts NOT verifiable with that Chromium build)
 - [x] M7 Desktop: observe/act/verify loop, UIA click/key/scroll, screenshot on demand, activity indicator and emergency stop (logic tested against a FAKE UI Automation tree only; real pywinauto/UIA behavior is UNVERIFIED and needs a Windows PC)
-- [ ] M8 Multi-step computer task engine: step ledger, checkpoints, cancel, retry limits, revalidation on resume
+- [x] M8 Multi-step computer task engine: step ledger, checkpoints, cancel, retry limits, revalidation on resume (tested with fakes plus real files, processes, terminal and a real headless Chromium on Linux)
 - [ ] M9 AI Brain tools and Voice use the same executor and permission system
 - [ ] M10 Kill switch, audit, privacy, docs, full regression
 
