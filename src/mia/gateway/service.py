@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -21,6 +22,7 @@ from .contracts import (
 from .health import CandidateHealthTracker
 from .model_registry import ModelRegistry
 from .registry import ProviderRegistry
+from .resilience import CircuitBreaker, ResilienceLog, RetryPolicy
 from .routing import actual_cost_usd
 from .selection import DecisionLog, RoutingPreferences, select
 
@@ -69,6 +71,10 @@ class StreamEvent:
     total_ms: float | None = None
 
 
+def _brief(exc: Exception) -> str:
+    return f"{type(exc).__name__}: {exc}"[:160]
+
+
 def _aggregate_failure(attempted: list[str], last_error: Exception) -> TransientProviderError:
     """Summarise an exhausted fallback chain, keeping the last throttle's retry hint."""
     throttled = isinstance(last_error, TransientProviderError) and last_error.rate_limited
@@ -87,12 +93,42 @@ class ModelGateway:
         model_registry: ModelRegistry | None = None,
         preferences: RoutingPreferences | None = None,
         decisions: DecisionLog | None = None,
+        retry_policy: RetryPolicy | None = None,
+        breaker: CircuitBreaker | None = None,
+        events: ResilienceLog | None = None,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         self.providers = providers
         self.health = health or CandidateHealthTracker()
         self.model_registry = model_registry
         self.preferences = preferences or RoutingPreferences()
         self.decisions = decisions or DecisionLog()
+        self.retry_policy = retry_policy or RetryPolicy()
+        self.events = events or ResilienceLog()
+        self.breaker = breaker or CircuitBreaker(on_event=self.events.add)
+        self._sleep = sleep
+
+    async def _call_with_retry(self, candidate_name: str, call: Callable[[], Awaitable[Any]]) -> Any:
+        """Run one provider call, retrying transient failures per the retry policy.
+
+        Rate limits and authentication/permanent errors are never retried here. The
+        retried operation is a pure generation request: nothing has been delivered
+        to the caller or executed (tool calls run outside the gateway), so a retry
+        cannot duplicate side effects.
+        """
+        attempts = self.retry_policy.max_attempts
+        for attempt in range(attempts):
+            try:
+                return await call()
+            except TransientProviderError as exc:
+                if exc.rate_limited or attempt + 1 >= attempts:
+                    raise
+                delay = self.retry_policy.delay(attempt)
+                self.events.add(
+                    "retry", candidate_name, f"attempt {attempt + 1} failed; retry in {delay:.1f}s"
+                )
+                await self._sleep(delay)
+        raise AssertionError("unreachable")  # pragma: no cover
 
     def set_preferences(self, preferences: RoutingPreferences) -> None:
         """Replace routing preferences after validating them."""
@@ -221,19 +257,32 @@ class ModelGateway:
         )
         attempted: list[str] = []
         last_error: Exception | None = None
+        skipped: list[str] = []
 
         for candidate in ranked:
-            attempted.append(f"{candidate.provider_id}/{candidate.model_id}")
-            provider = self.providers.get(candidate.provider_id)
+            provider_id = candidate.provider_id
+            candidate_name = f"{provider_id}/{candidate.model_id}"
+            if not self.breaker.allow(provider_id):
+                if provider_id not in skipped:
+                    skipped.append(provider_id)
+                    self.events.add("skipped", provider_id, "circuit open; provider paused")
+                continue
+            attempted.append(candidate_name)
+            provider = self.providers.get(provider_id)
+            settled = False
             try:
                 started = time.perf_counter()
-                response = await provider.complete(candidate, request)
+                response = await self._call_with_retry(
+                    candidate_name, lambda: provider.complete(candidate, request)
+                )
                 latency_ms = (time.perf_counter() - started) * 1000.0
                 if isinstance(response, str):
                     response = ProviderResponse(content=response)
                 if not response.content and not response.tool_calls:
                     raise PermanentProviderError("Provider returned an empty response")
                 self.health.record_success(candidate)
+                self.breaker.record_success(provider_id)
+                settled = True
                 return CompletionResult(
                     provider_id=candidate.provider_id,
                     model_id=candidate.model_id,
@@ -246,15 +295,31 @@ class ModelGateway:
                     free_tier=candidate.free_tier,
                     latency_ms=latency_ms,
                 )
+            except AuthenticationProviderError as exc:
+                # Provider-specific: pause it and try another; never retried in a loop.
+                self.breaker.record_auth_failure(provider_id)
+                settled = True
+                last_error = exc
+                continue
             except TransientProviderError as exc:
                 self.health.record_failure(candidate, exc)
+                self.breaker.record_failure(provider_id, rate_limited=exc.rate_limited)
+                self.events.add("failure", candidate_name, _brief(exc))
+                settled = True
                 last_error = exc
                 continue
             except PermanentProviderError:
                 raise
+            finally:
+                if not settled:
+                    self.breaker.release(provider_id)
 
         if last_error:
             raise _aggregate_failure(attempted, last_error) from last_error
+        if skipped:
+            raise TransientProviderError(
+                "All eligible providers are temporarily paused: " + ", ".join(skipped)
+            )
         raise RuntimeError("No eligible model is available under the current routing policy")
 
     async def stream(
@@ -276,10 +341,19 @@ class ModelGateway:
         )
         attempted: list[str] = []
         last_error: Exception | None = None
+        skipped: list[str] = []
 
         for candidate in ranked:
-            attempted.append(f"{candidate.provider_id}/{candidate.model_id}")
-            provider = self.providers.get(candidate.provider_id)
+            provider_id = candidate.provider_id
+            candidate_name = f"{provider_id}/{candidate.model_id}"
+            if not self.breaker.allow(provider_id):
+                if provider_id not in skipped:
+                    skipped.append(provider_id)
+                    self.events.add("skipped", provider_id, "circuit open; provider paused")
+                continue
+            attempted.append(candidate_name)
+            provider = self.providers.get(provider_id)
+            settled = False
             emitted = False
             streamer = getattr(provider, "stream", None)
             started = time.perf_counter()
@@ -331,6 +405,8 @@ class ModelGateway:
                     if not text_parts:
                         raise PermanentProviderError("Provider returned an empty response")
                 self.health.record_success(candidate)
+                self.breaker.record_success(provider_id)
+                settled = True
                 yield StreamEvent(
                     done=True,
                     provider_id=candidate.provider_id,
@@ -347,13 +423,30 @@ class ModelGateway:
                     total_ms=max(0.0, last_chunk_at - started - paused_at_last_chunk) * 1000.0,
                 )
                 return
-            except TransientProviderError as exc:
-                self.health.record_failure(candidate, exc)
+            except AuthenticationProviderError as exc:
+                self.breaker.record_auth_failure(provider_id)
+                settled = True
                 if emitted:
                     raise
                 last_error = exc
                 continue
+            except TransientProviderError as exc:
+                self.health.record_failure(candidate, exc)
+                self.breaker.record_failure(provider_id, rate_limited=exc.rate_limited)
+                self.events.add("failure", candidate_name, _brief(exc))
+                settled = True
+                if emitted:
+                    raise
+                last_error = exc
+                continue
+            finally:
+                if not settled:
+                    self.breaker.release(provider_id)
 
         if last_error:
             raise _aggregate_failure(attempted, last_error) from last_error
+        if skipped:
+            raise TransientProviderError(
+                "All eligible providers are temporarily paused: " + ", ".join(skipped)
+            )
         raise RuntimeError("No eligible model is available under the current routing policy")

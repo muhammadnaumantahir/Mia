@@ -116,3 +116,20 @@ None of these is marked "verified live".
   Memory wiring is a later milestone), and the task-aware hint from `brain/router.py` is
   unchanged. The baseline grew to 942 tests when the rebase pulled in other work on
   `main`; after this milestone: `ruff` clean, `pytest` 957 passed, 1 skipped (mocked).
+- **Milestone 6 (retry, circuit breaker, resilience events):** new
+  `gateway/resilience.py` and integration in `ModelGateway.complete/stream`.
+  `RetryPolicy` (default 1 attempt, i.e. unchanged behaviour; up to 5 with exponential
+  backoff and jitter) retries only transient non-rate-limit failures on the same
+  candidate in `complete()`; rate limits, authentication and request-specific errors
+  are never retried. A per-provider `CircuitBreaker` opens after repeated transient
+  failures, allows one half-open probe after the cooldown (doubling on a failed probe),
+  does not count throttling as a failure, and frees the probe slot on cancellation,
+  early stream close or a request-specific error. An authentication failure now pauses
+  that provider for a long cooldown and falls back to the next candidate (previously
+  it aborted the whole request). If every eligible provider is paused the caller gets a
+  `TransientProviderError`. A bounded `ResilienceLog` records retry, failure,
+  circuit and skip events without prompt content. **Not done:** streaming does not
+  retry the same candidate (it falls back before the first token only); context-length
+  errors still abort instead of falling back to a larger-context model; breaker and
+  event state are in-memory and not exposed over HTTP yet. Local verification: `ruff`
+  clean, `pytest` 974 passed, 1 skipped (mocked only).
