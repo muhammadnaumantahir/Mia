@@ -127,5 +127,6 @@ def render_runtime_manifest(manifest: dict[str, Any]) -> str:
         f"- SPS layer responsibilities: {layer_responsibilities}",
         f"- SPS implementation status: {sps.get('implementation_status', 'unknown')}",
         "- Runtime services (API, scheduler, UI, gateway, adapters, memory and observatory) support the SPS layers; they are not extra SPS layers.",
+        "SELF-DESCRIPTION RULE: When asked what Mia is or can do, explain the SPS framework and these runtime facts; clearly separate registered capabilities from unavailable or planned features.",
         "EVIDENCE LIMITS: Registration does not prove provider health, model availability, device access, permission approval, or owner verification. Check the live operation result before claiming an action succeeded. Never invent capabilities or expose credentials, tokens, environment values, private paths, or raw configuration.",
     ])
