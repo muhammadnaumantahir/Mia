@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark"><title>Mia — Identity</title>
+<style>
+:root{font-family:Inter,Segoe UI,system-ui,sans-serif;color:#e9f2ef;background:#0a1112;--panel:#101f1d;--line:#29463c;--muted:#8fa79f;--mint:#47daa1;--bad:#f2b5a5}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 8% 0%,#13372d 0,transparent 34%),#0a1112}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 24px;border-bottom:1px solid #203432}
+a{color:#9ce7c4}main{max-width:980px;margin:0 auto;padding:28px 20px 60px}
+h1{font-size:26px;margin:0 0 6px}p,.muted{color:var(--muted);line-height:1.55;font-size:13px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;margin:16px 0}
+label{display:block;color:#c5d8d0;font-size:12px;font-weight:650;margin:12px 0 6px}
+input,textarea,select{width:100%;background:#0b1716;color:#e9f2ef;border:1px solid #365349;border-radius:9px;padding:10px;font:inherit;font-size:13px;outline:none}
+textarea{min-height:76px;resize:vertical;line-height:1.5}input:focus,textarea:focus,select:focus{border-color:var(--mint);box-shadow:0 0 0 2px #47daa122}
+small{color:var(--muted);font-size:11px}.actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-top:16px}
+button{border:1px solid #3d6856;border-radius:9px;padding:10px 14px;background:#17372b;color:#d9f4e7;font-weight:650;font-size:12px;cursor:pointer}
+button.primary{background:linear-gradient(135deg,#47daa1,#15845f);color:#05271d;border:0}button:disabled{opacity:.55;cursor:wait}
+#status{font-size:12px;color:var(--muted);min-height:20px}#status.error{color:var(--bad)}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#091311;border:1px solid #29463c;border-radius:10px;padding:14px;color:#c8e5d7;font-size:12px;line-height:1.55;max-height:360px;overflow:auto}
+.history{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.history select{flex:1;min-width:220px}
+@media(max-width:700px){.grid{grid-template-columns:1fr}header{padding:14px 16px}main{padding:22px 14px}}
+</style>
+</head>
+<body>
+<header><strong>✳ Mia · Identity</strong><a href="/assistant">← Back to conversation</a></header>
+<main>
+ <h1>Who Mia is</h1>
+ <p>This owner-controlled profile is shared across text, voice and model providers. It helps Mia describe her purpose and preferred way of communicating. It cannot override core safety, privacy or factuality rules.</p>
+ <div class="panel">
+  <div class="grid">
+   <div><label for="name">Name</label><input id="name" maxlength="40"></div>
+   <div><label for="purpose">Purpose</label><input id="purpose" maxlength="500" placeholder="What should Mia help you achieve?"></div>
+   <div><label for="relationship">Relationship to owner</label><input id="relationship" maxlength="500" placeholder="For example: personal AI assistant"></div>
+   <div><label for="tone">Tone</label><input id="tone" maxlength="80" placeholder="For example: warm, clear and respectful"></div>
+   <div><label for="verbosity">Response detail</label><select id="verbosity"><option value="">Use conversation context</option><option value="concise">Concise</option><option value="balanced">Balanced</option><option value="detailed">Detailed</option></select></div>
+   <div><label for="language">Preferred language</label><input id="language" maxlength="40" placeholder="For example: English, Urdu or Roman Urdu"></div>
+  </div>
+  <div class="grid">
+   <div><label for="personality">Personality (one item per line)</label><textarea id="personality" placeholder="Curious&#10;Thoughtful&#10;Practical"></textarea></div>
+   <div><label for="principles">Principles (one item per line)</label><textarea id="principles" placeholder="Be honest about uncertainty&#10;Protect private data"></textarea></div>
+   <div><label for="preferences">Interaction preferences (one item per line)</label><textarea id="preferences" placeholder="Explain before taking consequential actions"></textarea></div>
+   <div><label for="reason">Reason for this change</label><textarea id="reason" maxlength="300" placeholder="Optional note recorded in identity history"></textarea></div>
+  </div>
+  <div class="actions"><button class="primary" id="save">Save identity</button><button id="reload">Discard changes / reload</button><span id="status" role="status" aria-live="polite"></span></div>
+  <p class="muted">Each real change creates a versioned, audited snapshot. A no-op save does not create a new version.</p>
+ </div>
+ <section class="panel"><h2 style="font-size:16px;margin:0 0 8px">Identity prompt preview</h2><p>What Mia receives as her model-independent identity context.</p><pre id="preview">Loading…</pre></section>
+ <section class="panel"><h2 style="font-size:16px;margin:0 0 8px">Version history</h2><div class="history"><select id="history"><option>Loading history…</option></select><button id="rollback">Restore selected version</button></div><p class="muted">Restoring creates a new version; it never rewrites or deletes the old history.</p></section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const list=id=>$(id).value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+const setList=(id,values)=>$(id).value=Array.isArray(values)?values.join("\n"):"";
+function status(message,error=false){$("status").textContent=message;$("status").classList.toggle("error",error)}
+async function request(url,options){const response=await fetch(url,{...options,headers:{"Content-Type":"application/json",...(options?.headers||{})}});const data=await response.json().catch(()=>({detail:"Invalid server response"}));if(!response.ok)throw new Error(data.detail||("Request failed: "+response.status));return data}
+function populate(record){const p=record.profile||{};$("name").value=p.name||"";$("purpose").value=p.purpose||"";$("relationship").value=p.owner_relationship||"";$("tone").value=p.communication_style?.tone||"";$("verbosity").value=p.communication_style?.verbosity||"";$("language").value=p.communication_style?.language||"";setList("personality",p.personality);setList("principles",p.principles);setList("preferences",p.interaction_preferences);$("reason").value="";$("preview").textContent=record.prompt_preview||"No preview available";status("Loaded identity version "+record.version)}
+async function load(){try{const [record,history]=await Promise.all([request("/api/identity"),request("/api/identity/history?limit=50")]);populate(record);const select=$("history");select.replaceChildren();for(const v of history.versions||[]){const option=document.createElement("option");option.value=String(v.version);option.textContent="Version "+v.version+" · "+(v.reason||"No reason")+(v.created_at?" · "+new Date(v.created_at).toLocaleString():"");select.append(option)}if(!select.options.length){const option=document.createElement("option");option.textContent="No versions";select.append(option)}}catch(error){status(error.message,true);$("preview").textContent="Identity could not be loaded."}}
+$("save").addEventListener("click",async()=>{const button=$("save");button.disabled=true;status("Saving…");try{const body={name:$("name").value,purpose:$("purpose").value,owner_relationship:$("relationship").value,personality:list("personality"),principles:list("principles"),interaction_preferences:list("preferences"),communication_style:{tone:$("tone").value,verbosity:$("verbosity").value,language:$("language").value},reason:$("reason").value};const record=await request("/api/identity",{method:"PUT",body:JSON.stringify(body)});populate(record);await loadHistoryOnly();status(record.changed?"Saved identity version "+record.version:"No changes to save")}catch(error){status(error.message,true)}finally{button.disabled=false}});
+async function loadHistoryOnly(){const data=await request("/api/identity/history?limit=50");const select=$("history");select.replaceChildren();for(const v of data.versions||[]){const o=document.createElement("option");o.value=String(v.version);o.textContent="Version "+v.version+" · "+(v.reason||"No reason");select.append(o)}}
+$("reload").addEventListener("click",load);
+$("rollback").addEventListener("click",async()=>{const version=Number($("history").value);if(!Number.isInteger(version)||version<1)return; if(!confirm("Restore identity version "+version+" as a new version?"))return;const button=$("rollback");button.disabled=true;try{const record=await request("/api/identity/rollback",{method:"POST",body:JSON.stringify({version,reason:"Owner restored from identity history UI"})});populate(record);await loadHistoryOnly();status("Restored as identity version "+record.version)}catch(error){status(error.message,true)}finally{button.disabled=false}});
+load();
+</script>
+</body></html>
