@@ -4474,7 +4474,12 @@ def create_app(
         root = Path(__file__).resolve().parents[3]
         output = root / "docs" / "code-graph" / "graph.json"
         try:
-            return build_graph(root, output=output)
+            graph = build_graph(root, output=output)
+            watcher = app.state.code_graph_watcher
+            if watcher is not None:
+                watcher.last_error = None
+                watcher.last_commit = graph["commit"]
+            return graph
         except Exception as exc:
             # Keep prior graph artifacts intact; never disguise index failure as an empty graph.
             raise HTTPException(status_code=503, detail=f"Code Graph indexing failed: {type(exc).__name__}") from exc
