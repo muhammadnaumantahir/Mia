@@ -1964,24 +1964,60 @@ def create_app(
     @app.post("/api/browser/actions/preview", status_code=201)
     async def browser_action_preview(item: BrowserActionInput) -> dict[str, Any]:
         try:
-            return await browser_actions.preview(
+            _, summary, _ = await browser_actions._plan(
+                item.kind, item.ref, item.root_id, item.relative_path
+            )
+            capability = {
+                "click": "browser.click_ref",
+                "download": "browser.download",
+                "upload": "browser.upload",
+            }[item.kind]
+            requires_approval = _computer_permission_requires_approval(
+                capability,
+                force_approval=item.kind == "upload" or summary.startswith("CONSEQUENTIAL"),
+            )
+            preview = await browser_actions.preview(
                 item.kind, item.ref, root_id=item.root_id, relative_path=item.relative_path)
+            return {**preview, "requires_approval": requires_approval}
+        except HTTPException:
+            raise
         except Exception as exc:
             raise _browser_error(exc) from exc
 
     @app.post("/api/browser/actions/execute")
     async def browser_action_execute(item: BrowserActionExecution) -> dict[str, Any]:
         try:
+            _, summary, _ = await browser_actions._plan(
+                item.kind, item.ref, item.root_id, item.relative_path
+            )
+            capability = {
+                "click": "browser.click_ref",
+                "download": "browser.download",
+                "upload": "browser.upload",
+            }[item.kind]
+            requires_approval = _computer_permission_requires_approval(
+                capability,
+                force_approval=item.kind == "upload" or summary.startswith("CONSEQUENTIAL"),
+            )
+            approval_id = item.approval_id
+            if approval_id is None:
+                if requires_approval:
+                    raise HTTPException(status_code=409, detail="This browser action needs its own owner approval")
+                approval_id = (await browser_actions.preview(
+                    item.kind, item.ref, root_id=item.root_id, relative_path=item.relative_path
+                ))["approval_id"]
             result = await browser_actions.execute(
-                item.approval_id, item.kind, item.ref, root_id=item.root_id,
+                approval_id, item.kind, item.ref, root_id=item.root_id,
                 relative_path=item.relative_path)
+        except HTTPException:
+            raise
         except Exception as exc:
             raise _browser_error(exc) from exc
         observatory.record_event(
             category="computer", event_type=f"browser_{item.kind}",
-            summary=f"Approved browser {item.kind}: verified={result.get('verified')}",
+            summary=f"Browser {item.kind}: verified={result.get('verified')}",
             outcome="success" if result.get("verified") else "failure", layer_id="SPS-10",
-            payload={"approval_id": item.approval_id, "kind": item.kind})
+            payload={"approval_id": approval_id, "kind": item.kind})
         return result
 
     @app.post("/api/browser/close")
@@ -2183,6 +2219,8 @@ def create_app(
 
     @app.post("/api/desktop/windows/action/execute")
     def desktop_window_action_execute(item: WindowActionExecution) -> dict[str, Any]:
+        if item.approval_id is None:
+            raise HTTPException(status_code=409, detail="Window management always needs its own owner approval")
         try:
             result = desktop_adapter.execute_window_action(
                 item.approval_id, item.window_handle, item.window_title, item.action,
@@ -2226,26 +2264,55 @@ def create_app(
     def desktop_action_preview(item: DesktopActionInput) -> dict[str, Any]:
         try:
             control.assert_active()
-            return desktop_ctl.preview(
+            preview = desktop_ctl.preview(
                 item.action, item.window_handle, automation_id=item.automation_id,
                 control_type=item.control_type, name=item.name, params=item.params)
+            capability = f"desktop.{item.action}"
+            requires_approval = _computer_permission_requires_approval(
+                capability,
+                force_approval=(
+                    item.action in {"keys", "click_at", "screenshot"}
+                    or str(preview.get("summary", "")).startswith("CONSEQUENTIAL")
+                ),
+            )
+            return {**preview, "requires_approval": requires_approval}
+        except HTTPException:
+            raise
         except Exception as exc:
             raise _desktop_error(exc) from exc
 
     @app.post("/api/desktop/actions/execute")
     def desktop_action_execute(item: DesktopActionExecution) -> dict[str, Any]:
         try:
-            result = desktop_ctl.execute(
-                item.approval_id, item.action, item.window_handle, item.window_title,
+            preview = desktop_ctl.preview(
+                item.action, item.window_handle, window_title=item.window_title,
                 automation_id=item.automation_id, control_type=item.control_type,
                 name=item.name, params=item.params)
+            requires_approval = _computer_permission_requires_approval(
+                f"desktop.{item.action}",
+                force_approval=(
+                    item.action in {"keys", "click_at", "screenshot"}
+                    or str(preview.get("summary", "")).startswith("CONSEQUENTIAL")
+                ),
+            )
+            approval_id = item.approval_id
+            if approval_id is None:
+                if requires_approval:
+                    raise HTTPException(status_code=409, detail="This desktop action needs its own owner approval")
+                approval_id = preview["approval_id"]
+            result = desktop_ctl.execute(
+                approval_id, item.action, item.window_handle, item.window_title,
+                automation_id=item.automation_id, control_type=item.control_type,
+                name=item.name, params=item.params)
+        except HTTPException:
+            raise
         except Exception as exc:
             raise _desktop_error(exc) from exc
         observatory.record_event(
             category="computer", event_type=f"desktop_{item.action}",
-            summary=f"Approved desktop {item.action}: verified={result.get('verified')}",
+            summary=f"Desktop {item.action}: verified={result.get('verified')}",
             outcome="success" if result.get("verified") else "failure", layer_id="SPS-10",
-            payload={"approval_id": item.approval_id, "action": item.action,
+            payload={"approval_id": approval_id, "action": item.action,
                      "window_handle": item.window_handle})
         return result
 
@@ -2564,9 +2631,13 @@ def create_app(
         return {"items": app_launcher.list_applications()}
 
     @app.post("/api/computer/apps/launch/preview", status_code=201)
-    def computer_app_launch_preview(item: ApplicationLaunchPreview) -> dict[str, str]:
+    def computer_app_launch_preview(item: ApplicationLaunchPreview) -> dict[str, Any]:
         try:
-            return app_launcher.preview_launch(item.app_id)
+            requires_approval = _computer_permission_requires_approval("apps.launch")
+            preview = app_launcher.preview_launch(item.app_id)
+            return {**preview, "requires_approval": requires_approval}
+        except HTTPException:
+            raise
         except ApplicationLaunchError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         except ApprovalError as exc:
@@ -2577,7 +2648,15 @@ def create_app(
         item: ApplicationLaunchExecution,
     ) -> dict[str, Any]:
         try:
-            result = app_launcher.execute_launch(item.app_id, item.approval_id)
+            requires_approval = _computer_permission_requires_approval("apps.launch")
+            approval_id = item.approval_id
+            if approval_id is None:
+                if requires_approval:
+                    raise HTTPException(status_code=409, detail="Launching this app needs its own owner approval")
+                approval_id = app_launcher.preview_launch(item.app_id)["approval_id"]
+            result = app_launcher.execute_launch(item.app_id, approval_id)
+        except HTTPException:
+            raise
         except ApplicationLaunchError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         except ApprovalError as exc:
@@ -2591,7 +2670,7 @@ def create_app(
             payload={
                 "app_id": item.app_id,
                 "process_id": result["process_id"],
-                "approval_id": item.approval_id,
+                "approval_id": approval_id,
             },
         )
         return result
