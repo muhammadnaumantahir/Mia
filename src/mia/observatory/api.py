@@ -2275,6 +2275,8 @@ def create_app(
         return result
 
     def _desktop_error(exc: Exception) -> HTTPException:
+        if isinstance(exc, HTTPException):
+            return exc
         if isinstance(exc, AutomationStopped):
             return HTTPException(status_code=423, detail=str(exc))
         if isinstance(exc, DesktopAccessError):
