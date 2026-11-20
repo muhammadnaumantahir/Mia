@@ -15,7 +15,6 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from mia.gateway.contracts import ModelRequest, RoutePolicy
-
 from mia.life.store import LifeStore
 
 REFLECT_EVERY = 5
