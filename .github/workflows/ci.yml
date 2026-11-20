@@ -2,9 +2,9 @@ name: Mia CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, development/complete-product-gaps, 'integration/**']
   pull_request:
-    branches: [main]
+    branches: [main, development/complete-product-gaps]
 
 permissions:
   contents: read
