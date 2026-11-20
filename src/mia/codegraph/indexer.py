@@ -1,0 +1,261 @@
+"""Deterministic, source-grounded code graph for Mia.
+
+The indexer is read-only with respect to application source. It writes only the
+requested graph artifacts and never executes indexed code.
+"""
+from __future__ import annotations
+
+import ast
+import hashlib
+import json
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+from typing import Any
+
+EXCLUDED = {".git", ".venv", "venv", "__pycache__", "node_modules", ".mypy_cache", ".pytest_cache", ".ruff_cache", "dist", "build"}
+SOURCE_SUFFIXES = {".py", ".html", ".js", ".ts", ".tsx", ".jsx", ".css", ".toml", ".sql", ".md"}
+LAYER_HINTS = {
+    "SPS-01": ("config", "contracts", "capabilities"),
+    "SPS-02": ("permission", "governance", "approval", "policy", "budget"),
+    "SPS-03": ("brain", "agent", "planner", "intent", "reason"),
+    "SPS-04": ("knowledge", "research", "document", "retrieval"),
+    "SPS-05": ("memory", "conversation", "experience", "life"),
+    "SPS-06": ("evaluation", "benchmark", "reflection", "observatory"),
+    "SPS-07": ("routing", "adaptation", "workflow", "selection"),
+    "SPS-08": ("evolution", "capability", "plugin"),
+    "SPS-09": ("test", "verify", "validation", "sandbox"),
+    "SPS-10": ("computer", "execution", "runtime", "voice", "gateway"),
+}
+LAYER_NAMES = {
+    "SPS-01": "Software DNA Core", "SPS-02": "Governance Core",
+    "SPS-03": "Cognitive Core", "SPS-04": "Knowledge Core",
+    "SPS-05": "Experience Core", "SPS-06": "Meta-Learning Core",
+    "SPS-07": "Adaptation Core", "SPS-08": "Evolution Core",
+    "SPS-09": "Verification & Validation Core", "SPS-10": "Execution Core",
+}
+
+
+def _git(root: Path, *args: str) -> str:
+    try:
+        result = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True,
+                                timeout=5, check=False)
+        return result.stdout.strip() if result.returncode == 0 else "unknown"
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+
+
+def _node_id(kind: str, key: str) -> str:
+    return f"{kind}:" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:20]
+
+
+def _layer_for(path: str) -> tuple[str, str] | None:
+    lowered = path.lower()
+    for layer, hints in LAYER_HINTS.items():
+        if any(hint in lowered for hint in hints):
+            return layer, LAYER_NAMES[layer]
+    return None
+
+
+def _module_path(path: Path, root: Path) -> str:
+    relative = path.relative_to(root).with_suffix("")
+    parts = list(relative.parts)
+    if parts and parts[-1] == "__init__":
+        parts.pop()
+    return ".".join(parts)
+
+
+def _python_files(root: Path) -> list[Path]:
+    found = []
+    for base, dirs, files in os.walk(root):
+        dirs[:] = sorted(d for d in dirs if d not in EXCLUDED and not d.startswith("."))
+        for name in sorted(files):
+            path = Path(base) / name
+            if path.suffix.lower() in SOURCE_SUFFIXES and name != ".env":
+                found.append(path)
+    return sorted(found, key=lambda p: p.relative_to(root).as_posix())
+
+
+def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[str, Any]:
+    """Build a deterministic graph from repository source and documentation."""
+    root = Path(root).resolve()
+    files = _python_files(root)
+    nodes: dict[str, dict[str, Any]] = {}
+    edges: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    modules = {_module_path(path, root): path for path in files if path.suffix == ".py"}
+    symbol_index: dict[str, list[str]] = {}
+    parsed: dict[Path, ast.Module] = {}
+    errors: list[dict[str, str]] = []
+
+    def add_node(kind: str, key: str, **attrs: Any) -> str:
+        ident = _node_id(kind, key)
+        nodes.setdefault(ident, {"id": ident, "kind": kind, "key": key, **attrs})
+        return ident
+
+    def add_edge(source: str, target: str, relation: str, confidence: str,
+                 evidence: str, line: int | None = None) -> None:
+        key = (source, target, relation, evidence)
+        edges[key] = {"source": source, "target": target, "type": relation,
+                      "confidence": confidence, "evidence": evidence, "line": line}
+
+    root_id = add_node("repository", root.name, label=root.name, path=".")
+    dir_ids: dict[str, str] = {}
+    file_ids: dict[Path, str] = {}
+    for path in files:
+        rel = path.relative_to(root).as_posix()
+        parent = path.parent.relative_to(root).as_posix()
+        if parent != ".":
+            current = ""
+            for part in parent.split("/"):
+                current = f"{current}/{part}".strip("/")
+                if current not in dir_ids:
+                    dir_ids[current] = add_node("directory", current, label=part, path=current)
+                    parent_id = dir_ids.get(str(Path(current).parent).replace("\\", "/"), root_id)
+                    add_edge(parent_id, dir_ids[current], "CONTAINS", "confirmed", f"filesystem:{current}")
+        fid = add_node("file", rel, label=path.name, path=rel, language=path.suffix.lstrip("."))
+        file_ids[path] = fid
+        parent_id = dir_ids.get(parent, root_id)
+        add_edge(parent_id, fid, "CONTAINS", "confirmed", f"filesystem:{rel}")
+        layer = _layer_for(rel)
+        if layer:
+            lid = add_node("sps_layer", layer[0], label=f"{layer[0]} · {layer[1]}")
+            add_edge(fid, lid, "BELONGS_TO_LAYER", "inferred", f"path heuristic: {rel}")
+
+    for path in files:
+        if path.suffix != ".py":
+            continue
+        rel = path.relative_to(root).as_posix()
+        fid = file_ids[path]
+        try:
+            source = path.read_text(encoding="utf-8")
+            tree = ast.parse(source, filename=rel)
+            parsed[path] = tree
+        except (OSError, UnicodeError, SyntaxError) as exc:
+            errors.append({"path": rel, "error": f"{type(exc).__name__}: {str(exc)[:180]}"})
+            continue
+
+        def visit_scope(body: list[ast.stmt], parent_key: str) -> None:
+            for item in body:
+                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    kind = "class" if isinstance(item, ast.ClassDef) else "function"
+                    key = f"{rel}:{parent_key + '.' if parent_key else ''}{item.name}"
+                    sid = add_node(kind, key, label=item.name, path=rel,
+                                   qualified_name=parent_key + "." + item.name if parent_key else item.name,
+                                   line=item.lineno, end_line=getattr(item, "end_lineno", item.lineno))
+                    symbol_index.setdefault(item.name, []).append(sid)
+                    add_edge(fid, sid, "DECLARES", "confirmed", f"ast:{rel}:{item.lineno}", item.lineno)
+                    if isinstance(item, ast.ClassDef):
+                        for base in item.bases:
+                            if isinstance(base, ast.Name):
+                                for candidate in symbol_index.get(base.id, []):
+                                    add_edge(sid, candidate, "EXTENDS", "inferred",
+                                             f"base expression {base.id}", item.lineno)
+                        visit_scope(item.body, key.split(":", 1)[1])
+                    else:
+                        for child in ast.walk(item):
+                            if isinstance(child, ast.Call) and isinstance(child.func, ast.Name):
+                                for target in symbol_index.get(child.func.id, []):
+                                    if target != sid:
+                                        add_edge(sid, target, "CALLS", "confirmed",
+                                                 f"ast-call:{rel}:{child.lineno}", child.lineno)
+                        visit_scope(item.body, key.split(":", 1)[1])
+                elif isinstance(item, (ast.If, ast.For, ast.AsyncFor, ast.While, ast.With,
+                                        ast.AsyncWith, ast.Try)):
+                    for field in ("body", "orelse", "finalbody"):
+                        child = getattr(item, field, None)
+                        if isinstance(child, list):
+                            visit_scope(child, parent_key)
+
+        visit_scope(tree.body, "")
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names = [(alias.name, alias.asname or alias.name.split(".")[0]) for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                names = [(f"{module}.{alias.name}".strip("."), alias.asname or alias.name) for alias in node.names]
+                if node.level:
+                    package = _module_path(path, root).split(".")[:-node.level]
+                    module = ".".join(package + ([module] if module else []))
+                    names = [(f"{module}.{alias.name}".strip("."), alias.asname or alias.name) for alias in node.names]
+            else:
+                continue
+            for imported, alias in names:
+                target_path = modules.get(imported)
+                if target_path is None:
+                    prefix = imported
+                    while "." in prefix and prefix not in modules:
+                        prefix = prefix.rsplit(".", 1)[0]
+                    target_path = modules.get(prefix)
+                if target_path is not None:
+                    add_edge(fid, file_ids[target_path], "IMPORTS", "confirmed",
+                             f"ast-import:{rel}:{node.lineno}", node.lineno)
+
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                for decorator in node.decorator_list:
+                    if isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Attribute):
+                        if decorator.func.attr in {"get", "post", "put", "patch", "delete"}:
+                            route = next((arg.value for arg in decorator.args
+                                          if isinstance(arg, ast.Constant) and isinstance(arg.value, str)), None)
+                            if route:
+                                route_id = add_node("api_endpoint", f"{decorator.func.attr.upper()} {route}",
+                                                     label=f"{decorator.func.attr.upper()} {route}",
+                                                     path=rel, line=decorator.lineno)
+                                function_id = _node_id("function", f"{rel}:{node.name}")
+                                add_edge(function_id, route_id, "EXPOSES_API", "confirmed",
+                                         f"fastapi-decorator:{rel}:{decorator.lineno}", decorator.lineno)
+
+    # Tests are linked only by a conservative exact-name convention and marked inferred.
+    declared = {n["id"]: n for n in nodes.values() if n["kind"] == "function"}
+    test_functions = [n for n in declared.values() if n["path"].startswith("tests/") and n["label"].startswith("test_")]
+    for test in test_functions:
+        stem = test["label"][5:]
+        candidates = [n for n in declared.values() if not n["path"].startswith("tests/")
+                      and (n["label"] == stem or n["label"] in stem.split("_"))]
+        for candidate in candidates[:5]:
+            add_edge(candidate["id"], test["id"], "TESTED_BY", "inferred",
+                     f"test-name heuristic: {test['path']}::{test['label']}")
+
+    fingerprint = hashlib.sha256()
+    for path in files:
+        rel = path.relative_to(root).as_posix()
+        try:
+            data = path.read_bytes()
+        except OSError as exc:
+            errors.append({"path": rel, "error": f"{type(exc).__name__}: {str(exc)[:180]}"})
+            continue
+        fingerprint.update(rel.encode("utf-8") + b"\0" + hashlib.sha256(data).digest())
+    commit = _git(root, "rev-parse", "HEAD")
+    result = {
+        "schema_version": "1.0.0",
+        "generated_at": __import__("datetime").datetime.now(__import__("datetime").UTC).isoformat(),
+        "repository": root.name,
+        "commit": commit,
+        "source_digest": fingerprint.hexdigest(),
+        "summary": {"nodes": len(nodes), "edges": len(edges), "files": len(files),
+                    "python_files": sum(1 for p in files if p.suffix == ".py"),
+                    "parse_errors": len(errors)},
+        "nodes": sorted(nodes.values(), key=lambda n: (n["kind"], n["key"])),
+        "edges": sorted(edges.values(), key=lambda e: (e["type"], e["source"], e["target"], e["evidence"])),
+        "index_errors": errors,
+        "limitations": ["Python AST relationships are source-grounded.",
+                        "BELONGS_TO_LAYER and TESTED_BY are explicitly inferred heuristics.",
+                        "Dynamic imports, reflection and runtime-generated calls are not resolved.",
+                        "Non-Python files are indexed as files; language-specific symbol parsing is not yet enabled."],
+    }
+    if output is not None:
+        destination = Path(output)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+        fd, temporary = tempfile.mkstemp(prefix=".graph-", suffix=".tmp", dir=destination.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as stream:
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, destination)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+    return result
