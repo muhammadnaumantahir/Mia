@@ -174,7 +174,7 @@ class UsageLedger:
             ).fetchone()
         return float(row["total"])
 
-    def spend_today_utc(self) -> float:
+    def spend_today_utc(self) -> float | None:
         now = _utc_now()
         return self.spend_since(now.replace(hour=0, minute=0, second=0, microsecond=0))
 
@@ -392,6 +392,7 @@ class UsageLedger:
             }
             for row in rows
         ]
+        spent_today = self.spend_today_utc()
         return {
             "window_days": days,
             "total_requests": sum(item["requests"] for item in items),
@@ -401,9 +402,6 @@ class UsageLedger:
                 None if any(item["unknown_cost_rows"] for item in items)
                 else round(sum(item["cost_usd"] or 0.0 for item in items), 8)
             ),
-            "spent_today_utc_usd": (
-                None if self.spend_today_utc() is None
-                else round(self.spend_today_utc() or 0.0, 8)
-            ),
+            "spent_today_utc_usd": None if spent_today is None else round(spent_today, 8),
             "items": items,
         }
