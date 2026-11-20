@@ -1,17 +1,14 @@
 # Mia — Self-Programming Personal AI
 
-**Mia** is a local-first, general-purpose intelligent personal assistant and proactive digital companion built on the user's existing **10-layer Self-Programming Software (SPS) framework**.
+**Mia** is a local-first, general-purpose intelligent personal AI companion built on the user's existing **10-layer Self-Programming Software (SPS) framework**.
 
-Mia is intended to maintain one persistent identity across conversations and model changes, explore permitted topics and projects between conversations, reflect on evidence and outcomes, initiate useful and well-timed conversations, work with the computer through controlled tools, and improve her capabilities through measurable, governed evolution.
-
-Three co-equal core priorities guide development: **persistent identity and memory**, **autonomous digital life and proactive initiative**, and **self-programming with governed evolution**. These are product priorities implemented through the existing ten SPS layers, not additional SPS layers.
-
-> **Project status:** Active implementation, not release-ready. The repository does not claim that full multi-step autonomy, unrestricted computer control, safe capability activation, or a completed 30-day experiment is ready.
+**First goal:** the owner can talk naturally with Mia, discuss ideas and personal topics, ask Mia about itself, and continue conversations with reliable memory and context in text and voice. The longer-term destination is a Jarvis-style personal AI operating system that helps with daily life, research, projects and files, controls the computer safely, and improves its own capabilities under governance.
 
 ## Product principles
 
+- **Conversation first:** complete a genuinely useful, context-aware, voice-enabled companion before expanding computer control.
 - **Free/open-source first:** No paid API, voice service, hosted server, or subscription is required to start the core application.
-- **Local-first, cloud-capable:** Use local models where practical; connect user-authorized provider keys through a replaceable gateway.
+- **Local-first, cloud-capable:** Use local models where practical; connect user-authorized provider keys through Mia's replaceable, independently owned gateway.
 - **Reuse before rewrite:** Audit existing projects, licenses, dependencies, interfaces, tests, and security before implementing a feature.
 - **SPS remains the framework:** Preserve the ten canonical layers. Do not invent an eleventh SPS layer.
 - **Observable evolution:** Every proposed, tested, rejected, activated, or rolled-back change must leave an auditable trace.
@@ -37,18 +34,19 @@ The coordinator/runtime connects these existing layers; it is not an additional 
 
 | Domain | Intended capability |
 |---|---|
-| Conversation | Context-aware text and natural voice interaction |
-| AI gateway | Independent Mia-owned gateway: local and direct cloud providers, model discovery, intelligent routing, resilience, security, budgets, evaluation and observability |
-| AI Brain | Model-independent intelligence pipeline: intent, context, routing, planning, permission-gated tools, verification and diagnostics (see [AI Brain](docs/architecture/AI_BRAIN.md)) |
-| Computer operations | Browser, applications, files, documents and authorized OS workflows |
-| Research | Web research, repository inspection, PDFs, technical documentation and citations |
-| Identity and memory | Persistent, source-aware identity, conversations, decisions, goals, experiences and contextual retrieval across sessions and model/provider changes |
-| Proactive digital companion | Curiosity backlog, independent bounded exploration, reflection, follow-ups and relevant conversation initiation with quiet-hour and frequency controls; target behaviour, not yet complete |
-| Autonomous work | Evidence-backed task proposals, live resource monitoring and a governed task lifecycle; broad proactive autonomy remains gated |
-| Self-programming | Discover gaps; reuse, adapt, compose, create, test, version and activate capabilities |
-| Evolution observatory | Day 0 to Day N timeline, benchmark trends, code lineage, layer health and experiment reports |
+| Conversation and identity | Natural multi-turn text and voice conversation; truthful Mia self-description; continuity across sessions, projects and model/provider changes |
+| Voice | Streaming STT/TTS, English/Urdu/Roman Urdu, interruption/barge-in, hands-free operation and always-on wake word with visible listening and immediate stop controls |
+| AI Brain | Model-independent reasoning pipeline: intent, context, routing, planning, permission-gated tools, answer verification, self-correction and diagnostics (see [AI Brain](docs/architecture/AI_BRAIN.md)) |
+| AI gateway | Independent Mia-owned gateway: local and direct cloud providers, model discovery, intelligent routing, escalation, resilience, security, budgets, parallel evaluation and observability |
+| Memory and knowledge | Persistent, source-aware identity, conversations, decisions, goals, experiences and contextual/semantic retrieval across sessions and model/provider changes |
+| Immersive interaction | Full 3D holographic interface that visualizes real conversation/runtime state and retains accessible non-3D fallback |
+| Personal digital life | Daily Briefing, Task Manager, Project Workspace, File Intelligence, Browser Research, Workflow Automation, notifications, Knowledge Graph, backup/restore and resource dashboard |
+| Computer operations | Browser, applications, files, documents and authorized OS workflows with a central permission broker, sandbox, audit, cancellation and recovery |
+| Self-programming | Capability-gap discovery, code generation, validation, version lineage, permission-scoped activation, rollback and research into custom foundation models and automatic self-modification |
+| Mia Code Graph | Live source-evidence graph of packages, files, symbols, dependencies, calls, APIs, tests, permissions and SPS layers, incrementally updated as code changes |
+| Evolution observatory | Real Day 0 to Day N evidence, benchmark trends, capability attribution, before/after comparisons and experiment reports |
 
-See [Proactive Digital Companion Runtime](docs/architecture/DIGITAL_PERSON_RUNTIME.md) for the target architecture, autonomy boundaries and acceptance criteria. It is a design target; the status document distinguishes what is implemented from what remains to be built.
+See [the implementation roadmap](docs/ROADMAP.md) for the mandatory conversation-first sequence and each milestone's acceptance criteria. See [Proactive Digital Companion Runtime](docs/architecture/DIGITAL_PERSON_RUNTIME.md) for bounded autonomy architecture; it is a design target and must not be mistaken for implemented functionality.
 
 ## Quick start — foundation preview
 
@@ -91,19 +89,19 @@ python -m pip install -e ".[computer]"
 playwright install chromium
 ~~~
 
-The first transcription downloads the selected Faster-Whisper model into the local Mia data directory. The default is the multilingual `base` model, CPU int8, and two worker threads. The local engine can be used hands-free or push-to-talk from the Assistant page; no background microphone listener is started and the microphone is released when a session ends.
+The first transcription downloads the selected Faster-Whisper model into the local Mia data directory. The default is the multilingual base model, CPU int8, and two worker threads. The local engine can be used hands-free or push-to-talk from the Assistant page; no background microphone listener is started and the microphone is released when a session ends.
 
-Computer file access defaults to Mia's own `workspace` folder. The optional computer extra includes Playwright and psutil for browser automation and CPU/RAM inspection. To grant additional roots, add a semicolon-separated list to `.env`, for example `MIA_COMPUTER_ROOTS=D:/Projects;D:/Documents`. File writes require a preview, explicit approval and an exact payload match. Copy `config/applications.example.json` to `config/applications.json` to enable the Notepad/Calculator/File Explorer allowlist. Browser navigation uses an isolated profile; clicks need approval. See [Computer Access](docs/architecture/COMPUTER_ACCESS.md).
+Computer file access defaults to Mia's own workspace folder. The optional computer extra includes Playwright and psutil for browser automation and CPU/RAM inspection. To grant additional roots, add a semicolon-separated list to .env, for example MIA_COMPUTER_ROOTS=D:/Projects;D:/Documents. File writes require a preview, explicit approval and an exact payload match. Copy config/applications.example.json to config/applications.json to enable the Notepad/Calculator/File Explorer allowlist. Browser navigation uses an isolated profile; clicks need approval. See [Computer Access](docs/architecture/COMPUTER_ACCESS.md).
 
-Open Mia at http://127.0.0.1:8765/assistant, the AI Gateway console at http://127.0.0.1:8765/gateway, and the Evolution Observatory at http://127.0.0.1:8765/. The Assistant page includes a hands-free browser voice conversation mode; press Start, speak, pause for Mia to reply aloud, and press End or say “stop listening”. Browser recognition may use an external service and is not offline; choose the Local Faster-Whisper engine (optional voice extra) for offline recognition. Esc or Interrupt stops Mia mid-answer; see docs/architecture/VOICE.md and docs/voice/OWNER_VERIFICATION.md.
+Open Mia at http://127.0.0.1:8765/assistant and the Evolution Observatory at http://127.0.0.1:8765/. The Assistant page includes a hands-free browser voice conversation mode; press Start, speak, pause for Mia to reply aloud, and press End or say “stop listening”. Browser recognition may use an external service and is not offline; choose the Local Faster-Whisper engine (optional voice extra) for offline recognition. Esc or Interrupt stops Mia mid-answer; see docs/architecture/VOICE.md and docs/voice/OWNER_VERIFICATION.md.
 
-For the supervisor walkthrough, see the [Supervisor Demo Runbook](docs/SUPERVISOR_DEMO.md). On Windows, `run_demo.cmd` starts the local app after setup; then run `python -m mia.supervisor_demo seed` and `python -m mia.supervisor_demo check` in a second terminal to add clearly labelled fictional demo memories and verify the local demo prerequisites.
+For the supervisor walkthrough, see the [Supervisor Demo Runbook](docs/SUPERVISOR_DEMO.md). On Windows, run_demo.cmd starts the local app after setup; then run python -m mia.supervisor_demo seed and python -m mia.supervisor_demo check in a second terminal to add clearly labelled fictional demo memories and verify the local demo prerequisites.
 
 For local AI, start Ollama and make sure a model is installed. Mia discovers local models through Ollama's native API. The optional gateway extra enables HTTP adapters; no cloud key is needed for the local path.
 
-Mia's gateway is an independent, Mia-owned service. It does not require FreeLLMAPI, OmniRoute, or another external gateway. See [Independent AI Gateway direction](docs/architecture/AI_GATEWAY_DIRECTION.md) for the owner-approved architecture and implementation requirements. 
+Mia's gateway is an independent, Mia-owned service. It does not require FreeLLMAPI, OmniRoute, or another external gateway. See [Independent AI Gateway direction](docs/architecture/AI_GATEWAY_DIRECTION.md) for the owner-approved architecture and implementation requirements.
 
-For local CPU/RAM telemetry and automatic daily experiment capture, install the optional `monitoring` extra. The default scheduler is off unless `MIA_EXPERIMENT_AUTO_CAPTURE=true` is present in `.env`.
+For local CPU/RAM telemetry and automatic daily experiment capture, install the optional monitoring extra. The default scheduler is off unless MIA_EXPERIMENT_AUTO_CAPTURE=true is present in .env.
 
 The Evolution Observatory includes a **Capability Lab** where Mia can draft pure-Python source and tests through a free-only model route. Review the draft, save an immutable candidate, run the local Docker validation pipeline, and register only passing versions. Owner-approved promotion and rollback records are supported for registered permission-free versions when MIA_CAPABILITY_ACTIVATION_ENABLED is enabled; the lifecycle enforces one active version per capability and records the decision. This does not hot-load code into the privileged Mia process. A complete permission broker and target-Windows verification remain open.
 
@@ -111,19 +109,17 @@ The Evolution Observatory can capture an immutable Day 0 baseline on the local M
 
 ## Development roadmap
 
-| Phase | Outcome | Current status |
+| Priority | Outcome | Execution rule |
 |---|---|---|
-| 0. Research and reuse audit | Source audit, license matrix, architecture and integration decisions | In progress |
-| 1. Foundation | Project skeleton, SPS registry, event store, observatory API, tests | Bootstrap committed |
-| 2. AI gateway | Ollama/OpenAI-compatible adapters, free-first routing and price guard | In progress |
-| 3. Voice | Hands-free and push-to-talk conversation with interrupt, mute, browser or local Faster-Whisper recognition, spoken replies and optional offline OS TTS | Implemented and browser-tested with fakes; real microphone/speaker, Windows voices and local model download/latency must be verified on the demo device; no wake word |
-| 4. Computer intelligence | Scoped filesystem, approved app launch and isolated public-web browser | In progress |
-| 5. Memory and knowledge | Persistent conversations, identity continuity, owner-managed structured memory, contextual retrieval and source-aware document ingestion | In progress; bounded FTS5 retrieval across knowledge, older conversations and structured records is injected into chat with provenance. Consolidation, semantic/relationship-aware retrieval, automatic extraction and owner-editable identity remain open |
-| 6. Autonomous digital life and agent runtime | Durable scheduler/queue, curiosity-led bounded exploration, reflection, proactive conversation and governed task execution | Partial foundation only; current background dispatch is limited to approved read-only system checks. Curiosity/social initiative, quiet-hour delivery policy, broader workflows, safe restart continuation and target-device verification remain open |
-| 7. Self-programming | Capability discovery, candidate versioning/lineage, sandbox validation, owner-gated promotion and rollback | Foundation in progress; permission broker, safe plugin execution boundary and Windows verification remain open |
-| 8. 30-day experiment | Immutable Day 0, explicit start, host-verified daily snapshots and optional resource-aware scheduler | Report API/viewer and terminal incomplete handling are implemented; owner-host baseline, real 30-day run and evidence-backed final results remain pending |
+| 0. Integration baseline | Inspect PR/source state, resolve application integration defects, retain Mia-owned gateway, initialize/update Code Graph | Do this first; CI infrastructure must not block |
+| 1. Conversation-first Mia | Self-identity, Brain/reasoning, context and persistent memory, independent gateway, natural multilingual voice, wake word and bounded parallel judges | **First product milestone; complete before computer-control expansion** |
+| 2. Immersive interaction | Full 3D holographic UI and multimodal experience | Start after Priority 1 development criteria |
+| 3. Personal digital life | Daily briefing, tasks, projects, files, research, workflows, notifications, knowledge graph, backup, dashboard, remote/multi-device access | Start after Priority 2 |
+| 4. Computer intelligence | Permission broker, sandboxed browser/desktop/filesystem control, approvals, audit, cancellation and recovery | Start after Priority 3 |
+| 5. Self-programming and model evolution | Governed capability evolution, custom foundation model research, automatic self-modification research objective | Start after Priority 4 |
+| 6. Evolution Observatory | Real growth metrics, benchmark attribution, before/after reports and 30-day experiment infrastructure | Start after Priority 5 |
 
-Phases are quality gates, not calendar promises. A phase is not complete until its documented exit criteria and tests pass. See [the complete roadmap](docs/ROADMAP.md).
+Phases are quality gates, not calendar promises. AI coding agents must always select the highest-priority unfinished development item from [the full roadmap](docs/ROADMAP.md), continue without waiting for "continue", and update [project status](docs/STATUS.md). CI is optional and does not gate development. Owner-only device/manual checks are tracked separately as OWNER_VERIFICATION_REQUIRED.
 
 ## Open-source reuse strategy
 
@@ -135,11 +131,11 @@ Mia will not blindly copy whole repositories. Each candidate is assessed as one 
 - **Study:** use architecture and interaction ideas without copying code.
 - **Reject/defer:** security, maintenance, licensing, hardware, or compatibility makes it unsuitable.
 
-The first audit covers OpenJarvis, FreeLLMAPI, LiteLLM, OpenHands Software Agent SDK, Open Interpreter, 01, Faster-Whisper, openWakeWord, Piper and Playwright. See [Open-source audit](docs/research/OPEN_SOURCE_AUDIT.md), [integration matrix](docs/research/INTEGRATION_MATRIX.md), and the [Independent AI Gateway direction](docs/architecture/AI_GATEWAY_DIRECTION.md).
+The first audit covers OpenJarvis, LiteLLM, OpenHands Software Agent SDK, Open Interpreter, 01, Faster-Whisper, openWakeWord, Piper and Playwright. See [Open-source audit](docs/research/OPEN_SOURCE_AUDIT.md), [integration matrix](docs/research/INTEGRATION_MATRIX.md), and the [Independent AI Gateway direction](docs/architecture/AI_GATEWAY_DIRECTION.md).
 
 ## Security and privacy baseline
 
-Mia can be designed for broad computer assistance, but broad capability is not blanket permission to perform every action autonomously. Destructive operations, credential access, external communication, purchases, financial actions, security changes, and deployment require policy checks and, where configured, user approval. Secrets are never committed, logged, or passed to generated code.
+Mia can be designed for broad computer assistance, but broad capability is not blanket permission to perform every action autonomously. Destructive operations, credential access, external communication, purchases, financial actions, security changes, and deployment require policy checks and, where configured, user approval. Secrets are never committed, logged, or passed to generated code. Always-on microphone mode must be clearly indicated and immediately stoppable.
 
 See [Safety and Governance](docs/SAFETY_AND_GOVERNANCE.md).
 
@@ -149,7 +145,7 @@ See [Safety and Governance](docs/SAFETY_AND_GOVERNANCE.md).
 docs/                  Research, architecture, phases, experiment protocol and supervisor demo runbook
 src/mia/               Python application, SPS foundations and demo preflight utility
 src/mia/agent/         Task lifecycle, workload discovery and autonomy gates
-src/mia/evolution/    Versioned capability persistence and validation lifecycle
+src/mia/evolution/     Versioned capability persistence and validation lifecycle
 src/mia/gateway/       Provider contracts and routing policy
 src/mia/observatory/   SQLite event/metric store and dashboard
 tests/                 Automated tests
@@ -161,7 +157,7 @@ experiment/            Runtime-created experiment data (gitignored)
 
 ## Contributing / AI coding agents
 
-Read [AGENTS.md](AGENTS.md) before making changes. Keep implementation modular, add tests, update the source/license register when dependencies or upstream code change, and never mark a roadmap phase complete based on documentation alone.
+Read AGENTS.md and always follow the conversation-first order in docs/ROADMAP.md. Keep implementation modular, add tests, update the source/license register when dependencies or upstream code change, and never mark a capability complete based on documentation alone.
 
 ## License
 
