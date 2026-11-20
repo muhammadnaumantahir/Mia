@@ -20,7 +20,7 @@ The product roadmap is now strictly ordered:
 
 The Code Graph is a required cross-cutting developer capability, initialized during the integration baseline and automatically refreshed after source changes throughout development. This sequence supersedes the older "three co-equal priorities" direction. See AGENTS.md and [the canonical roadmap](ROADMAP.md).
 
-**Implementation truth (not a completion claim):** the development integration branch now contains persistent conversation storage, bounded FTS5 retrieval, conservative English/Roman Urdu/Urdu memory capture and intent-aware recall, versioned owner-editable identity with a UI, a shared Brain path for text/streaming/voice, browser and local voice engines, an explicit opt-in browser "Hey Mia" wake phrase, an independent AI Gateway, Code Graph auto-refresh/impact analysis, governed computer adapters and a durable multi-step task engine. PRs #12, #16, #17 and #18 are merged into `development/complete-product-gaps`; parent PR #3 is still pending merge into `main`. PR #19 adds SPS architecture self-description and is awaiting Windows/Ubuntu CI. Important gaps remain: full-history semantic retrieval, model-assisted extraction beyond conservative rules, richer relation-aware recall, stronger cross-session/provider continuity, reasoning/judge evaluation, and offline always-on wake-word detection. Physical device checks and owner deployment remain separately tracked.
+**Implementation truth (not a completion claim):** main now includes the core runtime integration: independent AI Gateway, bounded semantic-memory option, structured/FTS memory and multilingual deterministic capture/recall, owner-editable versioned identity and UI, shared Brain pipeline, browser/local voice engines, opt-in browser wake phrase, governed computer adapters, task runtime, proactive inbox, and Code Graph. Core integration PR #3 merged to main at `7325708`; Code Graph PR #12 and identity/multilingual memory work were included in that integration. PR #20 is the clean-main follow-up for canonical SPS self-description and multilingual conversation-evaluation fixtures, currently under fresh CI. Important gaps remain: full-history semantic retrieval, model-assisted extraction beyond conservative rules, richer relation-aware recall, stronger cross-session/provider continuity, reasoning/judge evaluation, and offline always-on wake-word detection. Physical device checks and owner deployment remain separately tracked.
 
 ## Status inventory (component status, not execution order)
 
@@ -38,7 +38,7 @@ The following table records prior workstream status. It is an implementation inv
 | Computer intelligence | Governed host-side foundation implemented; local-device bridge pending | Scoped filesystem operations, allowlisted app launch, isolated browser automation, Windows UI Automation, process inspection/termination, risk-classified terminal, owner grants, one-time approvals, stop-all and durable multi-step tasks are implemented and tested. Adapters control the machine running Mia. If Mia runs on Oracle Cloud, they control the VM, not the owner's laptop; a paired outbound-only local companion agent, stronger sandboxing and real Windows device verification remain. Keep this work lower priority until the conversation-first milestone is accepted |
 | Self-programming | AI draft + Capability Lab + Docker validation foundations | Mia can draft pure-Python modules/tests through free-only model routing; reviewed drafts are stored as immutable versions, Docker-validated and registered only when passing. Permission-free candidates can run in isolated Docker with bounded JSON I/O. Owner-approved promotion/rollback records exist behind a feature flag. Permission broker, safe plugin runtime boundary and target-Windows verification remain |
 | Evolution Observatory | Day 0, explicit start, host verification and optional daily scheduler foundations | Baseline capture, fixed benchmarks, resource-aware daily snapshots, activity evidence, report API/viewer and evidence-hash verification exist. No real Windows-host baseline, actual owner-run 30-day experiment or evidence-backed final results exist yet |
-| Mia Code Graph | Priority 0 foundation integrated and CI-verified | Deterministic source-backed index, Python AST symbols/imports/calls, route/file relationships, content-digest watcher, explorer, CLI refresh/stale checks and Git-diff impact analysis. Ubuntu and Windows CI passed in PR #12. Current watcher performs full rebuilds; true file-level incremental indexing and broader language parsers remain future improvements |
+| Mia Code Graph | Integrated in main; CI-verified | Deterministic source-backed index, Python AST symbols/imports/calls, route/file relationships, content-digest watcher, explorer, CLI refresh/stale checks and Git-diff impact analysis. Ubuntu and Windows CI passed in PR #12 and refreshed 3,797 nodes / 7,682 edges in core integration CI. Current watcher performs full rebuilds; true file-level incremental indexing and broader language parsers remain future improvements |
 
 ## Verification and CI policy
 
@@ -48,7 +48,7 @@ Owner-only physical microphone/speaker tests, Windows desktop/device acceptance,
 
 ## Not complete
 
-Mia is not yet a finished conversational companion or personal AI operating system. The development branch has an owner-editable identity, deterministic multilingual memory capture/recall, browser wake phrase and governed host-side computer controls, but the parent core integration PR #3 is not yet merged into `main`, owner-device testing is pending, and PR #19 self-description is still under CI. Remaining conversation-first development includes full-history semantic retrieval, model-assisted memory extraction, richer relationship-aware recall, stronger continuity, model escalation, parallel judge-model evaluation, reasoning-quality benchmarks and offline wake-word detection. A paired local agent is still needed for an Oracle-hosted Mia to control the owner's Windows PC. The full 3D holographic interface, additional digital-life workflows, advanced governed self-programming, custom foundation-model research and the complete Evolution Observatory remain later roadmap work.
+Mia is not yet a finished conversational companion or personal AI operating system. Core runtime and Code Graph are merged into main; identity editing and deterministic English/Roman Urdu/Urdu-script memory capture and recall are integrated. PR #20 adds canonical SPS self-description and expanded multilingual conversation evaluation and is awaiting fresh-main CI. Owner-device testing remains separate. Remaining conversation-first development includes full-history semantic retrieval, model-assisted memory extraction, richer relationship-aware recall, stronger continuity, model escalation, parallel judge-model evaluation, reasoning-quality benchmarks and offline always-on wake-word detection. A paired local agent is still needed for an Oracle-hosted Mia to control the owner's Windows PC. The full 3D holographic interface, additional digital-life workflows, advanced governed self-programming, custom foundation-model research and the complete Evolution Observatory remain later roadmap work.
 
 Do not confuse a design target, UI affordance, documentation entry or mocked test with an operational capability. No Day 0 or daily growth data may be fabricated.
 
@@ -56,7 +56,7 @@ Do not confuse a design target, UI affordance, documentation entry or mocked tes
 
 The next development session must select the first unfinished item in Priority 0 or Priority 1 of docs/ROADMAP.md, based on a fresh source/PR review. Within the conversation-first target, the default order is:
 
-1. Finish and integrate PR #19's SPS architecture self-description, then re-run parent PR #3 CI and merge the verified core integration into `main`.
+1. Finish and merge PR #20's clean-main SPS architecture self-description and multilingual evaluation changes after fresh Ubuntu/Windows CI passes.
 2. Improve memory beyond the current deterministic baseline: full-history semantic indexing/retrieval, model-assisted extraction with owner approval, richer relation-aware recall and structured-memory retention.
 3. Strengthen cross-session/project/provider continuity and repeatable reasoning-quality evaluation.
 4. Add bounded parallel judge-model evaluation and quality-based model escalation, with latency/cost limits and evidence-based acceptance.
@@ -72,14 +72,14 @@ A development phase is complete when its code-side acceptance criteria are imple
 
 ## 2026-11-20 development branch addendum
 
-**Current main:** `d8d00fc420d78b0c4420a280fadfb15342db78ef` (conversation-first direction). The following work is committed to draft PR #3 but is not yet merged:
+**Current main baseline:** `7325708ff4d99264ae75dc7826ff64ec40ad0c5d` (core runtime + Code Graph merged; conversation-first direction). PR #3 is merged. PR #20 is the current draft follow-up; its exact head must pass CI before merge.
 
 - Independent gateway: paid budget reservations and atomic settlement, fail-closed unknown-price handling (including historical NULL-cost ledger rows), cancellation-safe reservation retention, provider health/routing improvements and console updates.
 - Memory: opt-in local Ollama semantic reranking with bounded recent conversation/knowledge/structured candidates and content-addressed embedding cache. Disabled by default; no cloud embeddings or model auto-download.
 - Self-description: Brain now appends a deterministic live-runtime manifest derived from registered tools, provider adapters, memory, permission broker, capability registry and available voice/Code Graph routes. It explicitly distinguishes registration from health, permission and owner verification; secret-like identifiers are filtered.
 - Permissions: shared permission policy across TaskEngine, direct computer routes and Brain broker; unregistered capabilities fail closed.
-- PR #12 Code Graph CI passed on Ubuntu/Windows; PR #16 identity editor, PR #17 multilingual capture and PR #18 multilingual recall also passed full Ubuntu/Windows Python 3.13 CI. PR #19 SPS self-description is currently undergoing a fresh full CI run. These are CI results, not local test claims.
-- PR #3 remains draft. No changes from it have been merged into main. CI is reported separately and is not a development gate.
+- PR #12 Code Graph, PR #16 identity editor, PR #17 multilingual capture, PR #18 multilingual recall and PR #3 core integration passed Ubuntu/Windows Python 3.13 CI. PR #20 SPS self-description is undergoing a fresh-main CI run. These are CI results, not local test claims.
+- PR #3 was merged into main after both platform CI jobs passed and targeted review of gateway reservations, owner permission evaluation, task execution and direct filesystem approval paths. CI is evidence, not a substitute for owner device testing.
 
 Voice: an explicit opt-in “Hey Mia” wake phrase mode is implemented using the browser speech service, with visible Mic/listening state, mute/stop and re-arming after each turn. It is not offline wake-word detection; browser privacy disclosure and OWNER_VERIFICATION_REQUIRED steps are documented. Regression tests are added but not run.
 - Conversation evaluation: a deterministic fixture and runner cover English, Urdu and Roman Urdu decision recall plus runtime self-description. This tests context assembly, not live model translation quality; tests are added but not run.
@@ -89,7 +89,7 @@ Remaining Priority 1 development includes full-history and relationship-aware re
 
 ## Code Graph (Priority 0 cross-cutting developer capability)
 
-The integration branch now contains the first repository-wide Code Graph implementation: deterministic Python AST indexing, stable node/edge IDs, source digests, Git commit metadata, a browser explorer, CLI refresh/stale checks, local API endpoints and Git-diff impact analysis. The background watcher detects edits using file-content digests, including same-size edits with preserved timestamps, and atomically rebuilds the full graph. The explorer is linked from the Assistant and Observatory navigation.
+Main now contains the first repository-wide Code Graph implementation: deterministic Python AST indexing, stable node/edge IDs, source digests, Git commit metadata, a browser explorer, CLI refresh/stale checks, local API endpoints and Git-diff impact analysis. The background watcher detects edits using file-content digests, including same-size edits with preserved timestamps, and atomically rebuilds the full graph. The explorer is linked from the Assistant and Observatory navigation.
 
 **Important limits:** the watcher currently performs full graph rebuilds rather than true file-level incremental indexing. Impact analysis reports confirmed static-import relationships and likely test candidates; it cannot prove dynamic imports, dependency injection or all runtime call paths. The graph endpoints are loopback-only by default; remote access needs explicit opt-in and a strong token.
 
@@ -97,7 +97,7 @@ The integration branch now contains the first repository-wide Code Graph impleme
 
 ## Conversation-first identity editor
 
-The persistent, model-independent identity backend provides versioned owner updates, immutable history, rollback, audit events and prompt injection shared by text/streaming chat and provider switches. The owner-facing Identity page is linked from the Assistant sidebar and provides profile editing, prompt preview, version history and rollback. Route and API integration tests passed on Ubuntu and Windows Python 3.13 in PR #16. Owner interaction testing remains separate.
+The persistent, model-independent identity backend provides versioned owner updates, immutable history, rollback, audit events and prompt injection shared by text/streaming chat and provider switches. The owner-facing Identity page is linked from the Assistant sidebar and provides profile editing, prompt preview, version history and rollback. Route and API integration tests passed on Ubuntu and Windows Python 3.13 in PR #16, included in core PR #3 merged to main. Owner interaction testing remains separate.
 
 ## Multilingual memory capture
 
