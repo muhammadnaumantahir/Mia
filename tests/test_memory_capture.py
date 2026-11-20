@@ -598,3 +598,83 @@ def test_roman_urdu_forget_command_removes_matching_memory(tmp_path):
     assert record_id in [item["record_id"] for item in forgotten["forgotten"]]
     assert store.structured.get(record_id) is None
 
+
+
+# ------------------------------------------------------- model-assisted extraction
+
+
+def test_model_extraction_is_pending_even_when_auto_capture_is_enabled(tmp_path):
+    store, _, conv = make(tmp_path)
+    calls = []
+
+    def extractor(sentence):
+        calls.append(sentence)
+        return {
+            "record_type": "episode",
+            "title": "Release incident",
+            "body": sentence,
+            "confidence": 0.84,
+        }
+
+    service = CaptureService(store, model_extractor=extractor)
+    store.settings.update({"capture_mode": "auto"})
+    result = say(
+        store, service, conv,
+        "Last Tuesday the release rollback took forty minutes because the cache was stale.",
+    )
+    assert len(calls) == 1
+    assert result["saved"] == [] and len(result["pending"]) == 1
+    record = store.structured.get(result["pending"][0]["record_id"])
+    assert record["status"] == "pending"
+    assert record["provenance"] == "observed"
+    assert record["origin"]["capture"] == "model_assisted"
+    assert record["evidence"][0]["type"] == "message"
+
+
+def test_model_extraction_rejects_paraphrased_or_invented_source_text(tmp_path):
+    store, _, conv = make(tmp_path)
+
+    def extractor(sentence):
+        return {
+            "record_type": "fact",
+            "title": "Invented detail",
+            "body": "The owner works remotely every day.",
+            "confidence": 0.8,
+        }
+
+    service = CaptureService(store, model_extractor=extractor)
+    result = say(
+        store, service, conv,
+        "Last Tuesday the release rollback took forty minutes because the cache was stale.",
+    )
+    assert result["pending"] == [] and result["saved"] == []
+    assert records(store) == []
+
+
+def test_model_extraction_never_runs_for_sensitive_or_uncertain_sentences(tmp_path):
+    store, _, conv = make(tmp_path)
+    calls = []
+
+    def extractor(sentence):
+        calls.append(sentence)
+        return None
+
+    service = CaptureService(store, model_extractor=extractor)
+    result = say(store, service, conv, "Maybe I prefer the political party my family votes for.")
+    assert calls == []
+    assert result["pending"] == [] and records(store) == []
+
+
+def test_model_extractor_failure_does_not_break_chat_or_capture(tmp_path):
+    store, _, conv = make(tmp_path)
+
+    def extractor(_sentence):
+        raise RuntimeError("provider unavailable")
+
+    service = CaptureService(store, model_extractor=extractor)
+    result = say(
+        store, service, conv,
+        "Last Tuesday the release rollback took forty minutes because the cache was stale.",
+    )
+    assert result["processed"] is True
+    assert result["pending"] == [] and result["saved"] == []
