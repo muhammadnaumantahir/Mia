@@ -46,3 +46,15 @@ deterministically. Writes use a temporary file and atomic replacement. If indexi
 the previous graph is preserved and the API reports an error rather than returning a
 fabricated empty graph. Every graph includes the source digest, current Git commit,
 generation time, parse errors and known parser limitations.
+
+
+## Change impact analysis
+
+Use the graph to identify import dependents and likely tests affected by changes since a Git base:
+
+```powershell
+# Compare the current checkout with main
+# The base ref must exist locally; fetch it first if necessary.
+```
+
+The local API exposes `GET /api/code-graph/impact?base=main`. It reports changed paths, direct and transitive static import dependents, and tests connected through explicitly inferred `TESTED_BY` edges. Deleted or unsupported files are reported as unindexed rather than guessed. This is conservative static impact analysis: dynamic imports, dependency injection, runtime wiring and missing test-name matches can leave relationships unresolved.
