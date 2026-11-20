@@ -43,18 +43,23 @@ _STOPWORDS = frozenset(
     "the and for with that this from have has had are was were will would can could "
     "you your our their his her its but not all any been being into onto than then "
     "them they what when where which who whom whose about over under also just only "
-    "very more most some such out too".split()
+    "very more most some such out too hai hain ka ke ki ko mein mujhe mera meri hum ne "
+    "yeh woh wo aur bhi par se tha thi the kya jo aik ek ho "
+    "ہے ہیں کا کے کی کو میں مجھے میرا میری ہم نے یہ وہ اور بھی پر سے تھا تھی تھے کیا ایک".split()
 )
 
 _REMEMBER = re.compile(
     r"^\s*(?:please\s+)?(?:remember|don'?t\s+forget|do\s+not\s+forget|keep\s+in\s+mind|"
-    r"make\s+a\s+note|note\s+that)\b\s*(?:that|this|:|,|-)?\s*(?P<body>.*)$",
+    r"make\s+a\s+note|note\s+that|(?:mujhe\s+)?yaad\s+(?:rakhna|rakho|rakh\s+lo|"
+    r"rakh\s+lena|rakh\s+lain|kar\s+lena)|یاد\s+(?:رکھنا|رکھو|رکھیں|رکھ\s+لو|"
+    r"رکھ\s+لینا|کر\s+لیں))\b\s*(?:(?:that|this|:|,|-|ke|kay|ki|کہ|یہ)\s*)?(?P<body>.*)$",
     re.IGNORECASE | re.DOTALL,
 )
 _FORGET = re.compile(
-    r"^\s*(?:please\s+)?(?:forget|stop\s+remembering)\b\s*"
-    r"(?:about|that|what\s+(?:i|you)\s+(?:said|know|remember)\s+about|everything\s+about)?\s*"
-    r"(?P<body>.*)$",
+    r"^\s*(?:please\s+)?(?:forget|stop\s+remembering|bhool\s+(?:jao|jana|jaana)|"
+    r"yaad\s+(?:mat|na)\s+rakhna|بھول\s+(?:جاؤ|جانا)|یاد\s+(?:مت|نہ)\s+رکھنا)\b\s*"
+    r"(?:about|that|what\s+(?:i|you)\s+(?:said|know|remember)\s+about|everything\s+about|"
+    r"ke\s+bare\s+mein)?\s*(?P<body>.*)$",
     re.IGNORECASE | re.DOTALL,
 )
 _UPDATE = re.compile(
@@ -63,7 +68,7 @@ _UPDATE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _MY_PREFERRED = re.compile(r"^\s*my\s+preferred\s+.+\s+is\s+.+$", re.IGNORECASE)
-_GENERIC_REF = re.compile(r"^(?:this|that|it|this\s+one|the\s+above|everything)?\s*[.!]*$", re.IGNORECASE)
+_GENERIC_REF = re.compile(r"^(?:this|that|it|this\s+one|the\s+above|everything|yeh|ye|woh|wo|is|us|upar\s+wali|upar\s+wala|یہ|وہ|اس|اوپر\s+والی|اوپر\s+والا)?\s*[.!،۔]*$", re.IGNORECASE)
 
 _UNCERTAIN = re.compile(
     r"\b(?:maybe|might|perhaps|probably|possibly|i\s+think|i\s+guess|i\s+suppose|not\s+sure|"
@@ -112,11 +117,11 @@ _AUTO_PATTERNS: tuple[tuple[re.Pattern[str], str, float, str | None], ...] = (
 )
 
 _TYPE_HINTS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"\b(?:decid\w*|decision|we\s+chose|going\s+with|agreed\s+(?:to|on))\b", re.I), "decision"),
+    (re.compile(r"\b(?:decid\w*|decision|we\s+chose|going\s+with|agreed\s+(?:to|on)|faisla|tay\s+kiya)\b|فیصلہ|طے\s+کیا", re.I), "decision"),
     (re.compile(r"\b(?:lesson|learn(?:ed|t)|mistake|next\s+time|root\s+cause)\b", re.I), "lesson"),
-    (re.compile(r"\b(?:goal|aim\s+to|plan\s+to|target|deadline)\b", re.I), "goal"),
-    (re.compile(r"\b(?:prefer\w*|favou?rite|always\s+use|i\s+(?:always|usually|generally|never)|"
-                r"i\s+like\s+to)\b", re.I), "preference"),
+    (re.compile(r"\b(?:goal|aim\s+to|plan\s+to|target|deadline|maqsad|hadaf)\b|مقصد|ہدف", re.I), "goal"),
+    (re.compile(r"\b(?:prefer\w*|favou?rite|always\s+use|i\s+(?:always|usually|generally|never)|pasand|tarjeeh|"
+                r"i\s+like\s+to)\b|پسند|ترجیح", re.I), "preference"),
     (re.compile(r"\b(?:project|milestone|requirement|feature|repo(?:sitory)?|working\s+on|building)\b", re.I), "project"),
     (re.compile(r"\b(?:happened|met\s+with|yesterday|last\s+(?:week|month)|we\s+(?:discussed|talked))\b", re.I), "episode"),
     (re.compile(r"\bmy\s+(?:friend|colleague|manager|brother|sister|wife|husband|partner|client|mentor)\b", re.I), "entity"),
@@ -130,8 +135,8 @@ _IMPORTANCE = {
 
 def tokens(text: str) -> set[str]:
     return {
-        word for word in re.findall(r"[a-z0-9]+", text.lower())
-        if len(word) >= 3 and word not in _STOPWORDS
+        word for word in re.findall(r"[\w]+", text.lower(), flags=re.UNICODE)
+        if len(word) >= 2 and word not in _STOPWORDS
     }
 
 
