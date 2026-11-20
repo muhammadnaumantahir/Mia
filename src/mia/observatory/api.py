@@ -2003,6 +2003,8 @@ def create_app(
             )
             preview = await browser_actions.preview(
                 item.kind, item.ref, root_id=item.root_id, relative_path=item.relative_path)
+            if not requires_approval:
+                preview.update(approval_store.approve(preview["approval_id"]))
             return {**preview, "requires_approval": requires_approval}
         except HTTPException:
             raise
@@ -2031,6 +2033,8 @@ def create_app(
                 approval_id = (await browser_actions.preview(
                     item.kind, item.ref, root_id=item.root_id, relative_path=item.relative_path
                 ))["approval_id"]
+            if not requires_approval and approval_store.status(approval_id) == "pending":
+                approval_store.approve(approval_id)
             result = await browser_actions.execute(
                 approval_id, item.kind, item.ref, root_id=item.root_id,
                 relative_path=item.relative_path)
@@ -2318,6 +2322,8 @@ def create_app(
                     or str(preview.get("summary", "")).startswith("CONSEQUENTIAL")
                 ),
             )
+            if not requires_approval:
+                preview.update(approval_store.approve(preview["approval_id"]))
             return {**preview, "requires_approval": requires_approval}
         except HTTPException:
             raise
@@ -2347,6 +2353,8 @@ def create_app(
                     automation_id=item.automation_id, control_type=item.control_type,
                     name=item.name, params=item.params,
                 )["approval_id"]
+            if not requires_approval and approval_store.status(approval_id) == "pending":
+                approval_store.approve(approval_id)
             result = desktop_ctl.execute(
                 approval_id, item.action, item.window_handle, item.window_title,
                 automation_id=item.automation_id, control_type=item.control_type,
@@ -2557,6 +2565,8 @@ def create_app(
                 item.op, item.root_id, item.relative_path,
                 destination_path=item.destination_path, recovery_id=item.recovery_id,
             )
+            if not requires_approval:
+                preview.update(approval_store.approve(preview["approval_id"]))
             return {**preview, "requires_approval": requires_approval}
         except (FilesystemAccessError, FileNotFoundError, FileOperationError, ValueError) as exc:
             raise _file_error(exc) from exc
@@ -2576,6 +2586,8 @@ def create_app(
                     item.op, item.root_id, item.relative_path,
                     destination_path=item.destination_path, recovery_id=item.recovery_id,
                 )["approval_id"]
+            if not requires_approval and approval_store.status(approval_id) == "pending":
+                approval_store.approve(approval_id)
             result = file_ops.execute(
                 item.op, approval_id, item.root_id, item.relative_path,
                 destination_path=item.destination_path, recovery_id=item.recovery_id,
@@ -2682,6 +2694,8 @@ def create_app(
         try:
             requires_approval = _computer_permission_requires_approval("apps.launch")
             preview = app_launcher.preview_launch(item.app_id)
+            if not requires_approval:
+                preview.update(approval_store.approve(preview["approval_id"]))
             return {**preview, "requires_approval": requires_approval}
         except HTTPException:
             raise
@@ -2701,6 +2715,8 @@ def create_app(
                 if requires_approval:
                     raise HTTPException(status_code=409, detail="Launching this app needs its own owner approval")
                 approval_id = app_launcher.preview_launch(item.app_id)["approval_id"]
+            if not requires_approval and approval_store.status(approval_id) == "pending":
+                approval_store.approve(approval_id)
             result = app_launcher.execute_launch(item.app_id, approval_id)
         except HTTPException:
             raise
@@ -2780,6 +2796,8 @@ def create_app(
                 item.relative_path,
                 item.content,
             )
+            if not requires_approval:
+                preview.update(approval_store.approve(preview["approval_id"]))
             return {**preview, "requires_approval": requires_approval}
         except FilesystemAccessError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
@@ -2811,6 +2829,8 @@ def create_app(
                 approval_id = computer_files.preview_write(
                     item.root_id, item.relative_path, item.content
                 )["approval_id"]
+            if not requires_approval and approval_store.status(approval_id) == "pending":
+                approval_store.approve(approval_id)
             result = computer_files.execute_write(
                 approval_id=approval_id,
                 root_id=item.root_id,
