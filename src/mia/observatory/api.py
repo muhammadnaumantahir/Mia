@@ -851,7 +851,13 @@ def create_app(
                     re.sub(r"\s+", " ", item).strip()
                     for item in re.split(r"(?<=[.!?])\s+|\n+", text or "")
                 ]
-                eligible = [
+                explicit_command = bool(re.match(
+                    r"^\\s*(?:remember|don'?t\\s+forget|keep\\s+in\\s+mind|make\\s+a\\s+note|"
+                    r"note\\s+that|forget|stop\\s+remembering|update\\s+(?:what\\s+you\\s+remember|"
+                    r"your\\s+memory)|yaad\\s+rakho|yaad\\s+rakhna|bhool\\s+jao|یاد\\s+رکھ|بھول)",
+                    text or "", re.I,
+                ))
+            eligible = [] if explicit_command else [
                     sentence for sentence in sentences
                     if 4 <= len(sentence.split()) <= 40
                     and len(sentence) <= 300
