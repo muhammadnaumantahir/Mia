@@ -240,6 +240,47 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
                                 add_edge(function_id, route_id, "EXPOSES_API", "confirmed",
                                          f"fastapi-decorator:{rel}:{decorator.lineno}", decorator.lineno)
 
+    # Resolve literal configuration/data-file access without guessing dynamic paths.
+    for path, tree in parsed.items():
+        rel = path.relative_to(root).as_posix()
+        for node in ast.walk(tree):
+            raw_path: str | None = None
+            relation: str | None = None
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                if node.func.id == "Path" and node.args and isinstance(node.args[0], ast.Constant):
+                    if isinstance(node.args[0].value, str):
+                        raw_path = node.args[0].value
+                        relation = "USES"
+                elif node.func.id == "open" and node.args and isinstance(node.args[0], ast.Constant):
+                    if isinstance(node.args[0].value, str):
+                        raw_path = node.args[0].value
+                        mode = node.args[1].value if len(node.args) > 1 and isinstance(node.args[1], ast.Constant) else "r"
+                        relation = "WRITES_TO" if isinstance(mode, str) and any(flag in mode for flag in ("w", "a", "x", "+")) else "READS_FROM"
+            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if node.func.attr in {"read_text", "read_bytes", "write_text", "write_bytes"}:
+                    receiver = node.func.value
+                    if (isinstance(receiver, ast.Call) and isinstance(receiver.func, ast.Name)
+                            and receiver.func.id == "Path" and receiver.args
+                            and isinstance(receiver.args[0], ast.Constant)
+                            and isinstance(receiver.args[0].value, str)):
+                        raw_path = receiver.args[0].value
+                        relation = "WRITES_TO" if node.func.attr.startswith("write") else "READS_FROM"
+            if not raw_path or not relation:
+                continue
+            normalized = raw_path.replace("\\", "/")
+            if normalized.startswith("/") or ":" in normalized:
+                continue
+            resolved = (root / normalized).resolve()
+            try:
+                target_rel = resolved.relative_to(root).as_posix()
+            except ValueError:
+                continue
+            target_path = root / target_rel
+            if target_path not in file_ids or target_path == path:
+                continue
+            add_edge(file_ids[path], file_ids[target_path], relation, "confirmed",
+                     f"ast-file-access:{rel}:{node.lineno}:{raw_path}", node.lineno)
+
     # Resolve direct calls only when the target is unique in the same file.
     # Cross-file calls via DI, aliases and dynamic imports are intentionally unresolved.
     for path, tree in parsed.items():
