@@ -42,6 +42,9 @@ from mia.brain.capabilities import CapabilityRegistry
 from mia.brain.orchestrator import Brain
 from mia.brain.plan import PlanStore
 from mia.brain.self_description import build_runtime_manifest, render_runtime_manifest
+from mia.codegraph.impact import analyze_impact
+from mia.codegraph.indexer import build_graph
+from mia.codegraph.watcher import CodeGraphWatcher
 from mia.computer.app_discovery import ApplicationDiscovery
 from mia.computer.applications import ApplicationLauncher, ApplicationLaunchError
 from mia.computer.approvals import ApprovalError, ApprovalStore
@@ -5150,6 +5153,20 @@ def create_app(
             raise HTTPException(
                 status_code=503,
                 detail=f"Code Graph indexing failed: {type(exc).__name__}",
+            ) from exc
+
+    @app.get("/api/code-graph/impact")
+    def code_graph_impact(request: Request, base: str = "HEAD~1") -> dict[str, Any]:
+        _authorize_code_graph_request(request)
+        root = Path(__file__).resolve().parents[3]
+        try:
+            return analyze_impact(root, base)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Code Graph impact analysis failed: {type(exc).__name__}",
             ) from exc
 
     @app.post("/api/code-graph/refresh")
