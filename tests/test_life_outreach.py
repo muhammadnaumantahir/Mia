@@ -13,7 +13,7 @@ from mia.memory.store import MemoryStore
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
 
-NOW = datetime.now(UTC) + timedelta(minutes=5)
+NOW = datetime.now(UTC) + timedelta(days=1)
 
 
 def ok():
