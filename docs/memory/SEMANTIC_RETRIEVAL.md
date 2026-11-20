@@ -14,7 +14,7 @@ The development branch adds an opt-in local embedding reranker:
   `http://127.0.0.1:11434`). Non-loopback destinations are rejected.
 - Mia calls Ollama's `/api/embed` endpoint with a bounded batch of candidate texts.
 - Recent structured records, knowledge items and a bounded set of messages from
-  non-temporary conversations are added as semantic candidates. A candidate is
+  non-temporary conversations (up to 12) are added as semantic candidates. A candidate is
   injected only when its semantic score clears the positive-match threshold.
 - Existing lexical candidates are reranked too. Relationship-aware expansion still
   runs after ranking.
@@ -22,7 +22,7 @@ The development branch adds an opt-in local embedding reranker:
   semantic candidates are discarded and lexical retrieval continues.
 
 Document embeddings are cached by model and content hash in the existing local memory
-SQLite database (bounded to 5,000 entries); only vectors are stored, not source text.
+SQLite database (bounded to 5,000 entries); only vectors are stored, not source text. The cache is cleared when source conversations or records are deleted, when messages are purged, or when a conversation is marked temporary.
 No cloud embedding API, API key, vector database, or automatic model download is used.
 The feature is disabled by default. It must remain local-only because retrieved memory
 can contain private owner information.
