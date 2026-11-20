@@ -400,3 +400,33 @@ def test_deleted_memory_is_not_used_in_later_replies_anywhere(tmp_path, monkeypa
         assert "Falcon" not in provider.memory_block()
         assert "Falcon" not in json.dumps([m["content"] for m in provider.requests[-1].messages
                                            if m["role"] != "user"])
+
+
+def test_semantic_candidate_pool_recovers_a_synonymous_decision(tmp_path):
+    store, conv = make(tmp_path)
+    record_id = add(
+        store, "decision", "Billing database decision",
+        "Use PostgreSQL for transactional invoice storage",
+    )
+
+    def semantic_reranker(_query, records):
+        return {r["record_id"]: 0.3 for r in records if r.get("record_id") == record_id}
+
+    packet = assemble_memory_context(
+        store, "Which datastore did we choose?", conv, reranker=semantic_reranker
+    )
+    assert record_id in ids(packet)
+    assert "PostgreSQL" in text(packet)
+
+
+def test_semantic_candidates_are_not_injected_without_a_positive_match(tmp_path):
+    store, conv = make(tmp_path)
+    record_id = add(
+        store, "decision", "Billing database decision",
+        "Use PostgreSQL for transactional invoice storage",
+    )
+    packet = assemble_memory_context(
+        store, "Which datastore did we choose?", conv,
+        reranker=lambda _query, _records: {},
+    )
+    assert record_id not in ids(packet)
