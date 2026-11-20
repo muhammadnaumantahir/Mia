@@ -40,6 +40,7 @@ from mia.brain.orchestrator import Brain, TurnRequest
 from mia.brain.plan import PlanStore
 from mia.computer.app_discovery import ApplicationDiscovery
 from mia.codegraph.indexer import build_graph
+from mia.codegraph.watcher import CodeGraphWatcher
 from mia.computer.applications import ApplicationLauncher, ApplicationLaunchError
 from mia.computer.approvals import ApprovalError, ApprovalStore
 from mia.computer.browser import BrowserAccessError, BrowserController
@@ -627,6 +628,7 @@ def create_app(
     app_discovery: ApplicationDiscovery | None = None,
     life: LifeStore | None = None,
     life_fetcher: Any | None = None,
+    enable_code_graph_watcher: bool = False,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -637,6 +639,23 @@ def create_app(
     ledger = usage_ledger or UsageLedger(data_dir / "mia-usage.sqlite3")
     startup_handlers: list[Callable[[], Any]] = []
     shutdown_handlers: list[Callable[[], Any]] = []
+    code_graph_watcher: CodeGraphWatcher | None = None
+    if (
+        enable_code_graph_watcher
+        and os.getenv("MIA_CODE_GRAPH_WATCH_ENABLED", "true").strip().lower() != "false"
+    ):
+        try:
+            watch_interval = float(os.getenv("MIA_CODE_GRAPH_WATCH_INTERVAL_SECONDS", "5"))
+        except ValueError:
+            watch_interval = 5.0
+        watch_interval = min(60.0, max(1.0, watch_interval))
+        graph_root = Path(__file__).resolve().parents[3]
+        code_graph_watcher = CodeGraphWatcher(
+            graph_root, graph_root / "docs" / "code-graph" / "graph.json",
+            interval_seconds=watch_interval,
+        )
+        startup_handlers.append(code_graph_watcher.start)
+        shutdown_handlers.append(code_graph_watcher.stop)
 
     async def _call_handler(handler: Callable[[], Any]) -> None:
         if asyncio.iscoroutinefunction(handler):
@@ -661,6 +680,7 @@ def create_app(
         description="Local-first, evidence-backed evolution telemetry and AI gateway.",
     )
     app.state.observatory = observatory
+    app.state.code_graph_watcher = code_graph_watcher
     baseline_capture_service = baseline_capture or capture_baseline_manifest
     app.state.baseline_capture = baseline_capture_service
     app.state.gateway = model_gateway
@@ -4463,6 +4483,16 @@ def create_app(
     def refresh_code_graph() -> dict[str, Any]:
         return code_graph()
 
+    @app.get("/api/code-graph/status")
+    def code_graph_status() -> dict[str, Any]:
+        watcher = app.state.code_graph_watcher
+        return {
+            "watcher_enabled": watcher is not None,
+            "watcher_running": bool(watcher and watcher.running),
+            "last_error": watcher.last_error if watcher else None,
+            "last_commit": watcher.last_commit if watcher else None,
+        }
+
     @app.get("/code-graph")
     def code_graph_page() -> FileResponse:
         page = Path(__file__).resolve().parents[1] / "codegraph" / "graph.html"
@@ -4473,4 +4503,4 @@ def create_app(
     return app
 
 
-app = create_app()
+app = create_app(enable_code_graph_watcher=True)
