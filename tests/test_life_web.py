@@ -362,6 +362,87 @@ def test_allowed_page_is_stored_as_an_untrusted_note_with_full_evidence(tmp_path
     assert life.get_item(item)["state"] == "done"
 
 
+def test_web_explorer_follows_only_bounded_same_host_links(tmp_path):
+    root_url = "https://docs.example-lab.org/falcon"
+    one_url = "https://docs.example-lab.org/guides/one"
+    two_url = "https://docs.example-lab.org/guides/two"
+    third_url = "https://docs.example-lab.org/guides/three"
+    external_url = "https://outside.example.net/ignore"
+
+    root = page(
+        url=root_url,
+        body=(
+            "<html><head><title>Falcon overview</title></head><body>"
+            "<p>The Falcon scheduler supports durable jobs and quiet hours.</p>"
+            '<a href="/guides/one">One</a><a href="/guides/two#section">Two</a>'
+            '<a href="/guides/three">Three</a>'
+            '<a href="https://outside.example.net/ignore">External</a>'
+            '<a href="http://docs.example-lab.org/insecure">HTTP</a>'
+            '<a href="/guides/one">Duplicate</a>'
+            "</body></html>"
+        ),
+    )
+    one = page(url=one_url, body="<p>Falcon guide one explains durable scheduler recovery and retries.</p>")
+    two = page(url=two_url, body="<p>Falcon guide two explains rate limits and bounded background work.</p>")
+
+    class RoutedFetcher:
+        def __init__(self):
+            self.calls = []
+            self.pages = {root_url: root, one_url: one, two_url: two}
+
+        def fetch(self, url, *, host_allowed, timeout, should_stop):
+            self.calls.append(url)
+            assert host_allowed("docs.example-lab.org")
+            assert timeout > 0 and not should_stop()
+            return self.pages[url]
+
+    fetcher = RoutedFetcher()
+    memory, life, runner, _ = make_parts(tmp_path, fetcher=fetcher)
+    life.add_source("docs.example-lab.org")
+    add_url_item(life, url=root_url)
+
+    result = runner.run_cycle("owner")
+    assert result["status"] == "completed"
+    assert fetcher.calls == [root_url, one_url, two_url]
+    cycle = life.get_cycle(result["cycle_id"])
+    assert cycle["resource"]["model_calls"] == 0
+    assert len(cycle["sources"]) == 3
+    assert [source["new"] for source in cycle["sources"]] == [True, True, True]
+    notes = [item for item in memory.list_items() if item["kind"] == "research"]
+    assert len(notes) == 3
+    assert all(note["trust_level"] == "untrusted" for note in notes)
+    assert all(note["metadata"]["reviewed"] is False for note in notes)
+    assert len([action for action in cycle["actions"] if action.startswith("http.get:")]) == 3
+    assert cycle["result"]["pages_visited"] == 3
+    assert cycle["result"]["new_notes"] == 3
+
+
+def test_web_explorer_does_not_follow_cross_host_even_when_allowlisted(tmp_path):
+    root_url = "https://docs.example-lab.org/falcon"
+    external_url = "https://archive.example-lab.org/history"
+    root = page(url=root_url, body=(
+        "<p>The Falcon scheduler guide discusses durable background jobs.</p>"
+        '<a href="https://archive.example-lab.org/history">Archive</a>'
+    ))
+
+    class SinglePageFetcher:
+        def __init__(self):
+            self.calls = []
+
+        def fetch(self, url, *, host_allowed, timeout, should_stop):
+            self.calls.append(url)
+            return root
+
+    fetcher = SinglePageFetcher()
+    memory, life, runner, _ = make_parts(tmp_path, fetcher=fetcher)
+    life.add_source("docs.example-lab.org")
+    life.add_source("archive.example-lab.org")
+    add_url_item(life, url=root_url)
+    result = runner.run_cycle("owner")
+    assert result["status"] == "completed"
+    assert fetcher.calls == [root_url]
+
+
 def test_unlisted_source_is_never_fetched(tmp_path):
     memory, life, runner, fetcher = make_parts(tmp_path)
     item = add_url_item(life)
