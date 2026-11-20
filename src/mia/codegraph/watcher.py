@@ -100,8 +100,8 @@ class CodeGraphWatcher:
                 "parse_errors": summary.get("parse_errors", 0),
             },
         }
-        with history.open("a", encoding="utf-8", newline="\\n") as stream:
-            stream.write(json.dumps(entry, sort_keys=True) + "\\n")
+        with history.open("a", encoding="utf-8", newline="\n") as stream:
+            stream.write(json.dumps(entry, sort_keys=True) + "\n")
 
     def _run(self) -> None:
         # Validate the existing artifact on startup as well as watching later edits.
