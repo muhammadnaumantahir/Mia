@@ -3654,10 +3654,20 @@ def create_app(
         candidate = capability_versions.get(capability_id, version)
         if candidate is None:
             raise HTTPException(status_code=404, detail="Capability version not found")
-        if candidate["status"] != "registered":
+        permissions = candidate.get("permissions") or []
+        if permissions:
+            if candidate["status"] != "active":
+                raise HTTPException(
+                    status_code=409,
+                    detail="Permission-bearing capabilities must be activated before execution",
+                )
+            # Recheck grants on every invocation. Revocation disables the
+            # capability immediately; TaskEngine rechecks each target path.
+            _capability_permission_authorizations(candidate)
+        elif candidate["status"] not in {"registered", "active"}:
             raise HTTPException(
                 status_code=409,
-                detail="Only registered capability versions may be executed",
+                detail="Only registered or active capability versions may be executed",
             )
         validation = candidate.get("validation") or {}
         required_gates = (
@@ -3671,13 +3681,6 @@ def create_app(
                 status_code=409,
                 detail="Capability does not have four passing sandbox validation gates",
             )
-        permissions = candidate.get("permissions")
-        if permissions != []:
-            raise HTTPException(
-                status_code=403,
-                detail="One-shot execution is limited to permission-free capabilities",
-            )
-
         try:
             input_json = json.dumps(
                 item.input_data,
@@ -3806,6 +3809,15 @@ def create_app(
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+        result_data = dict(execution["result"])
+        raw_actions = result_data.pop("_mia_actions", None)
+        action_tasks = _capability_action_tasks(candidate, raw_actions)
+        execution_policy = (
+            "docker-pure-data-with-owner-reviewed-task-requests"
+            if candidate.get("permissions")
+            else "docker-pure-data-only"
+        )
+
         observatory.record_event(
             category="evolution",
             event_type="capability_executed",
@@ -3825,19 +3837,22 @@ def create_app(
                 ).encode("utf-8")),
                 "runner": execution["runner"],
                 "image_id": execution["image_id"],
-                "execution_policy": "permission-free-single-call",
-                "activated": False,
+                "execution_policy": execution_policy,
+                "activated": candidate["status"] == "active",
+                "action_task_ids": [task["task_id"] for task in action_tasks],
             },
         )
         return {
             "capability_id": capability_id,
             "version": version,
-            "result": execution["result"],
+            "result": result_data,
             "source_sha256": candidate["source_sha256"],
             "runner": execution["runner"],
             "image_id": execution["image_id"],
-            "execution_policy": "permission-free-single-call",
-            "activated": False,
+            "execution_policy": execution_policy,
+            "activated": candidate["status"] == "active",
+            "action_tasks": action_tasks,
+            "actions_executed": False,
         }
 
     @app.post("/api/capabilities/{capability_id}/{version}/activate")
@@ -3846,12 +3861,17 @@ def create_app(
     ) -> dict[str, Any]:
         # The body is optional so a disabled gate answers 409 before approval
         # details are even considered; once enabled, approval details are required.
+        candidate = capability_versions.get(capability_id, version)
+        if candidate is None:
+            raise HTTPException(status_code=404, detail="Capability version not found")
+        permission_authorizations = _capability_permission_authorizations(candidate)
         try:
             result = capability_versions.activate(
                 capability_id,
                 version,
                 approved_by=item.approved_by if item else "",
                 reason=item.reason if item else "",
+                permission_authorizations=permission_authorizations,
             )
         except CapabilityActivationBlocked as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
