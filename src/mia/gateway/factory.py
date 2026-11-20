@@ -113,7 +113,7 @@ def paid_route_policy():
     return RoutePolicy(allow_paid=enabled, max_request_cost_usd=cap)
 
 
-def apply_daily_cap(policy, spent_today_usd: float):
+def apply_daily_cap(policy, spent_today_usd: float | None):
     """Tighten a route policy by the remaining daily budget (MIA_MAX_DAILY_SPEND_USD).
 
     The daily cap is mandatory whenever paid routing is enabled. Missing,
@@ -134,6 +134,7 @@ def apply_daily_cap(policy, spent_today_usd: float):
     if (
         not math.isfinite(cap)
         or cap < 0
+        or spent_today_usd is None
         or not math.isfinite(spent_today_usd)
         or spent_today_usd < 0
     ):
@@ -147,7 +148,7 @@ def apply_daily_cap(policy, spent_today_usd: float):
     )
 
 
-def apply_monthly_cap(policy, spent_month_usd: float):
+def apply_monthly_cap(policy, spent_month_usd: float | None):
     """Apply the mandatory UTC-calendar-month ceiling to paid inference.
 
     A missing, malformed or unsafe cap fails closed. Free/local routes are
@@ -167,6 +168,7 @@ def apply_monthly_cap(policy, spent_month_usd: float):
     if (
         not math.isfinite(cap)
         or cap < 0
+        or spent_month_usd is None
         or not math.isfinite(spent_month_usd)
         or spent_month_usd < 0
     ):
