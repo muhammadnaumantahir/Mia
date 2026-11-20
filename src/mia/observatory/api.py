@@ -1583,6 +1583,13 @@ def create_app(
             raise HTTPException(status_code=404, detail="Brain diagnostics asset not found")
         return FileResponse(page, media_type="text/html")
 
+    @app.get("/life")
+    def life_page() -> FileResponse:
+        page = Path(__file__).resolve().parents[1] / "life" / "life.html"
+        if not page.exists():
+            raise HTTPException(status_code=404, detail="Life page asset not found")
+        return FileResponse(page, media_type="text/html")
+
     @app.get("/")
     def dashboard() -> FileResponse:
         page = Path(__file__).with_name("dashboard.html")

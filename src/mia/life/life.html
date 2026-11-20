@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
+<title>Mia — Autonomous life</title>
+<style>
+:root{font-family:Inter,Segoe UI,system-ui,sans-serif;color:#e9f1ef;background:#0c1214}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 10% 0%,#15312c 0,transparent 38%),#0c1214}
+.shell{max-width:1100px;margin:0 auto;padding:28px 18px 60px}h1{font-size:23px;margin:0 0 4px}h3{font-size:15px;margin:0 0 12px}
+.sub,.muted{color:#8ca39c;font-size:12px}nav a{color:#9be5c5;font-size:12px;margin-right:14px}
+.panel{background:linear-gradient(145deg,#172225,#111a1d);border:1px solid #263638;border-radius:16px;padding:18px;margin-top:16px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0}
+.item{border-top:1px solid #253436;padding:10px 0;font-size:13px;overflow-wrap:anywhere}.item:first-child{border-top:0}
+.item small{display:block;color:#829890;margin-top:4px;line-height:1.5}
+.tag{font-size:11px;color:#9ce4c4;border:1px solid #315b4d;background:#122820;border-radius:999px;padding:3px 9px}
+.tag.warn{color:#f0c98f;border-color:#6b5530;background:#2a2113}
+button{background:#1f6f55;color:#eafff6;border:0;border-radius:9px;padding:8px 12px;font:inherit;font-size:12px;cursor:pointer}
+button.alt{background:#263535;color:#d8e2dd}button.danger{background:#8a3a2e}
+input,select,textarea{background:#10191b;color:#dce9e4;border:1px solid #35514a;border-radius:9px;padding:8px;font:inherit;font-size:12px;max-width:100%}
+label{font-size:11px;color:#9db2aa;display:flex;flex-direction:column;gap:4px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:800px){.cols{grid-template-columns:1fr}}
+#notice{min-height:18px;font-size:12px;color:#9acbb3;margin-top:10px}#notice.error{color:#f0b7a8}
+</style></head>
+<body><main class="shell">
+<nav><a href="/">Observatory</a><a href="/assistant">Assistant</a></nav>
+<h1>Autonomous life</h1>
+<div class="sub">Everything here is read from Mia's real journal. Nothing runs unless you allow it; proactive messages are off by default and arrive only in this inbox.</div>
+<div id="notice" role="status" aria-live="polite"></div>
+
+<section class="panel"><h3>Controls</h3>
+<div class="row" id="statusTags"></div>
+<div class="row">
+<button id="pause" class="alt">Pause</button><button id="resume">Resume</button>
+<button id="runCycle" class="alt">Run one cycle now</button>
+<button id="stop" class="danger">Emergency stop</button><button id="clearStop" class="alt">Clear stop</button></div>
+<div class="row">
+<label><span>Proactive messages (inbox only)</span><select id="outreachEnabled"><option value="false">Off</option><option value="true">On</option></select></label>
+<label><span>Max messages / day</span><input id="maxOutreach" type="number" min="0" max="20"></label>
+<label><span>Min gap (minutes)</span><input id="gapMinutes" type="number" min="0" max="10080"></label>
+<label><span>Quiet hours</span><select id="quietEnabled"><option value="false">Off</option><option value="true">On</option></select></label>
+<label><span>Quiet start (HH:MM)</span><input id="quietStart" type="time"></label>
+<label><span>Quiet end (HH:MM)</span><input id="quietEnd" type="time"></label>
+<label><span>UTC offset (minutes)</span><input id="utcOffset" type="number" min="-720" max="840"></label>
+<button id="saveSettings">Save settings</button></div></section>
+
+<section class="panel"><h3>Inbox</h3><div class="muted">Messages Mia chose to send you, each with its evidence.</div><div id="inbox"></div></section>
+
+<div class="cols">
+<section class="panel"><h3>Curiosity backlog</h3>
+<div class="row"><input id="ciTitle" placeholder="What should Mia look into?" maxlength="300" style="flex:1 1 220px">
+<input id="ciWhy" placeholder="Why it matters" maxlength="4000" style="flex:1 1 220px">
+<input id="ciUrl" placeholder="Optional https URL" maxlength="2000" style="flex:1 1 220px"><button id="addCuriosity">Add</button></div>
+<div id="backlog"></div></section>
+<section class="panel"><h3>Research sources allowed</h3><div class="muted">Mia may read only these exact hostnames (https, read-only).</div>
+<div class="row"><input id="srcHost" placeholder="docs.python.org" maxlength="253"><button id="addSource">Allow</button></div>
+<div id="sources"></div></section></div>
+
+<section class="panel"><h3>Reflections</h3><div id="reflections"></div></section>
+<section class="panel"><h3>Activity journal</h3><div id="journal"></div></section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+function el(tag,text,cls){const e=document.createElement(tag);if(text!==undefined&&text!==null)e.textContent=String(text);if(cls)e.className=cls;return e}
+function note(msg,error){const n=$('notice');n.textContent=msg;n.className=error?'error':''}
+async function api(path,method='GET',body){
+ const options={method,headers:{}};
+ if(body!==undefined){options.headers['Content-Type']='application/json';options.body=JSON.stringify(body)}
+ const response=await fetch(path,options);let data=null;
+ try{data=await response.json()}catch(_){}
+ if(!response.ok){const d=data&&data.detail;throw new Error(typeof d==='string'?d:'Request failed ('+response.status+')')}
+ return data}
+async function act(fn,okMessage){try{await fn();if(okMessage)note(okMessage);await refresh()}catch(e){note(e.message,true)}}
+function minutesToTime(m){return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')}
+function timeToMinutes(v){const p=(v||'').split(':');return p.length===2?Number(p[0])*60+Number(p[1]):null}
+function fill(box,items,build,empty){box.replaceChildren();if(!items.length){box.append(el('div',empty,'muted'));return}items.forEach(i=>box.append(build(i)))}
+function button(label,cls,handler){const b=el('button',label,cls);b.type='button';b.addEventListener('click',handler);return b}
+
+function renderStatus(s){
+ const tags=$('statusTags');tags.replaceChildren();
+ const st=s.settings;
+ const add=(t,warn)=>tags.append(el('span',t,'tag'+(warn?' warn':'')));
+ add(st.emergency_stop?'Emergency stop ON':st.paused?'Paused':'Active',st.emergency_stop||st.paused);
+ add('Background scheduler: '+(s.scheduler_running?'running':'not running')+(s.background_enabled?'':' (disabled by MIA_LIFE_ENABLED)'));
+ add('Cycles today: '+s.cycles_today+' / '+st.max_cycles_per_day);
+ add('Unread messages: '+s.unanswered_outreach);
+ add('Explorer: '+s.explorer.name);
+ if(s.quiet_hours_active)add('Quiet hours active',true);
+ $('outreachEnabled').value=String(st.outreach_enabled);$('maxOutreach').value=st.max_outreach_per_day;
+ $('gapMinutes').value=st.min_outreach_gap_minutes;$('quietEnabled').value=String(st.quiet_hours_enabled);
+ $('quietStart').value=minutesToTime(st.quiet_start_minute);$('quietEnd').value=minutesToTime(st.quiet_end_minute);
+ $('utcOffset').value=st.utc_offset_minutes;
+ fill($('sources'),s.research_sources,h=>{const d=el('div',null,'item');d.append(el('span',h),document.createTextNode(' '),
+  button('Remove','alt',()=>act(()=>api('/api/life/sources/'+encodeURIComponent(h),'DELETE'),'Source removed')));return d},'No research source is allowed, so Mia does no web research.')}
+
+function renderInbox(messages){
+ fill($('inbox'),messages,m=>{const d=el('div',null,'item');
+  d.append(el('strong',m.title),document.createTextNode(' '),el('span',m.state,'tag'+(m.state==='pending'?' warn':'')),el('div',m.body));
+  d.append(el('small','Evidence: '+m.evidence.map(e=>e.type+':'+(e.ref||'')).join(', ')+' · '+m.created_at));
+  const row=el('div',null,'row');
+  if(m.state==='pending')row.append(button('Mark read','alt',()=>act(()=>api('/api/life/outreach/'+m.message_id+'/state','POST',{state:'read'}))));
+  if(m.state!=='dismissed'&&m.state!=='acted'){row.append(button('Done','alt',()=>act(()=>api('/api/life/outreach/'+m.message_id+'/state','POST',{state:'acted'}))),
+   button('Dismiss (stop this topic)','danger',()=>act(()=>api('/api/life/outreach/'+m.message_id+'/state','POST',{state:'dismissed'}))))}
+  d.append(row);return d},'No messages. Mia has not contacted you.')}
+
+function renderBacklog(items){
+ fill($('backlog'),items,i=>{const d=el('div',null,'item');
+  d.append(el('strong',i.title),document.createTextNode(' '),el('span',i.state,'tag'),el('small',i.why_it_matters+' · origin '+i.origin+' · attempts '+i.attempts+(i.state_reason?' · '+i.state_reason:'')));
+  const row=el('div',null,'row');
+  if(i.state!=='queued')row.append(button('Requeue','alt',()=>act(()=>api('/api/life/curiosity/'+i.item_id+'/state','POST',{state:'queued'}))));
+  if(i.state!=='rejected')row.append(button('Reject','alt',()=>act(()=>api('/api/life/curiosity/'+i.item_id+'/state','POST',{state:'rejected'}))));
+  row.append(button('Delete','danger',()=>act(()=>api('/api/life/curiosity/'+i.item_id,'DELETE'))));
+  d.append(row);return d},'The backlog is empty.')}
+
+function renderReflections(items){
+ fill($('reflections'),items,r=>{const d=el('div',null,'item');
+  d.append(el('strong','Reviewed '+r.cycles_reviewed+' cycles'),el('small',r.created_at));
+  r.observations.forEach(o=>d.append(el('div','• '+o)));return d},'No reflection yet; one is written after 5 real cycles.')}
+
+function renderJournal(items){
+ fill($('journal'),items,c=>{const d=el('div',null,'item');
+  d.append(el('strong',c.goal),document.createTextNode(' '),el('span',c.outcome||c.status,'tag'));
+  d.append(el('div',c.summary||c.rationale));
+  d.append(el('small',c.started_at+' · trigger '+c.trigger+' · level '+c.permission_level+' · model calls '+((c.resource||{}).model_calls??'n/a')+' · messages: '+c.notification_decision+(c.repeat_count>1?' · repeated x'+c.repeat_count:'')));
+  return d},'No cycle has run yet.')}
+
+async function refresh(){
+ try{
+  const [s,inbox,backlog,refl,journal]=await Promise.all([api('/api/life/status'),api('/api/life/outreach?limit=30'),
+   api('/api/life/curiosity?limit=50'),api('/api/life/reflections?limit=10'),api('/api/life/journal?limit=30')]);
+  renderStatus(s);renderInbox(inbox.messages);renderBacklog(backlog.items);renderReflections(refl.reflections);renderJournal(journal.entries)
+ }catch(e){note(e.message,true)}}
+
+$('pause').onclick=()=>act(()=>api('/api/life/pause','POST'),'Paused');
+$('resume').onclick=()=>act(()=>api('/api/life/resume','POST'),'Resumed');
+$('stop').onclick=()=>act(()=>api('/api/life/emergency-stop','POST'),'Emergency stop engaged');
+$('clearStop').onclick=()=>act(()=>api('/api/life/emergency-stop/clear','POST'),'Stop cleared; activity stays paused until you resume');
+$('runCycle').onclick=()=>act(async()=>{const r=await api('/api/life/cycle','POST');note('Cycle result: '+r.status+(r.reason?' ('+r.reason+')':''))});
+$('saveSettings').onclick=()=>act(()=>api('/api/life/settings','PUT',{
+ outreach_enabled:$('outreachEnabled').value==='true',max_outreach_per_day:Number($('maxOutreach').value),
+ min_outreach_gap_minutes:Number($('gapMinutes').value),quiet_hours_enabled:$('quietEnabled').value==='true',
+ quiet_start_minute:timeToMinutes($('quietStart').value),quiet_end_minute:timeToMinutes($('quietEnd').value),
+ utc_offset_minutes:Number($('utcOffset').value)}),'Settings saved');
+$('addCuriosity').onclick=()=>act(async()=>{
+ const body={title:$('ciTitle').value,why_it_matters:$('ciWhy').value};if($('ciUrl').value.trim())body.url=$('ciUrl').value.trim();
+ await api('/api/life/curiosity','POST',body);$('ciTitle').value=$('ciWhy').value=$('ciUrl').value='';note('Added to the backlog')});
+$('addSource').onclick=()=>act(async()=>{await api('/api/life/sources','POST',{host:$('srcHost').value});$('srcHost').value='';note('Source allowed')});
+refresh();setInterval(refresh,30000);
+</script></body></html>
