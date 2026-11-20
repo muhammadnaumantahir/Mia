@@ -157,7 +157,7 @@ def test_continuity_survives_restart_and_model_switch(tmp_path, monkeypatch):
         },
     )
     assert follow_up.status_code == 200
-    identity_marker = "\\n\\nLIVE RUNTIME EVIDENCE"
+    identity_marker = "\n\nLIVE RUNTIME EVIDENCE"
     assert identity_before["content"].split(identity_marker, 1)[0] == second.last_messages[0]["content"].split(identity_marker, 1)[0]
     assert "Configured provider adapters (1): local-b" in second.last_messages[0]["content"]
     seen = json.dumps(second.last_messages)
