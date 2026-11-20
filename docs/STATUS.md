@@ -93,6 +93,6 @@ A first implementation is being developed on `feature/code-graph-foundation`:
 - Confirmed import/declaration/direct-call/route relationships; heuristic SPS-layer and test-name edges are explicitly labelled inferred.
 - Stable hash identifiers, source digest, Git commit metadata, parser error reporting and atomic graph artifact writes.
 - Local `/code-graph` UI with search, type/relationship/evidence filters, selection details, pan and zoom; Assistant and Observatory navigation links.
-- API rebuilds/validates the source digest when graph data is requested; CLI supports regeneration and stale checks.
+- Production FastAPI lifespan starts a background metadata watcher that validates the graph on startup and atomically rebuilds it after source changes; graph API access also validates/refreshes. CLI supports regeneration and stale checks.
 
 **Verification state:** source has been added, but this branch has not yet been run in a local Python environment. The generated graph has not yet been produced from an actual checkout, so node/edge counts and parser coverage are not claimed. Browser usability, API integration and the full test suite remain unverified. The first pass currently parses Python symbols and indexes other supported file types as file nodes; full language-specific frontend/database/runtime relationship analysis remains future work.
