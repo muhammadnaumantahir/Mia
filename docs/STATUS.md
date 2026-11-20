@@ -82,4 +82,7 @@ A development phase is complete when its code-side acceptance criteria are imple
 - Regression tests have been added, but the latest gateway, semantic-memory and permission changes have **not been run locally**. Historical test counts in earlier status entries do not verify this current diff.
 - PR #3 remains draft. No changes from it have been merged into main. CI is reported separately and is not a development gate.
 
-Remaining Priority 1 development includes full-history semantic retrieval/evaluation, model-assisted memory extraction/consolidation, richer self-description of architecture/limitations, quality-based model escalation, multilingual conversation evaluation and complete shared Brain/Voice conversation verification.
+Voice: an explicit opt-in “Hey Mia” wake phrase mode is implemented using the browser speech service, with visible Mic/listening state, mute/stop and re-arming after each turn. It is not offline wake-word detection; browser privacy disclosure and OWNER_VERIFICATION_REQUIRED steps are documented. Regression tests are added but not run.
+- Conversation evaluation: a deterministic fixture and runner cover English, Urdu and Roman Urdu decision recall plus runtime self-description. This tests context assembly, not live model translation quality; tests are added but not run.
+
+Remaining Priority 1 development includes full-history semantic retrieval/evaluation, model-assisted memory extraction/consolidation, richer self-description of architecture/limitations, quality-based model escalation, reasoning-quality evaluation and full text/voice acceptance verification.
