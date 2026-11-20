@@ -187,3 +187,12 @@ None of these is marked "verified live".
   A validator bug (error cap not enforced in loops) was caught by the new tests and
   fixed. Local verification: `ruff` clean, `pytest` 1095 passed, 16 skipped (browser
   tests lacking Playwright/Chromium; mocked providers only).
+
+
+## 2026-11-20 fail-closed accounting addendum
+
+- New paid usage rows with unknown/invalid cost are rejected; their reservation is not silently released.
+- Historical paid rows with NULL cost now make daily/monthly spend unknown. `spend_since`, budget reservation and policy application fail closed instead of allowing SQL SUM to ignore NULL and effectively treat it as zero.
+- Usage summaries return `cost_usd: null` and an `unknown_cost_rows` count; the gateway dashboard renders “Unknown” and warns that paid routing is blocked until reconciliation.
+- Paid request and stream cancellation retain reservations until expiry because the provider may have processed billable tokens before cancellation.
+- Regression tests for historical NULL-cost rows, cancellation, unknown spend and dashboard-safe summaries have been added but have not been run after these changes. The earlier local test counts in this audit are historical and do not verify this addendum.
