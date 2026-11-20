@@ -15,6 +15,7 @@ import json
 import math
 import sqlite3
 from collections import deque
+from contextlib import contextmanager
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -82,7 +83,7 @@ class DecisionLog:
         self._items: deque[RoutingDecision] = deque(maxlen=self.capacity)
         if self.database_path is not None:
             self.database_path.parent.mkdir(parents=True, exist_ok=True)
-            with self._connect() as db:
+            with self._connection() as db:
                 db.execute(
                     """
                     CREATE TABLE IF NOT EXISTS routing_decisions (
@@ -97,12 +98,20 @@ class DecisionLog:
                     "ON routing_decisions(created_at)"
                 )
 
-    def _connect(self):
+    @contextmanager
+    def _connection(self):
         if self.database_path is None:
             raise RuntimeError("persistent decision storage is not configured")
         db = sqlite3.connect(self.database_path, timeout=10)
         db.row_factory = sqlite3.Row
-        return db
+        try:
+            yield db
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
 
     @staticmethod
     def _decode(payload: str) -> RoutingDecision:
@@ -128,7 +137,7 @@ class DecisionLog:
             payload = json.dumps(
                 decision.to_dict(), ensure_ascii=False, sort_keys=True, separators=(",", ":")
             )
-            with self._connect() as db:
+            with self._connection() as db:
                 db.execute(
                     "INSERT INTO routing_decisions(created_at, decision_json) VALUES (?, ?)",
                     (decision.created_at, payload),
@@ -142,7 +151,7 @@ class DecisionLog:
     def recent(self, limit: int = 20) -> list[RoutingDecision]:
         safe_limit = max(0, min(int(limit), 10_000))
         if self.database_path is not None:
-            with self._connect() as db:
+            with self._connection() as db:
                 rows = db.execute(
                     "SELECT decision_json FROM routing_decisions "
                     "ORDER BY id DESC LIMIT ?",
