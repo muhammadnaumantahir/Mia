@@ -14,9 +14,10 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-EXCLUDED = {".git", ".venv", "venv", "__pycache__", "node_modules", ".mypy_cache", ".pytest_cache", ".ruff_cache", "dist", "build", "secrets", "credentials", "private_keys"}
+EXCLUDED = {".git", ".venv", "venv", "__pycache__", "node_modules", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".ssh", ".private", "private", "certs", "certificates", "dist", "build", "secrets", "credentials", "private_keys"}
 SENSITIVE_FILES = {".env", ".env.local", ".env.production", "secrets.json", "credentials.json",
-                   "service-account.json", "id_rsa", "id_ed25519"}
+                   "service-account.json", "id_rsa", "id_ed25519", "authorized_keys"}
+SENSITIVE_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".keystore", ".jks"}
 SOURCE_SUFFIXES = {
     ".py", ".html", ".js", ".ts", ".tsx", ".jsx", ".css", ".toml", ".sql", ".md",
     ".json", ".yaml", ".yml", ".ini", ".cfg", ".properties", ".xml", ".sh", ".ps1",
@@ -82,7 +83,7 @@ def _python_files(root: Path) -> list[Path]:
             # Generated graph history must not become its own indexing input.
             if relative in {"docs/code-graph/CHANGELOG.md", "docs/code-graph/graph.json"}:
                 continue
-            if name.lower() in SENSITIVE_FILES or (
+            if name.lower() in SENSITIVE_FILES or path.suffix.lower() in SENSITIVE_SUFFIXES or (
                 name.lower().startswith(".env.") and name.lower() != ".env.example"
             ):
                 continue
@@ -116,6 +117,7 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
     modules = {_module_path(path, root): path for path in files if path.suffix == ".py"}
     symbol_index: dict[str, list[str]] = {}
     parsed: dict[Path, ast.Module] = {}
+    definition_ids: dict[ast.AST, str] = {}
     errors: list[dict[str, str]] = []
 
     def add_node(kind: str, key: str, **attrs: Any) -> str:
@@ -174,6 +176,7 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
                                    qualified_name=parent_key + "." + item.name if parent_key else item.name,
                                    line=item.lineno, end_line=getattr(item, "end_lineno", item.lineno))
                     symbol_index.setdefault(item.name, []).append(sid)
+                    definition_ids[item] = sid
                     add_edge(fid, sid, "DECLARES", "confirmed", f"ast:{rel}:{item.lineno}", item.lineno)
                     if isinstance(item, ast.ClassDef):
                         for base in item.bases:
@@ -239,7 +242,9 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
                                 route_id = add_node("api_endpoint", f"{decorator.func.attr.upper()} {route}",
                                                      label=f"{decorator.func.attr.upper()} {route}",
                                                      path=rel, line=decorator.lineno)
-                                function_id = _node_id("function", f"{rel}:{node.name}")
+                                function_id = definition_ids.get(node)
+                                if function_id is None:
+                                    continue
                                 add_edge(function_id, route_id, "EXPOSES_API", "confirmed",
                                          f"fastapi-decorator:{rel}:{decorator.lineno}", decorator.lineno)
 
