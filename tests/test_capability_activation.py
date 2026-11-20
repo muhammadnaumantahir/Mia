@@ -135,7 +135,7 @@ def test_api_permissioned_activation_requires_a_matching_live_owner_grant(tmp_pa
     no_longer_authorized = client.post(
         "/api/capabilities/hello-tool/0.1.0/activate", json=body
     )
-    assert no_longer_authorized.status_code == 409
+    assert no_longer_authorized.status_code == 403
 
 
 def test_tampered_source_blocks_activation(tmp_path):
