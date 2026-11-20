@@ -44,7 +44,7 @@ from mia.computer.applications import ApplicationLauncher, ApplicationLaunchErro
 from mia.computer.approvals import ApprovalError, ApprovalStore
 from mia.computer.browser import BrowserAccessError, BrowserController
 from mia.computer.browser_actions import BrowserActions
-from mia.computer.capabilities import PermissionLevel, default_registry
+from mia.computer.capabilities import PermissionLevel, RiskLevel, default_registry
 from mia.computer.control import AutomationControl, AutomationStopped
 from mia.computer.desktop_control import DesktopController, _CONSEQUENTIAL, make_window_guard
 from mia.computer.environment import detect_environment
@@ -144,6 +144,7 @@ class CapabilityDraftInput(BaseModel):
     )
     name: str = Field(min_length=1, max_length=120)
     objective: str = Field(min_length=1, max_length=4000)
+    permissions: list[str] = Field(default_factory=list, max_length=10)
 
 
 class CapabilityCandidateInput(BaseModel):
