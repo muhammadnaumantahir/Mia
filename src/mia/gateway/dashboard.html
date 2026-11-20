@@ -27,6 +27,7 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
   <article class="card"><div class="label">Today · UTC spend</div><div class="metric" id="today">$—</div><div class="label">Current UTC day</div></article>
   <article class="card"><div class="label">Current month · UTC spend</div><div class="metric" id="month">$—</div><div class="label">Current UTC calendar month</div></article>
 </section>
+<p id="unknown-cost-warning" class="warning" hidden></p>
 <section class="section card">
  <div class="section-head"><h2>Spend governance</h2><span class="tag" id="paid-state">Paid inference off</span></div>
  <div id="budgets"></div>
@@ -48,7 +49,72 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
 </main>
 <script>
 const $=id=>document.getElementById(id);
-const money=n=>Number.isFinite(Number(n))?'$'+Number(n).toFixed(4):'Unknown';
+const money=n=>n===null||n===undefined?'Unknown':Number.isFinite(Number(n))?'
+function node(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=String(text);return e}
+function budgetLine(host,name,entry,spent){const row=node('div','budget-row');row.append(node('span','muted',name));const detail=entry.valid?money(entry.limit_usd)+' limit · '+money(spent)+' spent':(entry.configured?'Invalid configuration':'Not configured')+' · paid routes blocked';row.append(node('strong',entry.valid?'status-good':'status-warn',detail));host.append(row)}
+function render(data){
+ const usage=data.usage||{};const b=data.budgets||{};
+ $('requests').textContent=(usage.total_requests??0).toLocaleString();
+ $('spend').textContent=money(usage.total_cost_usd);
+ $('today').textContent=money(b.spent_today_utc_usd);
+ $('month').textContent=money(b.spent_month_utc_usd);
+ $('token-count').textContent=(usage.total_input_tokens??0).toLocaleString()+' input · '+(usage.total_output_tokens??0).toLocaleString()+' output tokens';
+ const unknownRows=(usage.items||[]).reduce((sum,item)=>sum+(item.unknown_cost_rows||0),0);
+ const unknownWarning=$('unknown-cost-warning');unknownWarning.hidden=unknownRows===0;
+ unknownWarning.textContent=unknownRows?'Unknown paid-cost ledger rows were found. Mia fails closed and blocks paid routing until the ledger is reconciled.':'';
+ $('paid-state').textContent=b.paid_routing_available?'Paid routing eligible':'Paid routing blocked';
+ $('paid-state').className='tag '+(b.paid_routing_available?'status-good':'status-warn');
+ const budgets=$('budgets');budgets.replaceChildren();
+ budgetLine(budgets,'Per-request',b.request,usage.total_cost_usd);
+ budgetLine(budgets,'Daily UTC',b.daily,b.spent_today_utc_usd);
+ budgetLine(budgets,'Monthly UTC',b.monthly,b.spent_month_utc_usd);
+ const reserved=b.reservations||{};const active=node('div','budget-row');active.append(node('span','muted','In-flight reservations'));active.append(node('strong','',money(reserved.active_reserved_usd)+' reserved · '+(reserved.active_count||0)+' active'));budgets.append(active);
+ const providers=$('providers');providers.replaceChildren();
+ for(const p of data.providers||[]){const card=node('article','card provider '+p.status);const top=node('div','provider');const name=node('strong','',p.provider_id);const state=node('span','label',p.status);const dot=node('span','dot');state.prepend(dot);top.append(name,state);card.append(top);const test=node('button','compact','Test connection');test.addEventListener('click',async()=>{test.disabled=true;try{const response=await fetch('/api/gateway/providers/'+encodeURIComponent(p.provider_id)+'/test',{method:'POST'});const result=await response.json();if(!response.ok)throw new Error(result.detail||'Provider test failed');state.textContent=result.ok?'connected · '+result.model_count+' models':result.status+': '+result.detail;state.prepend(node('span','dot'));}catch(e){$('error').textContent=e.message}finally{test.disabled=false}});card.append(test);providers.append(card)}
+ if(!(data.providers||[]).length)providers.append(node('div','empty','No providers registered'));
+ const tbody=$('models');tbody.replaceChildren();
+ for(const m of data.models||[]){
+  const tr=node('tr');const ident=node('td');ident.append(node('div','model-key',m.alias||m.model_id));ident.append(node('small','',m.provider_id+'/'+m.model_id));tr.append(ident);
+  const status=node('td','',m.stale?'stale':m.enabled?'enabled':'disabled');tr.append(status);
+  tr.append(node('td','',Number(m.context_window||0).toLocaleString()));
+  const caps=node('td');for(const c of m.effective_capabilities||[])caps.append(node('span','tag',c));tr.append(caps);
+  tr.append(node('td','',m.verification||'unknown'));
+  const pref=node('td');const select=node('select','compact');for(let n=-10;n<=10;n++){const opt=node('option','',String(n));opt.value=String(n);if(n===m.preference)opt.selected=true;select.append(opt)}pref.append(select);tr.append(pref);
+  const controls=node('td');controls.className='controls';
+  const toggle=node('button','compact',m.enabled?'Disable':'Enable');toggle.addEventListener('click',()=>updateModel(m,{enabled:!m.enabled},toggle));controls.append(toggle);
+  select.addEventListener('change',()=>updateModel(m,{preference:Number(select.value)},select));
+  const alias=node('button','compact','Set alias');alias.addEventListener('click',()=>{const value=window.prompt('Model alias (leave blank to clear):',m.alias||'');if(value!==null)updateModel(m,{alias:value.trim()||null,change_alias:true},alias)});controls.append(alias);tr.append(controls);
+  tbody.append(tr)
+ }
+ if(!(data.models||[]).length){
+  const tr=node('tr');const td=node('td','empty','No models discovered yet. Use Discover models to refresh the provider catalog.');
+  td.colSpan=7;tr.append(td);tbody.append(tr)
+ }
+ const decisions=$('decisions');decisions.replaceChildren();
+ for(const d of data.decisions||[]){const block=node('div','decision');block.append(node('strong','',d.selected||'No eligible model'));block.append(node('p','',d.task_type+' · '+d.mode+' · '+d.reason));if((d.overrides||[]).length)block.append(node('p','',d.overrides.join(' · ')));decisions.append(block)}
+ if(!(data.decisions||[]).length)decisions.append(node('div','empty','No routing decisions recorded in this process yet.'));
+}
+async function updateModel(model,settings,control){
+ control.disabled=true;
+ try{const url='/api/gateway/models/'+encodeURIComponent(model.provider_id)+'/'+encodeURIComponent(model.model_id)+'/settings';const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)});if(!res.ok)throw new Error((await res.json()).detail||'Could not update model');await load()}
+ catch(e){$('error').textContent=e.message}finally{control.disabled=false}
+}
+async function load(){
+ $('error').textContent='';$('refresh').disabled=true;
+ try{const response=await fetch('/api/gateway/overview',{cache:'no-store'});if(!response.ok)throw new Error('Gateway overview failed: HTTP '+response.status);render(await response.json())}
+ catch(e){$('error').textContent=e.message}
+ finally{$('refresh').disabled=false}
+}
+$('refresh').addEventListener('click',load);
+ $('refresh-models').addEventListener('click',async()=>{
+  const btn=$('refresh-models');btn.disabled=true;$('error').textContent='';
+  try{const response=await fetch('/api/gateway/models/refresh',{method:'POST'});if(!response.ok)throw new Error('Model discovery failed: HTTP '+response.status);const result=await response.json();await load();$('error').textContent='Discovered '+result.count+' model(s).'}
+  catch(e){$('error').textContent=e.message}finally{btn.disabled=false}
+ });
+ load();
+</script>
+</body>
+</html>+Number(n).toFixed(4):'Unknown';
 function node(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=String(text);return e}
 function budgetLine(host,name,entry,spent){const row=node('div','budget-row');row.append(node('span','muted',name));const detail=entry.valid?money(entry.limit_usd)+' limit · '+money(spent)+' spent':(entry.configured?'Invalid configuration':'Not configured')+' · paid routes blocked';row.append(node('strong',entry.valid?'status-good':'status-warn',detail));host.append(row)}
 function render(data){
