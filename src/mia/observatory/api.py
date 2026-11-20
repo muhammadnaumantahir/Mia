@@ -207,7 +207,7 @@ class ApplicationLaunchPreview(BaseModel):
 
 
 class ApplicationLaunchExecution(ApplicationLaunchPreview):
-    approval_id: str = Field(min_length=32, max_length=32)
+    approval_id: str | None = Field(default=None, min_length=32, max_length=32)
 
 
 class FileWritePreview(BaseModel):
@@ -217,7 +217,7 @@ class FileWritePreview(BaseModel):
 
 
 class FileWriteExecution(FileWritePreview):
-    approval_id: str = Field(min_length=32, max_length=32)
+    approval_id: str | None = Field(default=None, min_length=32, max_length=32)
 
 
 class ApprovalExecutionInput(BaseModel):
@@ -496,7 +496,7 @@ class BrowserActionInput(BrowserRefInput):
 
 
 class BrowserActionExecution(BrowserActionInput):
-    approval_id: str = Field(min_length=32, max_length=32)
+    approval_id: str | None = Field(default=None, min_length=32, max_length=32)
 
 
 class TerminalCommandInput(BaseModel):
@@ -567,12 +567,12 @@ class DesktopActionInput(BaseModel):
 
 
 class DesktopActionExecution(DesktopActionInput):
-    approval_id: str = Field(min_length=32, max_length=32)
+    approval_id: str | None = Field(default=None, min_length=32, max_length=32)
     window_title: str = Field(min_length=1, max_length=240)
 
 
 class WindowActionExecution(WindowActionInput):
-    approval_id: str = Field(min_length=32, max_length=32)
+    approval_id: str | None = Field(default=None, min_length=32, max_length=32)
     window_title: str = Field(min_length=1, max_length=240)
 
 
@@ -587,7 +587,7 @@ class FileOperationInput(BaseModel):
 
 
 class FileOperationExecution(FileOperationInput):
-    approval_id: str = Field(min_length=32, max_length=32)
+    approval_id: str | None = Field(default=None, min_length=32, max_length=32)
 
 
 class PermissionGrantInput(BaseModel):
@@ -701,6 +701,28 @@ def create_app(
     capability_registry = default_registry()
     app.state.permission_policy = policy
     app.state.capability_registry = capability_registry
+
+    def _computer_permission_requires_approval(
+        capability: str,
+        *,
+        path: str | None = None,
+        force_approval: bool = False,
+    ) -> bool:
+        """Evaluate the shared owner policy; unknown capabilities fail closed."""
+        try:
+            spec = capability_registry.get(capability)
+        except KeyError:
+            return True
+        decision = policy.authorize(spec, path=path)
+        if not decision.allowed:
+            raise HTTPException(status_code=403, detail=decision.reason)
+        return bool(decision.requires_approval or force_approval)
+
+    def _filesystem_permission_path(root_id: str, relative_path: str) -> str | None:
+        try:
+            return str(computer_files._resolve(root_id, relative_path or "."))
+        except Exception:
+            return None
     desktop_adapter = windows_ui or WindowsUIAdapter(approval_store)
     if desktop_adapter.window_guard is None:
         desktop_adapter.window_guard = make_window_guard()
