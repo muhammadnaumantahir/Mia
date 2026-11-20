@@ -37,7 +37,7 @@ from mia.agent.tasks import (
 from mia.agent.tools import ToolRegistry, ToolResult
 from mia.brain.broker import OwnerPermissionEvaluator, ToolBroker
 from mia.brain.capabilities import CapabilityRegistry
-from mia.brain.orchestrator import Brain
+from mia.brain.orchestrator import Brain, TurnRequest
 from mia.brain.plan import PlanStore
 from mia.brain.self_description import build_runtime_manifest, render_runtime_manifest
 from mia.computer.app_discovery import ApplicationDiscovery
@@ -97,7 +97,7 @@ from mia.memory.identity import (
 )
 from mia.memory.maintenance import MaintenanceService
 from mia.memory.relationships import RelationshipNotFoundError
-from mia.memory.semantic import LocalOllamaEmbeddingReranker, TurnRequest
+from mia.memory.semantic import LocalOllamaEmbeddingReranker
 from mia.memory.store import MemoryStore
 from mia.memory.structured import RECORD_TYPES, RecordNotFoundError, RecordStateError
 from mia.observatory.activity import ExperimentActivityCollector
