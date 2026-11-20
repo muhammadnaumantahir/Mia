@@ -22,7 +22,7 @@ class CodeGraphWatcher:
         self.interval_seconds = float(interval_seconds)
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        self._snapshot: tuple[tuple[str, int, int], ...] = ()
+        self._snapshot: tuple[tuple[str, str], ...] = ()
         self._lock = threading.Lock()
         self.last_error: str | None = None
         self.last_commit: str | None = None
