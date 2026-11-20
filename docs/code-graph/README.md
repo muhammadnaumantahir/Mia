@@ -57,3 +57,12 @@ Invoke-RestMethod "http://127.0.0.1:8765/api/code-graph/impact?base=main"
 ```
 
 The local API exposes `GET /api/code-graph/impact?base=main`. It reports changed paths, direct and transitive static import dependents, and tests connected through explicitly inferred `TESTED_BY` edges. Deleted or unsupported files are reported as unindexed rather than guessed. This is conservative static impact analysis: dynamic imports, dependency injection, runtime wiring and missing test-name matches can leave relationships unresolved.
+
+
+## Automatic refresh during development
+
+When the Mia server starts, its Code Graph watcher checks source-file content digests and rebuilds the full graph after changes. The interval is configurable with `MIA_CODE_GRAPH_WATCH_INTERVAL_SECONDS`; set `MIA_CODE_GRAPH_WATCH_ENABLED=false` to disable it. The watcher shuts down with the application.
+
+Every GitHub Actions CI run also regenerates the graph from the checked-out commit and uploads the JSON snapshot as a short-lived `mia-code-graph-<commit>` artifact. This makes the graph available even when Mia is not running locally. The artifact is retained for seven days.
+
+The watcher currently performs full graph rebuilds rather than incremental file-level parsing. The Git-diff impact endpoint is a conservative static-import analysis, not a complete runtime dependency map.
