@@ -65,7 +65,7 @@ class LocalOllamaEmbeddingReranker:
             raise ValueError("a valid local embedding model name is required")
         clean_url = validate_provider_url(base_url, allow_private=True)
         parts = urlsplit(clean_url)
-        if parts.scheme != "http" or parts.hostname not in {"127.0.0.1", "localhost", "::1"}:
+        if parts.scheme != "http" or parts.hostname not in {"127.0.0.1", "::1"}:
             raise ValueError("memory embeddings must use a loopback-only HTTP Ollama endpoint")
         if not math.isfinite(timeout_seconds) or not 1.0 <= timeout_seconds <= 60.0:
             raise ValueError("embedding timeout must be between 1 and 60 seconds")
@@ -97,13 +97,15 @@ class LocalOllamaEmbeddingReranker:
         if self._embedder is not None:
             vectors = self._embedder(texts)
         else:
-            response = httpx.post(
-                f"{self.base_url}/api/embed",
-                json={"model": self.model, "input": texts},
-                timeout=self.timeout_seconds,
-            )
-            response.raise_for_status()
-            payload = response.json()
+            # Disable environment proxies: private memory must never be sent to a
+            # configured HTTP_PROXY/HTTPS_PROXY even though the target is loopback.
+            with httpx.Client(timeout=self.timeout_seconds, trust_env=False) as client:
+                response = client.post(
+                    f"{self.base_url}/api/embed",
+                    json={"model": self.model, "input": texts},
+                )
+                response.raise_for_status()
+                payload = response.json()
             vectors = payload.get("embeddings") if isinstance(payload, dict) else None
         if not isinstance(vectors, list) or len(vectors) != len(texts):
             raise ValueError("local embedding service returned an invalid batch")
