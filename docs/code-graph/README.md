@@ -25,14 +25,13 @@ weights or runtime databases into it.
 
 ## Evidence model
 
-- `IMPORTS`, `DECLARES`, `CALLS`, and FastAPI `EXPOSES_API` edges are emitted from
-  Python AST evidence when statically resolvable.
+- `IMPORTS`, `DECLARES`, same-file unique `CALLS`, FastAPI `EXPOSES_API`, and exact
+  literal config-file `USES`/`READS_FROM`/`WRITES_TO` edges are emitted from Python AST evidence.
 - `BELONGS_TO_LAYER` and `TESTED_BY` are heuristics and are explicitly labelled
   `inferred`.
 - A missing edge is not proof that no runtime relationship exists. Reflection, dynamic
   imports, dependency injection and runtime-generated calls are not fully resolvable.
-- Unsupported non-Python files appear as file nodes; they are not falsely presented as
-  parsed symbols.
+- JSON/YAML/TOML/HTML/JS/TS/SQL and workflow/config files appear as file nodes; they are not falsely presented as parsed symbols. Sensitive environment and credential files/directories are excluded.
 
 ## Interface
 
