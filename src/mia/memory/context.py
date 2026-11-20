@@ -356,6 +356,16 @@ def assemble_memory_context(
                                "structured", record))
                 semantic_candidate_ids.add(record_id)
                 existing_ids.add(record_id)
+        for message in store.recent_messages(
+            limit=INTENT_POOL, exclude_message_ids=recent_ids
+        ):
+            message_id = str(message.get("message_id") or "")
+            if message_id and message_id not in existing_ids:
+                score = -0.05 + (0.1 if message.get("role") == "user" else 0.0)
+                score += _recency(message.get("created_at", ""), now)
+                scored.append((score, "conversation", message))
+                semantic_candidate_ids.add(message_id)
+                existing_ids.add(message_id)
         try:
             boosts = reranker(prompt, [record for _, _, record in scored])
             reranked: list[tuple[float, str, dict[str, Any]]] = []
