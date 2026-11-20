@@ -110,7 +110,9 @@ def test_chat_retrieves_relevant_memory_with_provenance(tmp_path, monkeypatch):
     assert refs[0]["provenance"] == "owner-provided" and refs[0]["source"] == "Architecture review"
 
     messages = provider.last_messages
-    assert messages[0] == {"role": "system", "content": identity_system_prompt()}
+    assert messages[0]["role"] == "system"
+    assert messages[0]["content"].startswith(identity_system_prompt())
+    assert "LIVE RUNTIME EVIDENCE" in messages[0]["content"]
     block = provider.memory_blocks()
     assert len(block) == 1 and "PostgreSQL" in block[0]["content"]
     assert messages[-1] == {"role": "user", "content": QUESTION}
@@ -155,7 +157,9 @@ def test_continuity_survives_restart_and_model_switch(tmp_path, monkeypatch):
         },
     )
     assert follow_up.status_code == 200
-    assert second.last_messages[0] == identity_before  # identical identity, different model
+    identity_marker = "\\n\\nLIVE RUNTIME EVIDENCE"
+    assert identity_before["content"].split(identity_marker, 1)[0] == second.last_messages[0]["content"].split(identity_marker, 1)[0]
+    assert "Configured provider adapters (1): local-b" in second.last_messages[0]["content"]
     seen = json.dumps(second.last_messages)
     assert "Understood, PostgreSQL." in seen  # prior turns persisted across the restart
     assert len(second.memory_blocks()) == 1 and "transactional safety" in seen
@@ -249,7 +253,8 @@ def test_stream_endpoint_uses_context_and_reports_references(tmp_path, monkeypat
     events = parse_sse(response.text)
     assert events[-1][0] == "done"
     assert [r["ref_id"] for r in events[-1][1]["context_references"]] == [item_id]
-    assert provider.last_messages[0]["content"] == identity_system_prompt()
+    assert provider.last_messages[0]["content"].startswith(identity_system_prompt())
+    assert "LIVE RUNTIME EVIDENCE" in provider.last_messages[0]["content"]
     assert len(provider.memory_blocks()) == 1
 
 
