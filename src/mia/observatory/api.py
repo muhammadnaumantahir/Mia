@@ -1808,6 +1808,7 @@ def create_app(
     @app.post("/api/browser/navigate")
     async def browser_navigate(item: BrowserNavigateInput) -> dict[str, Any]:
         try:
+            _computer_permission_requires_approval("browser.navigate")
             return await browser_controller.navigate(item.url)
         except BrowserAccessError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
@@ -1817,13 +1818,16 @@ def create_app(
             raise HTTPException(status_code=502, detail="Browser navigation failed") from exc
 
     @app.post("/api/browser/click/preview", status_code=201)
-    async def browser_click_preview(item: BrowserClickPreview) -> dict[str, str]:
+    async def browser_click_preview(item: BrowserClickPreview) -> dict[str, Any]:
+        requires_approval = _computer_permission_requires_approval(
+            "browser.click", force_approval=True
+        )
         current_url = browser_controller.current_url
         if not current_url:
             raise HTTPException(status_code=409, detail="Browser has no active page")
         try:
             state_digest = await browser_controller.current_state_digest()
-            return approval_store.request(
+            approval = approval_store.request(
                 action_id="browser.click",
                 payload={
                     "url": current_url,
@@ -1832,11 +1836,13 @@ def create_app(
                 },
                 summary=f"Click selector on {current_url}",
             )
+            return {**approval, "requires_approval": requires_approval}
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/browser/click/execute")
     async def browser_click_execute(item: BrowserClickExecution) -> dict[str, str]:
+        _computer_permission_requires_approval("browser.click", force_approval=True)
         current_url = browser_controller.current_url
         if not current_url:
             raise HTTPException(status_code=409, detail="Browser has no active page")
@@ -1892,6 +1898,8 @@ def create_app(
     @app.post("/api/browser/fill")
     async def browser_fill(item: BrowserFillInput) -> dict[str, Any]:
         try:
+            if _computer_permission_requires_approval("browser.fill"):
+                raise HTTPException(status_code=409, detail="Browser fill needs an active owner grant; grant browser.fill")
             return await browser_controller.fill(item.ref, item.text)
         except Exception as exc:
             raise _browser_error(exc) from exc
@@ -1899,6 +1907,8 @@ def create_app(
     @app.post("/api/browser/select")
     async def browser_select(item: BrowserSelectInput) -> dict[str, Any]:
         try:
+            if _computer_permission_requires_approval("browser.select"):
+                raise HTTPException(status_code=409, detail="Browser select needs an active owner grant; grant browser.select")
             return await browser_controller.select_option(item.ref, item.value)
         except Exception as exc:
             raise _browser_error(exc) from exc
@@ -1906,6 +1916,8 @@ def create_app(
     @app.post("/api/browser/check")
     async def browser_check(item: BrowserCheckInput) -> dict[str, Any]:
         try:
+            if _computer_permission_requires_approval("browser.check"):
+                raise HTTPException(status_code=409, detail="Browser check needs an active owner grant; grant browser.check")
             return await browser_controller.set_checked(item.ref, item.checked)
         except Exception as exc:
             raise _browser_error(exc) from exc
@@ -1913,6 +1925,8 @@ def create_app(
     @app.post("/api/browser/scroll")
     async def browser_scroll(item: BrowserScrollInput) -> dict[str, Any]:
         try:
+            if _computer_permission_requires_approval("browser.scroll"):
+                raise HTTPException(status_code=409, detail="Browser scroll needs an active owner grant; grant browser.scroll")
             return await browser_controller.scroll(item.direction, item.amount)
         except Exception as exc:
             raise _browser_error(exc) from exc
@@ -1927,6 +1941,8 @@ def create_app(
     @app.post("/api/browser/tabs/new", status_code=201)
     async def browser_tab_new(item: BrowserTabInput) -> dict[str, Any]:
         try:
+            if _computer_permission_requires_approval("browser.tabs"):
+                raise HTTPException(status_code=409, detail="Opening tabs needs an active owner grant; grant browser.tabs")
             return await browser_controller.new_tab(item.url)
         except Exception as exc:
             raise _browser_error(exc) from exc
@@ -1934,6 +1950,8 @@ def create_app(
     @app.post("/api/browser/tabs/switch")
     async def browser_tab_switch(item: BrowserTabInput) -> dict[str, Any]:
         try:
+            if _computer_permission_requires_approval("browser.tabs"):
+                raise HTTPException(status_code=409, detail="Switching tabs needs an active owner grant")
             if item.index is None:
                 raise ValueError("index is required")
             return await browser_controller.switch_tab(item.index)
@@ -1943,6 +1961,8 @@ def create_app(
     @app.post("/api/browser/tabs/close")
     async def browser_tab_close(item: BrowserTabInput) -> dict[str, Any]:
         try:
+            if _computer_permission_requires_approval("browser.tabs"):
+                raise HTTPException(status_code=409, detail="Closing tabs needs an active owner grant")
             if item.index is None:
                 raise ValueError("index is required")
             return await browser_controller.close_tab(item.index)
@@ -1952,6 +1972,8 @@ def create_app(
     @app.post("/api/browser/screenshot")
     async def browser_screenshot() -> dict[str, Any]:
         try:
+            if _computer_permission_requires_approval("browser.screenshot"):
+                raise HTTPException(status_code=409, detail="Screenshot capture needs an active owner grant")
             result = await browser_controller.screenshot()
         except Exception as exc:
             raise _browser_error(exc) from exc
@@ -2181,7 +2203,13 @@ def create_app(
     @app.post("/api/computer/processes/terminate/preview", status_code=201)
     def computer_process_terminate_preview(item: ProcessTerminateInput) -> dict[str, Any]:
         try:
-            return processes.preview_terminate(item.pid, force=item.force)
+            requires_approval = _computer_permission_requires_approval(
+                "process.terminate", force_approval=True
+            )
+            preview = processes.preview_terminate(item.pid, force=item.force)
+            return {**preview, "requires_approval": requires_approval}
+        except HTTPException:
+            raise
         except ProcessAccessError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         except RuntimeError as exc:
@@ -2190,7 +2218,10 @@ def create_app(
     @app.post("/api/computer/processes/terminate/execute")
     def computer_process_terminate_execute(item: ProcessTerminateExecution) -> dict[str, Any]:
         try:
+            _computer_permission_requires_approval("process.terminate", force_approval=True)
             result = processes.execute_terminate(item.approval_id, item.pid, force=item.force)
+        except HTTPException:
+            raise
         except ProcessAccessError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         except ApprovalError as exc:
