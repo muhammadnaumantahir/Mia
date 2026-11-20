@@ -163,8 +163,8 @@ def test_persistent_model_preferences_affect_gateway_routing(reg):
     from mia.gateway.contracts import RoutePolicy, ModelRequest
 
     candidates = [
-        cand(model="low"),
-        cand(model="preferred"),
+        cand(model="low", free=True),
+        cand(model="preferred", free=True),
     ]
     reg.sync_discovered(candidates, ["p"])
     reg.set_preference("p", "preferred", 8)
