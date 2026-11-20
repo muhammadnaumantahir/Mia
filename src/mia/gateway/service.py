@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
@@ -16,6 +17,7 @@ from .contracts import (
     ProviderResponse,
     RoutePolicy,
     StreamChunk,
+    StreamInterruptedError,
     TokenUsage,
     TransientProviderError,
 )
@@ -69,6 +71,7 @@ class StreamEvent:
     free_tier: bool = True
     first_token_ms: float | None = None  # request start to first text; final event only
     total_ms: float | None = None
+    tool_calls: tuple[dict[str, Any], ...] = ()  # whole, normalized calls; final event only
 
 
 def _brief(exc: Exception) -> str:
@@ -97,7 +100,13 @@ class ModelGateway:
         breaker: CircuitBreaker | None = None,
         events: ResilienceLog | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        stream_idle_timeout: float | None = None,
     ) -> None:
+        if stream_idle_timeout is not None and not (
+            math.isfinite(stream_idle_timeout) and 0 < stream_idle_timeout <= 3600
+        ):
+            raise ValueError("stream_idle_timeout must be a number of seconds from 0 to 3600")
+        self.stream_idle_timeout = stream_idle_timeout
         self.providers = providers
         self.health = health or CandidateHealthTracker()
         self.model_registry = model_registry
@@ -129,6 +138,32 @@ class ModelGateway:
                 )
                 await self._sleep(delay)
         raise AssertionError("unreachable")  # pragma: no cover
+
+    async def _guard_idle(self, source: AsyncIterator[StreamChunk]) -> AsyncIterator[StreamChunk]:
+        """Pass chunks through, failing transiently if the provider goes silent too long.
+
+        Always closes the provider's stream, so the HTTP connection is released on
+        timeout, error, cancellation or early close.
+        """
+        iterator = source.__aiter__()
+        try:
+            while True:
+                try:
+                    if self.stream_idle_timeout is None:
+                        chunk = await iterator.__anext__()
+                    else:
+                        chunk = await asyncio.wait_for(
+                            iterator.__anext__(), self.stream_idle_timeout
+                        )
+                except StopAsyncIteration:
+                    return
+                except TimeoutError:
+                    raise TransientProviderError("stream idle timeout") from None
+                yield chunk
+        finally:
+            aclose = getattr(iterator, "aclose", None)
+            if aclose is not None:
+                await aclose()
 
     def set_preferences(self, preferences: RoutingPreferences) -> None:
         """Replace routing preferences after validating them."""
@@ -355,6 +390,8 @@ class ModelGateway:
             provider = self.providers.get(provider_id)
             settled = False
             emitted = False
+            text_sent: list[str] = []
+            chunk_iter: AsyncIterator[StreamChunk] | None = None
             streamer = getattr(provider, "stream", None)
             started = time.perf_counter()
             first_token_at: float | None = None
@@ -364,22 +401,29 @@ class ModelGateway:
             paused = 0.0
             paused_at_last_chunk = 0.0
             try:
-                if streamer is None or request.tools:
+                buffered = streamer is None or (
+                    bool(request.tools) and not getattr(provider, "streams_tools", False)
+                )
+                if buffered:
                     response = await provider.complete(candidate, request)
                     last_chunk_at = first_token_at = time.perf_counter()
                     if isinstance(response, str):
                         response = ProviderResponse(content=response)
-                    if not response.content:
+                    if not response.content and not response.tool_calls:
                         raise PermanentProviderError("Provider returned an empty response")
                     chunks: list[StreamChunk] = [
                         StreamChunk(
-                            delta=response.content,
+                            delta=response.content or "",
                             finish_reason=response.finish_reason or "stop",
                             usage=response.usage,
+                            tool_calls=response.tool_calls,
                         )
                     ]
                     for chunk in chunks:
+                        if not chunk.delta:
+                            continue
                         emitted = True
+                        text_sent.append(chunk.delta)
                         yielded_at = time.perf_counter()
                         yield StreamEvent(delta=chunk.delta)
                         paused += time.perf_counter() - yielded_at
@@ -387,7 +431,8 @@ class ModelGateway:
                 else:
                     final = StreamChunk()
                     text_parts: list[str] = []
-                    async for chunk in streamer(candidate, request):
+                    chunk_iter = self._guard_idle(streamer(candidate, request))
+                    async for chunk in chunk_iter:
                         # Timestamps are taken on receipt, before yielding to the
                         # consumer, so a slow consumer does not inflate latency.
                         last_chunk_at = time.perf_counter()
@@ -397,12 +442,13 @@ class ModelGateway:
                                 first_token_at = last_chunk_at
                             emitted = True
                             text_parts.append(chunk.delta)
+                            text_sent.append(chunk.delta)
                             yielded_at = time.perf_counter()
                             yield StreamEvent(delta=chunk.delta)
                             paused += time.perf_counter() - yielded_at
-                        if chunk.finish_reason or chunk.usage:
+                        if chunk.finish_reason or chunk.usage or chunk.tool_calls:
                             final = chunk
-                    if not text_parts:
+                    if not text_parts and not final.tool_calls:
                         raise PermanentProviderError("Provider returned an empty response")
                 self.health.record_success(candidate)
                 self.breaker.record_success(provider_id)
@@ -421,6 +467,7 @@ class ModelGateway:
                         (first_token_at - started) * 1000.0 if first_token_at else None
                     ),
                     total_ms=max(0.0, last_chunk_at - started - paused_at_last_chunk) * 1000.0,
+                    tool_calls=final.tool_calls,
                 )
                 return
             except AuthenticationProviderError as exc:
@@ -436,10 +483,20 @@ class ModelGateway:
                 self.events.add("failure", candidate_name, _brief(exc))
                 settled = True
                 if emitted:
-                    raise
+                    # Keep the partial text with the error so callers can preserve it.
+                    raise StreamInterruptedError(
+                        str(exc),
+                        partial_text="".join(text_sent),
+                        retry_after=exc.retry_after,
+                        rate_limited=exc.rate_limited,
+                    ) from exc
                 last_error = exc
                 continue
             finally:
+                if chunk_iter is not None:
+                    aclose = getattr(chunk_iter, "aclose", None)
+                    if aclose is not None:
+                        await aclose()
                 if not settled:
                     self.breaker.release(provider_id)
 

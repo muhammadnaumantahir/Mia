@@ -133,3 +133,20 @@ None of these is marked "verified live".
   errors still abort instead of falling back to a larger-context model; breaker and
   event state are in-memory and not exposed over HTTP yet. Local verification: `ruff`
   clean, `pytest` 974 passed, 1 skipped (mocked only).
+- **Milestone 7 (streaming tool calls, cancellation, partial output):**
+  `StreamChunk.tool_calls` and `StreamEvent.tool_calls` carry *whole* normalized tool
+  calls on the final event (never partial fragments). `OpenAICompatibleProvider`
+  assembles streamed tool-call fragments by index (bounded: 8 calls, 200k argument
+  characters, invalid index rejected, nameless calls dropped); `OllamaProvider`
+  collects tool calls from its stream. Providers without `streams_tools` still use one
+  buffered call, which now keeps tool calls and treats a tool-only reply as valid.
+  Streams are always closed (idle timeout, error, early close, task cancellation).
+  Optional `stream_idle_timeout` fails a silent stream transiently (falls back before
+  the first token). A failure after text was sent raises `StreamInterruptedError`
+  (a `TransientProviderError`) carrying `partial_text` and rate-limit hints. **Not
+  done:** the Brain orchestrator still runs tool-bearing turns through its buffered
+  tool/plan pipeline, so gateway-level streaming tools are available but not yet used
+  by chat; tool arguments are not yet validated against schemas (milestone 8);
+  assembly against real servers is unverified (mocked SSE and NDJSON only). Local
+  verification: `ruff` clean, `pytest` 1035 passed, 14 skipped (the skips are browser
+  tests with no Playwright/Chromium here; none are gateway tests).

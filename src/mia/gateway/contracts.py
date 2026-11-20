@@ -40,6 +40,9 @@ class StreamChunk:
     delta: str = ""
     finish_reason: str | None = None
     usage: TokenUsage | None = None
+    # Complete, normalized tool calls; delivered once on the last chunk, never as
+    # partial fragments (arguments are only meaningful when whole).
+    tool_calls: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +96,21 @@ class TransientProviderError(RuntimeError):
 
 class PermanentProviderError(RuntimeError):
     """A non-transient provider failure that should not be retried automatically."""
+
+
+class StreamInterruptedError(TransientProviderError):
+    """A stream failed after text was already delivered; ``partial_text`` is what was sent."""
+
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        partial_text: str = "",
+        retry_after: float | None = None,
+        rate_limited: bool = False,
+    ) -> None:
+        super().__init__(message, retry_after=retry_after, rate_limited=rate_limited)
+        self.partial_text = partial_text
 
 
 class AuthenticationProviderError(PermanentProviderError):

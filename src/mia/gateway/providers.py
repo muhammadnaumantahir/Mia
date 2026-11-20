@@ -85,6 +85,8 @@ def _http_error(name: str, exc: Exception, httpx: Any) -> Exception:
 class OllamaProvider:
     """Local Ollama adapter using Ollama's native HTTP API."""
 
+    streams_tools = True
+
     provider_id = "ollama"
 
     def __init__(
@@ -237,6 +239,9 @@ class OllamaProvider:
             "stream": True,
             "options": {"num_predict": request.max_output_tokens},
         }
+        if request.tools and self.supports_tools:
+            body["tools"] = list(request.tools)
+        raw_calls: list[dict[str, Any]] = []
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 async with client.stream(
@@ -252,10 +257,15 @@ class OllamaProvider:
                             raise PermanentProviderError(
                                 "Ollama returned an invalid stream line"
                             ) from exc
-                        content = (payload.get("message") or {}).get("content")
+                        message = payload.get("message") or {}
+                        content = message.get("content")
+                        for call in message.get("tool_calls") or []:
+                            if isinstance(call, dict):
+                                raw_calls.append(call)
                         if payload.get("done"):
                             yield StreamChunk(
                                 delta=content if isinstance(content, str) else "",
+                                tool_calls=_normalise_tool_calls(raw_calls),
                                 finish_reason=payload.get("done_reason") or "stop",
                                 usage=_usage(
                                     payload.get("prompt_eval_count"),
@@ -277,6 +287,8 @@ class OpenAICompatibleProvider:
     proves that the selected route is currently free. Local hosting alone does
     not make upstream inference free.
     """
+
+    streams_tools = True  # assembles streamed tool-call fragments into whole calls
 
     def __init__(
         self,
@@ -448,8 +460,12 @@ class OpenAICompatibleProvider:
             "stream": True,
             "stream_options": {"include_usage": True},
         }
+        if request.tools and self.supports_tools:
+            body["tools"] = list(request.tools)
+            body["tool_choice"] = "auto"
         finish: str | None = None
         usage: TokenUsage | None = None
+        pending_calls: dict[int, dict[str, str]] = {}
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 async with client.stream(
@@ -465,7 +481,11 @@ class OpenAICompatibleProvider:
                             continue
                         data = line[5:].strip()
                         if data == "[DONE]":
-                            yield StreamChunk(finish_reason=finish or "stop", usage=usage)
+                            yield StreamChunk(
+                                finish_reason=finish or "stop",
+                                usage=usage,
+                                tool_calls=_assemble_stream_tool_calls(pending_calls),
+                            )
                             return
                         try:
                             payload = json.loads(data)
@@ -484,13 +504,55 @@ class OpenAICompatibleProvider:
                             continue
                         choice = choices[0]
                         finish = choice.get("finish_reason") or finish
-                        content = (choice.get("delta") or {}).get("content")
+                        delta = choice.get("delta") or {}
+                        _accumulate_stream_tool_calls(pending_calls, delta.get("tool_calls"))
+                        content = delta.get("content")
                         if isinstance(content, str) and content:
                             yield StreamChunk(delta=content)
         except httpx.HTTPError as exc:
             raise _http_error(self.provider_id, exc, httpx) from exc
         raise TransientProviderError(f"{self.provider_id} stream ended before completion")
 
+
+
+_MAX_STREAM_TOOL_CALLS = 8
+_MAX_STREAM_TOOL_ARG_CHARS = 200_000
+
+
+def _accumulate_stream_tool_calls(pending: dict[int, dict[str, str]], fragments: Any) -> None:
+    """Merge OpenAI-style streamed tool-call fragments (by ``index``) into ``pending``.
+
+    The name is taken once (first non-empty value wins, so servers that repeat it
+    on every fragment are tolerated); argument text is concatenated. Bounded so a
+    misbehaving server cannot grow memory without limit.
+    """
+    if not isinstance(fragments, list):
+        return
+    for fragment in fragments:
+        if not isinstance(fragment, dict):
+            continue
+        index = fragment.get("index", 0)
+        if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < _MAX_STREAM_TOOL_CALLS:
+            raise PermanentProviderError("provider sent an invalid tool-call index")
+        slot = pending.setdefault(index, {"id": "", "name": "", "arguments": ""})
+        if isinstance(fragment.get("id"), str) and fragment["id"] and not slot["id"]:
+            slot["id"] = fragment["id"][:200]
+        function = fragment.get("function")
+        if isinstance(function, dict):
+            if isinstance(function.get("name"), str) and function["name"] and not slot["name"]:
+                slot["name"] = function["name"][:200]
+            if isinstance(function.get("arguments"), str):
+                slot["arguments"] += function["arguments"]
+                if len(slot["arguments"]) > _MAX_STREAM_TOOL_ARG_CHARS:
+                    raise PermanentProviderError("provider sent oversized tool-call arguments")
+
+
+def _assemble_stream_tool_calls(pending: dict[int, dict[str, str]]) -> tuple[dict[str, Any], ...]:
+    calls = [
+        {"id": slot["id"] or None, "function": {"name": slot["name"], "arguments": slot["arguments"]}}
+        for _, slot in sorted(pending.items())
+    ]
+    return _normalise_tool_calls(calls)
 
 
 def _normalise_tool_calls(calls: list[dict[str, Any]]) -> tuple[dict[str, Any], ...]:
