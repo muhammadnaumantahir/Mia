@@ -57,7 +57,7 @@ view.setAttribute('transform','translate('+tx+' '+ty+') scale('+scale+')')}
 function select(n){selected=n.id;const outgoing=graph.edges.filter(e=>e.source===n.id),incoming=graph.edges.filter(e=>e.target===n.id);
 const nodeById=new Map(graph.nodes.map(x=>[x.id,x]));const d=$('details');d.replaceChildren();
 const h=document.createElement('h2');h.textContent=n.label||n.key;d.append(h);
-const meta=document.createElement('p');meta.innerHTML='';meta.textContent=n.kind+' · '+(n.path||n.key);d.append(meta);
+const meta=document.createElement('p');meta.textContent=n.kind+' · '+(n.path||n.key);d.append(meta);
 if(n.line){const line=document.createElement('p');line.textContent='Line '+n.line+(n.end_line?'–'+n.end_line:'');d.append(line)}
 const add=(title,items)=>{const h3=document.createElement('h3');h3.textContent=title+' ('+items.length+')';d.append(h3);const ul=document.createElement('ul');items.slice(0,80).forEach(e=>{const li=document.createElement('li'),other=nodeById.get(e.source===n.id?e.target:e.source);li.textContent=e.type+' → '+(other?.label||other?.key||'Unknown')+' · '+e.confidence+' · '+e.evidence;ul.append(li)});if(!items.length){const p=document.createElement('p');p.textContent='No indexed relationships.';d.append(p)}else d.append(ul)};
 const desc=document.createElement('p');desc.textContent=n.kind==='api_endpoint'?'HTTP API endpoint identified from a FastAPI route decorator.':n.kind==='function'?'Python function or method declared in this source file.':n.kind==='class'?'Python class declaration.':n.kind==='file'?'Indexed source or documentation file.':'Repository structure node.';d.append(desc);
