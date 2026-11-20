@@ -57,3 +57,15 @@ def test_brain_rejects_unknown_tool_permission_mapping(tmp_path):
     )
     assert refused.allowed is False
     assert refused.stage == "permission"
+
+
+def test_brain_app_list_uses_the_declared_discovery_capability(tmp_path):
+    evaluator = OwnerPermissionEvaluator(
+        PermissionPolicy(tmp_path / "permissions.sqlite3"),
+        default_registry(),
+    )
+    result = evaluator.evaluate(
+        definition("applications.list", "process.inspect", "read"),
+        {},
+    )
+    assert result.allowed is True
