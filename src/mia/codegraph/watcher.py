@@ -1,7 +1,9 @@
 """Background watcher that keeps Mia's local Code Graph synchronized."""
 from __future__ import annotations
 
+import json
 import threading
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .indexer import build_graph, source_snapshot
@@ -55,7 +57,20 @@ class CodeGraphWatcher:
         if not force and snapshot == self._snapshot and self.output.is_file():
             return False
         try:
+            previous: dict[str, object] = {}
+            if self.output.is_file():
+                try:
+                    loaded = json.loads(self.output.read_text(encoding="utf-8"))
+                    if isinstance(loaded, dict):
+                        previous = loaded
+                except (OSError, ValueError):
+                    previous = {}
             graph = build_graph(self.root, output=self.output)
+            if (
+                previous.get("source_digest") != graph["source_digest"]
+                or previous.get("commit") != graph["commit"]
+            ):
+                self._append_history(graph)
             self._snapshot = snapshot
             self.last_commit = graph["commit"]
             self.last_error = None
@@ -64,6 +79,22 @@ class CodeGraphWatcher:
             # The indexer uses atomic replacement, so the last good graph remains.
             self.last_error = type(exc).__name__
             return False
+
+    def _append_history(self, graph: dict[str, object]) -> None:
+        history = self.root / "docs" / "code-graph" / "CHANGELOG.md"
+        history.parent.mkdir(parents=True, exist_ok=True)
+        if not history.exists():
+            history.write_text("# Code Graph history\\n", encoding="utf-8")
+        entry = (
+            f"\\n## {datetime.now(UTC).isoformat()}\\n\\n"
+            f"- Commit: `{graph.get('commit', 'unknown')}`\\n"
+            f"- Source digest: `{graph.get('source_digest', 'unknown')}`\\n"
+            f"- Nodes: {graph.get('summary', {}).get('nodes', 0)}\\n"
+            f"- Edges: {graph.get('summary', {}).get('edges', 0)}\\n"
+            f"- Parse errors: {graph.get('summary', {}).get('parse_errors', 0)}\\n"
+        )
+        with history.open("a", encoding="utf-8", newline="\\n") as stream:
+            stream.write(entry)
 
     def _run(self) -> None:
         # Validate the existing artifact on startup as well as watching later edits.
