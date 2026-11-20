@@ -118,8 +118,15 @@ class UsageLedger:
         first_token_ms = _valid_ms(first_token_ms)
         total_ms = _valid_ms(total_ms)
         reported = input_tokens is not None and output_tokens is not None
-        if cost_usd is not None and (not math.isfinite(cost_usd) or cost_usd < 0):
+        if cost_usd is not None and (
+            isinstance(cost_usd, bool) or not isinstance(cost_usd, (int, float))
+            or not math.isfinite(cost_usd) or cost_usd < 0
+        ):
             cost_usd = None
+        if not free_tier and cost_usd is None:
+            # Keep any live reservation intact. Unknown paid spend is never
+            # written as zero or allowed to release the reserved budget.
+            raise ValueError("Paid inference usage has unknown cost; reservation retained")
         with self._connection() as db:
             db.execute(
                 """
