@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
@@ -172,7 +172,7 @@ def test_quiet_hours_block_background_cycles_but_not_owner_requests(tmp_path):
     assert life.list_journal() == []  # nothing started, nothing journaled
     assert runner.status()["quiet_hours_active"] is True
     assert runner.run_cycle("owner")["status"] == "deferred"  # explicit owner request still runs
-    runner.clock = lambda: datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
+    runner.clock = lambda: datetime.now(UTC) + timedelta(minutes=1)
     assert runner.status()["quiet_hours_active"] is False
     assert runner.run_cycle("schedule")["status"] in {"no_op", "deferred", "completed"}
 
