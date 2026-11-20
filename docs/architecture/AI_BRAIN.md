@@ -47,3 +47,8 @@ verification. They never hold prompts, replies, tool arguments or outputs, memor
 - Verification is structural and deterministic; there is no model judge by design.
 - Resuming a plan (`POST /api/brain/plans/{id}/resume`) reads the approval store: a consumed approval completes the step ("outcome not observed" - the Brain does not verify the executed action), rejected/expired approvals fail it, pending/approved stay paused. The owner still triggers the resume.
 - The diagnostics page (`/brain`) is plain HTML over the JSON API and has not been checked in a real browser. Only mocked providers were exercised in tests; no live Ollama run.
+
+
+## Runtime self-description
+
+The Brain receives a model-independent identity prompt plus a live runtime manifest. The manifest includes current registered tools/provider adapters and the state of memory, semantic reranking, permissions, voice, Code Graph and wake-word routes. It also names the ten canonical SPS layers and their design responsibilities. The architecture list is explicitly not a completion report: a layer's presence does not prove its features are implemented, enabled, healthy or owner-verified. Tests cover deterministic registry reporting, secret filtering and the ten-layer architecture statement.
