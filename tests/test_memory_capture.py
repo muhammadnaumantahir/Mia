@@ -678,3 +678,41 @@ def test_model_extractor_failure_does_not_break_chat_or_capture(tmp_path):
     )
     assert result["processed"] is True
     assert result["pending"] == [] and result["saved"] == []
+
+
+def test_precomputed_model_candidate_is_validated_and_queued_for_approval(tmp_path):
+    store, service, conv = make(tmp_path)
+    sentence = "Last Tuesday the release rollback took forty minutes because the cache was stale."
+    message_id = store.append_message(conv, "user", sentence)
+    candidate = {
+        "record_type": "episode",
+        "title": "Release rollback",
+        "body": sentence,
+        "confidence": 0.82,
+    }
+    result = service.process_message(
+        conv, message_id, sentence, model_candidates={sentence: candidate}
+    )
+    assert result["saved"] == []
+    assert len(result["pending"]) == 1
+    record = store.structured.get(result["pending"][0]["record_id"])
+    assert record["status"] == "pending"
+    assert record["origin"]["capture"] == "model_assisted"
+
+
+def test_precomputed_model_candidate_cannot_auto_save_or_inject_paraphrase(tmp_path):
+    store, service, conv = make(tmp_path)
+    store.settings.update({"capture_mode": "auto"})
+    sentence = "Last Tuesday the release rollback took forty minutes because the cache was stale."
+    message_id = store.append_message(conv, "user", sentence)
+    candidate = {
+        "record_type": "fact",
+        "title": "Made-up claim",
+        "body": "The owner always deploys on Friday.",
+        "confidence": 0.85,
+    }
+    result = service.process_message(
+        conv, message_id, sentence, model_candidates={sentence: candidate}
+    )
+    assert result["saved"] == [] and result["pending"] == []
+    assert records(store) == []
