@@ -1388,6 +1388,37 @@ def create_app(
     shutdown_handlers.append(stop_autonomy_runtime)
 
     # ---- autonomous life: curiosity backlog, activity journal, owner controls ----
+    def record_usage(
+        source: Any,
+        task_type: str,
+        estimated_input: int,
+        estimated_output: int,
+        *,
+        streamed: bool = False,
+        text: str = "",
+    ) -> None:
+        """Usage-ledger adapter for the Brain (CompletionResult or final StreamEvent)."""
+        usage = source.usage
+        ledger.record(
+            provider_id=source.provider_id,
+            model_id=source.model_id,
+            task_type=task_type,
+            input_tokens=usage.input_tokens if usage else None,
+            output_tokens=usage.output_tokens if usage else None,
+            estimated_input_tokens=estimated_input,
+            estimated_output_tokens=estimated_output,
+            cost_usd=source.cost_usd,
+            free_tier=source.free_tier,
+            data_local=source.data_local,
+            streamed=streamed,
+            reservation_id=getattr(source, "reservation_id", None),
+            **(
+                {"first_token_ms": source.first_token_ms, "total_ms": source.total_ms}
+                if streamed
+                else {"total_ms": source.latency_ms}
+            ),
+        )
+
     life_store = life or LifeStore(data_dir / "mia-life.sqlite3")
     life_background_enabled = os.getenv("MIA_LIFE_ENABLED", "false").strip().lower() == "true"
 
@@ -4515,37 +4546,6 @@ def create_app(
     @app.get("/api/tools")
     def list_tools() -> dict[str, Any]:
         return {"items": tool_registry.definitions()}
-
-    def record_usage(
-        source: Any,
-        task_type: str,
-        estimated_input: int,
-        estimated_output: int,
-        *,
-        streamed: bool = False,
-        text: str = "",
-    ) -> None:
-        """Usage-ledger adapter for the Brain (CompletionResult or final StreamEvent)."""
-        usage = source.usage
-        ledger.record(
-            provider_id=source.provider_id,
-            model_id=source.model_id,
-            task_type=task_type,
-            input_tokens=usage.input_tokens if usage else None,
-            output_tokens=usage.output_tokens if usage else None,
-            estimated_input_tokens=estimated_input,
-            estimated_output_tokens=estimated_output,
-            cost_usd=source.cost_usd,
-            free_tier=source.free_tier,
-            data_local=source.data_local,
-            streamed=streamed,
-            reservation_id=getattr(source, "reservation_id", None),
-            **(
-                {"first_token_ms": source.first_token_ms, "total_ms": source.total_ms}
-                if streamed
-                else {"total_ms": source.latency_ms}
-            ),
-        )
 
     plan_store = PlanStore(data_dir / "mia-brain.sqlite3")
     brain_capabilities = CapabilityRegistry(db_path=data_dir / "mia-brain-capabilities.sqlite3")
