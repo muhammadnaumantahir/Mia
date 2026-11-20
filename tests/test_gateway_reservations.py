@@ -290,3 +290,31 @@ def test_cancelled_paid_completion_retains_budget_reservation(tmp_path, monkeypa
         assert ledger.reservation_summary()["active_count"] == 1
 
     asyncio.run(scenario())
+
+
+def test_historical_unknown_paid_cost_fails_closed_for_budget_and_reporting(tmp_path):
+    from datetime import UTC, datetime
+
+    ledger = UsageLedger(tmp_path / "historical-unknown.sqlite3")
+    now = datetime.now(UTC)
+    with ledger._connection() as db:
+        db.execute(
+            "INSERT INTO usage(recorded_at,provider_id,model_id,task_type,input_tokens,"
+            "output_tokens,token_source,cost_usd,free_tier,data_local,streamed) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            (now.isoformat(), "legacy", "unknown-price", "chat", 10, 10,
+             "estimated", None, 0, 0, 0),
+        )
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    assert ledger.spend_since(day_start) is None
+    assert ledger.spend_today_utc() is None
+    assert ledger.spend_month_utc() is None
+    assert ledger.reserve_budget(
+        provider_id="cloud", model_id="model", reserved_usd=0.001,
+        per_request_limit_usd=0.01, daily_limit_usd=1.0, monthly_limit_usd=5.0,
+        now=now,
+    ) is None
+    summary = ledger.summary(days=1)
+    assert summary["total_cost_usd"] is None
+    assert summary["items"][0]["cost_usd"] is None
+    assert summary["items"][0]["unknown_cost_rows"] == 1
