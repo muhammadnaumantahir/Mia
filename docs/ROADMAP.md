@@ -62,7 +62,7 @@ Work:
 Routing principles:
 1. Local models first when quality and latency are acceptable.
 2. Eligible free tier next, subject to the upstream provider's terms and current quota.
-3. Paid models only when explicitly enabled and within both per-request and monthly budgets.
+3. Paid models only when explicitly enabled and within per-request, daily and monthly budgets.
 4. Never retry a request in a way that bypasses upstream restrictions.
 5. Never treat a catalog's listed free status as a guarantee of current availability.
 
