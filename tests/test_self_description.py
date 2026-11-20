@@ -35,6 +35,8 @@ def test_runtime_manifest_uses_live_registries_and_reports_limits():
     assert "Self Programming Software (SPS)" in prompt
     assert "SPS-01 Software DNA Core" in prompt
     assert "SPS-10 Execution Core" in prompt
+    assert "SPS-02: Permissions, policy, risk, budgets and approvals." in prompt
+    assert "SPS-09: Checks, tests, security validation and benchmarks." in prompt
     assert "not extra SPS layers" in prompt
 
 
