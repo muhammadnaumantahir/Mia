@@ -17,7 +17,7 @@ def test_multilingual_conversation_evaluation_set(tmp_path):
         body="We decided to use PostgreSQL for the billing service for transactional safety.",
         provenance="owner_provided",
         confidence=0.96,
-        evidence=[{"source": "owner_conversation", "turn": "architecture-review"}],
+        evidence=[{"type": "message", "ref": "architecture-review"}],
         details={"rationale": "Transactional integrity and mature operations"},
         origin={"source": "conversation_eval_seed"},
     )
