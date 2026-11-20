@@ -294,8 +294,10 @@ class UsageLedger:
         with self._connection() as db:
             return db.execute("DELETE FROM budget_reservations").rowcount
 
-    def reservation_summary(self) -> dict[str, Any]:
-        moment = _utc_now()
+    def reservation_summary(self, now: datetime | None = None) -> dict[str, Any]:
+        """Summarize active reservations at an injectable UTC instant."""
+        moment = now or _utc_now()
+        moment = moment.replace(tzinfo=UTC) if moment.tzinfo is None else moment.astimezone(UTC)
         with self._connection() as db:
             row = db.execute(
                 "SELECT COUNT(*) AS count, COALESCE(SUM(reserved_usd),0) AS reserved "
