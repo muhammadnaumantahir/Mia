@@ -101,6 +101,9 @@ def source_snapshot(root: str | Path) -> tuple[tuple[str, int, int], ...]:
         except OSError:
             continue
         snapshot.append((path.relative_to(root).as_posix(), stat.st_mtime_ns, stat.st_size))
+    # A commit can change without file metadata changing (for example, a docs-only
+    # commit containing already-written files); include HEAD in the watcher key.
+    snapshot.append((f"__git_head__:{_git(root, 'rev-parse', 'HEAD')}", 0, 0))
     return tuple(snapshot)
 
 
