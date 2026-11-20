@@ -142,7 +142,8 @@ class OllamaProvider:
                     detail_client, str(model_name)
                 )
                 # Ollama supports schema-constrained JSON output through /api/chat format.
-                # Unsupported model/runtime combinations fail closed in the gateway.\n                capabilities = {"chat", "json_schema"}
+                # Unsupported model/runtime combinations fail closed in the gateway.
+                capabilities = {"chat", "json_schema"}
                 # Tool calling stays owner-gated; when Ollama reports a capability
                 # list, the model must also advertise tools.
                 if self.supports_tools and (reported is None or "tools" in reported):
