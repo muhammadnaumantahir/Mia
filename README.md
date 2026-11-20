@@ -39,6 +39,7 @@ The coordinator/runtime connects these existing layers; it is not an additional 
 |---|---|
 | Conversation | Context-aware text and natural voice interaction |
 | AI gateway | Independent Mia-owned gateway: local and direct cloud providers, model discovery, intelligent routing, resilience, security, budgets, evaluation and observability |
+| AI Brain | Model-independent intelligence pipeline: intent, context, routing, planning, permission-gated tools, verification and diagnostics (see [AI Brain](docs/architecture/AI_BRAIN.md)) |
 | Computer operations | Browser, applications, files, documents and authorized OS workflows |
 | Research | Web research, repository inspection, PDFs, technical documentation and citations |
 | Identity and memory | Persistent, source-aware identity, conversations, decisions, goals, experiences and contextual retrieval across sessions and model/provider changes |
