@@ -23,6 +23,9 @@ config/applications.json
 *.key
 secrets/
 
+# Generated Code Graph snapshot
+docs/code-graph/graph.json
+
 # Local databases, logs and runtime data
 data/
 logs/

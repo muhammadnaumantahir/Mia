@@ -135,7 +135,10 @@ Report implemented, locally tested, unverified, owner-verification-required, blo
 
 ## Code Graph maintenance
 
-- After meaningful source or architecture changes, regenerate the graph with `python scripts/update_code_graph.py` and include the graph artifact when it is available.
+- Before changing a feature, refresh the graph when stale and inspect its relevant files, symbols, API routes, dependencies and tests in `/code-graph`.
+- After source changes, use the Code Graph explorer's **Analyze changes** action (or `GET /api/code-graph/impact?base=<base-ref>`) to inspect changed paths, direct/transitive dependents and likely regression tests. Treat the result as conservative static evidence, not a complete runtime dependency proof.
+- After meaningful source or architecture changes, regenerate the graph with `python scripts/update_code_graph.py` when the app watcher is not running; include the graph artifact when it is available.
+- The production app watcher checks content digests and refreshes automatically while Mia is running. Do not rely on it when the server is stopped.
 - Keep confirmed AST/source relationships separate from inferred/documented heuristics; every inferred edge must remain labelled.
-- Never execute or import indexed source code, index secrets/private runtime data, or let graph generation modify application source.
+- Never execute or import indexed source code, index secrets/private runtime data, or let graph generation modify tracked application source or documentation. Generated snapshots/history belong only in ignored artifacts/runtime data.
 - Report parser errors and unsupported constructs. A stale or missing graph is not a passing architecture check.

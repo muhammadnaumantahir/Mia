@@ -218,3 +218,14 @@ The following implementation work is present on draft PR #3 (`development/comple
 - Regression tests and documentation were added for these changes, but the latest branch tests have not been run locally.
 
 Runtime self-description is now injected into Brain context from live registries (registered tools/providers, memory, permission broker, voice routes and Code Graph availability), with explicit caveats that registration does not prove health or permission. An opt-in browser-based “Hey Mia” wake phrase now has visible listening state, mute/stop and re-arm behavior; it is not offline detection and awaits owner device/privacy verification. A deterministic English/Urdu/Roman Urdu conversation-memory evaluation fixture and runner have been added (not yet run). Remaining Priority 1 work includes full-history semantic indexing/evaluation, model-assisted extraction and consolidation, richer architecture/limitations evidence, model escalation, reasoning-quality evaluation and complete text/voice pipeline verification.
+
+
+### Code Graph — continuous development requirement
+
+Code Graph is a cross-cutting Priority 0 developer capability, not a later product phase. It must remain active throughout every feature implementation:
+- Keep a deterministic, source-backed map of Python modules, symbols, imports, routes and tests, with provenance and parser errors visible.
+- Refresh automatically after repository source changes. The current watcher uses content digests (not only file timestamps) and safely rebuilds the complete graph; true file-level incremental indexing is a later optimization, not a reason to delay reliable freshness.
+- Before changing a component, inspect its graph relationships and relevant tests; after changing it, refresh the graph and run Git-diff impact analysis to identify dependent modules and candidate regression tests.
+- Keep static facts separate from inferred relationships. Dynamic imports, runtime injection and indirect dependencies must not be presented as proven edges.
+- The graph API and browser explorer are local-only by default. Remote access requires explicit opt-in and a strong owner token.
+- Code Graph acceptance requires deterministic indexing, stale/change detection, access-control tests, impact-analysis tests, and documentation of the indexed commit and parser limitations.
