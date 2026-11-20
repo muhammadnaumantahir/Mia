@@ -811,7 +811,7 @@ def create_app(
             ]
             manifest = build_runtime_manifest(
                 tool_names=tool_names,
-                provider_ids=model_gateway.providers.keys(),
+                provider_ids=model_gateway.providers.ids(),
                 route_paths=route_paths,
                 memory_enabled=memory_store is not None,
                 semantic_memory_enabled=(
