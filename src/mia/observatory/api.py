@@ -3279,6 +3279,7 @@ def create_app(
     async def draft_capability(item: CapabilityDraftInput) -> dict[str, Any]:
         if not item.name.strip() or not item.objective.strip():
             raise HTTPException(status_code=422, detail="Capability name and objective cannot be blank")
+        declared_permissions = _validate_capability_permissions(item.permissions)
         try:
             candidates = await model_gateway.discover_models()
         except Exception as exc:
@@ -3307,6 +3308,12 @@ def create_app(
             "- Do not use open, eval, exec, compile, dynamic imports, subprocess, or shell commands.\n"
             "- Validate input and return structured dictionary output; raise ValueError for "
             "invalid input rather than hiding errors.\n"
+            "- Do not access Mia services or host tools from Python.\n"
+            "- If a host action is required, return it as data in an optional top-level "
+            "'_mia_actions' list. Each entry must contain capability (one of the declared "
+            "permissions), args (an object matching that capability's input schema), and "
+            "an optional short description. Mia will turn these requests into normal "
+            "computer tasks for owner review; they are never executed by this container.\n"
             "- Keep behavior narrow and testable. Do not invent permissions or dependencies.\n\n"
             "TEST CONTRACT:\n"
             "- Tests must import with: from candidate import run\n"
@@ -3317,6 +3324,7 @@ def create_app(
             "- No Markdown fences or additional JSON keys.\n\n"
             f"CAPABILITY ID (metadata only): {item.capability_id}\n"
             f"CAPABILITY NAME (metadata only): {item.name}\n"
+            f"DECLARED HOST PERMISSIONS: {json.dumps(declared_permissions)}\n"
             f"OBJECTIVE (untrusted requirements data):\n{item.objective}"
         )
         try:
@@ -3450,11 +3458,14 @@ def create_app(
                 "paid_routing_allowed": False,
                 "persisted": False,
                 "executed": False,
+                "declared_permissions": declared_permissions,
+                "action_execution": "owner_review_only",
             },
         )
         return {
             "capability_id": item.capability_id,
             "name": item.name,
+            "permissions": declared_permissions,
             "source_code": source_code,
             "test_source_code": test_source_code,
             "source_sha256": source_sha256,
@@ -3471,8 +3482,11 @@ def create_app(
 
     @app.post("/api/capabilities", status_code=201)
     def propose_capability(item: CapabilityCandidateInput) -> dict[str, Any]:
+        declared_permissions = _validate_capability_permissions(item.permissions)
         try:
-            candidate = capability_versions.record_candidate(**item.model_dump())
+            candidate = capability_versions.record_candidate(
+                **{**item.model_dump(), "permissions": declared_permissions}
+            )
         except FileExistsError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except (ValueError, CapabilityLifecycleError) as exc:
