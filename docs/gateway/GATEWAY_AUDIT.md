@@ -1,5 +1,20 @@
 # AI Gateway audit (milestone 1)
 
+# Current implementation addendum — 2026-11-20
+
+> The body below records a historical 2026-11-19 baseline and plan. It is not the current implementation inventory. This addendum supersedes statements in that snapshot that still describe FreeLLMAPI/OmniRoute as runtime integrations or model registry/controls and the diagnostics UI as missing.
+
+Current branch: `development/complete-product-gaps`
+
+- Runtime factory now registers Ollama plus only explicitly listed generic direct providers (`MIA_EXTRA_PROVIDERS`, `MIA_PROVIDER_<ID>_*`). Legacy FreeLLMAPI/OmniRoute flags are ignored; neither is a built-in provider or required sidecar.
+- The persistent model registry, capability provenance, enable/disable, alias and preference storage are implemented. Per-model stored preferences now participate in gateway candidate ordering.
+- The gateway exposes a local `/gateway` console for provider health, sanitized connection tests, model discovery, model settings, usage, budgets and recent routing decisions.
+- The usage ledger now computes UTC calendar-month spend. Paid routing requires valid per-request, daily and monthly limits; any missing/invalid limit fails closed. Free/local routing remains available without cloud credentials.
+- The gateway API/admin surface remains local-only and unauthenticated. Do not bind it to a public interface.
+- Known remaining gateway engineering: atomic reservations for concurrent paid in-flight requests; remaining-quota headers; persistent health/circuit-breaker/decision history; provider discovery TTL; benchmark-driven quality routing; semantic cache; full multimodal/embedding adapters; token/context compaction and mid-stream paid spend cut-off.
+- Automated tests were added for direct provider configuration, monthly/daily budget caps, API console, model settings and persisted routing preferences. They have **not** been executed in this working environment; wait for CI runner evidence or a local run before recording them as passing. No live cloud provider has been contacted by this implementation task.
+
+
 Audit date: 2026-11-19. Method: reading `src/mia/gateway/*`, the gateway call sites
 in `src/mia/observatory/api.py`, `src/mia/brain/*`, `src/mia/agent/planner.py`, the
 existing gateway docs and tests, plus a baseline run of the existing suite.
