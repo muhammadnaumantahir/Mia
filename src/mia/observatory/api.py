@@ -35,12 +35,11 @@ from mia.agent.tasks import (
     TaskTransitionError,
 )
 from mia.agent.tools import ToolRegistry, ToolResult
-from mia.brain.capabilities import CapabilityRegistry
 from mia.brain.broker import OwnerPermissionEvaluator, ToolBroker
+from mia.brain.capabilities import CapabilityRegistry
 from mia.brain.orchestrator import Brain
-from mia.brain.self_description import build_runtime_manifest, render_runtime_manifest
-from mia.memory.semantic import LocalOllamaEmbeddingReranker, TurnRequest
 from mia.brain.plan import PlanStore
+from mia.brain.self_description import build_runtime_manifest, render_runtime_manifest
 from mia.computer.app_discovery import ApplicationDiscovery
 from mia.computer.applications import ApplicationLauncher, ApplicationLaunchError
 from mia.computer.approvals import ApprovalError, ApprovalStore
@@ -48,7 +47,7 @@ from mia.computer.browser import BrowserAccessError, BrowserController
 from mia.computer.browser_actions import BrowserActions
 from mia.computer.capabilities import PermissionLevel, RiskLevel, default_registry
 from mia.computer.control import AutomationControl, AutomationStopped
-from mia.computer.desktop_control import DesktopController, _CONSEQUENTIAL, make_window_guard
+from mia.computer.desktop_control import _CONSEQUENTIAL, DesktopController, make_window_guard
 from mia.computer.environment import detect_environment
 from mia.computer.fileops import FileOperationError, FileOperations
 from mia.computer.filesystem import FilesystemAccessError, FilesystemAdapter
@@ -98,6 +97,7 @@ from mia.memory.identity import (
 )
 from mia.memory.maintenance import MaintenanceService
 from mia.memory.relationships import RelationshipNotFoundError
+from mia.memory.semantic import LocalOllamaEmbeddingReranker, TurnRequest
 from mia.memory.store import MemoryStore
 from mia.memory.structured import RECORD_TYPES, RecordNotFoundError, RecordStateError
 from mia.observatory.activity import ExperimentActivityCollector
