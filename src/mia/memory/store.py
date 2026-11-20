@@ -489,6 +489,7 @@ class MemoryStore:
                 (1 if temporary else 0, conversation_id),
             )
             if cursor.rowcount:
+                db.execute("DELETE FROM memory_embedding_cache")
                 AuditLog.write(
                     db,
                     actor="owner",
