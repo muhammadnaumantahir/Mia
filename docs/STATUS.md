@@ -99,3 +99,8 @@ No Day 0 or daily growth data may be fabricated. Daily snapshots require local h
 
 A phase is complete only after roadmap exit criteria, relevant Windows/Linux tests, target-device checks, security/license review, and evidence tied to the exact commit and successful workflow run.
 - 2026-11-19: voice completion pass on `main`: session state machine with interrupt, mute, push-to-talk, restart-loop guard, chunked TTS with speed/volume, local offline hands-free engine and microphone selection; 34 real-browser tests added (found and fixed a stale `onstart` bug). Real-device microphone/speaker tests are NOT done; see docs/voice/OWNER_VERIFICATION.md.
+
+
+### Memory retrieval addendum (2026-11-20)
+
+The development branch now includes an opt-in, loopback-only Ollama embedding reranker. It can recover semantically related recent structured records and knowledge items when lexical FTS5 has no match, then applies the existing trust/provenance/relationship/context-budget rules. It is disabled by default, downloads no model, uses no cloud embedding service and falls back to lexical retrieval if local embeddings fail. It is not yet a persistent vector index; past conversation recall remains lexical, and no embedding cache or evaluation dashboard exists. See `docs/memory/SEMANTIC_RETRIEVAL.md`. Tests are added but not run locally.
