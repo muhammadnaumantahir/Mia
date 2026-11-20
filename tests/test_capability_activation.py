@@ -3,12 +3,12 @@ import sqlite3
 import pytest
 from fastapi.testclient import TestClient
 
+from mia.computer.capabilities import PermissionLevel
 from mia.evolution.capabilities import (
     CapabilityActivationBlocked,
     CapabilityLifecycleError,
     CapabilityStore,
 )
-from mia.computer.capabilities import PermissionLevel
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
 
