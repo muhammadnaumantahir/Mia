@@ -73,7 +73,7 @@ def test_parse_errors_are_reported_without_fabricating_symbols(tmp_path):
     assert graph["summary"]["parse_errors"] == 1
     assert graph["index_errors"][0]["path"] == "src/mia/broken.py"
 
- 
+
 def test_import_cycles_are_reported_as_static_diagnostics(tmp_path):
     root = make_repo(tmp_path)
     (root / "src" / "mia" / "helpers.py").write_text(
