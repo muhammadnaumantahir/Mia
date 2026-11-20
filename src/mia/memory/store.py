@@ -282,6 +282,33 @@ class MemoryStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def all_messages_for_semantic(
+        self, *, exclude_message_ids: Iterable[str] = ()
+    ) -> list[dict[str, Any]]:
+        """Return every message in non-temporary conversations for semantic recall.
+
+        Unlike the recent-message helper, this deliberately has no recency limit:
+        the embedding cache makes repeat retrieval local and avoids silently
+        forgetting older conversations as the history grows. Callers must batch
+        embedding work and keep the final injected context separately bounded.
+        """
+        excluded = list({str(value) for value in exclude_message_ids if value})
+        clause = ""
+        params: list[Any] = []
+        if excluded:
+            clause = " AND m.message_id NOT IN (" + ",".join("?" for _ in excluded) + ")"
+            params.extend(excluded)
+        with self._connection() as db:
+            rows = db.execute(
+                "SELECT m.message_id,m.conversation_id,m.role,m.content,m.created_at,"
+                "c.title AS conversation_title FROM conversation_messages m "
+                "JOIN conversations c ON c.conversation_id=m.conversation_id "
+                "WHERE c.temporary=0" + clause +
+                " ORDER BY m.created_at DESC,m.rowid DESC",
+                params,
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def recent_message_ids(self, conversation_id: str, limit: int = 12) -> list[str]:
         """Ids of the newest messages, matching the window `get_messages` returns."""
         safe_limit = max(1, min(int(limit), 50))
