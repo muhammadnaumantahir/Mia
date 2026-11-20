@@ -406,12 +406,14 @@ class CapabilityStore:
         *,
         approved_by: str = "",
         reason: str = "",
+        permission_authorizations: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        """Promote a registered, permission-free version to the active pointer.
+        """Promote a registered version after the host permission broker approves its scope.
 
-        This records which version the owner approved; it never imports,
-        hot-loads or executes the source in the Mia process. The previously
-        active version is kept as `deprecated` so it can be restored.
+        Generated source is still never imported or executed in the Mia process.
+        Permission declarations are bound to active owner grants here; at execution
+        time each requested action is converted into an ordinary Mia computer task,
+        which re-checks target paths and one-time approvals.
         """
         if not self.activation_enabled:
             raise CapabilityActivationBlocked(
@@ -429,11 +431,18 @@ class CapabilityStore:
             raise CapabilityLifecycleError(
                 f"only a registered version can be activated, found {item['status']}"
             )
-        if item["permissions"]:
-            raise CapabilityActivationBlocked(
-                "Capabilities that request permissions cannot be activated: "
-                "the permission broker is not implemented."
-            )
+        declared_permissions = set(item["permissions"])
+        authorizations = dict(permission_authorizations or {})
+        if set(authorizations) != declared_permissions:
+            if declared_permissions:
+                raise CapabilityActivationBlocked(
+                    "Every declared permission needs a matching active owner grant "
+                    "before this capability can be activated."
+                )
+            if authorizations:
+                raise ValueError("permission authorizations were supplied for a permission-free capability")
+        if any(not isinstance(value, str) or not value.strip() for value in authorizations.values()):
+            raise ValueError("permission authorization references must be non-empty")
         self.read_source(capability_id, version)  # source must still match its hash
         validation = item["validation"] or {}
         if validation.get("passed") is not True:
@@ -480,6 +489,7 @@ class CapabilityStore:
                     "approved_by": approved_by.strip(),
                     "previous_active": previous,
                     "source_sha256": item["source_sha256"],
+                    "permission_authorizations": authorizations,
                 },
             )
         return self.get(capability_id, version) or {}
