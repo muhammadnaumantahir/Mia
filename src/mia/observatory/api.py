@@ -2241,8 +2241,26 @@ def create_app(
         discovery=discovery, terminal=terminal_executor, browser=browser_controller,
         browser_actions=browser_actions, desktop=desktop_ctl, desktop_adapter=desktop_adapter,
         os_family=_env.os_family)
+    def computer_permission_path(capability: str, args: dict[str, Any]) -> str | None:
+        if not capability.startswith("filesystem.") or not args.get("root_id"):
+            return None
+        relative = args.get("relative_path")
+        if not isinstance(relative, str):
+            return None
+        try:
+            return str(computer_files._resolve(args["root_id"], relative))
+        except Exception:
+            return None
+
     task_engine = computer_tasks or TaskEngine(
-        data_dir / "computer-tasks.sqlite3", approval_store, task_handlers, control=control)
+        data_dir / "computer-tasks.sqlite3",
+        approval_store,
+        task_handlers,
+        control=control,
+        permission_policy=policy,
+        capability_registry=capability_registry,
+        permission_path=computer_permission_path,
+    )
     task_engine.recover()
     task_engine.on_cancel(terminal_executor.cancel_task)
     app.state.task_engine = task_engine
