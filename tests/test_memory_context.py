@@ -355,8 +355,9 @@ def test_semantic_history_candidates_include_old_messages_and_skip_temporary(tmp
     for index in range(140):
         store.append_message("conversation-new", "user", f"Unrelated recent discussion item {index}")
     temporary = store.ensure_conversation("conversation-temp")
-    store.set_conversation_temporary(temporary, True)
     store.append_message(temporary, "user", "Private temporary Zephyr secret")
+    with sqlite3.connect(store.database_path) as db:
+        db.execute("UPDATE conversations SET temporary=1 WHERE conversation_id=?", (temporary,))
 
     candidates = store.all_messages_for_semantic()
     ids = {item["message_id"] for item in candidates}
