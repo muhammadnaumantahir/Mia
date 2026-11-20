@@ -442,6 +442,8 @@ class MemoryStore:
                 "DELETE FROM conversations WHERE conversation_id = ?",
                 (conversation_id,),
             )
+            if cursor.rowcount:
+                db.execute("DELETE FROM memory_embedding_cache")
         return cursor.rowcount > 0
 
     def purge_messages(self, message_ids: list[str], *, actor: str = "owner") -> int:
@@ -454,6 +456,7 @@ class MemoryStore:
                 )
                 removed += cursor.rowcount
             if removed:
+                db.execute("DELETE FROM memory_embedding_cache")
                 AuditLog.write(
                     db,
                     actor=actor,
@@ -659,6 +662,7 @@ class MemoryStore:
                 return False
             db.execute("DELETE FROM memory_fts WHERE item_id = ?", (item_id,))
             db.execute("DELETE FROM memory_items WHERE item_id = ?", (item_id,))
+            db.execute("DELETE FROM memory_embedding_cache")
             db.execute(
                 "DELETE FROM memory_usage WHERE ref_type = 'knowledge' AND ref_id = ?",
                 (item_id,),
@@ -732,6 +736,10 @@ class MemoryStore:
                     for row in rows:
                         db.execute("DELETE FROM memory_fts WHERE item_id = ?", (row["item_id"],))
                         db.execute("DELETE FROM memory_items WHERE item_id = ?", (row["item_id"],))
+            if not dry_run and (
+                result["conversations"]["count"] or result["items"]["count"]
+            ):
+                db.execute("DELETE FROM memory_embedding_cache")
         return result
 
     @staticmethod
