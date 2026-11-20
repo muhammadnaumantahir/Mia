@@ -93,6 +93,13 @@ Follow Mia Independent AI Gateway direction (docs/architecture/AI_GATEWAY_DIRECT
 - Always-on microphone operation must have clear, persistent listening indicators, immediate mute/stop controls, configurable privacy settings and no concealed recording.
 - Keep personal memory, remote access, multi-device sync and external notifications behind explicit owner-controlled scopes.
 
+## Git workflow — owner requirement
+
+- Make all development commits directly on the default `main` branch.
+- Do not create feature/development branches, pull requests, or PR-based merge workflows.
+- After each meaningful change, commit directly to `main`; verify the resulting commit/ref before proceeding.
+- Never force-push or rewrite existing main history. If main has advanced, fetch/re-read and build on its current head.
+
 ## Development quality and CI policy
 
 - Add or update tests for each behavior change.
