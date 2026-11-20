@@ -17,14 +17,14 @@ from typing import Any
 EXCLUDED = {".git", ".venv", "venv", "__pycache__", "node_modules", ".mypy_cache", ".pytest_cache", ".ruff_cache", "dist", "build"}
 SOURCE_SUFFIXES = {".py", ".html", ".js", ".ts", ".tsx", ".jsx", ".css", ".toml", ".sql", ".md"}
 LAYER_HINTS = {
-    "SPS-01": ("config", "contracts", "capabilities"),
+    "SPS-01": ("config", "contracts"),
     "SPS-02": ("permission", "governance", "approval", "policy", "budget"),
     "SPS-03": ("brain", "agent", "planner", "intent", "reason"),
     "SPS-04": ("knowledge", "research", "document", "retrieval"),
     "SPS-05": ("memory", "conversation", "experience", "life"),
     "SPS-06": ("evaluation", "benchmark", "reflection", "observatory"),
     "SPS-07": ("routing", "adaptation", "workflow", "selection"),
-    "SPS-08": ("evolution", "capability", "plugin"),
+    "SPS-08": ("evolution", "capabilit", "plugin"),
     "SPS-09": ("test", "verify", "validation", "sandbox"),
     "SPS-10": ("computer", "execution", "runtime", "voice"),
 }
@@ -246,7 +246,7 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
     for test in test_functions:
         stem = test["label"][5:]
         candidates = [n for n in declared.values() if not n["path"].startswith("tests/")
-                      and (n["label"] == stem or n["label"] in stem.split("_"))]
+                      and n["label"] == stem]
         for candidate in candidates[:5]:
             add_edge(candidate["id"], test["id"], "TESTED_BY", "inferred",
                      f"test-name heuristic: {test['path']}::{test['label']}")
