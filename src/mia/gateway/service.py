@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import os
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, replace
@@ -25,7 +26,7 @@ from .health import CandidateHealthTracker
 from .model_registry import ModelRegistry
 from .registry import ProviderRegistry
 from .resilience import CircuitBreaker, ResilienceLog, RetryPolicy
-from .routing import actual_cost_usd
+from .routing import actual_cost_usd, estimate_cost_usd
 from .selection import DecisionLog, RoutingPreferences, select
 from .toolcalls import parse_structured, screen_tool_calls
 
@@ -44,6 +45,7 @@ class CompletionResult:
     latency_ms: float | None = None  # wall time of the successful provider call
     structured: Any = None  # parsed JSON when the request had a json_schema
     tool_call_issues: tuple[dict[str, object], ...] = ()  # sanitized screening findings
+    reservation_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +78,7 @@ class StreamEvent:
     total_ms: float | None = None
     tool_calls: tuple[dict[str, Any], ...] = ()  # whole, normalized calls; final event only
     tool_call_issues: tuple[dict[str, object], ...] = ()
+    reservation_id: str | None = None
 
 
 def _brief(exc: Exception) -> str:
@@ -126,6 +129,8 @@ class ModelGateway:
         self.events = events or ResilienceLog()
         self.breaker = breaker or CircuitBreaker(on_event=self.events.add)
         self._sleep = sleep
+        self.usage_ledger: Any | None = None
+        self.require_budget_reservations = False
 
     async def _call_with_retry(self, candidate_name: str, call: Callable[[], Awaitable[Any]]) -> Any:
         """Run one provider call, retrying transient failures per the retry policy.
@@ -220,6 +225,48 @@ class ModelGateway:
         )
         self.decisions.add(decision)
         return ordered
+
+    @staticmethod
+    def _configured_budget(name: str) -> float | None:
+        raw = os.getenv(name, "").strip()
+        if not raw:
+            return None
+        try:
+            value = float(raw)
+        except ValueError:
+            return None
+        return value if math.isfinite(value) and value >= 0 else None
+
+    def _reserve_candidate_budget(
+        self, candidate: ModelCandidate, request: ModelRequest, policy: RoutePolicy
+    ) -> tuple[str | None, bool]:
+        """Reserve this paid candidate before provider I/O when app-level enforcement is active."""
+        if candidate.free_tier:
+            return None, True
+        if not policy.allow_paid:
+            return None, False
+        if self.usage_ledger is None:
+            return (None, not self.require_budget_reservations)
+        estimated = estimate_cost_usd(candidate, request)
+        daily = self._configured_budget("MIA_MAX_DAILY_SPEND_USD")
+        monthly = self._configured_budget("MIA_MAX_MONTHLY_SPEND_USD")
+        if estimated is None or daily is None or monthly is None:
+            return None, False
+        if estimated <= 0:
+            return None, True
+        reservation_id = self.usage_ledger.reserve_budget(
+            provider_id=candidate.provider_id,
+            model_id=candidate.model_id,
+            reserved_usd=estimated,
+            per_request_limit_usd=policy.max_request_cost_usd,
+            daily_limit_usd=daily,
+            monthly_limit_usd=monthly,
+        )
+        return reservation_id, reservation_id is not None
+
+    def _release_budget_reservation(self, reservation_id: str | None) -> None:
+        if reservation_id and self.usage_ledger is not None:
+            self.usage_ledger.release_reservation(reservation_id)
 
     def _order_by_health(self, ranked: list[ModelCandidate]) -> list[ModelCandidate]:
         """Drop rate-limited candidates, then put degraded ones after healthy ones.
@@ -336,9 +383,18 @@ class ModelGateway:
                     skipped.append(provider_id)
                     self.events.add("skipped", provider_id, "circuit open; provider paused")
                 continue
+            reservation_id, budget_allowed = self._reserve_candidate_budget(
+                candidate, request, policy
+            )
+            if not budget_allowed:
+                skipped.append(candidate_name)
+                self.events.add("budget_blocked", candidate_name,
+                                "paid request could not reserve the remaining spend allowance")
+                continue
             attempted.append(candidate_name)
             provider = self.providers.get(provider_id)
             settled = False
+            keep_reservation = False
             try:
                 started = time.perf_counter()
                 response = await self._call_with_retry(
@@ -367,6 +423,7 @@ class ModelGateway:
                     self.events.add("invalid_output", candidate_name, problem)
                     invalid.append(f"{candidate_name}: {problem}")
                     continue
+                keep_reservation = True
                 return CompletionResult(
                     provider_id=candidate.provider_id,
                     model_id=candidate.model_id,
@@ -380,6 +437,7 @@ class ModelGateway:
                     cost_usd=actual_cost_usd(candidate, response.usage, request),
                     free_tier=candidate.free_tier,
                     latency_ms=latency_ms,
+                    reservation_id=reservation_id,
                 )
             except AuthenticationProviderError as exc:
                 # Provider-specific: pause it and try another; never retried in a loop.
@@ -399,6 +457,8 @@ class ModelGateway:
             finally:
                 if not settled:
                     self.breaker.release(provider_id)
+                if not keep_reservation:
+                    self._release_budget_reservation(reservation_id)
 
         if invalid:
             raise PermanentProviderError(
@@ -443,9 +503,18 @@ class ModelGateway:
                     skipped.append(provider_id)
                     self.events.add("skipped", provider_id, "circuit open; provider paused")
                 continue
+            reservation_id, budget_allowed = self._reserve_candidate_budget(
+                candidate, request, policy
+            )
+            if not budget_allowed:
+                skipped.append(candidate_name)
+                self.events.add("budget_blocked", candidate_name,
+                                "paid stream could not reserve the remaining spend allowance")
+                continue
             attempted.append(candidate_name)
             provider = self.providers.get(provider_id)
             settled = False
+            keep_reservation = False
             emitted = False
             text_sent: list[str] = []
             chunk_iter: AsyncIterator[StreamChunk] | None = None
@@ -513,6 +582,7 @@ class ModelGateway:
                 self.health.record_success(candidate)
                 self.breaker.record_success(provider_id)
                 settled = True
+                keep_reservation = True
                 yield StreamEvent(
                     done=True,
                     provider_id=candidate.provider_id,
@@ -529,6 +599,7 @@ class ModelGateway:
                     total_ms=max(0.0, last_chunk_at - started - paused_at_last_chunk) * 1000.0,
                     tool_calls=out_calls,
                     tool_call_issues=out_issues,
+                    reservation_id=reservation_id,
                 )
                 return
             except AuthenticationProviderError as exc:
@@ -560,6 +631,8 @@ class ModelGateway:
                         await aclose()
                 if not settled:
                     self.breaker.release(provider_id)
+                if not keep_reservation:
+                    self._release_budget_reservation(reservation_id)
 
         if last_error:
             raise _aggregate_failure(attempted, last_error) from last_error
