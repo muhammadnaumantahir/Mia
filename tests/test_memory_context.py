@@ -385,3 +385,15 @@ def test_semantic_context_can_retrieve_a_message_outside_recent_history(tmp_path
     )
     assert old_id in {reference.ref_id for reference in packet.references}
     assert "Zephyr" in packet.message["content"]
+
+
+def test_embedding_cache_supports_batched_round_trip(tmp_path):
+    import hashlib
+
+    store = make_store(tmp_path)
+    digest = hashlib.sha256(b"semantic memory text").hexdigest()
+    store.set_embedding_cache_many("local-embedder", {digest: [0.25, 0.75]})
+    assert store.get_embedding_cache_many("local-embedder", [digest]) == {
+        digest: [0.25, 0.75]
+    }
+    assert store.get_embedding_cache_many("another-model", [digest]) == {}
