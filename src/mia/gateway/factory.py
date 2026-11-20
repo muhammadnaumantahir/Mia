@@ -143,3 +143,36 @@ def apply_daily_cap(policy, spent_today_usd: float):
         allow_paid=True,
         max_request_cost_usd=min(policy.max_request_cost_usd, remaining),
     )
+
+
+def apply_monthly_cap(policy, spent_month_usd: float):
+    """Apply the mandatory UTC-calendar-month ceiling to paid inference.
+
+    A missing, malformed or unsafe cap fails closed. Free/local routes are
+    unaffected. The monthly ceiling is required whenever paid routing is enabled.
+    """
+    from .contracts import RoutePolicy
+
+    if not policy.allow_paid:
+        return policy
+    raw = os.getenv("MIA_MAX_MONTHLY_SPEND_USD", "").strip()
+    if not raw:
+        return RoutePolicy(allow_paid=False, max_request_cost_usd=0.0)
+    try:
+        cap = float(raw)
+    except ValueError:
+        return RoutePolicy(allow_paid=False, max_request_cost_usd=0.0)
+    if (
+        not math.isfinite(cap)
+        or cap < 0
+        or not math.isfinite(spent_month_usd)
+        or spent_month_usd < 0
+    ):
+        return RoutePolicy(allow_paid=False, max_request_cost_usd=0.0)
+    remaining = cap - spent_month_usd
+    if remaining <= 0:
+        return RoutePolicy(allow_paid=False, max_request_cost_usd=0.0)
+    return RoutePolicy(
+        allow_paid=True,
+        max_request_cost_usd=min(policy.max_request_cost_usd, remaining),
+    )
