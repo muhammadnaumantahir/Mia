@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import sqlite3
 import uuid
@@ -131,6 +132,14 @@ class MemoryStore:
                     ON conversation_messages(conversation_id, created_at);
                 CREATE INDEX IF NOT EXISTS idx_memory_kind_time
                     ON memory_items(kind, created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS memory_embedding_cache (
+                    model_id TEXT NOT NULL,
+                    content_sha256 TEXT NOT NULL,
+                    embedding_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY(model_id, content_sha256)
+                );
             """)
             db.execute("""
                 CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts
@@ -552,6 +561,51 @@ class MemoryStore:
                 (safe_limit,),
             ).fetchall()
         return [self._decode_item(row) for row in rows]
+
+    def get_embedding_cache(self, model_id: str, content_sha256: str) -> list[float] | None:
+        """Read a local content-addressed embedding; corrupt rows are treated as cache misses."""
+        with self._connection() as db:
+            row = db.execute(
+                "SELECT embedding_json FROM memory_embedding_cache "
+                "WHERE model_id=? AND content_sha256=?",
+                (model_id, content_sha256),
+            ).fetchone()
+        if row is None:
+            return None
+        try:
+            vector = json.loads(row["embedding_json"])
+            if (not isinstance(vector, list) or not vector
+                    or not all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                               and math.isfinite(v) for v in vector)):
+                return None
+            return [float(v) for v in vector]
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None
+
+    def set_embedding_cache(
+        self, model_id: str, content_sha256: str, vector: list[float], *, max_entries: int = 5000
+    ) -> None:
+        """Store only a validated embedding vector, never the source memory text."""
+        if (not isinstance(model_id, str) or not model_id or len(model_id) > 120
+                or not re.fullmatch(r"[a-f0-9]{64}", content_sha256)
+                or not isinstance(vector, list) or not vector or len(vector) > 4096
+                or not all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                           and math.isfinite(v) for v in vector)):
+            raise ValueError("invalid embedding cache entry")
+        safe_limit = max(100, min(int(max_entries), 20000))
+        with self._connection() as db:
+            db.execute(
+                "INSERT INTO memory_embedding_cache(model_id,content_sha256,embedding_json,created_at) "
+                "VALUES(?,?,?,?) ON CONFLICT(model_id,content_sha256) DO UPDATE SET "
+                "embedding_json=excluded.embedding_json, created_at=excluded.created_at",
+                (model_id, content_sha256, json.dumps([float(v) for v in vector]), _now()),
+            )
+            db.execute(
+                "DELETE FROM memory_embedding_cache WHERE rowid IN ("
+                "SELECT rowid FROM memory_embedding_cache ORDER BY created_at DESC "
+                "LIMIT -1 OFFSET ?)",
+                (safe_limit,),
+            )
 
     def search(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
         match_query = _safe_fts_query(query)
