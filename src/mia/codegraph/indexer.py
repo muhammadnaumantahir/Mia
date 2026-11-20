@@ -179,17 +179,23 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
             else:
                 continue
             for imported, alias in names:
-                target_path = modules.get(imported)
-                if target_path is None:
-                    prefix = imported
-                    while "." in prefix and prefix not in modules:
-                        prefix = prefix.rsplit(".", 1)[0]
+                prefix = imported
+                target_path = None
+                while prefix:
                     target_path = modules.get(prefix)
-                if target_path is None:
-                    suffix_matches = [candidate for module, candidate in modules.items()
-                                      if module == prefix or module.endswith("." + prefix)]
-                    if len(suffix_matches) == 1:
-                        target_path = suffix_matches[0]
+                    if target_path is not None:
+                        break
+                    if "." in prefix:
+                        suffix_matches = [
+                            candidate for module, candidate in modules.items()
+                            if module.endswith("." + prefix)
+                        ]
+                        if len(suffix_matches) == 1:
+                            target_path = suffix_matches[0]
+                            break
+                    if "." not in prefix:
+                        break
+                    prefix = prefix.rsplit(".", 1)[0]
                 if target_path is not None:
                     add_edge(fid, file_ids[target_path], "IMPORTS", "confirmed",
                              f"ast-import:{rel}:{node.lineno}", node.lineno)
