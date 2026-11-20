@@ -4485,6 +4485,12 @@ def create_app(
             results.append({"provider_id": provider.provider_id, "status": state})
         return {"items": results}
 
+    @app.post("/api/gateway/providers/{provider_id}/test")
+    async def test_gateway_provider(provider_id: str) -> dict[str, Any]:
+        """Run a sanitized provider connection and model-list check."""
+        result = await model_gateway.test_connection(provider_id)
+        return asdict(result)
+
     @app.post("/api/gateway/models/refresh")
     async def refresh_gateway_models() -> dict[str, Any]:
         try:
