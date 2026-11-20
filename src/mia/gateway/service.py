@@ -27,6 +27,7 @@ from .registry import ProviderRegistry
 from .resilience import CircuitBreaker, ResilienceLog, RetryPolicy
 from .routing import actual_cost_usd
 from .selection import DecisionLog, RoutingPreferences, select
+from .toolcalls import parse_structured, screen_tool_calls
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +42,8 @@ class CompletionResult:
     cost_usd: float | None = 0.0
     free_tier: bool = True
     latency_ms: float | None = None  # wall time of the successful provider call
+    structured: Any = None  # parsed JSON when the request had a json_schema
+    tool_call_issues: tuple[dict[str, object], ...] = ()  # sanitized screening findings
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +75,7 @@ class StreamEvent:
     first_token_ms: float | None = None  # request start to first text; final event only
     total_ms: float | None = None
     tool_calls: tuple[dict[str, Any], ...] = ()  # whole, normalized calls; final event only
+    tool_call_issues: tuple[dict[str, object], ...] = ()
 
 
 def _brief(exc: Exception) -> str:
@@ -101,7 +105,13 @@ class ModelGateway:
         events: ResilienceLog | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         stream_idle_timeout: float | None = None,
+        tool_call_policy: str = "annotate",
     ) -> None:
+        if tool_call_policy not in ("annotate", "filter"):
+            raise ValueError("tool_call_policy must be 'annotate' or 'filter'")
+        # annotate: report issues, pass calls through (the caller's broker decides);
+        # filter: drop calls that fail screening against the offered tools.
+        self.tool_call_policy = tool_call_policy
         if stream_idle_timeout is not None and not (
             math.isfinite(stream_idle_timeout) and 0 < stream_idle_timeout <= 3600
         ):
@@ -164,6 +174,16 @@ class ModelGateway:
             aclose = getattr(iterator, "aclose", None)
             if aclose is not None:
                 await aclose()
+
+    def _screen(
+        self, request: ModelRequest, calls: tuple[dict[str, Any], ...]
+    ) -> tuple[tuple[dict[str, Any], ...], tuple[dict[str, object], ...]]:
+        """Screen proposed tool calls against the offered tools; never executes anything."""
+        if not calls:
+            return calls, ()
+        valid, issues = screen_tool_calls(calls, request.tools)
+        report = tuple(issue.to_dict() for issue in issues)
+        return (valid if self.tool_call_policy == "filter" else calls), report
 
     def set_preferences(self, preferences: RoutingPreferences) -> None:
         """Replace routing preferences after validating them."""
@@ -293,6 +313,7 @@ class ModelGateway:
         attempted: list[str] = []
         last_error: Exception | None = None
         skipped: list[str] = []
+        invalid: list[str] = []
 
         for candidate in ranked:
             provider_id = candidate.provider_id
@@ -315,15 +336,32 @@ class ModelGateway:
                     response = ProviderResponse(content=response)
                 if not response.content and not response.tool_calls:
                     raise PermanentProviderError("Provider returned an empty response")
+                tool_calls, tool_issues = self._screen(request, response.tool_calls)
+                structured: Any = None
+                problem: str | None = None
+                if request.json_schema is not None:
+                    structured, problem = parse_structured(
+                        response.content or "", request.json_schema
+                    )
+                elif response.tool_calls and not tool_calls and not response.content:
+                    problem = "model returned only invalid tool calls"
+                # The provider answered, so it is healthy; the *model output* is what
+                # failed. Try the next candidate without penalising the provider.
                 self.health.record_success(candidate)
                 self.breaker.record_success(provider_id)
                 settled = True
+                if problem is not None:
+                    self.events.add("invalid_output", candidate_name, problem)
+                    invalid.append(f"{candidate_name}: {problem}")
+                    continue
                 return CompletionResult(
                     provider_id=candidate.provider_id,
                     model_id=candidate.model_id,
                     content=response.content or "",
                     attempted_candidates=tuple(attempted),
-                    tool_calls=response.tool_calls,
+                    tool_calls=tool_calls,
+                    structured=structured,
+                    tool_call_issues=tool_issues,
                     data_local=candidate.data_local,
                     usage=response.usage,
                     cost_usd=actual_cost_usd(candidate, response.usage, request),
@@ -349,6 +387,10 @@ class ModelGateway:
                 if not settled:
                     self.breaker.release(provider_id)
 
+        if invalid:
+            raise PermanentProviderError(
+                "No model produced a valid response: " + "; ".join(invalid[:3])
+            )
         if last_error:
             raise _aggregate_failure(attempted, last_error) from last_error
         if skipped:
@@ -371,6 +413,8 @@ class ModelGateway:
         partial output is never silently mixed across models. Providers without
         a stream() method, and tool-bearing requests, use one buffered call.
         """
+        if request.json_schema is not None:
+            raise ValueError("structured output (json_schema) requires complete(), not stream()")
         ranked = self._order_by_health(
             self._rank(candidates, request, policy, order_hint)
         )
@@ -450,6 +494,9 @@ class ModelGateway:
                             final = chunk
                     if not text_parts and not final.tool_calls:
                         raise PermanentProviderError("Provider returned an empty response")
+                out_calls, out_issues = self._screen(request, final.tool_calls)
+                if final.tool_calls and not out_calls and not text_sent:
+                    raise PermanentProviderError("model returned only invalid tool calls")
                 self.health.record_success(candidate)
                 self.breaker.record_success(provider_id)
                 settled = True
@@ -467,7 +514,8 @@ class ModelGateway:
                         (first_token_at - started) * 1000.0 if first_token_at else None
                     ),
                     total_ms=max(0.0, last_chunk_at - started - paused_at_last_chunk) * 1000.0,
-                    tool_calls=final.tool_calls,
+                    tool_calls=out_calls,
+                    tool_call_issues=out_issues,
                 )
                 return
             except AuthenticationProviderError as exc:

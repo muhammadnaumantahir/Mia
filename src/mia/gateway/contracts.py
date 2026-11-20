@@ -15,6 +15,9 @@ class ModelRequest:
     messages: tuple[dict[str, Any], ...] = ()
     tools: tuple[dict[str, Any], ...] = ()
     sensitive: bool = False  # private content: may be restricted to local models
+    # Ask for JSON matching this schema. complete() validates the reply and falls
+    # back to another model when it does not conform; stream() does not support it.
+    json_schema: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)

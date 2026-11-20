@@ -202,6 +202,8 @@ class OllamaProvider:
         }
         if request.tools and self.supports_tools:
             body["tools"] = list(request.tools)
+        if request.json_schema is not None:
+            body["format"] = request.json_schema  # Ollama structured outputs
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(f"{self.base_url}/api/chat", json=body)
@@ -303,6 +305,7 @@ class OpenAICompatibleProvider:
         data_local: bool = False,
         allow_private_url: bool = True,
         extra_headers: dict[str, str] | None = None,
+        supports_json_schema: bool = False,
     ):
         if not provider_id.strip():
             raise ValueError("provider_id is required")
@@ -316,6 +319,7 @@ class OpenAICompatibleProvider:
         self.supports_tools = supports_tools
         self.data_local = data_local
         self.extra_headers = validate_extra_headers(extra_headers)
+        self.supports_json_schema = supports_json_schema
 
     @staticmethod
     def _httpx():
@@ -407,6 +411,11 @@ class OpenAICompatibleProvider:
         if request.tools and self.supports_tools:
             body["tools"] = list(request.tools)
             body["tool_choice"] = "auto"
+        if request.json_schema is not None and self.supports_json_schema:
+            body["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {"name": "mia_response", "schema": request.json_schema},
+            }
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(

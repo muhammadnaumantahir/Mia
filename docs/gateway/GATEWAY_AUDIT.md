@@ -150,3 +150,25 @@ None of these is marked "verified live".
   assembly against real servers is unverified (mocked SSE and NDJSON only). Local
   verification: `ruff` clean, `pytest` 1035 passed, 14 skipped (the skips are browser
   tests with no Playwright/Chromium here; none are gateway tests).
+- **Milestone 8 (tool-call screening, structured output):** new
+  `gateway/jsonschema_lite.py` (bounded JSON Schema subset; `pattern` is ignored to avoid
+  ReDoS, `$ref` unsupported, so a pass means "satisfies the supported constraints"),
+  `gateway/toolcalls.py` (`screen_tool_calls`, `parse_structured`). Model-proposed tool
+  calls are checked against the tools *offered in the request*: exact name match only,
+  arguments must be a JSON object that satisfies the offered schema (unknown keys
+  rejected), size caps, unique ids, at most 8 calls; issue text never contains argument
+  values. `ModelGateway(tool_call_policy=...)`: `annotate` (default) reports issues in
+  `CompletionResult.tool_call_issues` / `StreamEvent.tool_call_issues` and passes calls
+  through untouched, so the Brain broker (still the authoritative permission, registry
+  and egress check) behaves as before; `filter` drops invalid calls and falls back to
+  the next model when nothing valid remains. `ModelRequest.json_schema` asks for
+  structured output: Ollama gets native `format`, OpenAI-compatible providers get
+  `response_format` only when `MIA_<PREFIX>_ENABLE_JSON_SCHEMA=true`; `complete()`
+  always validates the reply, returns `structured`, and tries the next model on
+  non-conforming output without penalising the provider (the error is
+  `PermanentProviderError` if none conforms); `stream()` rejects `json_schema`.
+  **Not implemented on purpose:** a prompt-based tool-calling fallback for models without
+  native tool calls (tools are only routed to models with the `tools` capability).
+  A validator bug (error cap not enforced in loops) was caught by the new tests and
+  fixed. Local verification: `ruff` clean, `pytest` 1095 passed, 16 skipped (browser
+  tests lacking Playwright/Chromium; mocked providers only).

@@ -63,6 +63,7 @@ def _register_openai_compatible(
             free_tier=_flag(env + "ROUTE_FREE"),
             supports_tools=_flag(env + "ENABLE_TOOL_CALLING"),
             data_local=_flag(env + "DATA_LOCAL"),
+            supports_json_schema=_flag(env + "ENABLE_JSON_SCHEMA"),
             extra_headers=headers,
         )
     )
