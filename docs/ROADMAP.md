@@ -211,3 +211,8 @@ Exit criteria:
 - Day 0 and final results use the same benchmark definitions and environment notes.
 - Every claimed improvement is reproducible and linked to raw evidence.
 - Final report distinguishes capability growth from measured quality improvement.
+
+
+## Memory semantic retrieval addendum (2026-11-20)
+
+An opt-in local-only Ollama embedding reranker has been added on the development branch. It expands a bounded candidate pool of recent structured records and knowledge items, ranks them with local embeddings, and preserves existing provenance, trust, relationship expansion and context budgets. Disabled by default; no cloud API or model download. Remaining: persistent embedding cache/index, semantic retrieval across past conversation messages, multilingual quality evaluation, model benchmarking and owner verification. See docs/memory/SEMANTIC_RETRIEVAL.md.
