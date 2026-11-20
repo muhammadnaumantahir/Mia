@@ -568,3 +568,33 @@ def test_urdu_memory_capture_keeps_uncertain_temporary_and_sensitive_content_out
 def test_urdu_script_tokens_support_duplicate_comparison():
     assert similarity("مجھے اردو میں بات پسند ہے", "مجھے اردو میں بات پسند ہے") == 1.0
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Yaad rakhna ke hum ne Mia ke liye SQLite ka faisla kiya.", "decision"),
+        ("یاد رکھنا کہ میرا مقصد Mia کو مکمل کرنا ہے۔", "goal"),
+    ],
+)
+def test_explicit_memory_commands_support_roman_urdu_and_urdu(tmp_path, text, expected):
+    store, service, conv = make(tmp_path)
+    result = say(store, service, conv, text)
+
+    assert result["explicit"] is True
+    assert len(result["saved"]) == 1
+    record = store.structured.get(result["saved"][0]["record_id"])
+    assert record["record_type"] == expected
+    assert record["provenance"] == "owner_provided"
+    assert record["origin"]["capture"] == "explicit"
+
+
+def test_roman_urdu_forget_command_removes_matching_memory(tmp_path):
+    store, service, conv = make(tmp_path)
+    saved = say(store, service, conv, "Remember that my favorite editor is Neovim.")
+    record_id = saved["saved"][0]["record_id"]
+
+    forgotten = say(store, service, conv, "Bhool jao favorite editor Neovim.")
+
+    assert forgotten["explicit"] is True
+    assert record_id in forgotten["forgotten"]
+    assert store.structured.get(record_id) is None
+
