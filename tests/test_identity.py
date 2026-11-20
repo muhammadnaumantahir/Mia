@@ -392,3 +392,21 @@ def test_identity_storage_failure_does_not_break_chat(tmp_path, monkeypatch):
     assert provider.system_prompt == identity_system_prompt()
     events = observatory.list_events(limit=50)
     assert any(e["event_type"] == "identity_load_failure" for e in events)
+
+
+
+@pytest.mark.parametrize("endpoint", ["/api/gateway/chat", "/api/gateway/chat/stream"])
+def test_text_and_streaming_chat_receive_canonical_sps_self_description(
+    tmp_path, monkeypatch, endpoint
+):
+    provider = RecordingProvider("local-a", "model-alpha")
+    client, _, _ = make_client(tmp_path, monkeypatch, provider)
+
+    response = client.post(endpoint, json={"prompt": "Tell me about your architecture", "use_tools": False})
+
+    assert response.status_code == 200
+    prompt = provider.system_prompt
+    assert "CANONICAL SPS ARCHITECTURE" in prompt
+    assert "SPS-01 Software DNA Core" in prompt
+    assert "SPS-10 Execution Core" in prompt
+    assert "does not prove every feature is implemented or enabled" in prompt
