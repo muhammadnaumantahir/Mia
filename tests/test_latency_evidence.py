@@ -3,6 +3,11 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 
 import pytest
+
+from mia.gateway.contracts import ModelRequest, RoutePolicy, StreamChunk, TokenUsage
+from mia.gateway.ledger import UsageLedger
+from mia.observatory.store import ObservatoryStore
+
 from tests.test_gateway_streaming_ledger import (
     StreamingProvider,
     candidate,
@@ -11,10 +16,6 @@ from tests.test_gateway_streaming_ledger import (
     make_client,
     parse_sse,
 )
-
-from mia.gateway.contracts import ModelRequest, RoutePolicy, StreamChunk, TokenUsage
-from mia.gateway.ledger import UsageLedger
-from mia.observatory.store import ObservatoryStore
 
 
 class SlowProvider(StreamingProvider):
