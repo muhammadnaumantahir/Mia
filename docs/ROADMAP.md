@@ -215,7 +215,7 @@ Exit criteria:
 
 **Initial implementation:** `feature/code-graph-foundation` (2026-11-20).
 
-- Python AST indexing for files, classes, functions, imports, direct same-file calls and FastAPI route declarations.
+- Python AST indexing for files, classes, functions, imports, unique same-file calls, FastAPI route declarations and exact literal configuration read/write relationships; config/workflow file nodes are included while secret files are excluded.
 - Explicit evidence confidence: AST-backed edges are confirmed; SPS path mapping and test-name matching are inferred.
 - Interactive local graph page, search and filters, node inspection, pan/zoom and refresh.
 - Stable IDs, deterministic ordering, source digest, commit stamp, parse-error reporting and atomic output.
