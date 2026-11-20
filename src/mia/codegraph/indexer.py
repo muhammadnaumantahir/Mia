@@ -251,6 +251,63 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
             add_edge(candidate["id"], test["id"], "TESTED_BY", "inferred",
                      f"test-name heuristic: {test['path']}::{test['label']}")
 
+    # Static diagnostics are conservative: these are candidates, not proof of dead code.
+    meaningful = {"IMPORTS", "CALLS", "EXPOSES_API", "TESTED_BY", "USES",
+                  "DEPENDS_ON", "PROTECTED_BY", "READS_FROM", "WRITES_TO",
+                  "ROUTES_TO", "ACTIVATES", "TRIGGERS"}
+    incident: dict[str, int] = {}
+    for edge in edges.values():
+        if edge["type"] in meaningful:
+            incident[edge["source"]] = incident.get(edge["source"], 0) + 1
+            incident[edge["target"]] = incident.get(edge["target"], 0) + 1
+    unreferenced = [
+        {"id": node["id"], "key": node["key"], "kind": node["kind"],
+         "reason": "No matching static dependency/call/test/API edge was resolved."}
+        for node in nodes.values()
+        if node["kind"] in {"file", "function", "class", "api_endpoint"}
+        and node["id"] not in incident
+    ]
+
+    adjacency: dict[str, list[str]] = {
+        ident: [] for ident, node in nodes.items() if node["kind"] == "file"
+    }
+    for edge in edges.values():
+        if edge["type"] == "IMPORTS" and edge["source"] in adjacency:
+            adjacency[edge["source"]].append(edge["target"])
+    next_index = 0
+    indices: dict[str, int] = {}
+    lowlinks: dict[str, int] = {}
+    stack: list[str] = []
+    on_stack: set[str] = set()
+    circular_imports: list[list[str]] = []
+
+    def visit_import(node_id: str) -> None:
+        nonlocal next_index
+        indices[node_id] = lowlinks[node_id] = next_index
+        next_index += 1
+        stack.append(node_id)
+        on_stack.add(node_id)
+        for target in sorted(adjacency.get(node_id, [])):
+            if target not in indices:
+                visit_import(target)
+                lowlinks[node_id] = min(lowlinks[node_id], lowlinks[target])
+            elif target in on_stack:
+                lowlinks[node_id] = min(lowlinks[node_id], indices[target])
+        if lowlinks[node_id] == indices[node_id]:
+            component = []
+            while stack:
+                member = stack.pop()
+                on_stack.remove(member)
+                component.append(member)
+                if member == node_id:
+                    break
+            if len(component) > 1 or (len(component) == 1 and component[0] in adjacency.get(component[0], [])):
+                circular_imports.append(sorted(nodes[item]["key"] for item in component))
+
+    for node_id in sorted(adjacency):
+        if node_id not in indices:
+            visit_import(node_id)
+
     fingerprint = hashlib.sha256()
     for path in files:
         rel = path.relative_to(root).as_posix()
@@ -273,6 +330,11 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
         "nodes": sorted(nodes.values(), key=lambda n: (n["kind"], n["key"])),
         "edges": sorted(edges.values(), key=lambda e: (e["type"], e["source"], e["target"], e["evidence"])),
         "index_errors": errors,
+        "diagnostics": {
+            "unreferenced_static_candidates": sorted(unreferenced, key=lambda item: item["key"]),
+            "circular_imports": sorted(circular_imports),
+            "note": "Static candidates are not proof of dead code; dynamic loading and runtime wiring may create valid relationships.",
+        },
         "limitations": ["Python AST relationships are source-grounded.",
                         "BELONGS_TO_LAYER and TESTED_BY are explicitly inferred heuristics.",
                         "Dynamic imports, reflection and runtime-generated calls are not resolved.",
