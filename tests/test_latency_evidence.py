@@ -3,7 +3,7 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from test_gateway_streaming_ledger import (
+from tests.test_gateway_streaming_ledger import (
     StreamingProvider,
     candidate,
     collect,
