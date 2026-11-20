@@ -27,7 +27,7 @@ SQLite FTS5 provides local full-text search. The database does not require a clo
 - External webpages, repositories, documents and tool outputs are saved as untrusted by default.
 - The trust label is metadata, not an instruction.
 - Search returns provenance so the caller can cite the source.
-- Retrieved knowledge and past messages are injected only through the bounded, delimited block described below. Conflict handling between competing memories and structured decision/goal memory are not implemented yet.
+- Retrieved knowledge, past messages and structured decision/goal/entity memories are injected only through the bounded, delimited block described below. Competing records are detected and surfaced to the owner; Mia never silently chooses which conflicting statement is true.
 - Only explicitly user-authored preferences or facts should be marked as user/trusted.
 
 ## Contextual retrieval and identity (implemented 2026-11-19)
@@ -43,7 +43,7 @@ Every chat request (`POST /api/gateway/chat` and `/api/gateway/chat/stream`) is 
 
 `MIA_CONTEXT_RETRIEVAL=false` disables retrieval. Retrieval failures never block a reply (`context_retrieval_failure` event).
 
-Known limits: lexical (FTS5) matching only, so paraphrases with no shared words are missed; no entity/relationship graph; no consolidation or summarisation of old conversations; no automatic conflict detection; the web UI does not yet display `context_references`.
+Known limits: lexical (FTS5) matching remains the default, so paraphrases with no shared words may be missed; no embedding provider ships with Mia; contextual-reference matching uses conservative English patterns; old conversation summarisation is not implemented. Relationship edges are followed for structured records, and the Memory page displays identity, provenance, capture suggestions, upkeep and relationship controls.
 
 ## Persistent identity (implemented 2026-11-19)
 
