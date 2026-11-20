@@ -105,3 +105,8 @@ The persistent, model-independent identity backend provides versioned owner upda
 ## Mia self-description and SPS architecture
 
 The Brain runtime manifest now includes the canonical ten-layer SPS architecture (layer IDs, names and concise responsibilities) alongside live registry-derived tools, providers, memory, voice and permission status. It explicitly labels the layer list as an architecture map—not proof that every layer capability is implemented or enabled. Automated tests cover all ten layers and the evidence limitation.
+
+
+## Wake phrase status
+
+The current Hey Mia wake phrase is an opt-in browser SpeechRecognition mode. It uses the browser's online speech service and listens only while the Assistant page is open and the user has armed it. It is not an offline, operating-system-level or background always-on wake-word service. Local/offline wake-word detection and a persistent background service remain unfinished.
