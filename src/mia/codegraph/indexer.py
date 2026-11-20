@@ -281,6 +281,14 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
     if output is not None:
         destination = Path(output)
         destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.is_file():
+            try:
+                previous = json.loads(destination.read_text(encoding="utf-8"))
+                if (previous.get("source_digest") == result["source_digest"]
+                        and previous.get("commit") == result["commit"]):
+                    return previous
+            except (OSError, ValueError, AttributeError):
+                pass
         payload = json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
         fd, temporary = tempfile.mkstemp(prefix=".graph-", suffix=".tmp", dir=destination.parent)
         try:
