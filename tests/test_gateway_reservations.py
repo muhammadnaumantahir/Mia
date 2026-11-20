@@ -163,3 +163,29 @@ def test_budget_reservation_rejects_unknown_or_insufficient_caps(tmp_path):
         provider_id="p", model_id="m", reserved_usd=0.02,
         per_request_limit_usd=0.01, daily_limit_usd=1, monthly_limit_usd=1,
     ) is None
+
+
+def test_unknown_paid_cost_does_not_consume_reservation(tmp_path):
+    ledger = UsageLedger(tmp_path / "unknown-cost.sqlite3")
+    reservation = ledger.reserve_budget(
+        provider_id="cloud", model_id="model", reserved_usd=0.02,
+        per_request_limit_usd=0.05, daily_limit_usd=1.0, monthly_limit_usd=5.0,
+    )
+    assert reservation
+    with pytest.raises(ValueError, match="unknown cost"):
+        ledger.record(
+            provider_id="cloud", model_id="model", task_type="chat",
+            input_tokens=10, output_tokens=10, estimated_input_tokens=10,
+            estimated_output_tokens=10, cost_usd=None, free_tier=False,
+            data_local=False, reservation_id=reservation,
+        )
+    assert ledger.reservation_summary()["active_count"] == 1
+
+
+def test_token_usage_rejects_negative_or_boolean_provider_counts():
+    from mia.gateway.contracts import TokenUsage
+
+    with pytest.raises(ValueError):
+        TokenUsage(input_tokens=-1, output_tokens=10)
+    with pytest.raises(ValueError):
+        TokenUsage(input_tokens=True, output_tokens=10)
