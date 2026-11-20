@@ -66,7 +66,7 @@ class CodeGraphWatcher:
             return False
 
     def _run(self) -> None:
-        if not self.output.is_file():
-            self.check_once(force=True)
+        # Validate the existing artifact on startup as well as watching later edits.
+        self.check_once(force=True)
         while not self._stop.wait(self.interval_seconds):
             self.check_once()
