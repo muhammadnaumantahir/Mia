@@ -144,6 +144,17 @@ class UsageLedger:
         now = _utc_now()
         return self.spend_since(now.replace(hour=0, minute=0, second=0, microsecond=0))
 
+    def spend_month_utc(self, now: datetime | None = None) -> float:
+        """Total recorded spend in the current UTC calendar month.
+
+        `now` is injectable for deterministic boundary tests; naive values are
+        interpreted as UTC rather than as the host's local timezone.
+        """
+        moment = now or _utc_now()
+        moment = moment.replace(tzinfo=UTC) if moment.tzinfo is None else moment.astimezone(UTC)
+        month_start = moment.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        return self.spend_since(month_start)
+
     def window_summary(self, since: str, until: str) -> dict[str, Any]:
         """Totals for recorded_at in [since, until); ISO-8601 UTC strings."""
         with self._connection() as db:
