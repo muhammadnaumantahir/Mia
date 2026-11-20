@@ -2243,9 +2243,13 @@ def create_app(
     @app.post("/api/desktop/windows/action/preview", status_code=201)
     def desktop_window_action_preview(item: WindowActionInput) -> dict[str, Any]:
         try:
-            return desktop_adapter.preview_window_action(
+            _computer_permission_requires_approval("desktop.window_action", force_approval=True)
+            preview = desktop_adapter.preview_window_action(
                 item.window_handle, item.action,
                 acknowledge_unsaved_risk=item.acknowledge_unsaved_risk)
+            return {**preview, "requires_approval": True}
+        except HTTPException:
+            raise
         except RuntimeError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except DesktopAccessError as exc:
@@ -2256,9 +2260,12 @@ def create_app(
         if item.approval_id is None:
             raise HTTPException(status_code=409, detail="Window management always needs its own owner approval")
         try:
+            _computer_permission_requires_approval("desktop.window_action", force_approval=True)
             result = desktop_adapter.execute_window_action(
                 item.approval_id, item.window_handle, item.window_title, item.action,
                 acknowledge_unsaved_risk=item.acknowledge_unsaved_risk)
+        except HTTPException:
+            raise
         except RuntimeError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ApprovalError as exc:
