@@ -15,8 +15,10 @@ def make_repo(tmp_path: Path) -> Path:
     )
     (tmp_path / "src" / "mia" / "service.py").write_text(
         "from mia.helpers import helper\n\n"
+        "def local_helper(value):\n    return value\n\n"
         "class Service:\n"
         "    def run(self, value):\n"
+        "        local_helper(value)\n"
         "        return helper(value)\n",
         encoding="utf-8",
     )
@@ -44,6 +46,8 @@ def test_graph_records_confirmed_import_and_declarations(tmp_path):
                for edge in edges)
     assert any(edge["type"] == "DECLARES" and edge["evidence"].startswith("ast:")
                for edge in edges)
+    assert any(edge["type"] == "CALLS" and edge["confidence"] == "confirmed"
+               and edge["evidence"].startswith("ast-call:") for edge in edges)
 
 
 def test_inferred_edges_are_never_labelled_confirmed(tmp_path):
