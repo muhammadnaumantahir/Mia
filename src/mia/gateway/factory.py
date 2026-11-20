@@ -116,9 +116,9 @@ def paid_route_policy():
 def apply_daily_cap(policy, spent_today_usd: float):
     """Tighten a route policy by the remaining daily budget (MIA_MAX_DAILY_SPEND_USD).
 
-    Unset means no daily cap (the per-request cap still applies). A malformed,
-    non-finite or negative cap, or an unusable ledger total, disables paid
-    routing. Free and local routes are never affected.
+    The daily cap is mandatory whenever paid routing is enabled. Missing,
+    malformed, non-finite or negative caps, or an unusable ledger total, disable
+    paid routing. Free and local routes are never affected.
     """
     from .contracts import RoutePolicy
 
