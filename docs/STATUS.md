@@ -20,7 +20,7 @@ The product roadmap is now strictly ordered:
 
 The Code Graph is a required cross-cutting developer capability, initialized during the integration baseline and automatically refreshed after source changes throughout development. This sequence supersedes the older "three co-equal priorities" direction. See AGENTS.md and [the canonical roadmap](ROADMAP.md).
 
-**Implementation truth (not a completion claim):** main now includes the core runtime integration: independent AI Gateway, bounded semantic-memory option, structured/FTS memory and multilingual deterministic capture/recall, owner-editable versioned identity and UI, shared Brain pipeline, browser/local voice engines, opt-in browser wake phrase, governed computer adapters, task runtime, proactive inbox, and Code Graph. Core integration PR #3 merged to main at `7325708`; Code Graph PR #12 and identity/multilingual memory work were included in that integration. PR #20 is the clean-main follow-up for canonical SPS self-description and multilingual conversation-evaluation fixtures, currently under fresh CI. Important gaps remain: full-history semantic retrieval, model-assisted extraction beyond conservative rules, richer relation-aware recall, stronger cross-session/provider continuity, reasoning/judge evaluation, and offline always-on wake-word detection. Physical device checks and owner deployment remain separately tracked.
+**Implementation truth (not a completion claim):** main now includes the core runtime integration: independent AI Gateway, bounded semantic-memory option, structured/FTS memory and multilingual deterministic capture/recall, owner-editable versioned identity and UI, shared Brain pipeline, browser/local voice engines, opt-in browser wake phrase, governed computer adapters, task runtime, proactive inbox, and Code Graph. Core integration PR #3 merged to main at `7325708`; Code Graph PR #12 and identity/multilingual memory work were included in that integration. PR #20 is the clean-main follow-up for canonical SPS self-description and multilingual conversation-evaluation fixtures, currently under fresh CI. Important gaps remain: model-assisted extraction beyond conservative rules, richer relation-aware recall, stronger cross-session/provider continuity, reasoning/judge evaluation, and offline always-on wake-word detection. Full-retained-history semantic candidate retrieval is now implemented on the current development branch, pending review and local verification. Physical device checks and owner deployment remain separately tracked.
 
 ## Status inventory (component status, not execution order)
 
@@ -110,3 +110,14 @@ The memory context assembler now recognizes common Roman Urdu and Urdu-script re
 ## SPS architecture self-description
 
 Mia's runtime self-description now reads the canonical immutable ten-layer registry from `mia.sps.layers` and injects the exact layer IDs, names and responsibilities into Brain context. It explicitly distinguishes the SPS framework contract from implementation evidence: the metadata registry exists, but the full ten-layer implementation remains partial/in progress. Supporting runtime services are described as components, not extra SPS layers. Tests verify layer order, canonical names, responsibilities and the limitation statement. The deterministic conversation-evaluation fixture also covers Roman Urdu/Urdu goal recall, project continuity, the SPS architecture summary and the browser-versus-offline wake-phrase distinction.
+
+
+## 2026-11-20 full-history semantic memory development
+
+Branch: `feature/full-history-semantic-memory` (based on current `main`).
+
+- Added a store query that returns all messages from retained, non-temporary conversations rather than limiting semantic candidates to the latest 12/100 messages.
+- Semantic retrieval now considers this full retained history; temporary conversations remain excluded and the final prompt context remains governed by the existing message/character budgets.
+- Cached embeddings continue to use content-addressed hashes. First-time cache population is split into batches of 64 to avoid oversized Ollama embedding requests; subsequent retrieval reuses cached vectors.
+- Added regression tests for old messages outside the recent window and exclusion of temporary conversations.
+- Tests have been authored but not run in this session. CI is intentionally skipped per owner direction. The first query after upgrade may incur additional local embedding work proportional to uncached retained history; the configured local Ollama reranker remains opt-in.
