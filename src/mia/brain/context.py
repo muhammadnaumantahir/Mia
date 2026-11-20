@@ -101,7 +101,7 @@ def build_context(
         try:
             packet = assemble_memory_context(
                 store, query, conversation_id, budget=_budget_for(analysis),
-                reranker=LocalOllamaEmbeddingReranker.from_env(),
+                reranker=LocalOllamaEmbeddingReranker.from_env(cache=store),
             )
         except Exception:  # retrieval must never block a reply
             packet = None
