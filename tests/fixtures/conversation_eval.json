@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "description": "Deterministic multilingual conversation memory and self-description acceptance set. This tests retrieval/context assembly, not live model translation quality.",
+  "cases": [
+    {
+      "id": "english-decision-recall",
+      "language": "en",
+      "prompt": "What did we decide about the billing database?",
+      "expected_intent": "decision",
+      "expected_memory": "PostgreSQL"
+    },
+    {
+      "id": "roman-urdu-decision-recall",
+      "language": "roman-urdu",
+      "prompt": "Billing service ke liye hum ne kya faisla kiya tha?",
+      "expected_intent": "decision",
+      "expected_memory": "PostgreSQL"
+    },
+    {
+      "id": "urdu-decision-recall",
+      "language": "ur",
+      "prompt": "بلنگ سروس کے لیے ہم نے کیا فیصلہ کیا تھا؟",
+      "expected_intent": "decision",
+      "expected_memory": "PostgreSQL"
+    },
+    {
+      "id": "runtime-self-description",
+      "language": "en",
+      "prompt": "What capabilities are currently registered?",
+      "expected_manifest_phrase": "LIVE RUNTIME EVIDENCE"
+    }
+  ]
+}
