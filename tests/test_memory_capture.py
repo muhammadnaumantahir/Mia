@@ -510,3 +510,61 @@ def test_same_sentence_is_one_memory_whether_suggested_or_stated_explicitly(tmp_
     explicit = say(store, service, conv, "Remember that I always review pull requests before lunch.")
     assert explicit["saved"] == [] and explicit["skipped"][0]["reason"] == "duplicate"
     assert len(records(store)) == 1 and records(store)[0]["provenance"] == "owner_provided"
+
+# ------------------------------------------------------- Urdu/Roman Urdu capture
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Mujhe Roman Urdu mein baat karna pasand hai.", "preference"),
+        ("Main hamesha code review karta hoon.", "preference"),
+        ("Hum ne Mia ke liye SQLite use karne ka faisla kiya.", "decision"),
+        ("Mera maqsad Mia ko natural conversational assistant banana hai.", "goal"),
+        ("Main Mia par kaam kar raha hoon.", "project"),
+        ("مجھے اردو میں بات کرنا پسند ہے۔", "preference"),
+        ("میں ہمیشہ کوڈ ریویو کرتا ہوں۔", "preference"),
+        ("ہم نے Mia کے لیے SQLite کا فیصلہ کیا۔", "decision"),
+        ("میرا مقصد Mia کو مکمل کرنا ہے۔", "goal"),
+        ("میں Mia پر کام کر رہا ہوں۔", "project"),
+    ],
+)
+def test_automatic_capture_supports_roman_urdu_and_urdu(tmp_path, text, expected):
+    store, service, conv = make(tmp_path)
+    result = say(store, service, conv, text)
+
+    assert result["saved"] == []
+    assert len(result["pending"]) == 1
+    assert result["pending"][0]["record_type"] == expected
+    record = store.structured.get(result["pending"][0]["record_id"])
+    assert record["status"] == "pending"
+    assert record["provenance"] == "observed"
+    assert record["origin"]["capture"] == "auto"
+
+
+@pytest.mark.parametrize(
+    ("text", "reason"),
+    [
+        ("Mujhe shayad Roman Urdu pasand hai.", "uncertain"),
+        ("Mujhe abhi Roman Urdu pasand hai.", "temporary_context"),
+        ("Main hamesha mosque visit karta hoon.", "sensitive_attribute"),
+        ("Main hamesha dawa leta hoon.", "sensitive_attribute"),
+        ("میں ہمیشہ دوا لیتا ہوں۔", "sensitive_attribute"),
+        ("میں ہمیشہ نماز پڑھتا ہوں۔", "sensitive_attribute"),
+    ],
+)
+def test_urdu_memory_capture_keeps_uncertain_temporary_and_sensitive_content_out(
+    tmp_path, text, reason
+):
+    store, service, conv = make(tmp_path)
+    result = say(store, service, conv, text)
+
+    assert result["saved"] == []
+    assert result["pending"] == []
+    assert reason in [item["reason"] for item in result["skipped"]]
+    assert records(store) == []
+
+
+def test_urdu_script_tokens_support_duplicate_comparison():
+    assert similarity("مجھے اردو میں بات پسند ہے", "مجھے اردو میں بات پسند ہے") == 1.0
+
