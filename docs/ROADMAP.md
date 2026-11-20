@@ -219,6 +219,6 @@ Exit criteria:
 - Explicit evidence confidence: AST-backed edges are confirmed; SPS path mapping and test-name matching are inferred.
 - Interactive local graph page, search and filters, node inspection, pan/zoom and refresh.
 - Stable IDs, deterministic ordering, source digest, commit stamp, parse-error reporting and atomic output.
-- API refreshes on graph access; `python scripts/update_code_graph.py` generates the tracked artifact and `--check` detects staleness.
+- Production FastAPI app starts a background source watcher, validates on startup and rebuilds after detected changes; API access also refreshes. `python scripts/update_code_graph.py` generates the artifact and `--check` detects staleness.
 
 **Not yet complete:** execution traces and runtime call relationships; language-aware JavaScript/TypeScript/SQL parsers; database schema and ORM relationships; UI component/API binding; permission boundary attribution; scheduler/trigger relationships; graph diff/history UI; impact scoring, orphan/cycle/test-coverage analysis; full SPS responsibility mapping. The first branch requires local test and browser verification before integration.
