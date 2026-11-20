@@ -239,3 +239,54 @@ def test_cancelled_paid_stream_retains_budget_reservation(tmp_path, monkeypatch)
         assert ledger.reservation_summary()["active_count"] == 1
 
     asyncio.run(scenario())
+
+
+def test_cancelled_paid_completion_retains_budget_reservation(tmp_path, monkeypatch):
+    import asyncio
+
+    monkeypatch.setenv("MIA_MAX_DAILY_SPEND_USD", "1")
+    monkeypatch.setenv("MIA_MAX_MONTHLY_SPEND_USD", "5")
+    candidate = ModelCandidate(
+        provider_id="cloud", model_id="model", capabilities=frozenset({"chat"}),
+        context_window=4096, free_tier=False, healthy=True, enabled=True,
+        input_cost_per_million_usd=1.0, output_cost_per_million_usd=1.0,
+    )
+
+    class BlockingProvider:
+        provider_id = "cloud"
+
+        def __init__(self):
+            self.started = asyncio.Event()
+
+        async def health(self):
+            return True
+
+        async def list_models(self):
+            return [candidate]
+
+        async def complete(self, candidate, request):
+            self.started.set()
+            await asyncio.Event().wait()
+
+    async def scenario():
+        registry = ProviderRegistry()
+        provider = BlockingProvider()
+        registry.register(provider)
+        ledger = UsageLedger(tmp_path / "cancelled-complete.sqlite3")
+        gateway = ModelGateway(registry)
+        gateway.usage_ledger = ledger
+        gateway.require_budget_reservations = True
+        request = ModelRequest(task_type="chat", prompt="hello", estimated_input_tokens=100,
+                               max_output_tokens=100)
+        task = asyncio.create_task(
+            gateway.complete(request, [candidate], RoutePolicy(
+                allow_paid=True, max_request_cost_usd=0.001
+            ))
+        )
+        await provider.started.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert ledger.reservation_summary()["active_count"] == 1
+
+    asyncio.run(scenario())
