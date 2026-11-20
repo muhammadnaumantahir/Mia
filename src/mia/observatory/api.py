@@ -831,12 +831,87 @@ def create_app(
     except Exception:
         pass
 
-    def capture_from_message(
+    async def capture_from_message(
         conversation_id: str, message_id: str, text: str
     ) -> dict[str, Any] | None:
-        """Run memory capture for a user message. A failure never breaks chat."""
+        """Capture deterministic memories and optional local-model suggestions.
+
+        Private chat is never sent to a cloud provider for memory extraction. Model
+        output is only a suggestion; CaptureService validates it and queues approval.
+        """
         try:
-            outcome = capture_service.process_message(conversation_id, message_id, text)
+            model_candidates: dict[str, dict[str, Any]] = {}
+            settings = memory_store.settings.get_all()
+            if (settings.get("memory_enabled") and settings.get("capture_mode") != "off"
+                    and not memory_store.is_conversation_temporary(conversation_id)):
+                import re
+                from mia.memory.capture import screen_sentence
+
+                sentences = [
+                    re.sub(r"\\s+", " ", item).strip()
+                    for item in re.split(r"(?<=[.!?])\\s+|\\n+", text or "")
+                ]
+                eligible = [
+                    sentence for sentence in sentences
+                    if 4 <= len(sentence.split()) <= 40
+                    and len(sentence) <= 300
+                    and screen_sentence(sentence) is None
+                    and CaptureService._match_auto(sentence) is None
+                ][:2]
+                if eligible:
+                    local_candidates = [
+                        candidate for candidate in await model_gateway.discover_models()
+                        if candidate.data_local and candidate.enabled and candidate.healthy
+                        and "json_schema" in candidate.capabilities
+                    ]
+                    if local_candidates:
+                        schema = {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": ["record_type", "title", "body", "confidence"],
+                            "properties": {
+                                "record_type": {"type": "string", "enum": [
+                                    "decision", "goal", "episode", "project", "entity",
+                                    "fact", "preference", "lesson"
+                                ]},
+                                "title": {"type": "string", "minLength": 1, "maxLength": 200},
+                                "body": {"type": "string", "minLength": 1, "maxLength": 300},
+                                "confidence": {"type": "number", "minimum": 0, "maximum": 0.85},
+                            },
+                        }
+                        for sentence in eligible:
+                            request = ModelRequest(
+                                task_type="memory_extraction",
+                                prompt=sentence,
+                                estimated_input_tokens=max(1, len(sentence) // 4),
+                                max_output_tokens=160,
+                                required_capabilities=frozenset({"json_schema"}),
+                                messages=(
+                                    {"role": "system", "content": (
+                                        "Extract a possible long-term memory from the owner's "
+                                        "sentence. Return only the exact original sentence as "
+                                        "body, never infer or paraphrase. If it is not clearly "
+                                        "a durable fact, decision, goal, project, preference, "
+                                        "lesson, entity or episode, return an empty object."
+                                    )},
+                                    {"role": "user", "content": sentence},
+                                ),
+                                sensitive=True,
+                                json_schema=schema,
+                            )
+                            try:
+                                result = await asyncio.wait_for(
+                                    model_gateway.complete(request, local_candidates, RoutePolicy()),
+                                    timeout=8.0,
+                                )
+                                if isinstance(result.structured, dict) and result.structured:
+                                    model_candidates[sentence] = result.structured
+                            except Exception:
+                                # Optional extraction must never delay or fail the chat turn.
+                                continue
+            outcome = capture_service.process_message(
+                conversation_id, message_id, text, model_candidates=model_candidates
+            )
         except Exception:
             observatory.record_event(
                 category="memory",
