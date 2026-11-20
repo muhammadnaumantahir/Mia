@@ -86,3 +86,20 @@ Voice: an explicit opt-in “Hey Mia” wake phrase mode is implemented using th
 - Conversation evaluation: a deterministic fixture and runner cover English, Urdu and Roman Urdu decision recall plus runtime self-description. This tests context assembly, not live model translation quality; tests are added but not run.
 
 Remaining Priority 1 development includes full-history semantic retrieval/evaluation, model-assisted memory extraction/consolidation, richer self-description of architecture/limitations, quality-based model escalation, reasoning-quality evaluation and full text/voice acceptance verification.
+
+
+## Code Graph implementation status — 2026-11-20
+
+The Code Graph foundation is now ported onto `integration/code-graph-core`, which is based on the current core-runtime development branch. This integration branch is **not merged into main**.
+
+Implemented in this branch:
+- Deterministic repository/file/directory and Python AST symbol indexing with stable IDs, source digests, commit metadata, atomic graph output and parser-error reporting.
+- Confirmed import/declaration/same-file call/API/config-file relationships; inferred SPS-layer and test-name relationships remain explicitly labelled.
+- Secret/private-key exclusions, conservative circular-import and unreferenced-candidate diagnostics.
+- Local explorer, search and relationship/evidence filters, graph APIs, CLI refresh/stale-check and automatic background rebuild after source changes.
+- Loopback-only graph data endpoints by default; remote access requires explicit opt-in and a strong token.
+- Regression tests for graph indexing, watcher refresh, API access control, nested API-route symbol mapping and private-key exclusion.
+
+Important limits: the watcher currently rebuilds the complete graph after detecting changes; true incremental file-level indexing and Git-diff impact analysis are still open. Python is the only language with symbol-level parsing. Dynamic dependency injection, runtime call traces, ORM/database relationships, permission/workflow attribution and richer history comparison are not yet resolved.
+
+Verification truth: the integration was inspected and targeted defects were corrected, but the Code Graph and full core-runtime test suites have **not been run locally** in this environment. Do not treat the implementation as verified or merge-ready until proportionate local checks are completed.
