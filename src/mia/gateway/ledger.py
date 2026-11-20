@@ -228,13 +228,13 @@ class UsageLedger:
                 ).fetchone()[0]
                 reserved_daily = db.execute(
                     "SELECT COALESCE(SUM(reserved_usd), 0) FROM budget_reservations "
-                    "WHERE reserved_at >= ? AND expires_at > ?",
-                    (today_start.isoformat(), now_text),
+                    "WHERE expires_at > ?",
+                    (now_text,),
                 ).fetchone()[0]
                 reserved_month = db.execute(
                     "SELECT COALESCE(SUM(reserved_usd), 0) FROM budget_reservations "
-                    "WHERE reserved_at >= ? AND expires_at > ?",
-                    (month_start.isoformat(), now_text),
+                    "WHERE expires_at > ?",
+                    (now_text,),
                 ).fetchone()[0]
                 epsilon = 1e-12
                 if float(actual_daily) + float(reserved_daily) + reserved_usd > daily_limit_usd + epsilon:
@@ -278,13 +278,13 @@ class UsageLedger:
             ).fetchone()
             daily = db.execute(
                 "SELECT COALESCE(SUM(reserved_usd),0) FROM budget_reservations "
-                "WHERE reserved_at >= ? AND expires_at > ?",
-                (today.isoformat(), moment.isoformat()),
+                "WHERE expires_at > ?",
+                (moment.isoformat(),),
             ).fetchone()[0]
             monthly = db.execute(
                 "SELECT COALESCE(SUM(reserved_usd),0) FROM budget_reservations "
-                "WHERE reserved_at >= ? AND expires_at > ?",
-                (month.isoformat(), moment.isoformat()),
+                "WHERE expires_at > ?",
+                (moment.isoformat(),),
             ).fetchone()[0]
         return {
             "active_count": int(row["count"]),
