@@ -28,6 +28,7 @@ detected.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import Any
 
 from mia.memory.safety import find_secret
@@ -225,8 +226,16 @@ def screen_sentence(sentence: str) -> str | None:
 class CaptureService:
     """Applies the capture pipeline against a MemoryStore."""
 
-    def __init__(self, memory: Any) -> None:
+    def __init__(
+        self,
+        memory: Any,
+        *,
+        model_extractor: Callable[[str], dict[str, Any] | None] | None = None,
+    ) -> None:
         self.memory = memory
+        # Optional model adapter. The adapter receives only one screened owner
+        # sentence and must return a structured candidate; it never writes memory.
+        self.model_extractor = model_extractor
 
     # ------------------------------------------------------------------ public
 
@@ -422,15 +431,24 @@ class CaptureService:
                 continue
             if len(sentence) > MAX_SENTENCE:
                 continue
-            candidate = self._match_auto(sentence)
-            if candidate is None:
-                continue
             reason = screen_sentence(sentence)
             if reason:
                 result["skipped"].append({"reason": reason})
                 continue
-            rtype, confidence, subject = candidate
-            title = _title_for(subject, sentence)
+            candidate = self._match_auto(sentence)
+            model_assisted = False
+            model_title: str | None = None
+            if candidate is None:
+                candidate = self._match_model(sentence)
+                model_assisted = candidate is not None
+                if model_assisted:
+                    rtype, confidence, model_title = candidate
+                else:
+                    continue
+            else:
+                rtype, confidence, subject = candidate
+                model_title = _title_for(subject, sentence)
+            title = model_title or _title_for(None, sentence)
             key = f"{rtype}:{title.lower()}:{sentence.lower()}"
             if key in seen:
                 continue
@@ -443,12 +461,16 @@ class CaptureService:
             if rejected:
                 result["skipped"].append({"reason": "previously_rejected"})
                 continue
+            # Model-derived memories always require owner approval, even when
+            # deterministic high-confidence capture is configured for auto-save.
             auto_save = (
-                settings["capture_mode"] == "auto"
+                not model_assisted
+                and settings["capture_mode"] == "auto"
                 and confidence >= settings["auto_save_min_confidence"]
                 and not conflicts
             )
-            origin = {**origin_base, "capture": "auto",
+            origin = {**origin_base,
+                      "capture": "model_assisted" if model_assisted else "auto",
                       "conflicts_with": [c["record_id"] for c in conflicts]}
             try:
                 record_id, _ = self.memory.structured.add(
@@ -465,6 +487,41 @@ class CaptureService:
             (result["saved"] if auto_save else result["pending"]).append(entry)
             if conflicts:
                 result["conflicts"].extend(c["record_id"] for c in conflicts)
+
+    def _match_model(self, sentence: str) -> tuple[str, float, str] | None:
+        """Validate one model suggestion; require an exact source quote and approval.
+
+        The model is an extractor, not an authority: it cannot invent or paraphrase
+        stored facts, set provenance, choose lifecycle state, or write to the store.
+        """
+        if self.model_extractor is None:
+            return None
+        try:
+            candidate = self.model_extractor(sentence)
+        except Exception:
+            return None
+        if not isinstance(candidate, dict):
+            return None
+        record_type = candidate.get("record_type")
+        title = candidate.get("title")
+        body = candidate.get("body")
+        confidence = candidate.get("confidence")
+        allowed_types = {
+            "decision", "goal", "episode", "project", "entity",
+            "fact", "preference", "lesson",
+        }
+        if record_type not in allowed_types:
+            return None
+        if not isinstance(body, str) or _clean_body(body) != _clean_body(sentence):
+            return None
+        if not isinstance(title, str) or not title.strip() or len(title) > MAX_TITLE:
+            return None
+        if (isinstance(confidence, bool) or not isinstance(confidence, (int, float))
+                or not 0.0 <= confidence <= 0.85):
+            return None
+        if find_secret(body):
+            return None
+        return record_type, float(confidence), _clip(title, MAX_TITLE)
 
     def _reinforce(self, record: dict[str, Any]) -> None:
         """A repeated mention raises confidence a little (never above 0.95, never trust)."""
