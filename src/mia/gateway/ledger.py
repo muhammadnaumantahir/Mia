@@ -157,12 +157,19 @@ class UsageLedger:
                     (reservation_id,),
                 )
 
-    def spend_since(self, since: datetime) -> float:
-        """Total recorded USD since `since`. Unknown-cost rows add nothing but are
-        impossible on paid routes, which require valid prices to be selected."""
+    def spend_since(self, since: datetime) -> float | None:
+        """Total paid USD since `since`; unknown paid rows fail closed."""
         with self._connection() as db:
+            unknown = db.execute(
+                "SELECT COUNT(*) AS count FROM usage "
+                "WHERE recorded_at >= ? AND free_tier=0 AND cost_usd IS NULL",
+                (since.isoformat(),),
+            ).fetchone()
+            if int(unknown["count"]) > 0:
+                return None
             row = db.execute(
-                "SELECT COALESCE(SUM(cost_usd), 0) AS total FROM usage WHERE recorded_at >= ?",
+                "SELECT COALESCE(SUM(cost_usd), 0) AS total FROM usage "
+                "WHERE recorded_at >= ? AND free_tier=0",
                 (since.isoformat(),),
             ).fetchone()
         return float(row["total"])
@@ -225,12 +232,26 @@ class UsageLedger:
             with self._connection() as db:
                 db.execute("BEGIN IMMEDIATE")
                 db.execute("DELETE FROM budget_reservations WHERE expires_at <= ?", (now_text,))
+                unknown_daily = db.execute(
+                    "SELECT COUNT(*) FROM usage WHERE recorded_at >= ? "
+                    "AND free_tier=0 AND cost_usd IS NULL",
+                    (today_start.isoformat(),),
+                ).fetchone()[0]
+                unknown_month = db.execute(
+                    "SELECT COUNT(*) FROM usage WHERE recorded_at >= ? "
+                    "AND free_tier=0 AND cost_usd IS NULL",
+                    (month_start.isoformat(),),
+                ).fetchone()[0]
+                if int(unknown_daily) or int(unknown_month):
+                    return None
                 actual_daily = db.execute(
-                    "SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE recorded_at >= ?",
+                    "SELECT COALESCE(SUM(cost_usd), 0) FROM usage "
+                    "WHERE recorded_at >= ? AND free_tier=0",
                     (today_start.isoformat(),),
                 ).fetchone()[0]
                 actual_month = db.execute(
-                    "SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE recorded_at >= ?",
+                    "SELECT COALESCE(SUM(cost_usd), 0) FROM usage "
+                    "WHERE recorded_at >= ? AND free_tier=0",
                     (month_start.isoformat(),),
                 ).fetchone()[0]
                 reserved_daily = db.execute(
@@ -299,7 +320,8 @@ class UsageLedger:
                 SELECT COUNT(*) AS requests,
                        COALESCE(SUM(input_tokens), 0) AS input_tokens,
                        COALESCE(SUM(output_tokens), 0) AS output_tokens,
-                       COALESCE(SUM(cost_usd), 0) AS cost_usd,
+                       COALESCE(SUM(CASE WHEN free_tier=0 THEN cost_usd ELSE 0 END), 0) AS cost_usd,
+                       COALESCE(SUM(CASE WHEN free_tier=0 AND cost_usd IS NULL THEN 1 ELSE 0 END), 0) AS unknown_cost_rows,
                        COALESCE(SUM(token_source = 'estimated'), 0) AS estimated_rows,
                        COALESCE(SUM(free_tier = 0), 0) AS paid_requests,
                        COALESCE(SUM(data_local = 0), 0) AS non_local_requests
@@ -318,7 +340,8 @@ class UsageLedger:
             "requests": row["requests"],
             "input_tokens": row["input_tokens"],
             "output_tokens": row["output_tokens"],
-            "cost_usd": round(row["cost_usd"], 8),
+            "cost_usd": None if row["unknown_cost_rows"] else round(row["cost_usd"], 8),
+            "unknown_cost_rows": row["unknown_cost_rows"],
             "estimated_token_rows": row["estimated_rows"],
             "paid_requests": row["paid_requests"],
             "non_local_requests": row["non_local_requests"],
@@ -356,7 +379,8 @@ class UsageLedger:
                 "requests": row["requests"],
                 "input_tokens": row["input_tokens"],
                 "output_tokens": row["output_tokens"],
-                "cost_usd": round(row["cost_usd"], 8),
+                "cost_usd": None if row["unknown_cost_rows"] else round(row["cost_usd"], 8),
+                "unknown_cost_rows": row["unknown_cost_rows"],
                 "estimated_token_rows": row["estimated_rows"],
                 "free_tier": bool(row["free_tier"]),
                 "data_local": bool(row["data_local"]),
@@ -373,7 +397,13 @@ class UsageLedger:
             "total_requests": sum(item["requests"] for item in items),
             "total_input_tokens": sum(item["input_tokens"] for item in items),
             "total_output_tokens": sum(item["output_tokens"] for item in items),
-            "total_cost_usd": round(sum(item["cost_usd"] for item in items), 8),
-            "spent_today_utc_usd": round(self.spend_today_utc(), 8),
+            "total_cost_usd": (
+                None if any(item["unknown_cost_rows"] for item in items)
+                else round(sum(item["cost_usd"] or 0.0 for item in items), 8)
+            ),
+            "spent_today_utc_usd": (
+                None if self.spend_today_utc() is None
+                else round(self.spend_today_utc() or 0.0, 8)
+            ),
             "items": items,
         }
