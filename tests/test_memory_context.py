@@ -1,7 +1,7 @@
 import sqlite3
 from datetime import UTC, datetime, timedelta
 
-from mia.memory.context import ContextBudget, assemble_memory_context
+from mia.memory.context import ContextBudget, assemble_memory_context, detect_context_intent
 from mia.memory.identity import IDENTITY_PROMPT, identity_system_prompt
 from mia.memory.store import MemoryStore, extract_query_terms
 
@@ -292,3 +292,55 @@ def test_recent_message_candidates_exclude_temporary_conversations(tmp_path):
     contents = [row["content"] for row in rows]
     assert "A normal persisted memory message" in contents
     assert "A temporary message must not be indexed" not in contents
+
+# -------------------------------------------------- multilingual memory intent
+
+
+def test_context_intent_recognizes_english_roman_urdu_and_urdu():
+    cases = [
+        ("Hum kahan tak pohanchay thay?", {"project", "goal", "decision"}),
+        ("ہم کہاں تک پہنچے تھے؟", {"project", "goal", "decision"}),
+        ("Hum ne kya faisla kiya?", {"decision"}),
+        ("ہم نے کیا فیصلہ کیا؟", {"decision"}),
+        ("Meri pasand kya hai?", {"preference"}),
+        ("میری ترجیحات کیا ہیں؟", {"preference"}),
+        ("Mera maqsad kya hai?", {"goal"}),
+        ("میرا مقصد کیا ہے؟", {"goal"}),
+        ("Pichli dafa kya masla tha?", {"lesson", "episode", "project"}),
+        ("پچھلی بار کیا مسئلہ تھا؟", {"lesson", "episode", "project"}),
+        ("Mia ka progress kya hai?", {"project", "goal", "decision"}),
+        ("پروجیکٹ کی پیش رفت کیا ہے؟", {"project", "goal", "decision"}),
+    ]
+    for prompt, expected in cases:
+        assert detect_context_intent(prompt) == frozenset(expected), prompt
+
+
+def test_roman_urdu_goal_question_retrieves_a_goal_without_shared_keywords(tmp_path):
+    store = make_store(tmp_path)
+    conversation = store.ensure_conversation("conversation-roman-goal")
+    record_id, _ = store.structured.add(
+        record_type="goal",
+        title="First Mia milestone",
+        body="Build a natural conversational assistant with persistent context.",
+        provenance="owner_provided",
+    )
+
+    packet = assemble_memory_context(store, "Mera maqsad kya hai?", conversation)
+
+    assert any(ref.ref_id == record_id for ref in packet.references)
+
+
+def test_urdu_goal_question_retrieves_a_goal_without_shared_keywords(tmp_path):
+    store = make_store(tmp_path)
+    conversation = store.ensure_conversation("conversation-urdu-goal")
+    record_id, _ = store.structured.add(
+        record_type="goal",
+        title="First Mia milestone",
+        body="Build a natural conversational assistant with persistent context.",
+        provenance="owner_provided",
+    )
+
+    packet = assemble_memory_context(store, "میرا مقصد کیا ہے؟", conversation)
+
+    assert any(ref.ref_id == record_id for ref in packet.references)
+
