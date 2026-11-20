@@ -10,7 +10,7 @@ from .indexer import build_graph, source_snapshot
 
 
 class CodeGraphWatcher:
-    """Poll source metadata and atomically rebuild the graph after repository changes."""
+    """Check source content digests and atomically rebuild after repository changes."""
 
     def __init__(
         self, root: str | Path, output: str | Path, *, interval_seconds: float = 5.0
