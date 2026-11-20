@@ -449,6 +449,7 @@ class StructuredMemory:
                     new_importance, provenance, _now(), record_id,
                 ),
             )
+            db.execute("DELETE FROM memory_embedding_cache")
             if row["status"] in RETRIEVABLE:
                 db.execute("DELETE FROM structured_fts WHERE record_id = ?", (record_id,))
                 self._index(db, record_id, new_title, new_body)
@@ -632,6 +633,7 @@ class StructuredMemory:
                     "DELETE FROM memory_usage WHERE ref_type = 'record' AND ref_id = ?", (target,)
                 )
                 db.execute("DELETE FROM structured_memory WHERE record_id = ?", (target,))
+            db.execute("DELETE FROM memory_embedding_cache")
             if not chain:  # keep neighbours' pointers from dangling
                 db.execute(
                     "UPDATE structured_memory SET superseded_by = NULL WHERE superseded_by = ?",
@@ -817,6 +819,7 @@ class StructuredMemory:
                 (keep_id, now, now, duplicate_id),
             )
             db.execute("DELETE FROM structured_fts WHERE record_id = ?", (duplicate_id,))
+            db.execute("DELETE FROM memory_embedding_cache")
             AuditLog.write(
                 db,
                 actor=actor,
