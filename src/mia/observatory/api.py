@@ -8,6 +8,8 @@ from __future__ import annotations
 import ast
 import asyncio
 import hashlib
+import hmac
+import ipaddress
 import json
 import math
 import os
@@ -40,6 +42,9 @@ from mia.brain.capabilities import CapabilityRegistry
 from mia.brain.orchestrator import Brain, TurnRequest
 from mia.brain.plan import PlanStore
 from mia.brain.self_description import build_runtime_manifest, render_runtime_manifest
+from mia.codegraph.impact import analyze_impact
+from mia.codegraph.indexer import build_graph
+from mia.codegraph.watcher import CodeGraphWatcher
 from mia.computer.app_discovery import ApplicationDiscovery
 from mia.computer.applications import ApplicationLauncher, ApplicationLaunchError
 from mia.computer.approvals import ApprovalError, ApprovalStore
@@ -645,6 +650,7 @@ def create_app(
     app_discovery: ApplicationDiscovery | None = None,
     life: LifeStore | None = None,
     life_fetcher: Any | None = None,
+    enable_code_graph_watcher: bool = False,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -662,6 +668,23 @@ def create_app(
         model_gateway.require_budget_reservations = True
     startup_handlers: list[Callable[[], Any]] = []
     shutdown_handlers: list[Callable[[], Any]] = []
+    code_graph_watcher: CodeGraphWatcher | None = None
+    if (
+        enable_code_graph_watcher
+        and os.getenv("MIA_CODE_GRAPH_WATCH_ENABLED", "true").strip().lower() != "false"
+    ):
+        try:
+            watch_interval = float(os.getenv("MIA_CODE_GRAPH_WATCH_INTERVAL_SECONDS", "5"))
+        except ValueError:
+            watch_interval = 5.0
+        watch_interval = min(60.0, max(1.0, watch_interval))
+        graph_root = Path(__file__).resolve().parents[3]
+        code_graph_watcher = CodeGraphWatcher(
+            graph_root, graph_root / "docs" / "code-graph" / "graph.json",
+            interval_seconds=watch_interval,
+        )
+        startup_handlers.append(code_graph_watcher.start)
+        shutdown_handlers.append(code_graph_watcher.stop)
 
     async def _call_handler(handler: Callable[[], Any]) -> None:
         if asyncio.iscoroutinefunction(handler):
@@ -686,6 +709,7 @@ def create_app(
         description="Local-first, evidence-backed evolution telemetry and AI gateway.",
     )
     app.state.observatory = observatory
+    app.state.code_graph_watcher = code_graph_watcher
     baseline_capture_service = baseline_capture or capture_baseline_manifest
     app.state.baseline_capture = baseline_capture_service
     app.state.gateway = model_gateway
@@ -5091,7 +5115,82 @@ def create_app(
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Plan or step not found") from exc
 
+    def _authorize_code_graph_request(request: Request) -> None:
+        # Expose architecture metadata only to loopback clients unless the owner
+        # explicitly enables remote access with a strong token.
+        client_host = request.client.host if request.client else ""
+        forwarded = bool(request.headers.get("forwarded") or request.headers.get("x-forwarded-for"))
+        try:
+            loopback = ipaddress.ip_address(client_host).is_loopback
+        except ValueError:
+            loopback = client_host == "testclient"
+        if loopback and not forwarded:
+            return
+        configured = os.getenv("MIA_CODE_GRAPH_TOKEN", "")
+        supplied = request.headers.get("x-mia-code-graph-token", "")
+        remote_enabled = os.getenv("MIA_CODE_GRAPH_ALLOW_REMOTE", "false").strip().lower() == "true"
+        if remote_enabled and len(configured) >= 24 and hmac.compare_digest(supplied, configured):
+            return
+        raise HTTPException(
+            status_code=403,
+            detail="Code Graph is local-only; remote access requires explicit enablement and a configured token.",
+        )
+
+    @app.get("/api/code-graph")
+    def code_graph(request: Request) -> dict[str, Any]:
+        _authorize_code_graph_request(request)
+        root = Path(__file__).resolve().parents[3]
+        output = root / "docs" / "code-graph" / "graph.json"
+        try:
+            graph = build_graph(root, output=output)
+            watcher = app.state.code_graph_watcher
+            if watcher is not None:
+                watcher.last_error = None
+                watcher.last_commit = graph["commit"]
+            return graph
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Code Graph indexing failed: {type(exc).__name__}",
+            ) from exc
+
+    @app.get("/api/code-graph/impact")
+    def code_graph_impact(request: Request, base: str = "HEAD~1") -> dict[str, Any]:
+        _authorize_code_graph_request(request)
+        root = Path(__file__).resolve().parents[3]
+        try:
+            return analyze_impact(root, base)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Code Graph impact analysis failed: {type(exc).__name__}",
+            ) from exc
+
+    @app.post("/api/code-graph/refresh")
+    def refresh_code_graph(request: Request) -> dict[str, Any]:
+        return code_graph(request)
+
+    @app.get("/api/code-graph/status")
+    def code_graph_status(request: Request) -> dict[str, Any]:
+        _authorize_code_graph_request(request)
+        watcher = app.state.code_graph_watcher
+        return {
+            "watcher_enabled": watcher is not None,
+            "watcher_running": bool(watcher and watcher.running),
+            "last_error": watcher.last_error if watcher else None,
+            "last_commit": watcher.last_commit if watcher else None,
+        }
+
+    @app.get("/code-graph")
+    def code_graph_page() -> FileResponse:
+        page = Path(__file__).resolve().parents[1] / "codegraph" / "graph.html"
+        if not page.is_file():
+            raise HTTPException(status_code=404, detail="Code Graph interface is not installed")
+        return FileResponse(page, media_type="text/html")
+
     return app
 
 
-app = create_app()
+app = create_app(enable_code_graph_watcher=True)
