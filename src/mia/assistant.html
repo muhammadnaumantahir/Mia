@@ -105,6 +105,8 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 <div class="recent-title">Recent conversations</div><div class="recent-list" id="recentList"><div class="sub">No conversations yet</div></div>
 <div class="memory-panel">
  <div class="memory-panel-head"><b>Long-term memory</b><button id="refreshMemory" class="memory-refresh" type="button">↻ Refresh</button></div>
+ <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 8px"><a href="/memory" id="manageMemory" style="font-size:12px">Manage memory →</a><label style="font-size:11px;display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" id="tempConversation"> Temporary chat</label></div>
+ <div id="tempNote" class="sub" style="font-size:11px" hidden>Temporary: Mia saves nothing from this chat.</div>
  <div class="memory-count" id="memoryCount">Loading saved memories…</div>
  <div class="memory-list" id="memoryRecords"><div class="memory-empty">Loading records…</div></div>
 </div>
@@ -505,13 +507,32 @@ function renderMemoryReferences(container,references){
  section.append(heading);
  references.slice(0,6).forEach(ref=>{
   const chip=document.createElement('span');chip.className='memory-source';
-  chip.textContent='['+(ref.label||'M?')+'] '+(ref.title||ref.kind||'Memory')+' · '+(ref.provenance||ref.trust||'source');
+  const confirmed=ref.provenance==='owner_provided'||ref.provenance==='validated'||ref.provenance==='source_backed';
+  const state=ref.provenance?(confirmed?'confirmed':'unconfirmed'):(ref.trust||'source');
+  chip.textContent='['+(ref.label||'M?')+'] '+(ref.title||ref.kind||'Memory')+' · '+state;
+  if(ref.provenance&&!confirmed)chip.style.borderStyle='dashed';
   chip.title='Type: '+(ref.ref_type||'memory')+' · '+(ref.provenance||'unknown provenance');
   section.append(chip);
  });
  container.append(section);
 }
 
+function setupTemporaryToggle(){
+ const box=$('tempConversation');if(!box)return;
+ const sync=async()=>{
+  if(!conversationId){box.checked=false;return;}
+  try{const r=await fetch('/api/conversations/'+encodeURIComponent(conversationId));if(r.ok){const d=await r.json();box.checked=!!d.temporary;$('tempNote').hidden=!d.temporary;}}catch(e){}
+ };
+ box.addEventListener('change',async()=>{
+  if(!conversationId){box.checked=false;$('tempNote').hidden=false;$('tempNote').textContent='Send a first message, then mark the chat temporary.';return;}
+  try{
+   const r=await fetch('/api/conversations/'+encodeURIComponent(conversationId)+'/temporary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({temporary:box.checked})});
+   if(!r.ok)throw new Error('failed');
+   $('tempNote').textContent='Temporary: Mia saves nothing from this chat.';$('tempNote').hidden=!box.checked;
+  }catch(e){box.checked=!box.checked;}
+ });
+ sync();
+}
 async function loadCurrentConversation(){
  if(!conversationId)return;
  try{
@@ -1402,7 +1423,7 @@ refreshMicDevices();
 if(navigator.mediaDevices?.addEventListener)navigator.mediaDevices.addEventListener('devicechange',refreshMicDevices);
 if('speechSynthesis' in window)window.speechSynthesis.onvoiceschanged=refreshVoices;
 refreshProviders();
-loadCurrentConversation();
+loadCurrentConversation().then(setupTemporaryToggle);
 loadConversationList();
 loadMemoryRecords();
 </script></body></html>

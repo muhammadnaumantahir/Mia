@@ -60,7 +60,7 @@ behaviour I have not read; items marked *not verified* were not exercised.
 - [x] M4 Capture pipeline: explicit commands, settings/consent, pending queue, secret and sensitive-attribute filters, provenance, forget with source purge — local `pytest` 827 passed, 34 skipped (skips are Chromium-dependent browser tests); `ruff` clean
 - [x] M5 Retrieval upgrade: settings gates, importance/confidence weighting, contextual-reference intents, relationship expansion, per-reply usage log, optional reranker hook (no embedding provider shipped) — local `pytest` 931 passed, 34 skipped; `ruff` clean
 - [x] M6 Maintenance: duplicate clusters + owner-approved consolidation, conflict reports, stale goal/project flags, expiry sweeps (also at startup), confidence reinforcement, cross-type duplicate detection — local `pytest` 948 passed, 34 skipped; `ruff` clean
-- [ ] M7 Management UI and settings controls
+- [x] M7 Management UI (/memory page: memories, suggestions, controls, identity, upkeep, activity; chat panel link, confirmed/unconfirmed chips, temporary-chat toggle) — 9 real-browser tests; local `pytest` 1079 passed; `ruff` clean
 - [ ] M8 Security (owner auth), export/import/backup/restore
 - [ ] M9 Full regression run, documentation, final report
 

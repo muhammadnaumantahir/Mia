@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
+<title>Mia — Memory</title>
+<style>
+:root{font-family:Inter,Segoe UI,system-ui,sans-serif;color:#e9f2ef;background:#0a1112;font-synthesis:none;
+ --panel:#101f1d;--panel2:#0d1918;--line:#29463c;--line2:#203432;--mint:#47daa1;--mint-d:#15845f;--muted:#8fa79f;--dim:#718c80;--warn:#e9d69f;--bad:#f2b5a5}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 8% 0%,#13372d 0,transparent 34%),#0a1112}
+button,input,textarea,select{font:inherit}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 24px;border-bottom:1px solid var(--line2);flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:38px;height:38px;border-radius:13px;background:linear-gradient(145deg,#4ce0a8,#0b7257);display:grid;place-items:center;color:#05251b;font-size:20px;font-weight:800}
+.brand strong{font-size:18px;letter-spacing:-.3px}.brand small{display:block;color:#82a198;font-size:11px;margin-top:1px}
+a{color:#9ce7c4}a:hover{color:#c7f0dc}
+.back{font-size:12px;text-decoration:none;border:1px solid #2d5b49;background:#11281e;border-radius:999px;padding:7px 12px}
+nav.tabs{display:flex;gap:6px;padding:12px 24px 0;overflow-x:auto;border-bottom:1px solid var(--line2);scrollbar-width:thin}
+nav.tabs button{flex:0 0 auto;border:0;border-bottom:2px solid transparent;background:transparent;color:#9fb4ad;padding:10px 12px;font-size:13px;cursor:pointer;border-radius:8px 8px 0 0}
+nav.tabs button[aria-selected=true]{color:#e9f2ef;border-bottom-color:var(--mint);background:#0f1d1b}
+nav.tabs .badge{display:inline-block;min-width:18px;margin-left:6px;padding:1px 6px;border-radius:999px;background:#4a3d15;color:#ffe9a8;font-size:10px;font-weight:700;text-align:center}
+main{max-width:1000px;margin:0 auto;padding:22px 24px 60px}
+.status{font-size:12px;min-height:18px;margin:0 0 12px;color:#9bb7aa}.status.error{color:var(--bad)}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.toolbar input[type=search]{flex:1 1 220px;min-width:0}
+input,select,textarea{background:#0f1b1a;color:#e7f1ec;border:1px solid #2c4840;border-radius:10px;padding:9px 11px;font-size:13px;width:100%}
+input[type=checkbox],input[type=radio]{width:auto}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid #4b9d7b;outline-offset:1px}
+.toolbar select{width:auto}
+textarea{min-height:90px;resize:vertical;line-height:1.5}
+label{display:block;font-size:11px;color:#9cb5a8;font-weight:650;margin:10px 0 4px}
+.btn{border:1px solid #35594a;background:#18352b;color:#c7f0dc;border-radius:9px;padding:7px 11px;font-size:12px;font-weight:650;cursor:pointer}
+.btn:hover{background:#1f4337}.btn.primary{border:0;background:linear-gradient(135deg,#47daa1,#15845f);color:#06291e;font-weight:750}
+.btn.quiet{background:#172321;color:#adbfba;border-color:#2c4840}.btn.danger{background:#3b2523;color:#ffd2d2;border-color:#6a3b36}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.list{display:grid;gap:12px}
+.card{border:1px solid var(--line);background:linear-gradient(145deg,#10201d,#0e1819);border-radius:16px;padding:14px 16px;min-width:0}
+.card.focus{border-color:var(--mint);box-shadow:0 0 0 3px #1d65462a}
+.card h3{margin:0;font-size:15px;line-height:1.35;overflow-wrap:anywhere}
+.card .body{margin:8px 0 0;font-size:13px;line-height:1.55;color:#cfe3d9;white-space:pre-wrap;overflow-wrap:anywhere}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
+.chip{border:1px solid #315844;background:#132a20;color:#bce7ce;border-radius:999px;padding:3px 9px;font-size:10px;line-height:1.4;white-space:nowrap}
+.chip.confirmed{background:#123a2b;border-color:#2f7a5b;color:#bdf3d6}
+.chip.unconfirmed{background:#3a3213;border-color:#7a6a2c;color:#ffe9a8}
+.chip.inactive{background:#2a2a2a;border-color:#555;color:#c8c8c8}
+.chip.type{background:#16262e;border-color:#31505f;color:#bfe0ee}
+.why{margin:10px 0 0;font-size:11px;line-height:1.55;color:var(--muted)}
+.meta{margin:6px 0 0;font-size:10px;line-height:1.6;color:var(--dim)}
+.actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.empty{border:1px dashed #345047;border-radius:14px;padding:22px;text-align:center;color:var(--muted);font-size:13px;line-height:1.6}
+.panel{border:1px solid var(--line);background:var(--panel);border-radius:16px;padding:16px;margin-bottom:14px}
+.panel h2{margin:0 0 4px;font-size:15px}.panel p.help{margin:0 0 10px;font-size:12px;line-height:1.55;color:var(--muted)}
+.row{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid #1d3430}.row:first-of-type{border-top:0}
+.row .grow{flex:1;min-width:0}.row b{font-size:13px}.row small{display:block;font-size:11px;color:var(--muted);line-height:1.5;margin-top:2px}
+.radio-group{display:grid;gap:8px}.radio-group label{display:flex;gap:10px;align-items:flex-start;margin:0;padding:10px;border:1px solid #2a463c;border-radius:12px;color:#d6e8df;font-size:13px;cursor:pointer}
+.radio-group label small{display:block;color:var(--muted);font-weight:400;margin-top:2px;line-height:1.5}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.detail{margin-top:12px;border-top:1px solid #1d3430;padding-top:10px;font-size:12px;line-height:1.6;color:#b9cfc5}
+.detail h4{margin:10px 0 4px;font-size:11px;letter-spacing:.7px;text-transform:uppercase;color:#8eaa9b}
+.detail ul{margin:0;padding-left:18px}.detail li{margin:3px 0;overflow-wrap:anywhere}
+dialog{border:1px solid var(--line);background:#0e1a19;color:#e9f2ef;border-radius:18px;padding:18px;width:min(520px,calc(100vw - 24px));max-height:92vh;overflow:auto}
+dialog::backdrop{background:#000a}dialog h2{margin:0 0 6px;font-size:16px}dialog .help{font-size:12px;color:var(--muted);line-height:1.55;margin:0 0 6px}
+dialog .foot{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;flex-wrap:wrap}
+.audit{font-size:12px;line-height:1.5}.audit .when{color:var(--dim);font-size:10px}
+.sr{position:absolute;left:-9999px}
+@media(max-width:700px){header{padding:14px 16px}nav.tabs{padding:10px 16px 0}main{padding:18px 16px 50px}.grid2{grid-template-columns:1fr}.toolbar select{flex:1 1 130px}}
+</style>
+</head>
+<body>
+<header>
+ <div class="brand"><div class="logo" aria-hidden="true">M</div><div><strong>Mia · Memory</strong><small>What I remember, why, and how you control it</small></div></div>
+ <a class="back" href="/assistant">← Back to chat</a>
+</header>
+<nav class="tabs" role="tablist" aria-label="Memory sections" id="tabs"></nav>
+<main>
+ <p class="status" id="status" role="status" aria-live="polite"></p>
+ <section id="view" aria-live="polite"></section>
+</main>
+
+<dialog id="dlg"><form method="dialog" id="dlgForm"><h2 id="dlgTitle"></h2><p class="help" id="dlgHelp"></p><div id="dlgBody"></div>
+ <div class="foot"><button class="btn quiet" value="cancel" id="dlgCancel" type="button">Cancel</button><button class="btn primary" value="ok" id="dlgOk" type="submit">Save</button></div></form></dialog>
+
+<script>
+'use strict';
+const TABS=[['memories','Memories'],['suggestions','Suggestions'],['controls','Controls'],['identity','Identity'],['care','Upkeep'],['activity','Activity']];
+const TYPES=['fact','preference','decision','goal','project','episode','lesson','entity'];
+const STATUSES=['active','completed','pending','outdated','archived','expired','superseded','rejected'];
+const $=id=>document.getElementById(id);
+const state={tab:'memories',q:'',type:'',status:'active',focus:new URLSearchParams(location.search).get('record')};
+const TOKEN_KEY='mia_owner_token';
+
+function el(tag,attrs,...kids){
+ const n=document.createElement(tag);
+ for(const [k,v] of Object.entries(attrs||{})){
+  if(v===undefined||v===null||v===false)continue;
+  if(k==='class')n.className=v;else if(k==='text')n.textContent=v;else if(k.startsWith('on'))n.addEventListener(k.slice(2),v);
+  else if(v===true)n.setAttribute(k,'');else n.setAttribute(k,v);
+ }
+ for(const kid of kids.flat()){if(kid===null||kid===undefined||kid===false)continue;n.append(kid.nodeType?kid:document.createTextNode(String(kid)));}
+ return n;
+}
+function setStatus(message,isError){const s=$('status');s.textContent=message||'';s.className='status'+(isError?' error':'');}
+function when(iso){if(!iso)return '—';const d=new Date(iso);return isNaN(d)?String(iso):d.toLocaleString([], {dateStyle:'medium',timeStyle:'short'});}
+
+function token(){try{return localStorage.getItem(TOKEN_KEY)||'';}catch(e){return '';}}
+async function askToken(){
+ const values=await openDialog({title:'Owner access',help:'This Mia requires an owner token. It is stored only in this browser.',fields:[{name:'token',label:'Owner token',type:'password'}],ok:'Unlock'});
+ if(!values||!values.token)return false;
+ try{localStorage.setItem(TOKEN_KEY,values.token.trim());}catch(e){}
+ return true;
+}
+async function api(path,options={},retry=true){
+ const headers={...(options.body?{'Content-Type':'application/json'}:{}),...(options.headers||{})};
+ const t=token();if(t)headers['Authorization']='Bearer '+t;
+ const response=await fetch(path,{...options,headers});
+ if(response.status===401&&retry){try{localStorage.removeItem(TOKEN_KEY);}catch(e){} if(await askToken())return api(path,options,false);}
+ let data=null;try{data=await response.json();}catch(e){}
+ if(!response.ok){
+  const detail=data&&data.detail;
+  throw new Error(typeof detail==='string'?detail:Array.isArray(detail)?detail.map(d=>d.msg||'invalid').join('; '):'Request failed ('+response.status+')');
+ }
+ return data;
+}
+const post=(path,body)=>api(path,{method:'POST',body:JSON.stringify(body||{})});
+const put=(path,body)=>api(path,{method:'PUT',body:JSON.stringify(body||{})});
+
+/* ---------- dialog helper (no innerHTML) ---------- */
+function openDialog({title,help,fields=[],ok='Save',danger=false,content}){
+ return new Promise(resolve=>{
+  const dlg=$('dlg');$('dlgTitle').textContent=title;$('dlgHelp').textContent=help||'';
+  const body=$('dlgBody');body.replaceChildren();
+  const inputs={};
+  for(const f of fields){
+   let input;
+   if(f.type==='textarea')input=el('textarea',{id:'f_'+f.name,rows:f.rows||4});
+   else if(f.type==='select')input=el('select',{id:'f_'+f.name},f.options.map(o=>el('option',{value:o[0]},o[1])));
+   else if(f.type==='checkbox')input=el('input',{id:'f_'+f.name,type:'checkbox'});
+   else input=el('input',{id:'f_'+f.name,type:f.type||'text',min:f.min,max:f.max,step:f.step});
+   if(f.type==='checkbox'){input.checked=!!f.value;body.append(el('label',{for:'f_'+f.name,style:'display:flex;gap:8px;align-items:flex-start;font-weight:400;font-size:12px;color:#cfe3d9'},input,f.label));}
+   else{if(f.value!==undefined&&f.value!==null)input.value=f.value;body.append(el('label',{for:'f_'+f.name},f.label),input);}
+   inputs[f.name]=input;
+  }
+  if(content)body.append(content);
+  const okBtn=$('dlgOk');okBtn.textContent=ok;okBtn.className='btn '+(danger?'danger':'primary');
+  const finish=value=>{dlg.close();cleanup();resolve(value);};
+  const onSubmit=e=>{e.preventDefault();const out={};for(const [k,i] of Object.entries(inputs))out[k]=i.type==='checkbox'?i.checked:i.value;finish(out);};
+  const onCancel=()=>finish(null);
+  const form=$('dlgForm');
+  function cleanup(){form.removeEventListener('submit',onSubmit);$('dlgCancel').removeEventListener('click',onCancel);dlg.removeEventListener('cancel',onCancel);}
+  form.addEventListener('submit',onSubmit);$('dlgCancel').addEventListener('click',onCancel);dlg.addEventListener('cancel',onCancel);
+  dlg.showModal();const first=body.querySelector('input,textarea,select');if(first)first.focus();
+ });
+}
+
+/* ---------- labels ---------- */
+function trustChip(r){
+ const p=r.provenance;
+ if(p==='owner_provided')return el('span',{class:'chip confirmed',title:'You stated or confirmed this'},'✓ You confirmed');
+ if(p==='observed')return el('span',{class:'chip unconfirmed',title:'Mia noticed this in a chat; you have not confirmed it'},'~ Mia noticed · unconfirmed');
+ if(p==='inferred')return el('span',{class:'chip unconfirmed',title:'Mia inferred this; it may be wrong'},'~ Mia inferred · unverified');
+ if(p==='hypothesis')return el('span',{class:'chip unconfirmed'},'? Hypothesis');
+ return el('span',{class:'chip',title:p},p==='source_backed'?'Source-backed':'Validated');
+}
+function whySaved(r){
+ const o=r.origin||{};
+ if(o.corrects)return 'Saved as a correction of an earlier memory.';
+ if(o.capture==='explicit')return o.via==='api'?'You added this from the memory page.':'You asked Mia to remember this in a chat.';
+ if(o.capture==='auto')return 'Mia noticed this in a chat'+(r.confidence!=null?' (confidence '+Math.round(r.confidence*100)+'%)':'')+'. It is a suggestion until you approve it'+(r.status==='active'?' — saved automatically because your settings allow high-confidence capture.':'.');
+ if(o.approved_at)return 'You approved this suggestion.';
+ return 'Added directly.';
+}
+
+/* ---------- memory card ---------- */
+function memoryCard(r,reload){
+ const chips=el('div',{class:'chips'},
+  el('span',{class:'chip type'},r.record_type),trustChip(r),
+  r.status!=='active'?el('span',{class:'chip inactive'},r.status):null,
+  r.temporary?el('span',{class:'chip unconfirmed'},'Temporary · until '+when(r.expires_at)):null);
+ const origin=r.origin||{};
+ const source=origin.conversation_id?el('a',{href:'/assistant?conversation_id='+encodeURIComponent(origin.conversation_id)},'source conversation'):null;
+ const detail=el('div',{class:'detail',hidden:true});
+ const card=el('article',{class:'card'+(state.focus===r.record_id?' focus':''),id:'rec-'+r.record_id},
+  chips,el('h3',{text:r.title}),el('p',{class:'body',text:r.body}),
+  el('p',{class:'why'},'Why saved: '+whySaved(r)+' ',source),
+  el('p',{class:'meta'},'Created '+when(r.created_at)+' · Updated '+when(r.updated_at)+' · Importance '+Math.round((r.importance??0.5)*100)+'%'+(r.confidence!=null?' · Confidence '+Math.round(r.confidence*100)+'%':'')+' · Used in '+(r.use_count||0)+' repl'+((r.use_count||0)===1?'y':'ies')+(r.last_used_at?' (last '+when(r.last_used_at)+')':'')),
+  actionsFor(r,reload,detail),detail);
+ return card;
+}
+function actionsFor(r,reload,detail){
+ const run=(fn,msg)=>async()=>{try{const out=await fn();await reload();setStatus(typeof msg==='function'?msg(out):msg);}catch(e){setStatus(e.message,true);}};
+ const base='/api/memory/records/'+encodeURIComponent(r.record_id);
+ const buttons=[];
+ const live=['active','completed'].includes(r.status);
+ if(r.status==='pending'){
+  buttons.push(el('button',{class:'btn primary',onclick:run(()=>post(base+'/approve'),out=>out.conflicts_with&&out.conflicts_with.length?'Approved. It may conflict with another memory — check Upkeep.':'Approved and now used by Mia.')},'Approve'));
+  buttons.push(el('button',{class:'btn quiet',onclick:run(()=>post(base+'/reject'),'Rejected. Mia will not suggest it again.')},'Reject'));
+ }
+ if(live||r.status==='pending'){
+  if(r.provenance!=='owner_provided'&&live)buttons.push(el('button',{class:'btn',onclick:run(()=>post(base+'/confirm'),'Marked as confirmed by you.')},'Confirm'));
+  if(r.record_type!=='decision')buttons.push(el('button',{class:'btn quiet',onclick:async()=>{
+   const v=await openDialog({title:'Edit memory',help:'The previous wording is kept in this memory’s history.',fields:[{name:'title',label:'Title',value:r.title},{name:'body',label:'Details',type:'textarea',value:r.body,rows:5},{name:'importance',label:'Importance (0–100)',type:'number',min:0,max:100,value:Math.round((r.importance??0.5)*100)}]});
+   if(!v)return;await run(()=>post(base+'/edit',{title:v.title,body:v.body,importance:Number(v.importance)/100}),'Memory updated.')();}},'Edit'));
+ }
+ if(live)buttons.push(el('button',{class:'btn quiet',onclick:async()=>{
+  const v=await openDialog({title:'Correct this memory',help:r.record_type==='decision'?'Decisions are never overwritten. The correction becomes the current version and the original stays in the history.':'The correction becomes the current version; the original stays in the history.',fields:[{name:'body',label:'Corrected details',type:'textarea',value:r.body,rows:5}],ok:'Save correction'});
+  if(!v||!v.body.trim())return;await run(()=>post('/api/memory/records/'+encodeURIComponent(r.record_id)+'/correct',{body:v.body}),'Correction saved; the original is kept in history.')();}},'Correct'));
+ if(live){
+  buttons.push(el('button',{class:'btn quiet',onclick:run(()=>post(base+'/archive'),'Archived. Mia will not use it until you restore it.')},'Archive'));
+  buttons.push(el('button',{class:'btn quiet',onclick:run(()=>post(base+'/outdated'),'Marked outdated. Kept for history, not used.')},'Mark outdated'));
+  buttons.push(el('button',{class:'btn quiet',onclick:async()=>{
+   if(r.temporary){await run(()=>post(base+'/temporary',{temporary:false}),'Now permanent.')();return;}
+   const v=await openDialog({title:'Make temporary',help:'Mia will stop using this memory after the chosen time.',fields:[{name:'days',label:'Keep for how many days?',type:'number',min:1,max:3650,value:7}],ok:'Make temporary'});
+   if(!v)return;const days=Math.max(1,Number(v.days)||1);const when_=new Date(Date.now()+days*86400000).toISOString();
+   await run(()=>post(base+'/temporary',{temporary:true,expires_at:when_}),'Marked temporary.')();}},r.temporary?'Make permanent':'Make temporary'));
+ }
+ if(['archived','outdated'].includes(r.status))buttons.push(el('button',{class:'btn',onclick:run(()=>post(base+'/restore'),'Restored.')},'Restore'));
+ buttons.push(el('button',{class:'btn quiet',onclick:()=>toggleDetail(r,detail)},'History & use'));
+ buttons.push(el('button',{class:'btn danger',onclick:async()=>{
+  const v=await openDialog({title:'Delete this memory?',help:'This permanently removes the memory, its history and its correction chain. It cannot be undone.',danger:true,ok:'Delete permanently',fields:[{name:'purge',label:'Also remove the chat message it was saved from, so it cannot be found through conversation search',type:'checkbox',value:true}]});
+  if(!v)return;await run(()=>api(base+'?purge_source='+(v.purge?'true':'false'),{method:'DELETE'}),out=>'Deleted'+(out&&out.purged_messages?' (and '+out.purged_messages+' source message removed).':'.'))();}},'Delete'));
+ return el('div',{class:'actions'},buttons);
+}
+async function toggleDetail(r,box){
+ if(!box.hidden){box.hidden=true;return;}
+ box.hidden=false;box.replaceChildren(el('em',{},'Loading…'));
+ try{
+  const d=await api('/api/memory/records/'+encodeURIComponent(r.record_id));
+  const sec=(title,items,empty)=>[el('h4',{},title),items.length?el('ul',{},items.map(i=>el('li',{},i))):el('div',{style:'color:#718c80'},empty)];
+  box.replaceChildren(
+   ...sec('Versions (oldest first)',d.history.map(h=>(h.record_id===r.record_id?'▶ ':'')+when(h.created_at)+' · '+h.status+' · '+h.body.slice(0,160)),'No corrections.'),
+   ...sec('Earlier wording of edits',d.edit_history.map(h=>when(h.changed_at)+' · '+h.change_type+' · '+String(h.snapshot.body||'').slice(0,160)),'Never edited.'),
+   ...sec('Connections',d.relationships.map(x=>x.relation+(x.visibility==='private'?' (private — never sent to a model)':'')+' → '+(x.from_id===r.record_id?x.to_id:x.from_id).slice(0,8)),'No connections.'),
+   ...sec('Replies that used it',d.used_in_replies.map(u=>when(u.used_at)+' · reply '+String(u.reply_id).slice(0,8)+(u.conversation_id?' · ':'')),'Not used in a reply yet.'));
+ }catch(e){box.replaceChildren(el('span',{class:'status error'},e.message));}
+}
+
+/* ---------- views ---------- */
+async function viewMemories(root){
+ const bar=el('div',{class:'toolbar'},
+  el('input',{type:'search',id:'q',placeholder:'Search memories…','aria-label':'Search memories',value:state.q}),
+  el('select',{id:'ftype','aria-label':'Filter by category'},el('option',{value:''},'All categories'),TYPES.map(t=>el('option',{value:t,selected:state.type===t},t))),
+  el('select',{id:'fstatus','aria-label':'Filter by status'},el('option',{value:''},'Any status'),STATUSES.map(s=>el('option',{value:s,selected:state.status===s},s))),
+  el('button',{class:'btn primary',id:'add'},'+ Add memory'));
+ const list=el('div',{class:'list',id:'mlist'});
+ root.append(bar,list);
+ const load=async()=>{
+  const params=new URLSearchParams({limit:'100'});
+  if(state.q)params.set('q',state.q);if(state.type)params.set('record_type',state.type);if(state.status)params.set('status',state.status);
+  try{
+   const data=await api('/api/memory/records?'+params);list.replaceChildren();
+   updateBadge(data.counts);
+   if(state.focus){try{const f=await api('/api/memory/records/'+encodeURIComponent(state.focus));if(!data.items.some(i=>i.record_id===state.focus))list.append(memoryCard(f.record,load));}catch(e){}}
+   if(!data.items.length&&!list.children.length)list.append(el('div',{class:'empty'},'Nothing matches. Memories appear here when you say “Remember …”, approve a suggestion, or add one with “+ Add memory”.'));
+   for(const r of data.items)list.append(memoryCard(r,load));
+   setStatus(data.items.length+' shown'+(data.counts?' · '+Object.entries(data.counts).map(([k,v])=>v+' '+k).join(', '):''));
+   if(state.focus){const t=document.getElementById('rec-'+state.focus);if(t)t.scrollIntoView({block:'center'});state.focus=null;}
+  }catch(e){setStatus(e.message,true);}
+ };
+ let timer;
+ $('q').addEventListener('input',e=>{state.q=e.target.value.trim();clearTimeout(timer);timer=setTimeout(load,250);});
+ $('ftype').addEventListener('change',e=>{state.type=e.target.value;load();});
+ $('fstatus').addEventListener('change',e=>{state.status=e.target.value;load();});
+ $('add').addEventListener('click',async()=>{
+  const v=await openDialog({title:'Add a memory',help:'Mia saves this as something you told her directly.',fields:[{name:'text',label:'What should Mia remember?',type:'textarea',rows:4},{name:'type',label:'Category',type:'select',options:[['','Let Mia choose'],...TYPES.map(t=>[t,t])]}]});
+  if(!v||!v.text.trim())return;
+  try{const out=await post('/api/memory/capture',{text:v.text,record_type:v.type||null});
+   setStatus(out.saved&&out.saved.length?'Saved.':out.superseded&&out.superseded.length?'Saved as a correction of an earlier memory.':out.skipped&&out.skipped.length?'Not saved: '+out.skipped[0].reason.replace(/_/g,' ')+'.':'Nothing saved.',!(out.saved&&out.saved.length||out.superseded&&out.superseded.length));
+   await load();}catch(e){setStatus(e.message,true);}
+ });
+ await load();
+}
+function updateBadge(counts){
+ const n=(counts&&counts.pending)||0;const b=document.querySelector('#tabs [data-tab=suggestions] .badge');
+ if(b){b.textContent=n;b.hidden=!n;}
+}
+async function viewSuggestions(root){
+ root.append(el('p',{class:'help',style:'color:#8fa79f;font-size:12px;line-height:1.55;margin:0 0 12px'},'Suggestions are things Mia noticed in your chats. Mia never uses them until you approve. Rejected ones are not suggested again.'));
+ const list=el('div',{class:'list'});root.append(list);
+ const load=async()=>{
+  try{const data=await api('/api/memory/records?status=pending&limit=100');list.replaceChildren();updateBadge(data.counts);
+   if(!data.items.length)list.append(el('div',{class:'empty'},'No suggestions waiting. When automatic capture is set to “Ask me first”, new ones appear here.'));
+   for(const r of data.items){
+    const card=memoryCard(r,load);
+    const c=(r.origin&&r.origin.conflicts_with)||[];
+    if(c.length)card.insertBefore(el('p',{class:'why',style:'color:#ffe9a8'},'⚠ This may conflict with '+c.length+' existing memor'+(c.length>1?'ies':'y')+'. Check them before approving.'),card.querySelector('.why'));
+    list.append(card);}
+   setStatus(data.items.length+' waiting');
+  }catch(e){setStatus(e.message,true);}
+ };await load();
+}
+
+const MODES=[['off','Off','Mia only saves what you explicitly ask her to (“Remember that …”).'],['approval','Ask me first (recommended)','Mia suggests things she notices; nothing is used until you approve it.'],['auto','Save confident ones automatically','Clear, high-confidence statements are saved right away and marked unconfirmed; the rest wait for approval. Mia never overwrites an existing memory automatically.']];
+async function viewControls(root){
+ let s;try{s=await api('/api/memory/settings');}catch(e){setStatus(e.message,true);return;}
+ const save=async(changes,msg)=>{try{s=await put('/api/memory/settings',changes);setStatus(msg||'Saved.');}catch(e){setStatus(e.message,true);}};
+ const toggle=(key,title,help)=>el('div',{class:'row'},el('input',{type:'checkbox',id:'t_'+key,checked:!!s[key],'aria-labelledby':'l_'+key,onchange:e=>save({[key]:e.target.checked})}),el('div',{class:'grow'},el('b',{id:'l_'+key},title),el('small',{},help)));
+ root.append(
+  el('div',{class:'panel'},el('h2',{},'Memory'),el('p',{class:'help'},'Master controls. Turning memory off stops saving and retrieval everywhere; what is already stored stays until you delete it.'),
+   toggle('memory_enabled','Memory is on','Mia can save and use long-term memory.'),
+   toggle('retrieval_enabled','Use memory in replies','When off, Mia answers without looking at stored memory (capture still follows the setting below).')),
+  el('div',{class:'panel'},el('h2',{},'Automatic capture'),el('p',{class:'help'},'Applies only to things Mia notices on her own. “Remember that …” always works while memory is on. Mia never captures passwords or keys, and never saves sensitive personal attributes automatically.'),
+   el('div',{class:'radio-group',role:'radiogroup','aria-label':'Automatic capture'},MODES.map(([v,t,h])=>el('label',{},el('input',{type:'radio',name:'mode',value:v,checked:s.capture_mode===v,onchange:()=>save({capture_mode:v})}),el('span',{},t,el('small',{},h)))))),
+  el('div',{class:'panel'},el('h2',{},'Retention'),
+   el('div',{class:'grid2'},
+    el('div',{},el('label',{for:'conf'},'Auto-save confidence (50–100%)'),el('input',{id:'conf',type:'number',min:50,max:100,value:Math.round(s.auto_save_min_confidence*100),onchange:e=>save({auto_save_min_confidence:Number(e.target.value)/100})})),
+    el('div',{},el('label',{for:'pend'},'Unreviewed suggestions expire after (days)'),el('input',{id:'pend',type:'number',min:1,max:365,value:s.pending_retention_days,onchange:e=>save({pending_retention_days:Number(e.target.value)})}))),
+   el('div',{},el('label',{for:'convret'},'Conversation retention (days, empty keeps everything)'),el('input',{id:'convret',type:'number',min:1,max:36500,value:s.conversation_retention_days??'',onchange:e=>save({conversation_retention_days:e.target.value===''?null:Number(e.target.value)})})),
+   el('p',{class:'help',style:'margin-top:10px'},'Nothing is deleted automatically for conversation retention. Use the clean-up below to preview and delete.'),
+   cleanupPanel(s)),
+  await tempConversationsPanel());
+}
+function cleanupPanel(s){
+ const out=el('div',{style:'font-size:12px;margin-top:8px;color:#b9cfc5'});const go=el('button',{class:'btn danger',hidden:true},'Delete previewed items');
+ const days=el('input',{type:'number',min:1,max:36500,value:s.conversation_retention_days||90,style:'width:90px','aria-label':'Older than days'});
+ const preview=el('button',{class:'btn quiet',onclick:async()=>{try{const r=await post('/api/memory/purge',{older_than_days:Number(days.value),dry_run:true});out.textContent='Would delete '+((r.conversations||{}).count||0)+' conversation(s) and '+((r.items||{}).count||0)+' saved item(s).';go.hidden=false;}catch(e){out.textContent=e.message;}}},'Preview');
+ go.addEventListener('click',async()=>{try{const r=await post('/api/memory/purge',{older_than_days:Number(days.value),dry_run:false});out.textContent='Deleted '+((r.conversations||{}).count||0)+' conversation(s) and '+((r.items||{}).count||0)+' item(s).';go.hidden=true;}catch(e){out.textContent=e.message;}});
+ return el('div',{style:'margin-top:10px'},el('label',{},'Clean up conversations older than'),el('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},days,el('span',{},'days'),preview,go),out);
+}
+async function tempConversationsPanel(){
+ const box=el('div',{class:'panel'},el('h2',{},'Temporary conversations'),el('p',{class:'help'},'In a temporary conversation Mia saves nothing from the chat and never brings its messages into other conversations.'));
+ try{const d=await api('/api/conversations?limit=12');const items=d.items||d.conversations||[];
+  if(!items.length)box.append(el('div',{style:'font-size:12px;color:#8fa79f'},'No conversations yet.'));
+  for(const c of items)box.append(el('div',{class:'row'},el('input',{type:'checkbox',checked:!!c.temporary,id:'tc_'+c.conversation_id,'aria-labelledby':'tl_'+c.conversation_id,onchange:async e=>{try{await post('/api/conversations/'+encodeURIComponent(c.conversation_id)+'/temporary',{temporary:e.target.checked});setStatus(e.target.checked?'Marked temporary.':'No longer temporary.');}catch(err){e.target.checked=!e.target.checked;setStatus(err.message,true);}}}),el('div',{class:'grow'},el('b',{id:'tl_'+c.conversation_id},c.title||'Untitled conversation'),el('small',{},when(c.updated_at)+' · '+c.message_count+' message(s) · ',el('a',{href:'/assistant?conversation_id='+encodeURIComponent(c.conversation_id)},'open')))));
+ }catch(e){box.append(el('div',{class:'status error'},e.message));}
+ return box;
+}
+
+async function viewIdentity(root){
+ let d;try{d=await api('/api/identity');}catch(e){setStatus(e.message,true);return;}
+ const p=d.profile,st=p.communication_style;
+ const f=(id,label,val,type='text')=>[el('label',{for:id},label),type==='textarea'?el('textarea',{id,rows:3},val||''):el('input',{id,type:'text',value:val||''})];
+ const lines=v=>(v||[]).join('\n');
+ const form=el('div',{class:'panel'},el('h2',{},'Who Mia is'),el('p',{class:'help'},'Stored in Mia’s own memory, so it stays the same whichever AI model answers. Each change is saved as a new version you can restore. Honesty and safety rules are fixed and cannot be edited here.'),
+  ...f('i_name','Name',p.name),...f('i_purpose','Purpose',p.purpose,'textarea'),
+  ...f('i_pers','Personality (one per line)',lines(p.personality),'textarea'),...f('i_prin','Operating principles (one per line)',lines(p.principles),'textarea'),
+  el('div',{class:'grid2'},el('div',{},...f('i_tone','Tone',st.tone)),el('div',{},el('label',{for:'i_verb'},'Reply length'),el('select',{id:'i_verb'},[['','No preference'],['concise','Concise'],['balanced','Balanced'],['detailed','Detailed']].map(o=>el('option',{value:o[0],selected:st.verbosity===o[0]},o[1]))))),
+  ...f('i_lang','Reply language',st.language),...f('i_rel','Relationship with you',p.owner_relationship,'textarea'),...f('i_pref','Your interaction preferences (one per line)',lines(p.interaction_preferences),'textarea'),
+  ...f('i_reason','Reason for this change (optional)',''),
+  el('div',{class:'actions'},el('button',{class:'btn primary',onclick:async()=>{
+   const split=id=>$(id).value.split('\n').map(x=>x.trim()).filter(Boolean);
+   try{await put('/api/identity',{name:$('i_name').value,purpose:$('i_purpose').value,personality:split('i_pers'),principles:split('i_prin'),communication_style:{tone:$('i_tone').value,verbosity:$('i_verb').value,language:$('i_lang').value},owner_relationship:$('i_rel').value,interaction_preferences:split('i_pref'),reason:$('i_reason').value});setStatus('Identity saved.');root.replaceChildren();await viewIdentity(root);}catch(e){setStatus(e.message,true);}}},'Save identity')),
+  el('details',{style:'margin-top:12px'},el('summary',{style:'cursor:pointer;font-size:12px;color:#9cb5a8'},'Preview what the model is told'),el('p',{class:'body',style:'font-size:11px;color:#9db4a9;white-space:pre-wrap;line-height:1.5'},d.prompt_preview)));
+ const hist=el('div',{class:'panel'},el('h2',{},'Version history'));
+ try{const h=await api('/api/identity/history');for(const v of h.versions)hist.append(el('div',{class:'row'},el('div',{class:'grow'},el('b',{},'Version '+v.version+(v.version===d.version?' (current)':'')),el('small',{},when(v.created_at)+' · '+v.source+' · '+(v.reason||''))),v.version===d.version?null:el('button',{class:'btn quiet',onclick:async()=>{try{await post('/api/identity/rollback',{version:v.version,reason:'restored from the memory page'});setStatus('Restored as a new version.');root.replaceChildren();await viewIdentity(root);}catch(e){setStatus(e.message,true);}}},'Restore')));}catch(e){hist.append(el('div',{class:'status error'},e.message));}
+ root.append(form,hist);
+}
+
+async function viewCare(root){
+ const out=el('div');
+ const render=r=>{
+  out.replaceChildren();
+  const sec=(title,help,items)=>el('div',{class:'panel'},el('h2',{},title),el('p',{class:'help'},help),items.length?items:el('div',{style:'font-size:12px;color:#8fa79f'},'Nothing found.'));
+  out.append(
+   sec('Duplicates','Memories that say the same thing. Merging keeps the text in history and uses only the one you keep.',r.duplicates.map(d=>el('div',{class:'row'},el('div',{class:'grow'},el('b',{},d.titles[0]+(d.titles.length>1?' (+'+(d.titles.length-1)+' more)':'')),el('small',{},d.record_type+' · suggested keep: the most trusted one')),el('button',{class:'btn',onclick:async()=>{try{await post('/api/memory/records/consolidate',{keep_id:d.suggested_keep,merge_ids:d.duplicates});setStatus('Merged.');load();}catch(e){setStatus(e.message,true);}}},'Merge into one')))),
+   sec('Possible conflicts','Different memories about the same thing. Mia will not decide which is true. Correct, archive or delete the wrong one.',r.conflicts.map(c=>el('div',{class:'row'},el('div',{class:'grow'},el('b',{},c.titles.join('  ≠  ')),el('small',{},c.record_type+' · '+(c.reason==='same_subject'?'same subject':'similar wording'))),el('a',{class:'btn quiet',style:'text-decoration:none',href:'/memory?record='+encodeURIComponent(c.record_ids[0])},'Review')))),
+   sec('Might be out of date','Goals and projects you have not touched for a long time. Mia only asks; nothing changes automatically.',r.possibly_stale.map(s=>el('div',{class:'row'},el('div',{class:'grow'},el('b',{},s.title),el('small',{},s.record_type+' · not updated for '+s.days_since_update+' days')),el('a',{class:'btn quiet',style:'text-decoration:none',href:'/memory?record='+encodeURIComponent(s.record_id)},'Review')))),
+   el('div',{class:'panel'},el('h2',{},'Expiry'),el('p',{class:'help'},r.applied?'Expiry was applied.':'Pending clean-up: '+r.expired_temporary.length+' temporary memor'+(r.expired_temporary.length===1?'y':'ies')+' past their date and '+r.expired_pending.length+' unreviewed suggestion(s) past their window.'),
+    r.applied?null:el('button',{class:'btn',onclick:async()=>{try{const x=await post('/api/memory/maintenance',{apply:true});setStatus('Expired '+(x.expired_temporary.length+x.expired_pending.length)+' item(s).');load();}catch(e){setStatus(e.message,true);}}},'Apply expiry now')),
+   r.truncated?el('p',{class:'help'},'Large memory: only the newest records of each category were checked.'):null);
+ };
+ const load=async()=>{try{render(await post('/api/memory/maintenance',{apply:false}));setStatus('Checked.');}catch(e){setStatus(e.message,true);}};
+ root.append(el('div',{class:'toolbar'},el('button',{class:'btn primary',onclick:load},'Check again')),out);await load();
+}
+
+async function viewActivity(root){
+ try{const d=await api('/api/memory/audit?limit=100');const list=el('div',{class:'list'});
+  if(!d.entries.length)list.append(el('div',{class:'empty'},'No activity yet.'));
+  for(const e of d.entries)list.append(el('div',{class:'card audit'},el('div',{class:'when'},when(e.created_at)),el('b',{},e.action.replace(/_/g,' ')),' · '+e.actor+' · '+e.target_type+' '+String(e.target_id).slice(0,8)));
+  root.append(el('p',{style:'font-size:12px;color:#8fa79f;margin:0 0 12px'},'A record of what changed and who changed it. It contains ids and counts only — never the memory text.'),list);setStatus(d.entries.length+' recent change(s)');
+ }catch(e){setStatus(e.message,true);}
+}
+
+const VIEWS={memories:viewMemories,suggestions:viewSuggestions,controls:viewControls,identity:viewIdentity,care:viewCare,activity:viewActivity};
+async function show(tab){
+ state.tab=tab;history.replaceState({},'',tab==='memories'?location.pathname+location.search:location.pathname+'#'+tab);
+ for(const b of $('tabs').children)b.setAttribute('aria-selected',String(b.dataset.tab===tab));
+ const root=$('view');root.replaceChildren();setStatus('Loading…');
+ await VIEWS[tab](root);
+}
+function init(){
+ for(const [id,label] of TABS)$('tabs').append(el('button',{role:'tab','data-tab':id,'aria-selected':'false',onclick:()=>show(id)},label,id==='suggestions'?el('span',{class:'badge',hidden:true}):null));
+ const hash=location.hash.slice(1);show(VIEWS[hash]?hash:'memories');
+ api('/api/memory/records?status=pending&limit=1').then(d=>updateBadge(d.counts)).catch(()=>{});
+}
+init();
+</script>
+</body>
+</html>

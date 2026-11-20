@@ -317,7 +317,7 @@ class MemoryStore:
         with self._connection() as db:
             rows = db.execute(
                 """
-                SELECT c.conversation_id, c.title, c.created_at, c.updated_at,
+                SELECT c.conversation_id, c.title, c.created_at, c.updated_at, c.temporary,
                        COUNT(m.message_id) AS message_count
                 FROM conversations c
                 LEFT JOIN conversation_messages m
@@ -393,7 +393,7 @@ class MemoryStore:
         with self._connection() as db:
             row = db.execute(
                 """
-                SELECT conversation_id, title, created_at, updated_at
+                SELECT conversation_id, title, created_at, updated_at, temporary
                 FROM conversations
                 WHERE conversation_id = ?
                 """,

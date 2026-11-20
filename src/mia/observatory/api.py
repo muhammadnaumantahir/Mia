@@ -1505,6 +1505,13 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok", "service": "mia"}
 
+    @app.get("/memory")
+    def memory_page() -> FileResponse:
+        page = Path(__file__).with_name("memory.html")
+        if not page.is_file():
+            raise HTTPException(status_code=404, detail="Memory page is not installed")
+        return FileResponse(page, media_type="text/html")
+
     @app.get("/assistant")
     def assistant() -> FileResponse:
         page = Path(__file__).resolve().parents[1] / "assistant.html"
