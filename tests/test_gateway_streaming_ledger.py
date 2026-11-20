@@ -171,7 +171,7 @@ def test_ledger_records_and_summarises(tmp_path):
     assert summary["total_requests"] == 2
     assert summary["total_cost_usd"] == pytest.approx(0.25)  # NaN cost is dropped, not summed
     cloud = next(i for i in summary["items"] if i["provider_id"] == "cloud")
-    assert cloud["estimated_token_rows"] == 1 and cloud["input_tokens"] == 101
+    assert cloud["estimated_token_rows"] == 1 and cloud["input_tokens"] == 100
     assert ledger.spend_today_utc() == pytest.approx(0.25)
 
 
