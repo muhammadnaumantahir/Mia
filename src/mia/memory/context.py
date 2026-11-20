@@ -42,7 +42,11 @@ _RECORD_TYPE_WEIGHT = {"decision": 0.08, "goal": 0.08, "project": 0.04}
 _CONTEXT_INTENTS: tuple[tuple[re.Pattern[str], frozenset[str]], ...] = (
     (re.compile(
         r"\b(?:continue|resume|pick\s+up|back\s+to|carry\s+on)\b.*\b(?:project|work|feature|task)\b"
-        r"|\b(?:previous|last|earlier)\s+project\b|\bwhere\s+did\s+we\s+leave\s+off\b", re.I),
+        r"|\b(?:previous|last|earlier)\s+project\b|\bwhere\s+did\s+we\s+leave\s+off\b"
+        r"|\b(?:pichlay|pichle|pichla|pichli)\s+(?:project|kaam)\b"
+        r"|\b(?:hum|ham)\s+(?:kahan|kidhar)\s+(?:tak\s+)?(?:pohanchay|pohnchay|chhoray|chora|ruke|rukay)\b"
+        r"|\b(?:kahan\s+tak|kahan\s+chora)\b"
+        r"|(?:پچھلے|پچھلا|پچھلی)\s+(?:پروجیکٹ|کام)|ہم\s+کہاں\s+تک\s+پہنچے|کہاں\s+چھوڑا\s+تھا", re.I),
      frozenset({"project", "goal", "decision"})),
     (re.compile(
         r"\bwhat\s+did\s+we\s+(?:decide|agree|choose)\b|\bwhat\s+was\s+decided\b"
@@ -54,18 +58,26 @@ _CONTEXT_INTENTS: tuple[tuple[re.Pattern[str], frozenset[str]], ...] = (
      frozenset({"decision"})),
     (re.compile(
         r"\b(?:as\s+usual|my\s+usual|my\s+(?:usual\s+)?preferences?|my\s+preferred|"
-        r"the\s+way\s+i\s+like|same\s+as\s+(?:always|before)|usual\s+preferences?)\b", re.I),
+        r"the\s+way\s+i\s+like|same\s+as\s+(?:always|before)|usual\s+preferences?)\b"
+        r"|\b(?:meri\s+pasand|meri\s+tarjeeh|meri\s+tarjeehat|mujhe\s+kya\s+pasand|"
+        r"main\s+kya\s+pasand\s+karta)\b|میری\s+پسند|میری\s+ترجیحات|مجھے\s+کیا\s+پسند", re.I),
      frozenset({"preference"})),
     (re.compile(
         r"\b(?:problem|issue|bug|error|failure|trouble)\b.*\b(?:earlier|before|last\s+time|"
-        r"encountered|ran\s+into)\b|\bwhat\s+went\s+wrong\b|\bwhat\s+was\s+the\s+(?:problem|issue)\b",
-        re.I),
+        r"encountered|ran\s+into)\b|\bwhat\s+went\s+wrong\b|\bwhat\s+was\s+the\s+(?:problem|issue)\b"
+        r"|\b(?:pichli\s+baar|pichli\s+dafa|pehle)\s+(?:kya\s+)?(?:masla|issue|problem)\b"
+        r"|پچھلی\s+بار\s+کیا\s+مسئلہ\s+تھا|پہلے\s+کیا\s+مسئلہ\s+تھا", re.I),
      frozenset({"lesson", "episode", "project"})),
     (re.compile(
-        r"\b(?:current\s+state|current\s+status|status|progress)\b.*\b(?:feature|project|work|goal)\b",
-        re.I),
+        r"\b(?:current\s+state|current\s+status|status|progress)\b.*\b(?:feature|project|work|goal)\b"
+        r"|\b(?:project|feature|mia|kaam)\s+ka\s+(?:status|progress)\s+(?:kya\s+)?hai\b"
+        r"|(?:پروجیکٹ|فیچر|کام)\s+کی\s+(?:حالت|پیش\s+رفت)\s+کیا\s+ہے"
+        r"|ہم\s+کہاں\s+تک\s+پہنچے", re.I),
      frozenset({"project", "goal", "decision"})),
-    (re.compile(r"\bmy\s+goals?\b|\bwhat\s+am\s+i\s+(?:working\s+toward|aiming)\b", re.I),
+    (re.compile(
+        r"\bmy\s+goals?\b|\bwhat\s+am\s+i\s+(?:working\s+toward|aiming)\b"
+        r"|\bmera\s+(?:maqsad|hadaf|goal)\b|\bmere\s+goals?\b"
+        r"|میرا\s+(?:مقصد|ہدف)|میرے\s+مقاصد", re.I),
      frozenset({"goal"})),
 )
 INTENT_RECORD_CAP = 6
