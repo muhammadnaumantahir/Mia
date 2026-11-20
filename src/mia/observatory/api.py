@@ -845,6 +845,8 @@ def create_app(
         browser_controller, approval_store, computer_files, control=control)
 
     def _browser_error(exc: Exception) -> HTTPException:
+        if isinstance(exc, HTTPException):
+            return exc
         if isinstance(exc, BrowserAccessError):
             return HTTPException(status_code=403, detail=str(exc))
         if isinstance(exc, ApprovalError):
