@@ -72,7 +72,7 @@ from mia.gateway.contracts import (
     RoutePolicy,
     TransientProviderError,
 )
-from mia.gateway.factory import apply_daily_cap, build_default_registry, paid_route_policy
+from mia.gateway.factory import (\n    apply_daily_cap,\n    apply_monthly_cap,\n    build_default_registry,\n    paid_route_policy,\n)
 from mia.gateway.ledger import UsageLedger
 from mia.gateway.model_registry import ModelRegistry
 from mia.gateway.service import ModelGateway
@@ -4292,7 +4292,10 @@ def create_app(
         tools=tool_registry,
         identity=current_identity,
         observatory=observatory,
-        route_policy=lambda: apply_daily_cap(paid_route_policy(), ledger.spend_today_utc()),
+        route_policy=lambda: apply_monthly_cap(
+            apply_daily_cap(paid_route_policy(), ledger.spend_today_utc()),
+            ledger.spend_month_utc(),
+        ),
         usage_recorder=record_usage,
         plan_store=plan_store,
         capabilities=brain_capabilities,
