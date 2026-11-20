@@ -21,6 +21,15 @@ def test_multilingual_conversation_evaluation_set(tmp_path):
         details={"rationale": "Transactional integrity and mature operations"},
         origin={"source": "conversation_eval_seed"},
     )
+    store.structured.add(
+        record_type="goal",
+        title="Mia conversation goal",
+        body="Build Mia into a natural conversational assistant with persistent memory and Urdu/Roman Urdu conversation.",
+        provenance="owner_provided",
+        confidence=0.98,
+        evidence=[{"type": "message", "ref": "owner-roadmap"}],
+        origin={"source": "conversation_eval_seed"},
+    )
     conversation = store.ensure_conversation("conversation-eval")
 
     for case in cases:
@@ -30,7 +39,8 @@ def test_multilingual_conversation_evaluation_set(tmp_path):
             packet = assemble_memory_context(store, prompt, conversation)
             assert not packet.empty, case["id"]
             assert case["expected_memory"] in packet.message["content"], case["id"]
-            assert any(ref.title == "Billing database decision" for ref in packet.references), case["id"]
+            expected_title = case.get("expected_title", "Billing database decision")
+            assert any(ref.title == expected_title for ref in packet.references), case["id"]
 
     roman_terms = extract_query_terms("Billing service ke liye hum ne kya faisla kiya tha")
     assert {"billing", "service", "faisla"} <= set(roman_terms)
@@ -41,7 +51,7 @@ def test_multilingual_conversation_evaluation_set(tmp_path):
     manifest = build_runtime_manifest(
         tool_names=["memory.search", "browser.open"],
         provider_ids=["ollama"],
-        route_paths=["/api/chat", "/api/voice/transcribe"],
+        route_paths=["/assistant", "/api/chat", "/api/voice/transcribe"],
         memory_enabled=True,
         semantic_memory_enabled=False,
         permission_broker_enabled=True,
@@ -49,3 +59,6 @@ def test_multilingual_conversation_evaluation_set(tmp_path):
     )
     rendered = render_runtime_manifest(manifest)
     assert manifest_case["expected_manifest_phrase"] in rendered
+    assert manifest_case["expected_architecture_phrase"] in rendered
+    assert "Browser wake phrase: available" in rendered
+    assert "Offline wake-word detection: not registered" in rendered
