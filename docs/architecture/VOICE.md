@@ -91,13 +91,18 @@ quality and availability depend on the browser's service.
 - Urdu speech output requires an installed Urdu voice; this repository does not ship or install voices.
   Availability on a given Windows/browser was not verified here.
 
-## Wake word
+## Wake phrase
 
-Not implemented, deliberately. Mia does not listen until the owner starts a session or holds the talk button.
-A browser page cannot keep an offline keyword spotter running safely without a continuously open microphone, and
-the candidate (openWakeWord) needs a license, maintenance and false-positive review on the target hardware first
-(see `docs/research/INTEGRATION_MATRIX.md`). If added later it must be opt-in, off by default, show an
-always-visible microphone indicator, and have an immediate one-action mute.
+An opt-in **Hey Mia** browser wake-phrase mode is implemented on the Assistant page.
+
+- It is off by default and starts only after the owner clicks **Enable Hey Mia** and grants microphone permission.
+- It uses the browser Web Speech recognition service (online), not a local keyword-spotting model.
+- While armed, the page visibly shows the microphone as on and listens for the English phrase **Hey Mia**. Unaddressed speech is not submitted to chat.
+- After the phrase is detected, Mia removes the wake phrase, submits any following words as the user's turn, switches to the selected conversation language, speaks the reply and re-arms for the next phrase.
+- **Mute mic**, **Disable Hey Mia** and **End conversation** stop recognition immediately; a stopped session does not re-arm.
+- The browser may process microphone audio outside Mia. Do not use this mode for confidential speech unless the browser provider's processing is acceptable.
+
+This is a browser-page wake phrase, not offline wake-word detection and not an OS-level background listener. It requires the Assistant page to remain open and the browser speech service to be available. Local Faster-Whisper remains the offline transcription engine after an explicit voice session starts; it does not provide local wake-phrase detection. A true offline always-on detector remains future work and must be separately opt-in, visibly indicated, and immediately muteable.
 
 ## Privacy and control
 
@@ -127,7 +132,7 @@ Only Chromium was exercised by the automated tests.
   gateway, using a controllable fake recogniser and synthesiser, plus Chromium's fake microphone for the local
   engine (transcription endpoint mocked).
 - `tests/test_voice_api.py`, `test_voice_stt.py`, `test_voice_tts.py`: backend endpoints and adapters.
-- `tests/test_voice_ui_contract.py`: static contract checks (element ids, privacy text, no wake word).
+- `tests/test_voice_ui_contract.py`: static contract checks for voice controls, privacy disclosure and the explicit opt-in wake phrase.
 
 These do not prove that a physical microphone, speaker, Windows SAPI voice or the Whisper model works on the
 target laptop. See `docs/voice/OWNER_VERIFICATION.md`.
