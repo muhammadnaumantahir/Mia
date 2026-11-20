@@ -41,7 +41,7 @@ def candidate_from_cycle(cycle: dict[str, Any], item: dict[str, Any] | None) -> 
             body=f"{item['why_it_matters']} Do you want to update it, pause it or drop it?",
             evidence=[ref, {"type": "item", "ref": item["item_id"]}],
         )
-    if origin != "owner":
+    if origin not in {"owner", "conversation"}:
         return None  # Mia does not interrupt the owner about its own housekeeping
     if cycle["outcome"] == "completed":
         stored = [s for s in cycle["sources"] if s.get("stored_item_id")]

@@ -220,3 +220,7 @@ Each step requires implementation, tests, documentation and evidence on the exac
 ## Implemented: reflection and inbox outreach (2026-11-20)
 
 `mia.life.reflect.Reflector` writes a deterministic digest after every 5 new real cycles (counts, hosts, failures, message decisions, cited cycle ids). `mia.life.outreach` builds candidates from journal facts only: completed owner research with a stored untrusted note, blocked owner items, and stale-goal check-ins. Housekeeping items never contact the owner and page text is never echoed. Delivery is opt-in and inbox-only, evaluated in this order: emergency stop, outreach disabled, pause, quiet hours, daily cap, minimum gap (the last three bypassed for owner-requested cycles), unanswered backpressure, 30-day dismissed-topic memory, per-topic cooldown. Each cycle's `notification_decision` records `sent`, `suppressed: <reason>` or `none`. API: `GET /api/life/outreach`, `POST /api/life/outreach/{id}/state` (read, acted, dismissed), `GET /api/life/reflections`.
+
+## Implemented: curiosity from conversation (2026-11-20)
+
+`mia.life.capture` examines only the owner's chat message for explicit invitations to explore later and queues at most one `conversation`-origin backlog item per message (quote as reason, conversation id as source). It never queues URLs or secret-like topics, respects `conversation_capture_enabled` and the emergency stop, and cannot break a chat turn. Queued items are explored by the normal gated runner; any finding reaches the owner only through the opt-in inbox.

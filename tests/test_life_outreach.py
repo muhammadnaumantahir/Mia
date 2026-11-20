@@ -248,3 +248,11 @@ def test_api_inbox_flow_and_status(tmp_path, monkeypatch):
         assert client.post(f"/api/life/outreach/{mid}/state", json={"state": "pending"}).status_code == 400
         assert client.post("/api/life/outreach/nope/state", json={"state": "read"}).status_code == 404
         assert client.get("/api/life/reflections").json() == {"reflections": []}
+
+
+def test_conversation_origin_item_reports_its_finding(tmp_path):
+    life, runner = parts(tmp_path, FOUND)
+    owner_item(life, title="Look into: bm25 normalisation", origin="conversation")
+    runner.run_cycle("schedule")
+    [message] = life.list_outreach()
+    assert message["kind"] == "finding" and "bm25" in message["title"]

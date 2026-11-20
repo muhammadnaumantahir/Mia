@@ -67,6 +67,7 @@ class LifeSettings:
     min_outreach_gap_minutes: int = 240
     outreach_cooldown_days: int = 7
     max_unanswered_outreach: int = 3
+    conversation_capture_enabled: bool = True
 
 
 _SETTING_RANGES: dict[str, tuple[int, int]] = {
@@ -85,7 +86,8 @@ _SETTING_RANGES: dict[str, tuple[int, int]] = {
     "outreach_cooldown_days": (1, 365),
     "max_unanswered_outreach": (1, 50),
 }
-_BOOL_SETTINGS = {"paused", "emergency_stop", "quiet_hours_enabled", "outreach_enabled"}
+_BOOL_SETTINGS = {"paused", "emergency_stop", "quiet_hours_enabled", "outreach_enabled",
+                  "conversation_capture_enabled"}
 
 
 def validate_settings(values: dict[str, Any]) -> dict[str, Any]:

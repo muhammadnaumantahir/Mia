@@ -77,6 +77,7 @@ from mia.gateway.ledger import UsageLedger
 from mia.gateway.model_registry import ModelRegistry
 from mia.gateway.service import ModelGateway
 from mia.knowledge.document_ingestion import DocumentIngestionError, DocumentIngestor
+from mia.life.capture import capture_from_message as capture_curiosity_from_message
 from mia.life.runner import LifeRunner, LifeScheduler
 from mia.life.store import ITEM_STATES, LifeStore
 from mia.life.web import ResearchExplorer, normalise_research_url
@@ -397,6 +398,7 @@ class LifeSettingsInput(BaseModel):
     min_outreach_gap_minutes: int | None = None
     outreach_cooldown_days: int | None = None
     max_unanswered_outreach: int | None = None
+    conversation_capture_enabled: bool | None = None
 
 
 class OutreachStateInput(BaseModel):
@@ -4300,6 +4302,16 @@ def create_app(
     )
     app.state.brain = brain
 
+    def _capture_curiosity(prompt: str, conversation_id: str) -> None:
+        """Queue explicit "I wonder ..." style requests; never affects the chat turn."""
+        try:
+            item_id = capture_curiosity_from_message(life_store, prompt, conversation_id)
+            if item_id:
+                _life_event("curiosity_captured", "Queued a curiosity item from conversation",
+                            {"item_id": item_id})
+        except Exception:
+            pass
+
     def _turn_request(item: ChatInput, conversation_id: str | None = None) -> TurnRequest:
         return TurnRequest(
             prompt=item.prompt,
@@ -4321,6 +4333,7 @@ def create_app(
             conversation_id = memory_store.ensure_conversation(item.conversation_id)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _capture_curiosity(item.prompt, conversation_id)
         turn = _turn_request(item, conversation_id=conversation_id)
 
         def sse(event: str, data: dict[str, Any]) -> str:
@@ -4379,7 +4392,9 @@ def create_app(
     @app.post("/api/gateway/chat")
     async def chat(item: ChatInput) -> dict[str, Any]:
         try:
-            return await brain.run_turn(_turn_request(item))
+            result = await brain.run_turn(_turn_request(item))
+            _capture_curiosity(item.prompt, str(result.get("conversation_id") or item.conversation_id or ""))
+            return result
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except TransientProviderError as exc:

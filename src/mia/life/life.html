@@ -37,6 +37,7 @@ label{font-size:11px;color:#9db2aa;display:flex;flex-direction:column;gap:4px}
 <label><span>Proactive messages (inbox only)</span><select id="outreachEnabled"><option value="false">Off</option><option value="true">On</option></select></label>
 <label><span>Max messages / day</span><input id="maxOutreach" type="number" min="0" max="20"></label>
 <label><span>Min gap (minutes)</span><input id="gapMinutes" type="number" min="0" max="10080"></label>
+<label><span>Queue curiosity from my chat</span><select id="captureEnabled"><option value="true">On</option><option value="false">Off</option></select></label>
 <label><span>Quiet hours</span><select id="quietEnabled"><option value="false">Off</option><option value="true">On</option></select></label>
 <label><span>Quiet start (HH:MM)</span><input id="quietStart" type="time"></label>
 <label><span>Quiet end (HH:MM)</span><input id="quietEnd" type="time"></label>
@@ -86,7 +87,7 @@ function renderStatus(s){
  add('Explorer: '+s.explorer.name);
  if(s.quiet_hours_active)add('Quiet hours active',true);
  $('outreachEnabled').value=String(st.outreach_enabled);$('maxOutreach').value=st.max_outreach_per_day;
- $('gapMinutes').value=st.min_outreach_gap_minutes;$('quietEnabled').value=String(st.quiet_hours_enabled);
+ $('gapMinutes').value=st.min_outreach_gap_minutes;$('quietEnabled').value=String(st.quiet_hours_enabled);$('captureEnabled').value=String(st.conversation_capture_enabled);
  $('quietStart').value=minutesToTime(st.quiet_start_minute);$('quietEnd').value=minutesToTime(st.quiet_end_minute);
  $('utcOffset').value=st.utc_offset_minutes;
  fill($('sources'),s.research_sources,h=>{const d=el('div',null,'item');d.append(el('span',h),document.createTextNode(' '),
@@ -137,7 +138,7 @@ $('clearStop').onclick=()=>act(()=>api('/api/life/emergency-stop/clear','POST'),
 $('runCycle').onclick=()=>act(async()=>{const r=await api('/api/life/cycle','POST');note('Cycle result: '+r.status+(r.reason?' ('+r.reason+')':''))});
 $('saveSettings').onclick=()=>act(()=>api('/api/life/settings','PUT',{
  outreach_enabled:$('outreachEnabled').value==='true',max_outreach_per_day:Number($('maxOutreach').value),
- min_outreach_gap_minutes:Number($('gapMinutes').value),quiet_hours_enabled:$('quietEnabled').value==='true',
+ min_outreach_gap_minutes:Number($('gapMinutes').value),quiet_hours_enabled:$('quietEnabled').value==='true',conversation_capture_enabled:$('captureEnabled').value==='true',
  quiet_start_minute:timeToMinutes($('quietStart').value),quiet_end_minute:timeToMinutes($('quietEnd').value),
  utc_offset_minutes:Number($('utcOffset').value)}),'Settings saved');
 $('addCuriosity').onclick=()=>act(async()=>{
