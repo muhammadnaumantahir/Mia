@@ -517,6 +517,12 @@ class TaskEngine:
             if permission is not None and handler.request_approval is not None:
                 try:
                     approval_id = await self._call(handler, handler.request_approval, args)
+                    # The standing owner grant is the authorization for this
+                    # medium-risk action. Approve only the exact, freshly prepared
+                    # adapter payload so the adapter can still consume its normal
+                    # one-time, payload-bound token.
+                    self.approvals.approve(approval_id)
+                    self._set_step(task_id, idx, approval_id=approval_id)
                 except Exception as exc:
                     self._fail(task_id, idx, f"Granted action could not be prepared: {exc}")
                     return False
