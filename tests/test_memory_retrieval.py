@@ -430,3 +430,21 @@ def test_semantic_candidates_are_not_injected_without_a_positive_match(tmp_path)
         reranker=lambda _query, _records: {},
     )
     assert record_id not in ids(packet)
+
+
+def test_semantic_candidate_pool_recovers_a_synonymous_prior_conversation(tmp_path):
+    store, conv = make(tmp_path)
+    old = store.ensure_conversation("conversation-old")
+    message_id = store.append_message(
+        old, "user", "We picked PostgreSQL for the billing data store"
+    )
+
+    def semantic_reranker(_query, records):
+        return {r["message_id"]: 0.3 for r in records if r.get("message_id") == message_id}
+
+    packet = assemble_memory_context(
+        store, "Which persistence engine did we select?", conv,
+        reranker=semantic_reranker,
+    )
+    assert message_id in ids(packet)
+    assert "PostgreSQL" in text(packet)
