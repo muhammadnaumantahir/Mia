@@ -49,7 +49,7 @@ Exit criteria:
 
 **Persistent conversation memory**
 - Extend existing persistence and FTS5 retrieval with semantic and relationship-aware retrieval when it is resource- and license-appropriate.
-- Add owner-controlled automatic memory extraction, confidence/provenance, correction, conflict handling, consolidation and retention.
+- Add owner-controlled automatic memory extraction, confidence/provenance, correction, conflict handling, consolidation and retention. Include English, Roman Urdu and Urdu-script capture/command tests; the current deterministic rules are a baseline, not a substitute for future model-assisted extraction.
 - Preserve important context, decisions, project state, preferences, goals and episodic history across model/provider switches.
 - Keep retrieved memories source-labelled and distinguish owner-confirmed facts from model inferences and untrusted document content.
 - Provide transparent memory inspection, correction, export and deletion controls.
