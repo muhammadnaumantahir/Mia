@@ -852,9 +852,9 @@ def create_app(
                     for item in re.split(r"(?<=[.!?])\s+|\n+", text or "")
                 ]
                 explicit_command = bool(re.match(
-                    r"^\\s*(?:remember|don'?t\\s+forget|keep\\s+in\\s+mind|make\\s+a\\s+note|"
-                    r"note\\s+that|forget|stop\\s+remembering|update\\s+(?:what\\s+you\\s+remember|"
-                    r"your\\s+memory)|yaad\\s+rakho|yaad\\s+rakhna|bhool\\s+jao|یاد\\s+رکھ|بھول)",
+                    r"^\s*(?:remember|don'?t\s+forget|keep\s+in\s+mind|make\s+a\s+note|"
+                    r"note\s+that|forget|stop\s+remembering|update\s+(?:what\s+you\s+remember|"
+                    r"your\s+memory)|yaad\s+rakho|yaad\s+rakhna|bhool\s+jao|یاد\s+رکھ|بھول)",
                     text or "", re.I,
                 ))
             eligible = [] if explicit_command else [
