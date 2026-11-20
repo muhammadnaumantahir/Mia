@@ -4391,15 +4391,16 @@ def create_app(
         request_budget = budget_limit("MIA_MAX_REQUEST_SPEND_USD")
         daily_budget = budget_limit("MIA_MAX_DAILY_SPEND_USD")
         monthly_budget = budget_limit("MIA_MAX_MONTHLY_SPEND_USD")
+        reservations = ledger.reservation_summary()
         paid_requested = os.getenv("MIA_ALLOW_PAID", "false").strip().lower() == "true"
         paid_available = (
             paid_requested
             and request_budget["valid"]
             and request_budget["limit_usd"] > 0
             and daily_budget["valid"]
-            and daily_budget["limit_usd"] > ledger.spend_today_utc()
+            and daily_budget["limit_usd"] > ledger.spend_today_utc() + reservations["reserved_today_utc_usd"]
             and monthly_budget["valid"]
-            and monthly_budget["limit_usd"] > ledger.spend_month_utc()
+            and monthly_budget["limit_usd"] > ledger.spend_month_utc() + reservations["reserved_month_utc_usd"]
         )
         return {
             "usage": ledger.summary(30),
@@ -4411,7 +4412,7 @@ def create_app(
                 "monthly": monthly_budget,
                 "spent_today_utc_usd": ledger.spend_today_utc(),
                 "spent_month_utc_usd": ledger.spend_month_utc(),
-                "reservations": ledger.reservation_summary(),
+                "reservations": reservations,
             },
             "providers": providers_snapshot,
             "health": model_gateway.health.snapshot(),
