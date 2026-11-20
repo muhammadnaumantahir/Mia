@@ -77,8 +77,12 @@ def test_application_launch_owner_grant_can_skip_second_approval(tmp_path, monke
     preview = client.post("/api/computer/apps/launch/preview", json={"app_id": "editor"})
     assert preview.status_code == 201
     assert preview.json()["requires_approval"] is False
+    assert preview.json()["status"] == "approved"
 
-    launched = client.post("/api/computer/apps/launch/execute", json={"app_id": "editor"})
+    launched = client.post(
+        "/api/computer/apps/launch/execute",
+        json={"app_id": "editor", "approval_id": preview.json()["approval_id"]},
+    )
     assert launched.status_code == 200
     assert launched.json()["process_id"] == 456
     assert approvals.list_pending() == []
