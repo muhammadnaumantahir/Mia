@@ -123,8 +123,10 @@ def apply_daily_cap(policy, spent_today_usd: float):
     from .contracts import RoutePolicy
 
     raw = os.getenv("MIA_MAX_DAILY_SPEND_USD", "").strip()
-    if not raw or not policy.allow_paid:
+    if not policy.allow_paid:
         return policy
+    if not raw:
+        return RoutePolicy(allow_paid=False, max_request_cost_usd=0.0)
     try:
         cap = float(raw)
     except ValueError:
