@@ -160,7 +160,7 @@ async def test_gateway_discovery_syncs_registry_and_respects_owner_settings(tmp_
 
 
 def test_persistent_model_preferences_affect_gateway_routing(reg):
-    from mia.gateway.contracts import RoutePolicy, ModelRequest
+    from mia.gateway.contracts import ModelRequest, RoutePolicy
 
     candidates = [
         cand(model="low", free=True),
