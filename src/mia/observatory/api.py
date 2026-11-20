@@ -36,6 +36,7 @@ from mia.agent.tasks import (
 )
 from mia.agent.tools import ToolRegistry, ToolResult
 from mia.brain.capabilities import CapabilityRegistry
+from mia.brain.broker import OwnerPermissionEvaluator, ToolBroker
 from mia.brain.orchestrator import Brain, TurnRequest
 from mia.brain.plan import PlanStore
 from mia.computer.app_discovery import ApplicationDiscovery
@@ -4501,6 +4502,25 @@ def create_app(
     plan_store = PlanStore(data_dir / "mia-brain.sqlite3")
     brain_capabilities = CapabilityRegistry(db_path=data_dir / "mia-brain-capabilities.sqlite3")
     plan_store.recover_interrupted()
+    def brain_tool_permission_path(tool: Any, arguments: dict[str, Any]) -> str | None:
+        if not tool.name.startswith("filesystem.") or not arguments.get("root_id"):
+            return None
+        relative = arguments.get("relative_path")
+        if not isinstance(relative, str):
+            return None
+        try:
+            return str(computer_files._resolve(arguments["root_id"], relative))
+        except Exception:
+            return None
+
+    brain_broker = ToolBroker(
+        tool_registry,
+        evaluator=OwnerPermissionEvaluator(
+            policy,
+            capability_registry,
+            path_resolver=brain_tool_permission_path,
+        ),
+    )
     brain = Brain(
         gateway=model_gateway,
         memory=memory_store,
@@ -4514,6 +4534,7 @@ def create_app(
         usage_recorder=record_usage,
         plan_store=plan_store,
         capabilities=brain_capabilities,
+        broker=brain_broker,
         capture=capture_from_message,
         on_reply=record_reply_usage,
         approval_status=approval_store.status,
