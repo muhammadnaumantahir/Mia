@@ -70,23 +70,19 @@ def _register_openai_compatible(
 
 
 def build_default_registry() -> ProviderRegistry:
-    """Register Ollama by default and FreeLLMAPI only when explicitly enabled."""
+    """Register local Ollama and explicitly configured direct provider adapters.
+
+    Cloud endpoints are ordinary provider IDs configured through the generic
+    OpenAI-compatible adapter. Mia does not launch or depend on gateway sidecars
+    or external routing control planes.
+    """
     registry = ProviderRegistry()
     ollama_url = os.getenv("MIA_OLLAMA_BASE_URL", "http://127.0.0.1:11434")
-    ollama_tools = (
-        os.getenv("MIA_OLLAMA_ENABLE_TOOL_CALLING", "false").strip().lower() == "true"
-    )
-    registry.register(
-        OllamaProvider(base_url=ollama_url, supports_tools=ollama_tools)
-    )
+    ollama_tools = _flag("MIA_OLLAMA_ENABLE_TOOL_CALLING")
+    registry.register(OllamaProvider(base_url=ollama_url, supports_tools=ollama_tools))
 
-    # FreeLLMAPI keeps its original variables; Omniroute follows the same scheme.
-    # Omniroute has no default URL: its endpoint is not assumed, the owner sets it.
-    _register_openai_compatible(registry, "freellmapi", "FREELLMAPI", "http://127.0.0.1:3001/v1")
-    _register_openai_compatible(registry, "omniroute", "OMNIROUTE", None)
-
-    # Further OpenAI-compatible endpoints: MIA_EXTRA_PROVIDERS=id1,id2 with
-    # MIA_PROVIDER_<ID>_BASE_URL etc. (ID upper-cased, '-' becomes '_').
+    # MIA_EXTRA_PROVIDERS=id1,id2 with MIA_PROVIDER_<ID>_* settings.
+    # Mia owns discovery, selection, budgets and fallback for every endpoint.
     for raw_id in os.getenv("MIA_EXTRA_PROVIDERS", "").split(","):
         provider_id = raw_id.strip().lower()
         if not provider_id:
