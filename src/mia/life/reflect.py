@@ -1,7 +1,8 @@
-"""Deterministic reflection: a digest of what really happened since the last one.
+"""Evidence-linked deterministic reflection with an optional local-model advisory.
 
-Observations are counts and facts read from the journal; each reflection lists the
-cycle ids it reviewed. No model is called, so nothing here can be invented.
+The deterministic digest is always written from real journal facts. When explicitly
+enabled, a loopback Ollama model may add labelled hypotheses and unexecuted
+follow-ups; it never changes settings, executes work or writes trusted memory.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ import asyncio
 import json
 from collections import Counter
 from datetime import datetime
+from typing import Any
 from urllib.parse import urlsplit
 
 from mia.gateway.contracts import ModelRequest, RoutePolicy
