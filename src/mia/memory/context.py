@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from mia.memory.store import MemoryStore, extract_query_terms
-from mia.memory.structured import normalise_title
+from mia.memory.structured import RECORD_TYPES, normalise_title
 
 _TRUST_WEIGHT = {"user": 0.25, "trusted": 0.15, "untrusted": 0.0}
 _TRUST_LABEL = {
@@ -329,19 +329,50 @@ def assemble_memory_context(
                 continue
             scored.append((0.3 + _record_weight(record, conversation_id, now), "structured", record))
     if reranker is not None:
-        try:
-            boosts = reranker(prompt, [r for _, kind, r in scored if kind == "structured"])
-            scored = [
-                (
-                    score + max(-0.3, min(0.3, float(boosts.get(r.get("record_id", ""), 0.0))))
-                    if kind == "structured" else score,
-                    kind,
-                    r,
+        # Add a small, bounded recent candidate pool so embeddings can recover
+        # semantically related records that FTS5 could not find by shared words.
+        # Candidates are included only when the reranker returns a positive match.
+        semantic_candidate_ids: set[str] = set()
+        existing_ids = {
+            str(record.get("record_id") or record.get("item_id") or record.get("message_id") or "")
+            for _, _, record in scored
+        }
+        for item in store.list_items(limit=INTENT_POOL):
+            item_id = str(item.get("item_id") or "")
+            if item_id and item_id not in existing_ids:
+                score = (
+                    -0.05
+                    + _TRUST_WEIGHT.get(item.get("trust_level", "untrusted"), 0.0)
+                    + _KIND_WEIGHT.get(item.get("kind", ""), 0.0)
+                    + _recency(item.get("updated_at", ""), now)
                 )
-                for score, kind, r in scored
+                scored.append((score, "knowledge", item))
+                semantic_candidate_ids.add(item_id)
+                existing_ids.add(item_id)
+        for record in store.structured.recent(RECORD_TYPES, limit=INTENT_POOL):
+            record_id = str(record.get("record_id") or "")
+            if record_id and record_id not in existing_ids:
+                scored.append((-0.05 + _record_weight(record, conversation_id, now),
+                               "structured", record))
+                semantic_candidate_ids.add(record_id)
+                existing_ids.add(record_id)
+        try:
+            boosts = reranker(prompt, [record for _, _, record in scored])
+            reranked: list[tuple[float, str, dict[str, Any]]] = []
+            for score, kind, record in scored:
+                key = str(record.get("record_id") or record.get("item_id")
+                          or record.get("message_id") or "")
+                boost = max(-0.3, min(0.3, float(boosts.get(key, 0.0))))
+                if key in semantic_candidate_ids and boost < 0.05:
+                    continue
+                reranked.append((score + boost, kind, record))
+            scored = reranked
+        except Exception:  # optional local semantic retrieval must never block a reply
+            scored = [
+                entry for entry in scored
+                if str(entry[2].get("record_id") or entry[2].get("item_id")
+                       or entry[2].get("message_id") or "") not in semantic_candidate_ids
             ]
-        except Exception:  # an optional semantic layer must never break retrieval
-            pass
 
     scored.sort(key=lambda entry: entry[0], reverse=True)
     _add_linked_records(store, scored)
