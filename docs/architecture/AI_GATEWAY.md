@@ -8,7 +8,7 @@ Expose one stable Mia model interface while supporting local inference and multi
 
 ## Logical components
 
-- Provider adapters: Ollama, FreeLLMAPI sidecar, or a later selected gateway.
+- Provider adapters: local Ollama and directly configured cloud/self-hosted OpenAI-compatible endpoints, all called by Mia.
 - Model registry: provider, model ID, capabilities, context, health, latency, prices, quota and terms metadata.
 - Task classifier: conversation, reasoning, coding, vision, research, speech or embedding.
 - Router: choose a suitable eligible candidate using task fit, capability, context, known cost, latency and reliability.
@@ -26,7 +26,7 @@ Default mode is local/free-first:
 4. If no eligible candidate exists, report that the task cannot be routed rather than silently spending money.
 5. Paid candidates are excluded unless paid mode is explicitly enabled, both prices are known and the estimated request cost is within the configured per-request cap.
 
-**Monthly spend enforcement is not implemented yet.** The environment variable for a monthly ceiling is reserved for a future usage ledger; do not enable paid inference until that ledger exists and has been tested. Unknown cloud prices are not treated as zero.
+**Budget enforcement:** paid inference is disabled by default. It requires explicit request, daily UTC and monthly UTC ceilings (MIA_MAX_REQUEST_SPEND_USD, MIA_MAX_DAILY_SPEND_USD, MIA_MAX_MONTHLY_SPEND_USD) plus MIA_ALLOW_PAID=true. Missing, malformed, negative or non-finite limits disable paid routes. The append-only usage ledger calculates daily and monthly spend. Unknown cloud prices are not treated as zero. Budget ceilings are checked before routing; concurrent in-flight requests are not yet atomically reserved against the same remaining allowance, so paid use should remain disabled until reservation accounting is implemented and tested.
 
 Routing should optimize the task, not simply choose the newest or largest model. Benchmark-based quality and reliability evidence by task type is still future work. Do not fabricate quality scores for newly discovered models.
 
@@ -49,7 +49,7 @@ A Mia provider adapter should implement:
 - secret redaction;
 - timeouts and retry policy.
 
-Streaming, model-specific capability metadata, monthly cost ledger and benchmark-based route quality remain outstanding.
+Streaming tool calls now reach the gateway layer; model-specific capability provenance and a persistent registry exist. Benchmark-based route quality, semantic caching, specialized multimodal paths and online route evaluation remain outstanding.
 
 ## Safety requirements
 
@@ -64,7 +64,7 @@ Ollama is marked as a local inference provider. Any remote-compatible provider i
 
 The chat tool loop withholds file and knowledge contents from non-local providers by default. `MIA_ALLOW_REMOTE_FILE_CONTEXT=true` is a separate owner opt-in that permits this data egress.
 
-## Streaming, usage ledger and daily budget
+## Streaming, usage ledger and request/daily/monthly budget
 
 - `POST /api/gateway/chat/stream` returns Server-Sent Events: `delta` (text fragments), then `done` (provider, model, token counts, cost, conversation id) or `error` (`partial: true` when text had already been sent). Streaming is text-only: tool-bearing chat stays on `POST /api/gateway/chat`; requests with tools passed to `ModelGateway.stream` use one buffered call.
 - Fallback to the next candidate happens only before the first token. A failure after output has started is surfaced, not retried on another model; the saved assistant message is marked `[response interrupted]`.
@@ -112,4 +112,4 @@ local-only setup needs no keys.
 status (`ok`, `unreachable`, `auth_failed`, `invalid_response`, `unknown_provider`,
 `error`) with model count and latency; it never returns URLs, headers or bodies.
 Model discovery skips a provider whose credentials are rejected instead of failing.
-No HTTP endpoint exposes the connection test yet (no owner-only admin auth exists).
+The local /api/gateway/providers/{provider_id}/test endpoint returns a sanitized connection result. The app remains localhost-only; no authenticated remote owner-admin surface exists.
