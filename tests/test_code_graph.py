@@ -112,12 +112,16 @@ def test_config_files_are_indexed_but_secret_material_is_excluded(tmp_path):
     secrets = root / "secrets"
     secrets.mkdir()
     (secrets / "credentials.json").write_text('{"token":"real-secret"}', encoding="utf-8")
+    private_keys = root / "private"
+    private_keys.mkdir()
+    (private_keys / "signing.pem").write_text("private-key-material", encoding="utf-8")
     graph = build_graph(root)
     paths = {node.get("path") for node in graph["nodes"] if node["kind"] == "file"}
     assert "config/settings.yaml" in paths
     assert ".env.example" in paths
     assert ".env.local" not in paths
     assert "secrets/credentials.json" not in paths
+    assert "private/signing.pem" not in paths
 
 
 def test_literal_config_reads_and_writes_are_source_grounded(tmp_path):
@@ -144,3 +148,26 @@ def test_literal_config_reads_and_writes_are_source_grounded(tmp_path):
                and e["confidence"] == "confirmed" for e in edges)
     assert any(e["type"] == "WRITES_TO" and targets[e["target"]] == "config/output.json"
                and e["confidence"] == "confirmed" for e in edges)
+
+
+def test_api_route_is_linked_to_the_actual_qualified_function_node(tmp_path):
+    root = make_repo(tmp_path)
+    (root / "src" / "mia" / "routes.py").write_text(
+        "class ItemRoutes:\n"
+        "    @router.get(\"/items\")\n"
+        "    def list_items(self):\n"
+        "        return []\n",
+        encoding="utf-8",
+    )
+    graph = build_graph(root)
+    function = next(
+        node for node in graph["nodes"]
+        if node["kind"] == "function" and node.get("qualified_name") == "ItemRoutes.list_items"
+    )
+    endpoint = next(node for node in graph["nodes"] if node["kind"] == "api_endpoint")
+    assert any(
+        edge["type"] == "EXPOSES_API"
+        and edge["source"] == function["id"]
+        and edge["target"] == endpoint["id"]
+        for edge in graph["edges"]
+    )
