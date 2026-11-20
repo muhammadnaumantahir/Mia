@@ -1274,10 +1274,10 @@ function startVoiceRecognition(){
   if(voiceWakeMode&&!voiceWakeActive){
    const finalWakeText=fresh.filter(result=>result.isFinal).map(result=>result[0]?.transcript||'').join(' ').trim();
    if(!finalWakeText)return;
-   const wakeMatch=/\\bhey\\s+mia\\b/i.exec(finalWakeText);
+   const wakeMatch=/\bhey\s+mia\b/i.exec(finalWakeText);
    if(!wakeMatch){setVoiceStatus("Listening for 'Hey Mia'.");return;}
    voiceWakeActive=true;
-   const remainder=finalWakeText.slice(wakeMatch.index+wakeMatch[0].length).replace(/^[\\s,.:;!?-]+/,'').trim();
+   const remainder=finalWakeText.slice(wakeMatch.index+wakeMatch[0].length).replace(/^[\s,.:;!?-]+/,'').trim();
    voiceFinalTranscript=remainder;
    voiceInterimTranscript='';
    setVoiceState('listening');
