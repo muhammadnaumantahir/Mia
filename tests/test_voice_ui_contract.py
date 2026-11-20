@@ -66,6 +66,12 @@ def test_voice_session_exposes_state_interrupt_mute_push_to_talk_and_engine_cont
     assert "class LocalRecognizer" in source and "/api/voice/transcribe" in source
 
 
-def test_always_listening_wake_word_is_not_present():
-    source = assistant_source().lower()
-    assert "wakeword" not in source and "hey mia" not in source
+def test_wake_phrase_is_explicit_opt_in_and_has_visible_stop_controls():
+    source = assistant_source()
+    assert 'id="wakeWordMode"' in source
+    assert "startVoiceConversation({wakeWord:true})" in source
+    assert "Listening for 'Hey Mia'" in source
+    assert "voiceWakeMode&&!voiceWakeActive" in source
+    assert "Hey Mia wake phrase mode is opt-in" in source or "Hey Mia is an explicit opt-in browser wake phrase" in source
+    assert "stopVoiceConversation('Hey Mia wake phrase listening stopped.')" in source
+    assert "voiceWakeActive=false" in source
