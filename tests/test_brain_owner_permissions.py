@@ -1,7 +1,7 @@
 from mia.agent.tools import ToolDefinition
 from mia.brain.broker import OwnerPermissionEvaluator
 from mia.computer.capabilities import default_registry
-from mia.computer.permissions import PermissionLevel, PermissionPolicy
+from mia.computer.permissions import PermissionPolicy
 
 
 def definition(name, permission, mode):
