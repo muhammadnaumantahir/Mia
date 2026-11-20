@@ -30,7 +30,7 @@ def test_atomic_budget_reservations_do_not_overbook_concurrent_requests(tmp_path
 
     accepted = [item for item in results if item]
     assert len(accepted) == 5
-    state = ledger.reservation_summary()
+    state = ledger.reservation_summary(now=now)
     assert state["active_count"] == 5
     assert state["active_reserved_usd"] == pytest.approx(0.05)
 
