@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mia · AI Gateway</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--panel:#131b2e;--panel2:#18233a;--line:#293650;--text:#edf3ff;--muted:#9aabc5;--accent:#83b7ff;--good:#6ed6a5;--warn:#f5c56b;--bad:#ff8585}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 10% 0%,#172b4c 0,transparent 32%),var(--bg);color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,Segoe UI,sans-serif}
+main{max-width:1200px;margin:auto;padding:28px 22px 64px}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px}.eyebrow{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:700}h1{font-size:30px;margin:3px 0 0;letter-spacing:-.03em}.sub{color:var(--muted);margin:6px 0 0}.actions{display:flex;gap:10px;align-items:center}
+button,select{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:8px 11px}button{cursor:pointer}button:hover{border-color:var(--accent)}button:disabled{opacity:.5;cursor:wait}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin-bottom:16px}.card{background:linear-gradient(145deg,var(--panel),#10182a);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0}.metric{font-size:25px;font-weight:700;letter-spacing:-.03em;margin-top:5px}.label{font-size:12px;color:var(--muted)}.section{margin-top:18px}.section-head{display:flex;justify-content:space-between;align-items:center;margin:0 0 10px}.section h2{font-size:16px;margin:0}.muted{color:var(--muted)}.providers{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.provider{display:flex;align-items:center;justify-content:space-between;gap:8px}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:7px}.online .dot{background:var(--good)}.offline .dot{background:var(--warn)}.unavailable .dot{background:var(--bad)}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:middle}th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.08em}td small{display:block;color:var(--muted);font-size:11px}.tag{display:inline-block;border:1px solid var(--line);padding:2px 7px;border-radius:999px;color:var(--muted);font-size:11px;margin:2px 3px 2px 0}.model-key{font-weight:650}.controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.compact{padding:5px 7px;font-size:12px}.budget-row{display:flex;justify-content:space-between;gap:20px;padding:7px 0;border-bottom:1px solid var(--line)}.status-good{color:var(--good)}.status-warn{color:var(--warn)}.status-bad{color:var(--bad)}.decision{padding:10px 0;border-bottom:1px solid var(--line)}.decision strong{font-size:13px}.decision p{margin:3px 0;color:var(--muted)}.empty{color:var(--muted);padding:14px 0}.notice{color:var(--muted);font-size:12px;margin-top:14px}.error{color:var(--bad);white-space:pre-wrap;margin-top:10px}
+@media(max-width:850px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}main{padding:20px 14px}}@media(max-width:560px){.top{align-items:flex-start;flex-direction:column}.grid{grid-template-columns:1fr 1fr}.metric{font-size:21px}table{min-width:760px}.table-wrap{overflow:auto}}
+</style>
+</head>
+<body>
+<main>
+<header class="top">
+  <div><div class="eyebrow">Mia · Runtime operations</div><h1>AI Gateway</h1><p class="sub">Provider health, model routing, inference usage and spend controls.</p></div>
+  <div class="actions"><a href="/assistant" style="color:var(--accent);text-decoration:none">← Assistant</a><button id="refresh">Refresh data</button></div>
+</header>
+<div id="error" class="error" role="alert"></div>
+<section class="grid" aria-label="Gateway metrics">
+  <article class="card"><div class="label">Requests · 30 days</div><div class="metric" id="requests">—</div><div class="label" id="token-count">Token usage unavailable</div></article>
+  <article class="card"><div class="label">Recorded spend · 30 days</div><div class="metric" id="spend">$—</div><div class="label">USD, based on ledger rows</div></article>
+  <article class="card"><div class="label">Today · UTC spend</div><div class="metric" id="today">$—</div><div class="label">Current UTC day</div></article>
+  <article class="card"><div class="label">Current month · UTC spend</div><div class="metric" id="month">$—</div><div class="label">Current UTC calendar month</div></article>
+</section>
+<section class="section card">
+ <div class="section-head"><h2>Spend governance</h2><span class="tag" id="paid-state">Paid inference off</span></div>
+ <div id="budgets"></div>
+ <p class="notice">Paid inference remains blocked unless it is explicitly enabled and valid per-request, daily and monthly caps are configured. Unknown model prices are never treated as free.</p>
+</section>
+<section class="section card">
+ <div class="section-head"><h2>Providers</h2><span class="label">Mia-owned provider adapters</span></div>
+ <div id="providers" class="providers"><div class="empty">Loading provider status…</div></div>
+</section>
+<section class="section card">
+ <div class="section-head"><h2>Model registry</h2><span class="label">Enablement, aliases and routing preference persist across restarts</span></div>
+ <div class="table-wrap"><table><thead><tr><th>Provider / model</th><th>State</th><th>Context</th><th>Capabilities</th><th>Evidence</th><th>Preference</th><th>Controls</th></tr></thead><tbody id="models"><tr><td colspan="7" class="empty">Loading model registry…</td></tr></tbody></table></div>
+</section>
+<section class="section card">
+ <div class="section-head"><h2>Recent routing decisions</h2><span class="label">No prompts or credentials are stored here</span></div>
+ <div id="decisions"><div class="empty">Loading routing decisions…</div></div>
+</section>
+<p class="notice">This local console is an operational view, not a claim that a provider has been live-tested. Keep Mia bound to localhost unless owner authentication and remote-access protections are configured.</p>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const money=n=>Number.isFinite(Number(n))?'$'+Number(n).toFixed(4):'Unknown';
+function node(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=String(text);return e}
+function budgetLine(host,name,entry,spent){const row=node('div','budget-row');row.append(node('span','muted',name));const detail=entry.valid?money(entry.limit_usd)+' limit · '+money(spent)+' spent':(entry.configured?'Invalid configuration':'Not configured')+' · paid routes blocked';row.append(node('strong',entry.valid?'status-good':'status-warn',detail));host.append(row)}
+function render(data){
+ const usage=data.usage||{};const b=data.budgets||{};
+ $('requests').textContent=(usage.total_requests??0).toLocaleString();
+ $('spend').textContent=money(usage.total_cost_usd);
+ $('today').textContent=money(b.spent_today_utc_usd);
+ $('month').textContent=money(b.spent_month_utc_usd);
+ $('token-count').textContent=(usage.total_input_tokens??0).toLocaleString()+' input · '+(usage.total_output_tokens??0).toLocaleString()+' output tokens';
+ $('paid-state').textContent=b.paid_routing_available?'Paid routing eligible':'Paid routing blocked';
+ $('paid-state').className='tag '+(b.paid_routing_available?'status-good':'status-warn');
+ const budgets=$('budgets');budgets.replaceChildren();
+ budgetLine(budgets,'Per-request',b.request,usage.total_cost_usd);
+ budgetLine(budgets,'Daily UTC',b.daily,b.spent_today_utc_usd);
+ budgetLine(budgets,'Monthly UTC',b.monthly,b.spent_month_utc_usd);
+ const providers=$('providers');providers.replaceChildren();
+ for(const p of data.providers||[]){const card=node('article','card provider '+p.status);const name=node('strong','',p.provider_id);const state=node('span','label',p.status);const dot=node('span','dot');state.prepend(dot);card.append(name,state);providers.append(card)}
+ if(!(data.providers||[]).length)providers.append(node('div','empty','No providers registered'));
+ const tbody=$('models');tbody.replaceChildren();
+ for(const m of data.models||[]){
+  const tr=node('tr');const ident=node('td');ident.append(node('div','model-key',m.alias||m.model_id));ident.append(node('small','',m.provider_id+'/'+m.model_id));tr.append(ident);
+  const status=node('td','',m.stale?'stale':m.enabled?'enabled':'disabled');tr.append(status);
+  tr.append(node('td','',Number(m.context_window||0).toLocaleString()));
+  const caps=node('td');for(const c of m.effective_capabilities||[])caps.append(node('span','tag',c));tr.append(caps);
+  tr.append(node('td','',m.verification||'unknown'));
+  const pref=node('td');const select=node('select','compact');for(let n=-10;n<=10;n++){const opt=node('option','',String(n));opt.value=String(n);if(n===m.preference)opt.selected=true;select.append(opt)}pref.append(select);tr.append(pref);
+  const controls=node('td');controls.className='controls';
+  const toggle=node('button','compact',m.enabled?'Disable':'Enable');toggle.addEventListener('click',()=>updateModel(m,{enabled:!m.enabled},toggle));controls.append(toggle);
+  select.addEventListener('change',()=>updateModel(m,{preference:Number(select.value)},select));
+  const alias=node('button','compact','Set alias');alias.addEventListener('click',()=>{const value=window.prompt('Model alias (leave blank to clear):',m.alias||'');if(value!==null)updateModel(m,{alias:value.trim()||null,change_alias:true},alias)});controls.append(alias);tr.append(controls);
+  tbody.append(tr)
+ }
+ if(!(data.models||[]).length)tbody.append(node('tr','', '')).firstChild?.append(node('td','empty','No models discovered yet. Refresh models from Mia before configuring them.'));
+ const decisions=$('decisions');decisions.replaceChildren();
+ for(const d of data.decisions||[]){const block=node('div','decision');block.append(node('strong','',d.selected||'No eligible model'));block.append(node('p','',d.task_type+' · '+d.mode+' · '+d.reason));if((d.overrides||[]).length)block.append(node('p','',d.overrides.join(' · ')));decisions.append(block)}
+ if(!(data.decisions||[]).length)decisions.append(node('div','empty','No routing decisions recorded in this process yet.'));
+}
+async function updateModel(model,settings,control){
+ control.disabled=true;
+ try{const url='/api/gateway/models/'+encodeURIComponent(model.provider_id)+'/'+encodeURIComponent(model.model_id)+'/settings';const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)});if(!res.ok)throw new Error((await res.json()).detail||'Could not update model');await load()}
+ catch(e){$('error').textContent=e.message}finally{control.disabled=false}
+}
+async function load(){
+ $('error').textContent='';$('refresh').disabled=true;
+ try{const response=await fetch('/api/gateway/overview',{cache:'no-store'});if(!response.ok)throw new Error('Gateway overview failed: HTTP '+response.status);render(await response.json())}
+ catch(e){$('error').textContent=e.message}
+ finally{$('refresh').disabled=false}
+}
+$('refresh').addEventListener('click',load);load();
+</script>
+</body>
+</html>
