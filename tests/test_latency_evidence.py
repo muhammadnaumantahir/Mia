@@ -7,7 +7,6 @@ import pytest
 from mia.gateway.contracts import ModelRequest, RoutePolicy, StreamChunk, TokenUsage
 from mia.gateway.ledger import UsageLedger
 from mia.observatory.store import ObservatoryStore
-
 from tests.test_gateway_streaming_ledger import (
     StreamingProvider,
     candidate,
