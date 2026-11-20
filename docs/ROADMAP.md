@@ -1,211 +1,208 @@
 # Mia implementation roadmap
 
-The roadmap is sequenced by dependencies and quality gates, not by artificial release dates. Each phase must produce working, tested software before dependent phases are marked complete.
+**Product direction:** Mia is being built first as an intelligent, natural, voice-enabled conversational companion. The longer-term destination is a personal AI operating system that understands the owner, helps with daily life, controls the computer safely and improves its own capabilities under governance.
 
-## Three co-equal core product priorities
+**Execution rule:** Work strictly from the highest-priority incomplete phase downward. An AI coding agent must not begin lower-priority feature work while a higher-priority phase still has unfinished development acceptance criteria, except to resolve a direct prerequisite, an integration defect or a security issue that blocks the current phase. CI and owner-only physical testing are not development gates; they are reported separately.
 
-The owner's product direction is that Mia must become a persistent, proactive digital companion—not only a passive voice/chat assistant. Three priorities are co-equal and permanent; sequence their implementation by dependency, but do not defer one until the others are complete:
+The roadmap is sequenced by product priority, dependency and evidence—not by artificial release dates. The canonical ten-layer SPS architecture is preserved throughout.
 
-1. **Persistent identity and memory:** one canonical Mia identity and structured, source-aware memory that survives sessions, restarts and model/provider changes. This includes conversations, preferences, people/entities, projects, decisions, goals, episodic experience and validated lessons.
-2. **Autonomous digital life and proactive initiative:** Mia can maintain curiosity and follow-up queues, independently explore permitted topics/projects, reflect on evidence, create internal work products and initiate useful conversations without waiting for a command. This runs through bounded scheduled/event-driven cycles, not an always-running model.
-3. **Self-programming and governed evolution:** discover capability gaps, reuse/adapt/create capabilities, test in isolation, record lineage/evidence, promote through governance and roll back regressions.
+## Priority 0 — Integration and development baseline
 
-These are cross-cutting product priorities implemented through the existing ten SPS layers and supporting runtime components. They do not change the canonical SPS layer count. See [Proactive Digital Companion Runtime](architecture/DIGITAL_PERSON_RUNTIME.md) for the target behaviour and acceptance criteria.
-
-## Phase 0 — Research and open-source reuse audit
-
-**Goal:** Decide what Mia should adopt, integrate, adapt, study or reject.
+**Goal:** Establish what is actually implemented on the active branch and remove integration friction before extending the product.
 
 Work:
-- Inspect current source, docs, license, dependency graph, release activity and tests of candidate repositories.
-- Compare Windows support, Python support, hardware footprint, offline operation and deployment complexity.
-- Map candidate capabilities to the ten SPS layers without changing the layer model.
-- Record code, package, container, model-weight, voice and data licenses separately.
-- Identify paid/hosted service dependencies and provider terms-of-service constraints.
+- Read AGENTS.md, this roadmap and docs/STATUS.md at the start of every coding session.
+- Inspect main, the current working branch, open pull requests and their actual diffs. Review the previously referenced PR #3 if it exists; do not assume its state or contents.
+- Resolve application-level defects and merge/integration conflicts in existing Brain, chat, voice, memory, gateway, life and permission work.
+- Reconcile stale documentation with the source and tests; never mark a capability implemented based only on a roadmap or README.
+- Keep Mia's gateway independent: remove FreeLLMAPI/OmniRoute runtime dependencies, sidecars and required control planes. Preserve them only as research references where appropriate.
+- Establish targeted local verification and record commands/results. Do not spend development time repeatedly diagnosing GitHub runner-allocation or CI infrastructure failures.
+- Build/refresh the initial Mia Code Graph and make incremental local updates part of the normal coding workflow.
 
 Exit criteria:
-- Every high-priority capability has a selected implementation strategy.
-- The integration matrix has source URLs, current license, version/ref, risks and test plan.
-- No unreviewed GPL/AGPL source is copied into Mia.
-- No free-tier quota is used in a way that circumvents provider limits or terms.
+- The active development baseline and unresolved application defects are documented from source-level inspection.
+- Existing implemented conversation, Brain, voice, memory and gateway pieces have a coherent integration path.
+- No required FreeLLMAPI or OmniRoute runtime service remains.
+- Code Graph can index the real repository, show source-backed relationships and record the indexed commit.
+- Local checks are run where practical; CI infrastructure availability is recorded separately.
 
-## Phase 1 — Foundation and observability
+## Priority 1 — Conversation-first Mia (first product milestone)
 
-**Goal:** Establish a stable local application and evidence trail.
+**Goal:** The owner can talk naturally with Mia, discuss open-ended and personal topics, ask Mia about itself, continue previous discussions and receive thoughtful, context-aware answers in text and voice. This is the first milestone to complete. Do not prioritize computer-control expansion until this phase is complete.
+
+### Work
+
+**Identity and self-understanding**
+- Maintain one canonical Mia identity, purpose, personality, operating instructions and truthful capability inventory independent of the selected model.
+- Let Mia answer questions about who it is, how it works, its ten-layer SPS architecture, enabled tools, current state, limits and unavailable features using live, maintained application evidence.
+- Separate known facts, inferred facts, unknowns and unavailable runtime information. Never invent memories, tools, actions, emotions or system status.
+- Make personality and response style configurable without allowing personality settings to override security or factuality.
+
+**Natural conversation and reasoning**
+- Unify text, streaming, voice and future modalities through the same model-independent AI Brain and conversation pipeline.
+- Improve intent understanding, context management, reasoning, clarification, planning, answer verification, uncertainty handling, correction and recovery.
+- Preserve multi-turn context and conversation continuity across sessions, restarts, projects, providers and model changes.
+- Support English, Urdu and Roman Urdu in understanding and responses; use language-aware tests rather than relying on UI labels.
+- Add a conversation/task workspace that shows active intent, plan, progress, completion, pending work and truthful failure reasons without overwhelming normal conversation.
+- Use task-aware model selection, escalation and fallback through the Mia-owned gateway.
+- Add configurable parallel execution of multiple judge/evaluator models for suitable tasks. Bound concurrency, latency, data sharing and spend; simple conversations should not trigger an unnecessary expensive ensemble.
+
+**Persistent conversation memory**
+- Extend existing persistence and FTS5 retrieval with semantic and relationship-aware retrieval when it is resource- and license-appropriate.
+- Add owner-controlled automatic memory extraction, confidence/provenance, correction, conflict handling, consolidation and retention.
+- Preserve important context, decisions, project state, preferences, goals and episodic history across model/provider switches.
+- Keep retrieved memories source-labelled and distinguish owner-confirmed facts from model inferences and untrusted document content.
+- Provide transparent memory inspection, correction, export and deletion controls.
+
+**Natural voice and hands-free conversation**
+- Complete streaming speech input/output, natural turn-taking, interruption/barge-in, mute, stop, audio-device selection, transcript handling and voice settings.
+- Support Urdu/English speech recognition and spoken output with measurable quality and clear fallback behaviour.
+- Include an always-on wake-word mode with visible listening state, immediate mute/stop, configurable activation phrase where supported, false-activation controls, resource limits and clear privacy disclosure.
+- Keep push-to-talk/manual start available as a fallback. No concealed recording or silent microphone operation.
+- Preserve the same memory, identity, reasoning and tool-result verification across voice and text.
+
+**AI gateway required by conversation**
+- Follow architecture/AI_GATEWAY_DIRECTION.md (relative to docs/): Mia owns its provider/model registry, direct adapters, generic OpenAI-compatible adapter, local Ollama adapter, task-aware routing, escalation, fallback, circuit breakers, health, budgets, credential security, usage ledger, evaluation and observability.
+- FreeLLMAPI and OmniRoute must not be runtime dependencies, sidecars or required control planes.
+- Cloud-hosted open-weight models may be used through providers without downloading model weights onto the owner's PC or Mia's server.
+- Local-only operation must remain possible without cloud credentials. Unknown pricing is not zero; paid inference remains off until explicitly enabled with tested limits.
+
+### Exit criteria
+
+- A repeatable conversation evaluation suite covers Mia identity/self-description, real capability inventory, memory recall, follow-up continuity, cross-session/provider continuity, open-ended reasoning, ambiguity, uncertainty, corrections, English/Urdu/Roman Urdu, voice turn-taking, interruption and recovery.
+- Mia gives accurate, evidence-grounded answers about itself and does not claim features that are not implemented or enabled.
+- Relevant memory can be retrieved across conversations and is traceable to source/provenance; owner corrections and retention controls work.
+- Text and voice share the same Brain, identity, context and verification path.
+- Natural voice, wake-word controls and failure states have automated coverage where possible. Physical microphone/speaker/target-device checks are explicitly labelled OWNER_VERIFICATION_REQUIRED.
+- Parallel judges and model escalation obey privacy, resource and budget policy and are testable with deterministic provider fakes.
+- The owner can sustain a meaningful multi-turn discussion, change topics, refer back to previous context and ask Mia about itself without restarting or re-explaining the conversation.
+
+## Priority 2 — Immersive 3D holographic interaction
+
+**Goal:** Make the completed conversational companion feel like a polished, responsive Jarvis-style assistant.
 
 Work:
-- Python package, configuration, logging and local service entry point.
-- Immutable definitions for the ten SPS layers.
-- SQLite store for experiment metadata, events, metric samples, capability versions and snapshots.
-- Local-only observatory API and dashboard.
-- Tests, CI, schema versioning and export/import of experiment records.
+- Build the full 3D holographic interface as a real interaction surface, not a static visual mockup.
+- Visualize listening, thinking, speaking, interruption, tool activity, memory references and task progress with clear state semantics.
+- Add responsive layout, accessible controls, reduced-motion support, performance fallbacks and a practical non-3D mode.
+- Integrate voice activation and conversation controls without hiding microphone/privacy state.
+- Support multimodal input/output where useful and supported by the active providers.
 
 Exit criteria:
-- Clean install works on Windows with Python 3.13.
-- Tests pass on a clean environment.
-- Dashboard displays actual records and shows an honest empty state when no data exists.
-- Every event includes timestamp, experiment/day context, event type, outcome and structured payload.
-- The experiment baseline can be exported and cryptographically hashed.
+- The UI reflects actual runtime state and never fabricates activity.
+- Core conversation remains usable when 3D rendering is unavailable or disabled.
+- Performance and accessibility have repeatable checks; resource-heavy effects can be reduced or switched off.
 
-## Phase 2 — Universal AI gateway
+## Priority 3 — Personal digital life and everyday assistance
 
-**Goal:** One independently owned, policy-controlled Mia gateway for all model providers. FreeLLMAPI and OmniRoute are not runtime dependencies or required sidecars. Follow [Independent AI Gateway direction](architecture/AI_GATEWAY_DIRECTION.md).
+**Goal:** Extend Mia from a conversational companion into a useful, proactive personal assistant without prematurely granting broad computer control.
 
 Work:
-- Define provider and model contracts.
-- Add local Ollama adapter first.
-- Build Mia-owned provider/model registry, direct provider adapters and a generic OpenAI-compatible adapter. Study gateway projects only for isolated patterns; do not depend on FreeLLMAPI or OmniRoute.
-- Add model discovery, capability metadata, context limits, sourced pricing/quota metadata, health checks, latency and reliability statistics.
-- Implement task-aware routing, escalation, load balancing, fallback, circuit breakers and provider-aware retry policy.
-- Add secure credential references, data-egress policy, request/daily/monthly budgets, append-only usage tracking, observability and benchmark-based route evaluation.
-
-Routing principles:
-1. Local models first when quality and latency are acceptable.
-2. Eligible free tier next, subject to the upstream provider's terms and current quota.
-3. Paid models only when explicitly enabled and within both per-request and monthly budgets.
-4. Never retry a request in a way that bypasses upstream restrictions.
-5. Never treat a catalog's listed free status as a guarantee of current availability.
+- **Personal Daily Briefing:** owner-approved summaries of priorities, reminders, calendar/task context and relevant updates.
+- **Unified Task Manager:** capture, organize, prioritize, track and follow up on personal and project tasks.
+- **Project Workspace:** project-specific context, goals, decisions, documents, milestones and progress.
+- **File Intelligence:** securely index and search owner-selected files, explain and summarize documents, and cite source locations.
+- **Browser Research Assistant:** conduct scoped research, compare sources, cite evidence and save owner-reviewed findings.
+- **Workflow Automation:** compose bounded multi-step workflows with previews, permissions, checkpoints and logs.
+- **Notification Center:** quiet, configurable, deduplicated and owner-controlled reminders and proactive messages.
+- **Personal Knowledge Graph:** connect people, projects, topics, decisions, tasks and source evidence.
+- **Backup and Restore:** encrypted/configurable backup, integrity checking, restore preview and recovery tests.
+- **Usage and Resource Dashboard:** show model/provider usage, spend, latency, CPU/RAM, storage and background workload from real measurements.
+- **Multi-device Access:** synchronize approved state and conversation continuity across devices with conflict handling.
+- **Secure Remote Mia Access:** authenticated, encrypted remote access with least-privilege scopes; no public unauthenticated service.
+- Add goal tracking, unfinished-task detection, useful follow-up suggestions, weekly progress and evidence-backed reflection.
+- Keep proactive work bounded by quiet hours, relevance, novelty, frequency caps, opt-out, privacy, resource budgets and emergency stop.
 
 Exit criteria:
-- Local inference works without cloud keys.
-- Multiple provider adapters pass contract tests.
-- Paid access is denied by default.
-- Fallback works for transient errors without leaking credentials or duplicating unsafe tool actions.
-- Cost and routing decisions are recorded in the observatory.
+- Each feature has an explicit data source, permission scope, retention policy and user-visible control.
+- Proactive messages explain why they were generated and avoid duplicate or stale interruptions.
+- Backups can be restored and verified; remote/multi-device access is authenticated and scoped.
+- Background work pauses safely under resource pressure and never invents activity during offline periods.
 
-## Phase 3 — Voice interface
+## Priority 4 — Secure computer intelligence and control
 
-**Goal:** Natural, low-cost voice interaction with a selectable feminine voice.
+**Goal:** After the conversation-first milestone and personal-assistant foundations, allow Mia to operate the owner's computer through controlled, observable and recoverable actions.
 
 Work:
-- Wake-word detection and push-to-talk fallback.
-- Streaming microphone capture and voice activity detection.
-- Speech-to-text adapter; benchmark Faster-Whisper and whisper.cpp on the target CPU.
-- TTS adapter; evaluate voice quality, English/Urdu pronunciation, latency, offline operation and model-weight license.
-- Interruptions, barge-in, mute, audio-device selection and transcripts.
-- Keep voice optional; all features remain usable through text.
+- Browser automation, desktop UI interaction, application launch and process inspection.
+- Scoped filesystem search/read/write/move, versioned edits and document operations.
+- A central permission broker enforced at every execution boundary, including Brain, Voice, browser, desktop, filesystem, plugins and background tasks.
+- A Windows-capable runtime and verified sandbox with filesystem, process, network and resource restrictions.
+- Action plans, dry-run/previews, explicit approval for destructive or externally visible actions, audit history, cancellation and recovery.
+- Task recording/replay and undo for reversible actions.
+- Voice control of computer tasks using the same Brain and permissions as text.
+- Keep owner-approved scopes narrow and revocable. Never turn conversation into blanket computer permission.
 
 Exit criteria:
-- Voice works offline with a documented model and license.
-- Wake-word false activations and missed activations are measured.
-- The selected voice has an explicitly verified redistributable license if distributed.
-- The application can stop listening immediately and visibly indicate microphone state.
+- Every tool declares schema, permissions, side effects, time/resource bounds and recovery behaviour.
+- Permission checks occur at execution time, not only in the UI or planner.
+- Generated code and untrusted browser/document content cannot access secrets or escape the sandbox.
+- Sensitive/destructive actions require explicit owner approval by default.
+- Actions are auditable, cancellable and recoverable where technically possible; target Windows verification is separately identified as owner verification.
 
-## Phase 4 — Computer intelligence
+## Priority 5 — Self-programming, custom models and governed evolution
 
-**Goal:** Operate the user's Windows computer through narrow, inspectable tools.
+**Goal:** Let Mia discover and improve capabilities, and research the long-term possibility of building a custom foundation model.
 
 Work:
-- Browser automation through Playwright.
-- Desktop UI automation through a Windows adapter.
-- Filesystem search, read, write, move and versioned edit operations.
-- Document creation and analysis.
-- Application launch and process inspection.
-- Action plans, previews, permission scopes, audit logs and cancellation.
+- Detect capability gaps from real conversations, failures, evaluation results and owner goals.
+- Reuse, adapt, compose or create tools/capabilities with documented provenance and license review.
+- Generate candidate implementations in isolated workspaces; run static checks, unit, integration, security and regression tests.
+- Maintain immutable versions, diffs, lineage, capability contracts, permission declarations and evidence.
+- Provide a secure plugin host and permission-scoped activation, owner approval for privileged capabilities, monitoring, rollback and retirement.
+- Include **automatic self-modification** as a research objective: automate gap discovery, candidate generation, validation and reversible changes inside isolated/versioned environments. Unrestricted live modification of the privileged production runtime, security policy, secrets or approval boundaries is not an acceptable deployment mode; such boundaries must not be bypassed.
+- Research **building or fine-tuning a custom foundation model**: define use cases, data rights, compute, evaluation, cost and deployment feasibility. Start with open-weight/cloud-hosted models and smaller task-specific adaptation where appropriate; do not make expensive pretraining a prerequisite for Mia's usefulness.
+- Allow Mia to explain proposed changes, evidence, expected effects, risks and rollback plan before activation.
 
 Exit criteria:
-- Every tool declares input/output schema, permissions, side effects and timeout.
-- Destructive or externally visible actions require approval by default.
-- Browser and generated-code execution are isolated from credentials and unrelated files.
-- All actions are traceable and recoverable where possible.
+- Generated code never executes in the privileged host process.
+- Failed validation prevents activation; every change has immutable lineage and reproducible evidence.
+- Permission-scoped activation and rollback work without weakening the security boundary.
+- Model research has a benchmark, data/license assessment, compute/cost estimate and a go/no-go decision rather than an unsupported claim that a foundation model has been trained.
+- No-op, deferred, rejected and rolled-back changes are recorded as legitimate outcomes.
 
-## Phase 5 — Memory and knowledge
+## Priority 6 — Evolution Observatory and 30-day experiment
 
-**Goal:** Give Mia persistent, source-aware memory and a searchable knowledge library.
+**Goal:** Measure real improvements rather than code volume or simulated activity.
 
 Work:
-- SQLite as the zero-service baseline.
-- Conversations, facts, tasks, preferences, goals, decisions and episodic experiences stored separately.
-- Stable identity and contextual continuity across sessions, restarts and model/provider changes.
-- Memory consolidation that summarizes older conversations while preserving key details, corrections, decision history and source links.
-- Contextual retrieval that combines recent turns with relevant semantic, episodic, entity, project and decision memory; retrieval must include provenance and trust labels.
-- Document ingestion for PDF, Markdown, code and office formats through replaceable parsers.
-- Full-text retrieval first; optional embeddings only when resource and license checks pass.
-- Source citations, conflict handling, deletion, retention, export and user-controlled memory policies.
+- Maintain an immutable Day 0 baseline and daily snapshots from actual owner-machine/runtime evidence.
+- Attribute quality and capability changes to commits, model/provider versions, configuration and capability activations.
+- Benchmark conversational quality, memory recall, reasoning, voice latency/quality, tool reliability, safety, resource usage and cost.
+- Provide before/after comparisons, trends, failure analysis and evidence-linked reports.
+- Preserve offline, paused, failed, no-op and rolled-back days honestly.
+- Implement the infrastructure for a 30-day experiment; starting, running and reviewing the real experiment is owner activity.
 
 Exit criteria:
-- Every imported item records source, timestamp, parser/version and provenance.
-- Retrieved claims can be traced to source passages.
-- Memory does not silently elevate untrusted document instructions into system policy.
+- Baseline and final benchmarks use consistent definitions and environment notes.
+- Every claimed improvement links to raw evidence and exact software/model/configuration versions.
+- No growth metric is fabricated or inferred from code-line counts alone.
+- The 30-day report distinguishes implementation progress from measured quality, reliability and autonomy.
 
-## Phase 6 — Autonomous digital life and agent runtime
+## Cross-cutting requirements
 
-**Goal:** Give Mia a persistent life between conversations: independently pursue bounded, useful work, reflect on evidence, and initiate relevant conversations while safely executing approved tasks.
+### Mia Code Graph
 
-This phase is not just a task queue or a voice wake-word feature. Its target architecture is specified in [Proactive Digital Companion Runtime](architecture/DIGITAL_PERSON_RUNTIME.md).
+The Code Graph is mandatory and begins in Priority 0; it remains incrementally updated in every phase. It must represent actual source evidence for packages, files, classes, functions, imports, calls, APIs, database models, tests, SPS layers, gateway, Brain, Memory, Voice, Computer, permissions, scheduler, workflows and self-programming.
 
-Work:
-- Task state machine: proposed, approved, running, waiting, completed, failed, cancelled.
-- Planner, tool dispatcher, task queue, scheduler and retry policy.
-- Task Desk UI for proposal generation/review, plus explicit manual execution of one registered read-only tool or a bounded 2-5 step read-only sequence after owner approval and CPU/RAM checks; model-generated task descriptions are never interpreted as commands.
-- Workload sources: self-assessment, internal tests, benchmarks, research discoveries, authorized environment signals, curiosity backlog, unresolved conversations and experience analysis.
-- Autonomous life cycle: observe, orient, explore, reason, create, verify, remember, reflect, then communicate or sleep.
-- Durable curiosity/interest/follow-up backlog with rationale, evidence quality, novelty, expected value, cost and state; no random work to simulate activity.
-- Proactive social/conversation engine that initiates useful, contextual discussions, remembers their outcomes and avoids stale/duplicate interruptions.
-- Configurable quiet hours, notification caps, per-topic cooldowns, deduplication, pause/resume, emergency stop and per-tool/source scopes.
-- Resource-aware scheduling and sleep/idle policies; bounded wake-up cycles rather than continuous model inference.
-- Resume, cancellation, timeout, rate limit, idempotency, durable lease/heartbeat, checkpoint and recovery.
-- A user-visible activity ledger that records triggers, goals, sources, model/provider use, actions, decisions, resource costs and outcomes.
-- Internal/read-only research and analysis are the default autonomous scope. Sensitive writes, generated-code execution, external communication and irreversible actions remain separately permission- and approval-gated.
+Use typed relationships including IMPORTS, CALLS, DEPENDS_ON, IMPLEMENTS, EXTENDS, USES, EXPOSES_API, READS_FROM, WRITES_TO, TESTED_BY, PROTECTED_BY, BELONGS_TO_LAYER, ROUTES_TO, ACTIVATES and TRIGGERS. Mark confirmed/inferred/documented edges separately; never invent links. Provide search, filters, node details, dependency/execution paths, impact analysis, circular/orphan detection, test/permission mapping, architecture-drift indicators and graph history. Full and incremental indexing must work in the local Git/development workflow without relying on CI. Graph generation is deterministic, testable, secret-safe and read-only with respect to source files. Maintain schema, data and changelog under docs/code-graph/ or the established equivalent.
 
-Exit criteria:
-- Tasks left running by a process restart are atomically marked failed with an append-only recovery event; no task is silently replayed, and retry requires owner re-approval.
-- Durable leases/heartbeats and expired-lease recovery prevent one live worker from being mistaken for abandoned work; process-restart continuation still requires safe checkpoints and action-specific idempotency.
-- The system can explain why each task or curiosity item was selected and what evidence changed its state.
-- Read-only execution validates every step, stops on first failure, shares one overall timeout and records an append-only lifecycle trace.
-- Autonomous exploration can complete a permitted investigation without a user prompt, persist its sources/findings and decide whether a proactive message is justified.
-- Proactive messaging enforces quiet hours, rate/frequency limits, deduplication, pause/resume and emergency stop in runtime tests.
-- Background workload pauses under resource pressure; offline periods are recorded honestly and never filled with fabricated activity.
-- The autonomy switch, per-scope permissions and emergency stop are reliable.
-- Sensitive or externally visible actions require the configured approval path; cancelling or pausing prevents new steps from starting.
+### Ten-layer SPS architecture
 
-## Phase 7 — Self-programming and capability evolution
+All phases use the existing ten canonical SPS layers in architecture/SPS_LAYERS.md. The gateway, holographic interface, Code Graph, task runtime and integrations are supporting services/features, not new SPS layers.
 
-**Goal:** Let Mia discover justified gaps and evolve capabilities without corrupting its trusted runtime.
+### Development and verification policy
 
-Lifecycle:
-1. Detect a capability gap and record evidence.
-2. Decide reuse, adapt, improve, compose, create, defer or reject.
-3. Produce a capability contract and implementation plan.
-4. Generate code in an isolated workspace.
-5. Run static checks, unit tests, security checks and regression benchmarks.
-6. Review permissions and provenance.
-7. Persist an immutable version, diff, parent lineage and validation evidence.
-8. Register and activate through a controlled plugin boundary.
-9. Monitor; rollback or retire on regression.
-10. Record the outcome as experience.
+- Development is mandatory; CI is optional. Do not let GitHub Actions runner allocation, workflow failures or CI configuration block feature development.
+- Run local tests, formatters, type/static checks and focused integration checks when practical. Record what ran and what did not. Never claim a pass without evidence and never weaken tests to manufacture a pass.
+- Do not repeatedly spend development time on CI infrastructure. Record CI status separately.
+- Physical microphone/speaker checks, real Windows desktop tests, live cloud credentials/providers, Oracle deployment, owner acceptance and the actual 30-day experiment are OWNER_VERIFICATION_REQUIRED; implement their supporting software and automated tests without making those owner actions development blockers.
+- Update docs/STATUS.md with implementation truth, exact evidence and the next highest-priority unfinished item after meaningful work.
+- Keep security, source/license review, privacy, resource budgets and rollback requirements active in every phase.
 
-Exit criteria:
-- Generated code never runs in the privileged host process.
-- Capability versions and lineage are reproducible.
-- Failed validation prevents activation.
-- Activation can be rolled back without restarting the entire assistant where the plugin boundary allows it.
-- No-op is a valid evolution decision; no change is forced merely to create activity.
+## How AI coding agents must choose work
 
-## Phase 8 — Thirty-day autonomous experiment
+At each session start, read AGENTS.md, docs/ROADMAP.md and docs/STATUS.md, inspect the live repository/branch/PR state, and select the first unfinished development acceptance criterion from the highest-priority incomplete phase. Work it through code, tests and documentation; then continue with the next unfinished criterion in that same phase without asking the owner to say "continue". Do not jump to computer control, 3D polish, custom model training or self-modification while the conversation-first milestone remains incomplete, except when the work is a direct prerequisite or fixes a blocking security/integration defect.
 
-**Goal:** Evaluate whether Mia improves from Day 0 to Day 30 under reproducible conditions.
+The actual owner-run voice/device acceptance and final approval do not prevent the AI from continuing to the next development task once all code-side acceptance work for the phase is complete. Label those owner checks explicitly and do not claim they were completed.
 
-Prerequisites:
-- Phases 1–7 have the required stable capabilities.
-- Immutable source/configuration/model baseline is captured.
-- Benchmark suite, environment and task distribution are fixed.
-- Consent, computer-access scope, spend ceiling and emergency stop are configured.
-- Experiment database and snapshots are backed up.
-
-Experiment:
-- Day 0: baseline snapshot and benchmark run.
-- Days 1–5: capability-gap discovery and low-risk improvements.
-- Days 6–10: capability development and adapter integration.
-- Days 11–15: adaptation and experience-based policy updates.
-- Days 16–20: capability composition and reusable workflows.
-- Days 21–25: reliability, efficiency and regression optimization.
-- Days 26–30: final fixed benchmarks, independent task evaluation and report.
-
-No stage forces new code. Preserve no-op, rejected, failed and rolled-back decisions as first-class results.
-
-Exit criteria:
-- All 30 daily records or explicit offline/paused days are accounted for.
-- Day 0 and final results use the same benchmark definitions and environment notes.
-- Every claimed improvement is reproducible and linked to raw evidence.
-- Final report distinguishes capability growth from measured quality improvement.
