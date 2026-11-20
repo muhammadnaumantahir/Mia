@@ -2,7 +2,7 @@ import json
 import sqlite3
 from datetime import UTC, datetime, timedelta
 
-from test_experiment_scheduler import FakeResources, create_due_experiment, passing_manifest
+from tests.test_experiment_scheduler import FakeResources, create_due_experiment, passing_manifest
 
 from mia.agent.tasks import TaskStore
 from mia.evolution.capabilities import CapabilityStore
