@@ -92,19 +92,18 @@ def _python_files(root: Path) -> list[Path]:
     return sorted(found, key=lambda p: p.relative_to(root).as_posix())
 
 
-def source_snapshot(root: str | Path) -> tuple[tuple[str, int, int], ...]:
-    """Cheap filesystem snapshot used by the watcher to detect source changes."""
+def source_snapshot(root: str | Path) -> tuple[tuple[str, str], ...]:
+    """Content-based snapshot used by the watcher to detect every source change."""
     root = Path(root).resolve()
     snapshot = []
     for path in _python_files(root):
         try:
-            stat = path.stat()
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
         except OSError:
             continue
-        snapshot.append((path.relative_to(root).as_posix(), stat.st_mtime_ns, stat.st_size))
-    # A commit can change without file metadata changing (for example, a docs-only
-    # commit containing already-written files); include HEAD in the watcher key.
-    snapshot.append((f"__git_head__:{_git(root, 'rev-parse', 'HEAD')}", 0, 0))
+        snapshot.append((path.relative_to(root).as_posix(), digest))
+    # A commit can change without file contents changing; include HEAD in the key.
+    snapshot.append((f"__git_head__:{_git(root, 'rev-parse', 'HEAD')}", ""))
     return tuple(snapshot)
 
 
