@@ -30,7 +30,7 @@ def changed_paths_since(root: str | Path, base_ref: str) -> list[str]:
     if verified.returncode != 0:
         raise ValueError("base Git reference was not found")
     diff = subprocess.run(
-        ["git", "diff", "--name-only", "--diff-filter=ACMR", f"{ref}...HEAD", "--"],
+        ["git", "diff", "--name-only", "--diff-filter=ACMRD", f"{ref}...HEAD", "--"],
         cwd=root,
         capture_output=True,
         text=True,
