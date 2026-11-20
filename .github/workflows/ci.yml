@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, development/complete-product-gaps, 'integration/**']
   pull_request:
-    branches: [main, development/complete-product-gaps]
+    branches: [main, development/complete-product-gaps, 'integration/**', 'feature/**']
 
 permissions:
   contents: read
