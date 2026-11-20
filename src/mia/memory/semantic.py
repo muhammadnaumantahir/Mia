@@ -10,8 +10,8 @@ import hashlib
 import math
 import os
 from collections.abc import Callable, Sequence
-from urllib.parse import urlsplit
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -76,7 +76,7 @@ class LocalOllamaEmbeddingReranker:
         self.cache = cache
 
     @classmethod
-    def from_env(cls, *, cache: Any | None = None) -> "LocalOllamaEmbeddingReranker | None":
+    def from_env(cls, *, cache: Any | None = None) -> LocalOllamaEmbeddingReranker | None:
         if os.getenv("MIA_MEMORY_SEMANTIC_RERANK_ENABLED", "false").strip().lower() != "true":
             return None
         model = os.getenv("MIA_MEMORY_EMBEDDING_MODEL", "").strip()
