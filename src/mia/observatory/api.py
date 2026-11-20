@@ -4388,8 +4388,11 @@ def create_app(
         paid_available = (
             paid_requested
             and request_budget["valid"]
+            and request_budget["limit_usd"] > 0
             and daily_budget["valid"]
+            and daily_budget["limit_usd"] > ledger.spend_today_utc()
             and monthly_budget["valid"]
+            and monthly_budget["limit_usd"] > ledger.spend_month_utc()
         )
         return {
             "usage": ledger.summary(30),
