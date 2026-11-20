@@ -6,6 +6,7 @@ If the local service is unavailable, callers fall back to lexical retrieval.
 """
 from __future__ import annotations
 
+import hashlib
 import math
 import os
 from collections.abc import Callable, Sequence
@@ -57,6 +58,7 @@ class LocalOllamaEmbeddingReranker:
         base_url: str = "http://127.0.0.1:11434",
         timeout_seconds: float = 8.0,
         embedder: Embedder | None = None,
+        cache: Any | None = None,
     ) -> None:
         model = model.strip()
         if not model or len(model) > 120 or any(ch in model for ch in "\r\n\0"):
@@ -71,9 +73,10 @@ class LocalOllamaEmbeddingReranker:
         self.base_url = clean_url
         self.timeout_seconds = timeout_seconds
         self._embedder = embedder
+        self.cache = cache
 
     @classmethod
-    def from_env(cls) -> "LocalOllamaEmbeddingReranker | None":
+    def from_env(cls, *, cache: Any | None = None) -> "LocalOllamaEmbeddingReranker | None":
         if os.getenv("MIA_MEMORY_SEMANTIC_RERANK_ENABLED", "false").strip().lower() != "true":
             return None
         model = os.getenv("MIA_MEMORY_EMBEDDING_MODEL", "").strip()
@@ -83,6 +86,7 @@ class LocalOllamaEmbeddingReranker:
             return cls(
                 model=model,
                 base_url=os.getenv("MIA_OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
+                cache=cache,
             )
         except ValueError:
             # A non-loopback or malformed endpoint disables semantic reranking;
@@ -123,11 +127,33 @@ class LocalOllamaEmbeddingReranker:
                     if (key := _record_key(record)) and _record_text(record).strip()]
         if not selected:
             return {}
-        vectors = self._embed([query[:6000], *(text for _, text in selected)])
-        query_vector = vectors[0]
+        query_vector = self._embed([query[:6000]])[0]
+        document_vectors: list[list[float] | None] = [None] * len(selected)
+        missing: list[tuple[int, str, str]] = []
+        for index, (key, text) in enumerate(selected):
+            digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            cached = None
+            if self.cache is not None:
+                try:
+                    cached = self.cache.get_embedding_cache(self.model, digest)
+                except Exception:
+                    cached = None
+            if cached is not None and len(cached) == len(query_vector):
+                document_vectors[index] = cached
+            else:
+                missing.append((index, digest, text))
+        if missing:
+            fresh = self._embed([text for _, _, text in missing])
+            for (index, digest, _), vector in zip(missing, fresh, strict=True):
+                document_vectors[index] = vector
+                if self.cache is not None:
+                    try:
+                        self.cache.set_embedding_cache(self.model, digest, vector)
+                    except Exception:
+                        pass
         similarities = [
-            (key, _cosine(query_vector, vector))
-            for (key, _), vector in zip(selected, vectors[1:], strict=True)
+            (key, _cosine(query_vector, vector or []))
+            for (key, _), vector in zip(selected, document_vectors, strict=True)
         ]
         # Only positively similar records receive a boost. The caller clamps the
         # result to its global ±0.3 reranking safety bound.
