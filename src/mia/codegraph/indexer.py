@@ -72,6 +72,10 @@ def _python_files(root: Path) -> list[Path]:
         dirs[:] = sorted(d for d in dirs if d not in EXCLUDED)
         for name in sorted(files):
             path = Path(base) / name
+            relative = path.relative_to(root).as_posix()
+            # Generated graph history must not become its own indexing input.
+            if relative in {"docs/code-graph/CHANGELOG.md", "docs/code-graph/graph.json"}:
+                continue
             if path.suffix.lower() in SOURCE_SUFFIXES and name != ".env":
                 found.append(path)
     return sorted(found, key=lambda p: p.relative_to(root).as_posix())
