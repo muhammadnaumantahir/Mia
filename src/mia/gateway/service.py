@@ -440,6 +440,11 @@ class ModelGateway:
                     latency_ms=latency_ms,
                     reservation_id=reservation_id,
                 )
+            except asyncio.CancelledError:
+                # The provider may already have processed billable input tokens.
+                # Keep the reservation until expiry instead of silently refunding it.
+                keep_reservation = reservation_id is not None
+                raise
             except AuthenticationProviderError as exc:
                 # Provider-specific: pause it and try another; never retried in a loop.
                 self.breaker.record_auth_failure(provider_id)
