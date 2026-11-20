@@ -120,7 +120,7 @@ _TYPE_HINTS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\b(?:decid\w*|decision|we\s+chose|going\s+with|agreed\s+(?:to|on)|faisla|tay\s+kiya)\b|فیصلہ|طے\s+کیا", re.I), "decision"),
     (re.compile(r"\b(?:lesson|learn(?:ed|t)|mistake|next\s+time|root\s+cause)\b", re.I), "lesson"),
     (re.compile(r"\b(?:goal|aim\s+to|plan\s+to|target|deadline|maqsad|hadaf)\b|مقصد|ہدف", re.I), "goal"),
-    (re.compile(r"\b(?:prefer\w*|favou?rite|always\s+use|i\s+(?:always|usually|generally|never)|pasand|pasandeed\\w*|tarjeeh|"
+    (re.compile(r"\b(?:prefer\w*|favou?rite|always\s+use|i\s+(?:always|usually|generally|never)|pasand|pasandeed\w*|tarjeeh|"
                 r"i\s+like\s+to)\b|پسند|ترجیح", re.I), "preference"),
     (re.compile(r"\b(?:project|milestone|requirement|feature|repo(?:sitory)?|working\s+on|building)\b", re.I), "project"),
     (re.compile(r"\b(?:happened|met\s+with|yesterday|last\s+(?:week|month)|we\s+(?:discussed|talked))\b", re.I), "episode"),
