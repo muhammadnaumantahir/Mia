@@ -366,8 +366,6 @@ def test_web_explorer_follows_only_bounded_same_host_links(tmp_path):
     root_url = "https://docs.example-lab.org/falcon"
     one_url = "https://docs.example-lab.org/guides/one"
     two_url = "https://docs.example-lab.org/guides/two"
-    third_url = "https://docs.example-lab.org/guides/three"
-    external_url = "https://outside.example.net/ignore"
 
     root = page(
         url=root_url,
@@ -419,7 +417,6 @@ def test_web_explorer_follows_only_bounded_same_host_links(tmp_path):
 
 def test_web_explorer_does_not_follow_cross_host_even_when_allowlisted(tmp_path):
     root_url = "https://docs.example-lab.org/falcon"
-    external_url = "https://archive.example-lab.org/history"
     root = page(url=root_url, body=(
         "<p>The Falcon scheduler guide discusses durable background jobs.</p>"
         '<a href="https://archive.example-lab.org/history">Archive</a>'
