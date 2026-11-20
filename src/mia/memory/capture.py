@@ -106,7 +106,7 @@ _AUTO_PATTERNS: tuple[tuple[re.Pattern[str], str, float, str | None], ...] = (
     # Roman Urdu and Urdu-script statements are supported alongside English.
     (re.compile(r"\bmujhe\s+(?P<value>.+?)\s+pasand\s+(?:hai|hain|hy|he)\b", re.I),
      "preference", 0.7, None),
-    (re.compile(r"\b(?:main|mein)\s+(?:hamesha|aksar|aam\s+tor\s+par)\s+(?P<value>.+?)\s+(?:karta|karti|karte)\s+(?:hoon|hun|hain)\b", re.I),
+    (re.compile(r"\b(?:main|mein)\s+(?:hamesha|aksar|aam\s+tor\s+par)\s+(?P<value>.+?)\s+(?:karta|karti|karte|rakhta|rakhti|rakhtay|leta|leti|lete|jata|jati|jate)\s+(?:hoon|hun|hain)\b", re.I),
      "preference", 0.7, None),
     (re.compile(r"\b(?:hum|ham)\s+(?:ne|ny)\s+(?P<value>.+?)\s+(?:ka\s+)?(?:faisla|decision)\s+(?:kiya|kar\s+liya)\b", re.I),
      "decision", 0.75, None),
@@ -118,7 +118,7 @@ _AUTO_PATTERNS: tuple[tuple[re.Pattern[str], str, float, str | None], ...] = (
      "fact", 0.8, "subject"),
     (re.compile(r"مجھے\s+(?P<value>.+?)\s+پسند\s+(?:ہے|ہیں)", re.I),
      "preference", 0.7, None),
-    (re.compile(r"میں\s+ہمیشہ\s+(?P<value>.+?)\s+(?:کرتا|کرتی|کرتے)\s+ہوں", re.I),
+    (re.compile(r"میں\s+ہمیشہ\s+(?P<value>.+?)\s+(?:کرتا|کرتی|کرتے|لیتا|لیتی|لیتے|رکھتا|رکھتی|رکھتے|جاتا|جاتی|جاتے)\s+ہوں", re.I),
      "preference", 0.7, None),
     (re.compile(r"ہم\s+نے\s+(?P<value>.+?)\s+(?:کا\s+)?فیصلہ\s+کیا", re.I),
      "decision", 0.75, None),
