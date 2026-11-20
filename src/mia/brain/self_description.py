@@ -9,7 +9,7 @@ import re
 from collections.abc import Iterable
 from typing import Any
 
-_SAFE_NAME = re.compile(r"^[a-z][a-z0-9_.:-]{0,79}$")
+_SAFE_NAME = re.compile(r"^[a-z][a-z0-9]*(?:[._:-][a-z][a-z0-9]*)*$")
 
 
 def _safe_names(values: Iterable[Any], *, limit: int = 30) -> list[str]:
