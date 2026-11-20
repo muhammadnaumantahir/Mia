@@ -77,6 +77,11 @@ def test_gateway_console_and_persistent_model_controls(tmp_path):
     assert refreshed.status_code == 200
     assert refreshed.json()["count"] == 1
 
+    connection = client.post("/api/gateway/providers/stub-local/test")
+    assert connection.status_code == 200
+    assert connection.json()["ok"] is True
+    assert connection.json()["model_count"] == 1
+
     overview = client.get("/api/gateway/overview")
     assert overview.status_code == 200
     model = overview.json()["models"][0]
