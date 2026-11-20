@@ -279,3 +279,16 @@ def test_identity_is_model_independent_and_honest_about_being_an_ai():
     assert "never claim to have researched" in lowered
     for model_name in ("llama", "qwen", "gpt", "gemini", "claude"):
         assert model_name not in lowered
+
+
+def test_recent_message_candidates_exclude_temporary_conversations(tmp_path):
+    store = make_store(tmp_path)
+    normal = store.ensure_conversation("conversation-normal")
+    store.append_message(normal, "user", "A normal persisted memory message")
+    temp = store.ensure_conversation("conversation-temp")
+    store.set_conversation_temporary(temp, True)
+    store.append_message(temp, "user", "A temporary message must not be indexed")
+    rows = store.recent_messages(limit=20)
+    contents = [row["content"] for row in rows]
+    assert "A normal persisted memory message" in contents
+    assert "A temporary message must not be indexed" not in contents
