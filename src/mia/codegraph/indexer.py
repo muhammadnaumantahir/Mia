@@ -14,7 +14,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-EXCLUDED = {".git", ".venv", "venv", "__pycache__", "node_modules", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".ssh", ".private", "private", "certs", "certificates", "dist", "build", "secrets", "credentials", "private_keys"}
+EXCLUDED = {".git", ".venv", "venv", "__pycache__", "node_modules", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".ssh", ".private", ".cache", "cache", "private", "certs", "certificates", "dist", "build", "secrets", "credentials", "private_keys", "data", "workspace", "backups", "exports", "logs", "tmp", "temp", "runtime", "uploads", "downloads", "recordings", "transcripts", "sessions", "artifacts"}
 SENSITIVE_FILES = {".env", ".env.local", ".env.production", "secrets.json", "credentials.json",
                    "service-account.json", "id_rsa", "id_ed25519", "authorized_keys"}
 SENSITIVE_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".keystore", ".jks"}
