@@ -1,9 +1,23 @@
 # Mia project status
 
-**Last updated:** 2026-11-19  
+**Last updated:** 2026-11-20  
 **Repository:** muhammadnaumantahir/Mia  
 **Default branch:** main  
 **Overall state:** Active implementation — not release-ready
+
+## Development continuation — 2026-11-20
+
+This update supersedes older phase descriptions below wherever they conflict with the current implementation. Latest development changes are being prepared on branch `development/complete-product-gaps`; this is not yet proof that the branch has merged or passed CI.
+
+**Gateway work in this branch**
+- The runtime provider factory now registers Ollama and generic direct OpenAI-compatible providers only. Provider IDs come from `MIA_EXTRA_PROVIDERS` with `MIA_PROVIDER_<ID>_*` settings. FreeLLMAPI/OmniRoute runtime toggles are intentionally ignored; neither is installed or required.
+- Daily and monthly UTC spend ceilings are now mandatory alongside the per-request ceiling before paid inference can be eligible. Missing, malformed, negative or non-finite ceilings fail closed. The ledger has a UTC calendar-month aggregate.
+- A local `/gateway` console now exposes provider health/connection testing, model discovery, usage and spend ceilings, recent routing decisions, and persistent model enablement, alias and preference controls. Stored model preferences feed candidate ordering.
+- Regression tests were added for direct-provider registration, daily/monthly caps, provider connection tests, model-control APIs and persisted routing preferences. They are not recorded as passing until a real test run completes.
+
+**Owner-testing exclusions**: manual user acceptance, physical microphone/speaker and Windows desktop checks, Oracle deployment checks, live external provider checks, and the actual 30-day experiment remain owner-only and are intentionally not counted as development deliverables.
+
+**Engineering gaps still open after this branch's changes**: atomic reservation of budgets for parallel in-flight paid requests; persistent provider health/circuit-breaker and route-decision history; quota-header ingestion; model benchmark/quality evaluation; semantic cache; full embedding/audio/video multimodal adapters; fully unified computer permission-policy wiring for every adapter and Brain/Voice; permission-scoped activation of generated capabilities; model-assisted reflection and multi-page research; wake word remains a deliberate optional/owner-tested enhancement. Paid inference should remain off until atomic budget reservation is implemented.
 
 ## Owner-confirmed core product priorities (2026-11-19)
 
