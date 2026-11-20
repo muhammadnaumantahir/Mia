@@ -1,4 +1,5 @@
 from mia.brain.self_description import build_runtime_manifest, render_runtime_manifest
+from mia.codegraph.indexer import LAYER_NAMES
 
 
 def test_runtime_manifest_uses_live_registries_and_reports_limits():
@@ -58,6 +59,7 @@ def test_runtime_manifest_explains_all_ten_sps_layers_without_claiming_completio
     assert layers[0]["name"] == "Software DNA Core"
     assert layers[-1]["id"] == "SPS-10"
     assert layers[-1]["name"] == "Execution Core"
+    assert {layer["id"]: layer["name"] for layer in layers} == LAYER_NAMES
 
     prompt = render_runtime_manifest(manifest)
     assert "CANONICAL SPS ARCHITECTURE" in prompt
