@@ -848,8 +848,8 @@ def create_app(
                 from mia.memory.capture import screen_sentence
 
                 sentences = [
-                    re.sub(r"\\s+", " ", item).strip()
-                    for item in re.split(r"(?<=[.!?])\\s+|\\n+", text or "")
+                    re.sub(r"\s+", " ", item).strip()
+                    for item in re.split(r"(?<=[.!?])\s+|\n+", text or "")
                 ]
                 eligible = [
                     sentence for sentence in sentences
