@@ -222,6 +222,6 @@ Runtime self-description is now injected into Brain context from live registries
 
 ## Cross-cutting Code Graph delivery gates
 
-Code Graph is part of Priority 0 integration and remains active throughout every later phase. The first foundation provides automatic full-graph refresh after source changes; it does not yet satisfy the later incremental-indexing or Git-diff impact-analysis criteria. Keep those explicit as unfinished work rather than describing the watcher as incremental indexing.
+Code Graph is part of Priority 0 integration and remains active throughout every later phase. The first foundation provides automatic full-graph refresh after source changes and a first conservative Git-diff impact-analysis API/explorer. It does not yet satisfy incremental file-level indexing or complete impact-analysis criteria (dynamic/runtime edges, reliable feature-to-test mapping and change-risk scoring). Keep those explicit as unfinished work rather than describing the watcher as incremental indexing.
 
 Before Priority 0 is accepted, verify the graph against the integrated core-runtime branch, ensure the graph routes and watcher coexist with the current Brain/gateway API, run the graph tests, and record the indexed commit and parser limitations. During subsequent development, refresh the graph after meaningful changes and use its impact information to select relevant tests.
