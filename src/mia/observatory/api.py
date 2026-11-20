@@ -4485,6 +4485,19 @@ def create_app(
             results.append({"provider_id": provider.provider_id, "status": state})
         return {"items": results}
 
+    @app.post("/api/gateway/models/refresh")
+    async def refresh_gateway_models() -> dict[str, Any]:
+        try:
+            discovered = await model_gateway.discover_models()
+        except TransientProviderError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return {"count": len(discovered), "items": [
+            {"provider_id": item.provider_id, "model_id": item.model_id}
+            for item in discovered
+        ]}
+
     @app.get("/api/gateway/models")
     async def models() -> dict[str, Any]:
         try:
