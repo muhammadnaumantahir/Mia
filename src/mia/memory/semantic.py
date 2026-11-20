@@ -79,10 +79,15 @@ class LocalOllamaEmbeddingReranker:
         model = os.getenv("MIA_MEMORY_EMBEDDING_MODEL", "").strip()
         if not model:
             return None
-        return cls(
-            model=model,
-            base_url=os.getenv("MIA_OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
-        )
+        try:
+            return cls(
+                model=model,
+                base_url=os.getenv("MIA_OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
+            )
+        except ValueError:
+            # A non-loopback or malformed endpoint disables semantic reranking;
+            # lexical retrieval remains available and no remote data is sent.
+            return None
 
     def _embed(self, texts: list[str]) -> list[list[float]]:
         if self._embedder is not None:
