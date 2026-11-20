@@ -2,7 +2,7 @@
 
 Mia Code Graph is a deterministic, local codebase index. It reads repository files and
 Python syntax trees; it never imports or executes indexed application modules. It writes
-only `docs/code-graph/graph.json` and the changelog artifact.
+only the generated graph snapshot and ignored runtime history at `data/code-graph/history.jsonl`.
 
 ## Run
 
@@ -45,7 +45,7 @@ Node IDs are stable hashes of their kind and logical key. The index is sorted
 deterministically. Writes use a temporary file and atomic replacement. If indexing fails,
 the previous graph is preserved and the API reports an error rather than returning a
 fabricated empty graph. Every graph includes the source digest, current Git commit,
-generation time, parse errors and known parser limitations.
+generation time, parse errors and known parser limitations. Generated graph JSON is ignored by Git; append-only history is stored under the ignored `data/` directory so the watcher never dirties tracked documentation.
 
 
 ## Change impact analysis
