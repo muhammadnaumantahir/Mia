@@ -373,6 +373,7 @@ class ModelGateway:
         attempted: list[str] = []
         last_error: Exception | None = None
         skipped: list[str] = []
+        budget_blocked: list[str] = []
         invalid: list[str] = []
 
         for candidate in ranked:
@@ -387,7 +388,7 @@ class ModelGateway:
                 candidate, request, policy
             )
             if not budget_allowed:
-                skipped.append(candidate_name)
+                budget_blocked.append(candidate_name)
                 self.events.add("budget_blocked", candidate_name,
                                 "paid request could not reserve the remaining spend allowance")
                 continue
@@ -466,6 +467,8 @@ class ModelGateway:
             )
         if last_error:
             raise _aggregate_failure(attempted, last_error) from last_error
+        if budget_blocked:
+            raise RuntimeError("Paid inference was blocked because its spend budget is reserved or exhausted")
         if skipped:
             raise TransientProviderError(
                 "All eligible providers are temporarily paused: " + ", ".join(skipped)
@@ -494,6 +497,7 @@ class ModelGateway:
         attempted: list[str] = []
         last_error: Exception | None = None
         skipped: list[str] = []
+        budget_blocked: list[str] = []
 
         for candidate in ranked:
             provider_id = candidate.provider_id
@@ -507,7 +511,7 @@ class ModelGateway:
                 candidate, request, policy
             )
             if not budget_allowed:
-                skipped.append(candidate_name)
+                budget_blocked.append(candidate_name)
                 self.events.add("budget_blocked", candidate_name,
                                 "paid stream could not reserve the remaining spend allowance")
                 continue
@@ -636,6 +640,8 @@ class ModelGateway:
 
         if last_error:
             raise _aggregate_failure(attempted, last_error) from last_error
+        if budget_blocked:
+            raise RuntimeError("Paid inference was blocked because its spend budget is reserved or exhausted")
         if skipped:
             raise TransientProviderError(
                 "All eligible providers are temporarily paused: " + ", ".join(skipped)
