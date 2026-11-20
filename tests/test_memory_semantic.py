@@ -132,5 +132,8 @@ def test_semantic_reranker_reuses_cached_document_embeddings(tmp_path):
     records = [{"record_id": "record-1", "title": "Billing", "body": "PostgreSQL"}]
     reranker("query one", records)
     assert len(calls) == 2  # query and uncached document
-    reranker("query two", records)
+    reopened_reranker = LocalOllamaEmbeddingReranker(
+        model="test-model", embedder=fake_embed, cache=MemoryStore(tmp_path / "memory.sqlite3")
+    )
+    reopened_reranker("query two", records)
     assert len(calls) == 3  # only the new query; document vector came from SQLite
