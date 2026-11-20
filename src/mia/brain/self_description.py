@@ -9,6 +9,8 @@ import re
 from collections.abc import Iterable
 from typing import Any
 
+from mia.sps.layers import SPS_LAYERS
+
 _SAFE_NAME = re.compile(r"^[a-z][a-z0-9]*(?:[._:-][a-z][a-z0-9]*)*$")
 
 
@@ -57,6 +59,32 @@ def build_runtime_manifest(
         "voice_routes": "registered" if voice_registered else "not registered",
         "code_graph": "registered" if code_graph_registered else "not registered",
         "wake_word": "registered" if wake_word_registered else "not registered",
+        "sps_framework": {
+            "name": "Self Programming Software (SPS)",
+            "layer_count": len(SPS_LAYERS),
+            "layers": [
+                {
+                    "id": layer.layer_id,
+                    "name": layer.name,
+                    "responsibility": layer.responsibility,
+                }
+                for layer in SPS_LAYERS
+            ],
+            "implementation_status": (
+                "The canonical ten-layer metadata contract is registered; "
+                "the full ten-layer implementation is partial and in progress."
+            ),
+            "runtime_components": [
+                "coordinator",
+                "API server",
+                "scheduler",
+                "user interface",
+                "provider gateway",
+                "computer adapters",
+                "memory stores",
+                "observatory",
+            ],
+        },
     }
 
 
@@ -77,5 +105,8 @@ def render_runtime_manifest(manifest: dict[str, Any]) -> str:
         f"- Voice API routes: {manifest.get('voice_routes', 'unknown')}",
         f"- Code Graph API: {manifest.get('code_graph', 'unknown')}",
         f"- Wake-word route/tool: {manifest.get('wake_word', 'unknown')}",
+        f"- Architecture: {sps.get('name', 'unknown')} with {sps.get('layer_count', 0)} canonical layers: {layer_summary}",
+        f"- SPS implementation status: {sps.get('implementation_status', 'unknown')}",
+        "- Runtime services (API, scheduler, UI, gateway, adapters, memory and observatory) support the SPS layers; they are not extra SPS layers.",
         "EVIDENCE LIMITS: Registration does not prove provider health, model availability, device access, permission approval, or owner verification. Check the live operation result before claiming an action succeeded. Never invent capabilities or expose credentials, tokens, environment values, private paths, or raw configuration.",
     ])
