@@ -6,7 +6,7 @@ import asyncio
 import math
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from .contracts import (
@@ -202,8 +202,21 @@ class ModelGateway:
         policy: RoutePolicy,
         order_hint: list[ModelCandidate] | tuple[ModelCandidate, ...] | None,
     ) -> list[ModelCandidate]:
+        preferences = self.preferences
+        if self.model_registry is not None:
+            # Persisted per-model owner preferences survive restart and provider refresh.
+            stored_preferences = {
+                record.key: record.preference
+                for record in self.model_registry.list(include_stale=False)
+                if record.preference != 0
+            }
+            if stored_preferences:
+                preferences = replace(
+                    preferences,
+                    preferences={**stored_preferences, **preferences.preferences},
+                )
         ordered, decision = select(
-            candidates, request, policy, self.preferences, hint=order_hint
+            candidates, request, policy, preferences, hint=order_hint
         )
         self.decisions.add(decision)
         return ordered
