@@ -595,6 +595,6 @@ def test_roman_urdu_forget_command_removes_matching_memory(tmp_path):
     forgotten = say(store, service, conv, "Bhool jao favorite editor Neovim.")
 
     assert forgotten["explicit"] is True
-    assert record_id in forgotten["forgotten"]
+    assert record_id in [item["record_id"] for item in forgotten["forgotten"]]
     assert store.structured.get(record_id) is None
 
