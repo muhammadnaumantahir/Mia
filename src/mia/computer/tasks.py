@@ -259,8 +259,6 @@ class TaskEngine:
         try:
             spec = self.capability_registry.get(capability)
         except KeyError:
-            if handler.idempotent:
-                return None
             return Decision(
                 allowed=False,
                 requires_approval=True,
