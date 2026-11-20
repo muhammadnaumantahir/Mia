@@ -18,7 +18,7 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
 <main>
 <header class="top">
   <div><div class="eyebrow">Mia · Runtime operations</div><h1>AI Gateway</h1><p class="sub">Provider health, model routing, inference usage and spend controls.</p></div>
-  <div class="actions"><a href="/assistant" style="color:var(--accent);text-decoration:none">← Assistant</a><button id="refresh">Refresh data</button></div>
+  <div class="actions"><a href="/assistant" style="color:var(--accent);text-decoration:none">← Assistant</a><button id="refresh-models">Discover models</button><button id="refresh">Refresh data</button></div>
 </header>
 <div id="error" class="error" role="alert"></div>
 <section class="grid" aria-label="Gateway metrics">
@@ -97,7 +97,13 @@ async function load(){
  catch(e){$('error').textContent=e.message}
  finally{$('refresh').disabled=false}
 }
-$('refresh').addEventListener('click',load);load();
+$('refresh').addEventListener('click',load);
+ $('refresh-models').addEventListener('click',async()=>{
+  const btn=$('refresh-models');btn.disabled=true;$('error').textContent='';
+  try{const response=await fetch('/api/gateway/models/refresh',{method:'POST'});if(!response.ok)throw new Error('Model discovery failed: HTTP '+response.status);const result=await response.json();await load();$('error').textContent='Discovered '+result.count+' model(s).'}
+  catch(e){$('error').textContent=e.message}finally{btn.disabled=false}
+ });
+ load();
 </script>
 </body>
 </html>
