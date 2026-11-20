@@ -42,6 +42,7 @@ def build_runtime_manifest(
     )]
     voice_registered = any("/api/voice" in path or "/api/tts" in path for path in routes)
     code_graph_registered = "/api/code-graph" in routes
+    browser_wake_phrase_available = "/assistant" in routes
     wake_word_registered = (
         any("wake" in path.lower() for path in routes)
         or any("wake" in name for name in tools)
@@ -59,6 +60,11 @@ def build_runtime_manifest(
         "voice_routes": "registered" if voice_registered else "not registered",
         "code_graph": "registered" if code_graph_registered else "not registered",
         "wake_word": "registered" if wake_word_registered else "not registered",
+        "browser_wake_phrase": (
+            "available (explicit opt-in; browser speech service)"
+            if browser_wake_phrase_available else "not registered"
+        ),
+        "offline_wake_word": "not registered",
         "sps_framework": {
             "name": "Self Programming Software (SPS)",
             "layer_count": len(SPS_LAYERS),
@@ -115,6 +121,8 @@ def render_runtime_manifest(manifest: dict[str, Any]) -> str:
         f"- Voice API routes: {manifest.get('voice_routes', 'unknown')}",
         f"- Code Graph API: {manifest.get('code_graph', 'unknown')}",
         f"- Wake-word route/tool: {manifest.get('wake_word', 'unknown')}",
+        f"- Browser wake phrase: {manifest.get('browser_wake_phrase', 'unknown')}",
+        f"- Offline wake-word detection: {manifest.get('offline_wake_word', 'unknown')}",
         f"- Architecture: {sps.get('name', 'unknown')} with {sps.get('layer_count', 0)} canonical layers: {layer_summary}",
         f"- SPS layer responsibilities: {layer_responsibilities}",
         f"- SPS implementation status: {sps.get('implementation_status', 'unknown')}",
