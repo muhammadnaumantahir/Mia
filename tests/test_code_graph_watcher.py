@@ -21,9 +21,11 @@ def test_watcher_rebuilds_graph_after_source_changes(tmp_path):
     second = output.read_text(encoding="utf-8")
     assert "second" in second
     assert first != second
-    history = (tmp_path / "docs" / "code-graph" / "CHANGELOG.md").read_text(encoding="utf-8")
-    assert "Source digest" in history
-    assert history.count("## ") >= 2
+    history_path = tmp_path / "data" / "code-graph" / "history.jsonl"
+    history = [json.loads(line) for line in history_path.read_text(encoding="utf-8").splitlines()]
+    assert len(history) >= 2
+    assert all(item["source_digest"] for item in history)
+    assert not (tmp_path / "docs" / "code-graph" / "CHANGELOG.md").exists()
 
 
 def test_watcher_rejects_unsafe_polling_intervals(tmp_path):
