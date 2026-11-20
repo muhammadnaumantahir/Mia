@@ -59,6 +59,14 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 .memory-sources{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px;padding-top:8px;border-top:1px solid #29443a}
 .memory-sources-label{width:100%;font-size:9px;color:#8eaa9b;text-transform:uppercase;letter-spacing:.7px}
 .memory-source{border:1px solid #315844;background:#132a20;color:#bce7ce;border-radius:999px;padding:4px 7px;font-size:9px;line-height:1.35;max-width:100%;overflow-wrap:anywhere}
+.life-inbox-toggle{border:1px solid #35594a;background:#172923;color:#c6ead8;border-radius:999px;padding:7px 11px;font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px}
+.life-inbox-count{min-width:19px;height:19px;border-radius:99px;background:#47daa1;color:#06291e;display:inline-grid;place-items:center;padding:0 5px;font-size:10px;font-weight:850}
+.life-inbox-panel{width:min(900px,calc(100% - 56px));margin:0 auto 14px;border:1px solid #315444;border-radius:15px;background:#10201c;padding:13px 15px;box-shadow:0 12px 30px #0002}
+.life-inbox-panel[hidden]{display:none!important}.life-inbox-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.life-inbox-head strong{font-size:13px;color:#d8eee3}.life-inbox-head small{display:block;font-size:10px;color:#86a296;margin-top:3px}.life-inbox-list{display:grid;gap:8px;margin-top:10px;max-height:290px;overflow:auto}
+.life-inbox-item{border:1px solid #29483c;border-radius:10px;background:#0c1715;padding:10px}.life-inbox-item strong{font-size:12px;color:#d8eee3;overflow-wrap:anywhere}.life-inbox-item p{font-size:11px;line-height:1.5;color:#a3b9ae;margin:5px 0;white-space:pre-wrap;overflow-wrap:anywhere}.life-inbox-item small{font-size:9px;color:#718b80}.life-inbox-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.life-inbox-actions button{border:1px solid #35594a;background:#18352b;color:#c7f0dc;border-radius:8px;padding:5px 8px;font-size:10px;cursor:pointer}.life-inbox-actions button.danger{background:#322724;color:#edc4b6;border-color:#684c43}.life-inbox-empty,.life-inbox-error{font-size:11px;color:#8fa99e;padding:12px 2px}.life-inbox-error{color:#f0b7a8}
+.life-inbox-toggle:focus-visible,.life-inbox-actions button:focus-visible{outline:2px solid #70dca8;outline-offset:2px}
+@media(max-width:800px){.life-inbox-panel{width:calc(100% - 32px)}}
+
 
 
 .voice-console{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 11px;border:1px solid #29483c;background:linear-gradient(110deg,#142d25,#111d1d);border-radius:13px;margin-bottom:9px}
@@ -101,7 +109,7 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 <body><div class="layout">
 <aside>
 <div class="brand"><div class="logo">M</div><div><strong>Mia</strong><small>Your personal AI</small></div></div>
-<nav class="nav"><a class="active" href="/assistant">✳ <span>New conversation</span></a><button class="nav-button" id="toggleTasks" type="button" aria-controls="taskPanel" aria-expanded="false">☷ <span>Task Desk</span></button><a href="/"><span>◷</span><span>Evolution Observatory</span></a></nav>
+<nav class="nav"><a class="active" href="/assistant">✳ <span>New conversation</span></a><a href="/identity">◈ <span>Mia identity</span></a><button class="nav-button" id="toggleTasks" type="button" aria-controls="taskPanel" aria-expanded="false">☷ <span>Task Desk</span></button><a href="/"><span>◷</span><span>Evolution Observatory</span></a><a href="/code-graph"><span>⌘</span><span>Code Graph</span></a></nav>
 <div class="recent-title">Recent conversations</div><div class="recent-list" id="recentList"><div class="sub">No conversations yet</div></div>
 <div class="memory-panel">
  <div class="memory-panel-head"><b>Long-term memory</b><button id="refreshMemory" class="memory-refresh" type="button">↻ Refresh</button></div>
@@ -114,7 +122,12 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 <div class="sidecard"><b>Local-first by design</b><p>Mia tries local models first. Cloud providers are optional, and paid routing remains disabled unless you explicitly configure it.</p></div>
 </aside>
 <main>
-<header class="top"><div class="context">Personal assistant <span style="color:#527d6c">/</span> Conversation</div><div class="state" id="providerState">Checking AI providers…</div></header>
+<header class="top"><div class="context">Personal assistant <span style="color:#527d6c">/</span> Conversation</div><div style="display:flex;align-items:center;gap:9px"><button class="life-inbox-toggle" id="lifeInboxToggle" type="button" aria-expanded="false" aria-controls="lifeInboxPanel">Mia Inbox <span class="life-inbox-count" id="lifeInboxCount">…</span></button><div class="state" id="providerState">Checking AI providers…</div></div></header>
+<section class="life-inbox-panel" id="lifeInboxPanel" hidden aria-label="Mia inbox">
+ <div class="life-inbox-head"><div><strong>Mia's proactive inbox</strong><small>Owner-controlled messages based on Mia's journal, with source references. No push notifications are sent.</small></div><div style="display:flex;gap:7px"><button class="memory-refresh" id="refreshLifeInbox" type="button">↻ Refresh</button><button class="memory-refresh" id="closeLifeInbox" type="button" aria-label="Close inbox">Close</button></div></div>
+ <div class="life-inbox-list" id="lifeInboxMessages" aria-live="polite"><div class="life-inbox-empty">Loading inbox…</div></div>
+ <div style="margin-top:8px"><a href="/life" style="font-size:10px;color:#9bd9b8">Open autonomous life controls and full inbox →</a></div>
+</section>
 <section class="content">
 <div class="welcome" id="welcome"><div class="orb">✳</div><h1>What can I help with?</h1><p>Talk naturally, ask questions, explore ideas or plan a task. Mia will use an available model that meets the current cost and capability rules.</p></div>
 <div class="messages" id="messages" aria-live="polite"></div>
@@ -133,7 +146,7 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 <form class="composer" id="composer">
  <div class="voice-console">
   <div class="voice-info"><div class="voice-orb" id="voiceOrb" data-state="idle" aria-hidden="true">♫</div><div class="voice-copy"><strong>Talk with Mia <span class="voice-state" id="voiceState">Off</span></strong><small id="voiceStatus" role="status" aria-live="polite">Voice conversation is off · press Start when you're ready</small></div></div>
-  <div class="voice-actions"><select id="voiceLanguage" aria-label="Voice recognition language"><option value="en-US">English</option><option value="ur-PK">Urdu · Pakistan</option><option value="auto">Auto · English + Urdu (local engine)</option></select><button class="voice-preview-button" id="previewVoice" type="button">Test voice</button><button class="voice-toggle" id="voiceMode" type="button" aria-pressed="false">Start voice</button></div>
+  <div class="voice-actions"><select id="voiceLanguage" aria-label="Voice recognition language"><option value="en-US">English</option><option value="ur-PK">Urdu · Pakistan</option><option value="auto">Auto · English + Urdu (local engine)</option></select><button class="voice-preview-button" id="previewVoice" type="button">Test voice</button><button class="voice-toggle" id="voiceMode" type="button" aria-pressed="false">Start voice</button><button class="voice-preview-button" id="wakeWordMode" type="button" aria-pressed="false" title="Opt-in browser wake phrase mode">Enable Hey Mia</button></div>
  </div>
  <div class="voice-controls" id="voiceControls">
   <span class="voice-badge" id="voiceMicBadge" data-on="false" role="status">Mic off</span>
@@ -148,16 +161,87 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
   <label class="voice-check"><input id="voiceBargeIn" type="checkbox"> Interrupt by voice (use headphones)</label>
  </div>
  <div class="voice-preview" id="voicePreview" aria-live="polite"></div>
- <p class="voice-privacy">Browser engine: recognition uses your browser's speech service and may require internet; the browser may process microphone audio outside Mia. Local engine: audio is transcribed on this computer by Faster-Whisper (optional voice extra) and is not stored. The microphone starts only after you press Start voice (or hold the talk button in push-to-talk) and is released when the session ends. The Microphone choice applies to the local engine and Local record; the browser engine uses the browser's default microphone. Esc or Interrupt stops Mia speaking.</p>
+ <p class="voice-privacy">Browser engine: recognition uses your browser's speech service and may require internet; the browser may process microphone audio outside Mia. Local engine: audio is transcribed on this computer by Faster-Whisper (optional voice extra) and is not stored. The microphone starts only after you press Start voice, Enable Hey Mia, or hold the talk button in push-to-talk, and is released when the session ends. Hey Mia is an explicit opt-in browser wake phrase; browser recognition stays active while armed, the Mic on indicator remains visible, and Stop voice or Mute mic stops listening. The Microphone choice applies to the local engine and Local record; the browser engine uses the browser's default microphone. Esc or Interrupt stops Mia speaking.</p>
  <textarea id="prompt" rows="2" placeholder="Message Mia… (English or Roman Urdu)" aria-label="Message Mia"></textarea>
 <div class="composerfoot"><div class="hint" id="hint">Enter to send · Shift + Enter for a new line</div><div class="actions"><button class="send" id="mic" type="button" title="Record one clip and transcribe locally with Faster-Whisper" style="background:#1c3930;color:#a9ebcb;border:1px solid #356451">Local record</button><select id="taskType" aria-label="Task type"><option value="chat">General</option><option value="reasoning">Reasoning</option><option value="coding">Coding</option><option value="research">Research</option></select><label style="font-size:11px;color:#94aaa2;display:flex;align-items:center;gap:5px"><input id="useTools" type="checkbox" checked> Tools</label><label style="font-size:11px;color:#94aaa2;display:flex;align-items:center;gap:5px"><input id="speakReplies" type="checkbox"> Speak</label><select id="voiceChoice" aria-label="Speech voice" title="Installed browser voices" style="max-width:110px"><option value="">Default voice</option></select><button class="send" id="send" type="submit">Send ↗</button></div></div>
 </form>
-<div class="bottomnote">Voice input can be hands-free or push-to-talk, using the browser speech service or local Faster-Whisper (optional voice extra). Speech output can use offline system voices with the optional TTS extra, or browser voices as fallback.<br>Push-to-talk and model-requested tools are optional per message. File and knowledge contents stay local by default; writes, launches and browser clicks always require an approval card. Always-listening wake word is not enabled. Optional background dispatch is off by default and limited to owner-approved read-only system checks. Do not send secrets to cloud models.</div>
+<div class="bottomnote">Voice input can be hands-free or push-to-talk, using the browser speech service or local Faster-Whisper (optional voice extra). Speech output can use offline system voices with the optional TTS extra, or browser voices as fallback.<br>Push-to-talk and model-requested tools are optional per message. File and knowledge contents stay local by default; writes, launches and browser clicks always require an approval card. Hey Mia wake phrase mode is opt-in and uses the browser speech service (not offline local wake-word detection). Optional background dispatch is off by default and limited to owner-approved read-only system checks. Do not send secrets to cloud models.</div>
 </section></main></div>
 <script>
 const $=id=>document.getElementById(id);
 let conversationId=new URLSearchParams(window.location.search).get('conversation_id');
 let registeredTools=[];
+let lifeInboxLoading=false;
+function renderLifeInbox(messages){
+ const list=$('lifeInboxMessages');list.replaceChildren();
+ const pending=(messages||[]).filter(message=>message.state==='pending');
+ $('lifeInboxCount').textContent=String(pending.length);
+ $('lifeInboxCount').setAttribute('aria-label',pending.length+' unread messages');
+ if(!messages.length){const empty=document.createElement('div');empty.className='life-inbox-empty';empty.textContent='Your inbox is clear. Mia has no pending messages.';list.append(empty);return;}
+ messages.forEach(message=>{
+  const card=document.createElement('article');card.className='life-inbox-item';
+  const title=document.createElement('strong');title.textContent=message.title||'Mia message';
+  const body=document.createElement('p');body.textContent=message.body||'';
+  const state=document.createElement('small');state.textContent=(message.state||'unknown')+' · '+(message.created_at||'');
+  card.append(title,body,state);
+  if(Array.isArray(message.evidence)&&message.evidence.length){
+   const evidence=document.createElement('small');
+   evidence.textContent='Evidence: '+message.evidence.map(item=>String(item.type||'source')+': '+String(item.ref||'')).join(' · ');
+   evidence.style.display='block';evidence.style.marginTop='4px';card.append(evidence);
+  }
+  if(message.state==='pending'){
+   const actions=document.createElement('div');actions.className='life-inbox-actions';
+   actions.append(
+    makeLifeInboxAction('Mark read','',()=>updateLifeInbox(message.message_id,'read')),
+    makeLifeInboxAction('Done','',()=>updateLifeInbox(message.message_id,'acted')),
+    makeLifeInboxAction('Dismiss topic','danger',()=>updateLifeInbox(message.message_id,'dismissed'))
+   );card.append(actions);
+  }
+  list.append(card);
+ });
+}
+function makeLifeInboxAction(label,kind,callback){
+ const button=document.createElement('button');button.type='button';button.textContent=label;
+ if(kind)button.classList.add(kind);
+ button.addEventListener('click',callback);return button;
+}
+async function loadLifeInbox(){
+ if(lifeInboxLoading)return;
+ lifeInboxLoading=true;
+ try{
+  const response=await fetch('/api/life/outreach?limit=30',{cache:'no-store'});
+  const data=await response.json();
+  if(!response.ok)throw new Error(data.detail||'Mia inbox is unavailable');
+  renderLifeInbox(Array.isArray(data.messages)?data.messages:[]);
+ }catch(error){
+  const list=$('lifeInboxMessages');list.replaceChildren();
+  const message=document.createElement('div');message.className='life-inbox-error';
+  message.textContent=error.message||'Mia inbox could not be loaded';list.append(message);
+  $('lifeInboxCount').textContent='!';
+ }finally{lifeInboxLoading=false}
+}
+async function updateLifeInbox(messageId,state){
+ const buttons=$('lifeInboxMessages').querySelectorAll('button');buttons.forEach(button=>button.disabled=true);
+ try{
+  const response=await fetch('/api/life/outreach/'+encodeURIComponent(messageId)+'/state',{
+   method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({state})
+  });
+  const data=await response.json();if(!response.ok)throw new Error(data.detail||'Inbox update failed');
+  await loadLifeInbox();
+ }catch(error){
+  const list=$('lifeInboxMessages');const notice=document.createElement('div');notice.className='life-inbox-error';notice.textContent=error.message;list.prepend(notice);
+  buttons.forEach(button=>button.disabled=false);
+ }
+}
+$('lifeInboxToggle').addEventListener('click',()=>{
+ const open=$('lifeInboxPanel').hidden;
+ $('lifeInboxPanel').hidden=!open;$('lifeInboxToggle').setAttribute('aria-expanded',String(open));
+ if(open)loadLifeInbox();
+});
+$('refreshLifeInbox').addEventListener('click',loadLifeInbox);
+$('closeLifeInbox').addEventListener('click',()=>{
+ $('lifeInboxPanel').hidden=true;$('lifeInboxToggle').setAttribute('aria-expanded','false');
+});
 function setTaskStatus(message,isError=false){
  const status=$('taskStatus');status.textContent=message;status.classList.toggle('error',isError);
 }
@@ -457,7 +541,7 @@ async function loadConversationList(){
  try{
   const response=await fetch('/api/conversations');
   const data=await response.json();
-  const box=$('recentList');box.innerHTML='';
+  const box=$('recentList');box.replaceChildren();
   (data.items||[]).forEach(item=>{
    const link=document.createElement('a');
    link.href='/assistant?conversation_id='+encodeURIComponent(item.conversation_id);
@@ -806,6 +890,8 @@ $('composer').addEventListener('submit',async event=>{
 });
 
 let voiceMode=false;
+let voiceWakeMode=false;
+let voiceWakeActive=false;
 let voiceRecognition=null;
 let voiceRecognitionActive=false;
 let voiceStarting=false;
@@ -1058,6 +1144,10 @@ function queueVoiceRestart(delay=550){
 }
 function stopVoiceConversation(message='Voice conversation stopped.',isError=false){
  voiceMode=false;
+ voiceWakeMode=false;
+ voiceWakeActive=false;
+ $('wakeWordMode').textContent='Enable Hey Mia';
+ $('wakeWordMode').setAttribute('aria-pressed','false');
  clearTimeout(voiceSilenceTimer);
  clearTimeout(voiceRestartTimer);
  voiceFinalTranscript='';
@@ -1127,6 +1217,13 @@ function finishVoiceUtterance(){
      setVoiceStatus('Push-to-talk ready · hold the button or Space and speak.');
     }else if(voiceMuted){
      setVoiceState('muted');
+    }else if(voiceWakeMode){
+     voiceWakeActive=false;
+     voiceFinalTranscript='';
+     voiceInterimTranscript='';
+     setVoiceState('listening');
+     setVoiceStatus("Listening for 'Hey Mia'. Say the wake phrase to start.");
+     queueVoiceRestart(650);
     }else{
      setVoiceState('ready');
      if(voiceFinalTranscript.trim())setTimeout(finishVoiceUtterance,300);
@@ -1146,7 +1243,7 @@ function startVoiceRecognition(){
  const now=Date.now();
  voiceStartLog=voiceStartLog.filter(time=>now-time<6000);
  voiceStartLog.push(now);
- if(voiceStartLog.length>=5&&voiceLastResultAt<voiceStartLog[0]){
+ if(voiceStartLog.length>=(voiceWakeMode?12:5)&&voiceLastResultAt<voiceStartLog[0]){
   stopVoiceConversation('The microphone keeps stopping, so I ended the session to avoid a restart loop. Check the microphone and try again.',true);
   return;
  }
@@ -1156,7 +1253,7 @@ function startVoiceRecognition(){
  recognition.interimResults=true;
  recognition.maxAlternatives=1;
  const chosenLanguage=$('voiceLanguage').value||'en-US';
- recognition.lang=chosenLanguage==='auto'?(voiceEngineName==='local'?'':'en-US'):chosenLanguage;
+ recognition.lang=voiceWakeMode&&!voiceWakeActive?'en-US':(chosenLanguage==='auto'?(voiceEngineName==='local'?'':'en-US'):chosenLanguage);
  voiceStarting=true;
  recognition.onstart=()=>{
   if(!voiceMode||voiceRecognition!==recognition)return;
@@ -1165,13 +1262,36 @@ function startVoiceRecognition(){
   setMicBadge(true,engineBadgeLabel());
   if(!voiceBusy){
    setVoiceState('listening');
-   setVoiceStatus(voicePushToTalk?'Listening… release the button when you finish.':'Listening… speak naturally. I will answer and listen again.');
+   setVoiceStatus(voiceWakeMode&&!voiceWakeActive
+    ?"Listening for 'Hey Mia'. Say the wake phrase to start."
+    :(voicePushToTalk?'Listening… release the button when you finish.':'Listening… speak naturally. I will answer and listen again.'));
   }
  };
  recognition.onresult=event=>{
   if(!voiceMode||voiceMuted||voiceRecognition!==recognition)return;
   const fresh=[];
   for(let index=event.resultIndex;index<event.results.length;index++)fresh.push(event.results[index]);
+  if(voiceWakeMode&&!voiceWakeActive){
+   const finalWakeText=fresh.filter(result=>result.isFinal).map(result=>result[0]?.transcript||'').join(' ').trim();
+   if(!finalWakeText)return;
+   voiceLastResultAt=Date.now();
+   const wakeMatch=/\bhey\s+mia\b/i.exec(finalWakeText);
+   if(!wakeMatch){setVoiceStatus("Listening for 'Hey Mia'.");return;}
+   voiceWakeActive=true;
+   const remainder=finalWakeText.slice(wakeMatch.index+wakeMatch[0].length).replace(/^[\s,.:;!?-]+/,'').trim();
+   voiceFinalTranscript=remainder;
+   voiceInterimTranscript='';
+   setVoiceState('listening');
+   setVoiceStatus(remainder?'Hey Mia detected. Processing your request…':"Hey Mia detected. I'm listening.");
+   const selectedLanguage=$('voiceLanguage').value||'en-US';
+   const activeLanguage=selectedLanguage==='auto'?'en-US':selectedLanguage;
+   if(activeLanguage&&recognition.lang!==activeLanguage){
+    recognition.lang=activeLanguage;
+    try{recognition.stop();}catch(error){}
+   }
+   if(remainder)voiceSilenceTimer=setTimeout(finishVoiceUtterance,450);
+   return;
+  }
   if(voiceBusy&&!voiceBargeActive){
    if(voiceSpeaking&&$('voiceBargeIn').checked){
     const heard=fresh.map(result=>result[0]?.transcript||'').join(' ').trim();
@@ -1251,7 +1371,13 @@ function startVoiceRecognition(){
   stopVoiceConversation('Could not start microphone recognition: '+error.message,true);
  }
 }
-async function startVoiceConversation(){
+async function startVoiceConversation({wakeWord=false}={}){
+ if(wakeWord&&$('voiceEngine').value==='local'){
+  setVoiceStatus("Hey Mia wake phrase mode currently uses the browser speech service. Select Browser speech service first.",true);return;
+ }
+ if(wakeWord&&$('voiceInputMode').value==='ptt'){
+  setVoiceStatus("Hey Mia wake phrase mode requires Hands-free input. Select Hands-free first.",true);return;
+ }
  if(chatBusy){setVoiceStatus('Wait for the current reply to finish before starting voice mode.',true);return;}
  if(recording){setVoiceStatus('Stop the local recording before starting voice mode.',true);return;}
  const wantLocal=$('voiceEngine').value==='local';
@@ -1277,6 +1403,8 @@ async function startVoiceConversation(){
  if(voiceMode||chatBusy)return;
  voiceEngineName=wantLocal?'local':'browser';
  voiceMode=true;
+ voiceWakeMode=wakeWord;
+ voiceWakeActive=!wakeWord;
  voiceSessionError=false;
  voiceFinalTranscript='';
  voiceInterimTranscript='';
@@ -1291,6 +1419,8 @@ async function startVoiceConversation(){
  $('voiceMode').textContent='End conversation';
  $('voiceMode').classList.add('active');
  $('voiceMode').setAttribute('aria-pressed','true');
+ $('wakeWordMode').textContent=wakeWord?'Disable Hey Mia':'Enable Hey Mia';
+ $('wakeWordMode').setAttribute('aria-pressed',wakeWord?'true':'false');
  $('voiceLanguage').disabled=true;
  $('voiceInputMode').disabled=true;
  $('voiceEngine').disabled=true;
@@ -1328,6 +1458,7 @@ function toggleVoiceMute(){
  $('voiceMute').setAttribute('aria-pressed',String(voiceMuted));
  $('voiceMute').textContent=voiceMuted?'Unmute mic':'Mute mic';
  if(voiceMuted){
+  if(voiceWakeMode){voiceWakeActive=false;voiceFinalTranscript='';voiceInterimTranscript='';}
   clearTimeout(voiceSilenceTimer);
   clearTimeout(voiceRestartTimer);
   stopRecognitionQuietly();
@@ -1339,6 +1470,10 @@ function toggleVoiceMute(){
  }else if(voicePushToTalk){
   setVoiceState('ready');
   setVoiceStatus('Push-to-talk ready · hold the button or Space and speak.');
+ }else if(voiceWakeMode){
+  setVoiceState('listening');
+  setVoiceStatus("Microphone unmuted. Listening for 'Hey Mia'.");
+  queueVoiceRestart(100);
  }else{
   setVoiceState('ready');
   setVoiceStatus('Microphone unmuted.');
@@ -1352,6 +1487,12 @@ $('voiceMode').addEventListener('click',()=>{
   startVoiceConversation();
  }
 });
+$('wakeWordMode').addEventListener('click',()=>{
+ if(voiceWakeMode){stopVoiceConversation('Hey Mia wake phrase listening stopped.');return;}
+ if(voiceMode){setVoiceStatus('End the current voice session before enabling Hey Mia.',true);return;}
+ startVoiceConversation({wakeWord:true});
+});
+if(!SpeechRecognitionAPI){$('wakeWordMode').disabled=true;$('wakeWordMode').title='Wake phrase mode requires browser speech recognition.'}
 $('voiceInterrupt').addEventListener('click',interruptSpeech);
 $('voiceMute').addEventListener('click',toggleVoiceMute);
 $('voicePtt').addEventListener('pointerdown',event=>{event.preventDefault();try{event.target.setPointerCapture(event.pointerId);}catch(error){}pttDown();});
@@ -1426,4 +1567,6 @@ refreshProviders();
 loadCurrentConversation().then(setupTemporaryToggle);
 loadConversationList();
 loadMemoryRecords();
+loadLifeInbox();
+window.setInterval(loadLifeInbox,60000);
 </script></body></html>

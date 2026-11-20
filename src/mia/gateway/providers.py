@@ -283,7 +283,7 @@ class OllamaProvider:
 
 
 class OpenAICompatibleProvider:
-    """Adapter for OpenAI-compatible endpoints, including a local FreeLLMAPI sidecar.
+    """Adapter for direct OpenAI-compatible provider endpoints.
 
     Do not set free_tier=True for a gateway unless its model/quota policy
     proves that the selected route is currently free. Local hosting alone does

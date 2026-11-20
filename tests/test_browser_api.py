@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from mia.computer.approvals import ApprovalStore
+from mia.computer.capabilities import PermissionLevel
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
 
@@ -23,6 +24,9 @@ class FakeBrowser:
     async def click(self, selector):
         self.clicked.append(selector)
         return {"url": self.current_url, "title": "Example"}
+
+    async def fill(self, ref, text):
+        return {"ref": ref, "verified": True}
 
     async def close(self):
         self.current_url = None
@@ -87,3 +91,26 @@ def test_browser_click_requires_approval_bound_to_current_page(tmp_path):
     )
     assert executed.status_code == 200
     assert browser.clicked == ["a.help"]
+
+
+def test_browser_fill_requires_an_explicit_owner_grant(tmp_path):
+    approvals = ApprovalStore(tmp_path / "fill-approvals.sqlite3")
+    browser = FakeBrowser()
+    app = create_app(
+        store=ObservatoryStore(tmp_path / "fill-observatory.sqlite3"),
+        approvals=approvals,
+        browser=browser,
+    )
+    client = TestClient(app)
+    blocked = client.post("/api/browser/fill", json={"ref": "e1", "text": "hello"})
+    assert blocked.status_code == 409
+
+    app.state.permission_policy.grant(
+        granted_by="owner",
+        capabilities=["browser.fill"],
+        level=PermissionLevel.INTERACT,
+        kind="session",
+    )
+    allowed = client.post("/api/browser/fill", json={"ref": "e1", "text": "hello"})
+    assert allowed.status_code == 200
+    assert allowed.json()["verified"] is True

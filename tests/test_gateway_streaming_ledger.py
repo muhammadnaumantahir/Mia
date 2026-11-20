@@ -151,7 +151,8 @@ def test_actual_cost_uses_reported_tokens_and_never_undercounts():
     assert actual_cost_usd(candidate(free=False, inp=None, out=1.0), None, request) is None
     assert actual_cost_usd(candidate(free=False, inp=float("nan"), out=1.0),
                            TokenUsage(1, 1), request) is None
-    assert actual_cost_usd(paid, TokenUsage(-1, 1), request) is None
+    with pytest.raises(ValueError, match="non-negative"):
+        TokenUsage(-1, 1)
 
 
 def test_ledger_records_and_summarises(tmp_path):
@@ -162,21 +163,22 @@ def test_ledger_records_and_summarises(tmp_path):
     ledger.record(provider_id="cloud", model_id="b", task_type="chat", input_tokens=None,
                   output_tokens=None, estimated_input_tokens=100, estimated_output_tokens=50,
                   cost_usd=0.25, free_tier=False, data_local=False, streamed=True)
-    ledger.record(provider_id="cloud", model_id="b", task_type="chat", input_tokens=1,
-                  output_tokens=1, estimated_input_tokens=1, estimated_output_tokens=1,
-                  cost_usd=float("nan"), free_tier=False, data_local=False)
+    with pytest.raises(ValueError, match="unknown cost"):
+        ledger.record(provider_id="cloud", model_id="b", task_type="chat", input_tokens=1,
+                      output_tokens=1, estimated_input_tokens=1, estimated_output_tokens=1,
+                      cost_usd=float("nan"), free_tier=False, data_local=False)
     summary = ledger.summary(7)
-    assert summary["total_requests"] == 3
+    assert summary["total_requests"] == 2
     assert summary["total_cost_usd"] == pytest.approx(0.25)  # NaN cost is dropped, not summed
     cloud = next(i for i in summary["items"] if i["provider_id"] == "cloud")
-    assert cloud["estimated_token_rows"] == 1 and cloud["input_tokens"] == 101
+    assert cloud["estimated_token_rows"] == 1 and cloud["input_tokens"] == 100
     assert ledger.spend_today_utc() == pytest.approx(0.25)
 
 
 def test_daily_cap_tightens_and_fails_closed(monkeypatch):
     policy = RoutePolicy(allow_paid=True, max_request_cost_usd=1.0)
     monkeypatch.delenv("MIA_MAX_DAILY_SPEND_USD", raising=False)
-    assert apply_daily_cap(policy, 99.0) == policy  # no daily cap configured
+    assert not apply_daily_cap(policy, 99.0).allow_paid  # missing daily cap fails closed
     monkeypatch.setenv("MIA_MAX_DAILY_SPEND_USD", "2.0")
     assert apply_daily_cap(policy, 1.5).max_request_cost_usd == pytest.approx(0.5)
     assert apply_daily_cap(policy, 0.0).max_request_cost_usd == 1.0

@@ -1,6 +1,6 @@
 # Voice feature completion checklist
 
-Audit of `main` at commit 51a6242. Status is updated as milestones land; a box is ticked only when it is
+Audit baseline: `main` at commit d8d00fc (conversation-first roadmap). Status is updated as milestones land; a box is ticked only when it is
 implemented and covered by a test that was actually run.
 
 ## Already working (audited, not rebuilt)
@@ -23,7 +23,7 @@ implemented and covered by a test that was actually run.
 - [x] Microphone device selection for the local engine and Local record (browser engine cannot choose a device; documented; tested)
 - [x] Local Faster-Whisper engine works hands-free and push-to-talk (mic capture, utterance detection, WAV upload tested with a fake microphone; real Whisper not run here)
 - [x] 34 real-Chromium lifecycle tests with a fake recogniser/synthesiser against the real app (tests/test_voice_browser.py)
-- [x] Wake word: evaluated and deliberately not enabled; rationale and requirements in VOICE.md
+- [ ] Opt-in “Hey Mia” browser wake phrase mode has been implemented on the current development branch; it uses Web Speech recognition (not offline local wake-word detection). Regression tests were added but have not been run; real microphone/privacy/stop behavior remains OWNER_VERIFICATION_REQUIRED.
 
 ## Milestones
 1. Audit checklist (this file)
@@ -36,3 +36,9 @@ implemented and covered by a test that was actually run.
 - A late `onstart` event from a recogniser that had already been stopped could flip a stopped session back to
   "Listening" and show the microphone as on.
 - The restart-loop guard needed to trigger after 5 starts in 6 s with no speech, not after 8 s.
+
+
+## Current development update (2026-11-20)
+
+- [ ] Hey Mia wake phrase: code and Playwright regression test added; tests have not been run. Complete section F in `OWNER_VERIFICATION.md` before calling it verified.
+- [ ] English, Urdu and Roman Urdu memory-recall evaluation fixture added in `tests/fixtures/conversation_eval.json`; deterministic test runner added, not yet run. This validates context assembly, not live model translation quality.

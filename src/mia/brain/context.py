@@ -14,6 +14,7 @@ from typing import Any
 
 from mia.gateway.contracts import ModelCandidate
 from mia.memory.context import ContextBudget, assemble_memory_context
+from mia.memory.semantic import LocalOllamaEmbeddingReranker
 from mia.memory.store import MemoryStore
 
 from .intent import IntentAnalysis
@@ -99,7 +100,8 @@ def build_context(
         query = prompt  # the retriever interprets contextual references itself
         try:
             packet = assemble_memory_context(
-                store, query, conversation_id, budget=_budget_for(analysis)
+                store, query, conversation_id, budget=_budget_for(analysis),
+                reranker=LocalOllamaEmbeddingReranker.from_env(cache=store),
             )
         except Exception:  # retrieval must never block a reply
             packet = None

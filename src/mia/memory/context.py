@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from mia.memory.store import MemoryStore, extract_query_terms
-from mia.memory.structured import normalise_title
+from mia.memory.structured import RECORD_TYPES, normalise_title
 
 _TRUST_WEIGHT = {"user": 0.25, "trusted": 0.15, "untrusted": 0.0}
 _TRUST_LABEL = {
@@ -42,26 +42,42 @@ _RECORD_TYPE_WEIGHT = {"decision": 0.08, "goal": 0.08, "project": 0.04}
 _CONTEXT_INTENTS: tuple[tuple[re.Pattern[str], frozenset[str]], ...] = (
     (re.compile(
         r"\b(?:continue|resume|pick\s+up|back\s+to|carry\s+on)\b.*\b(?:project|work|feature|task)\b"
-        r"|\b(?:previous|last|earlier)\s+project\b|\bwhere\s+did\s+we\s+leave\s+off\b", re.I),
+        r"|\b(?:previous|last|earlier)\s+project\b|\bwhere\s+did\s+we\s+leave\s+off\b"
+        r"|\b(?:pichlay|pichle|pichla|pichli)\s+(?:project|kaam)\b"
+        r"|\b(?:hum|ham)\s+(?:kahan|kidhar)\s+(?:tak\s+)?(?:pohanchay|pohnchay|chhoray|chora|ruke|rukay)\b"
+        r"|\b(?:kahan\s+tak|kahan\s+chora)\b"
+        r"|(?:پچھلے|پچھلا|پچھلی)\s+(?:پروجیکٹ|کام)|ہم\s+کہاں\s+تک\s+پہنچے|کہاں\s+چھوڑا\s+تھا", re.I),
      frozenset({"project", "goal", "decision"})),
     (re.compile(
         r"\bwhat\s+did\s+we\s+(?:decide|agree|choose)\b|\bwhat\s+was\s+decided\b"
-        r"|\b(?:our|the|last|previous|earlier)\s+decisions?\b", re.I),
+        r"|\b(?:our|the|last|previous|earlier)\s+decisions?\b"
+        r"|\bhum\s+ne\s+(?:kya\s+)?(?:faisla|tay|decide|chuna|choose)\b"
+        r"|\b(?:kya\s+)?(?:faisla|decision)\s+(?:kiya|hua)\b"
+        r"|ہم\s+نے\s+کیا\s+(?:فیصلہ|طے)\s+کیا|کیا\s+(?:فیصلہ|طے)\s+ہوا"
+        r"|(?:پچھلا|آخری)\s+فیصلہ", re.I),
      frozenset({"decision"})),
     (re.compile(
         r"\b(?:as\s+usual|my\s+usual|my\s+(?:usual\s+)?preferences?|my\s+preferred|"
-        r"the\s+way\s+i\s+like|same\s+as\s+(?:always|before)|usual\s+preferences?)\b", re.I),
+        r"the\s+way\s+i\s+like|same\s+as\s+(?:always|before)|usual\s+preferences?)\b"
+        r"|\b(?:meri\s+pasand|meri\s+tarjeeh|meri\s+tarjeehat|mujhe\s+kya\s+pasand|"
+        r"main\s+kya\s+pasand\s+karta)\b|میری\s+پسند|میری\s+ترجیحات|مجھے\s+کیا\s+پسند", re.I),
      frozenset({"preference"})),
     (re.compile(
         r"\b(?:problem|issue|bug|error|failure|trouble)\b.*\b(?:earlier|before|last\s+time|"
-        r"encountered|ran\s+into)\b|\bwhat\s+went\s+wrong\b|\bwhat\s+was\s+the\s+(?:problem|issue)\b",
-        re.I),
+        r"encountered|ran\s+into)\b|\bwhat\s+went\s+wrong\b|\bwhat\s+was\s+the\s+(?:problem|issue)\b"
+        r"|\b(?:pichli\s+baar|pichli\s+dafa|pehle)\s+(?:kya\s+)?(?:masla|issue|problem)\b"
+        r"|پچھلی\s+بار\s+کیا\s+مسئلہ\s+تھا|پہلے\s+کیا\s+مسئلہ\s+تھا", re.I),
      frozenset({"lesson", "episode", "project"})),
     (re.compile(
-        r"\b(?:current\s+state|current\s+status|status|progress)\b.*\b(?:feature|project|work|goal)\b",
-        re.I),
+        r"\b(?:current\s+state|current\s+status|status|progress)\b.*\b(?:feature|project|work|goal)\b"
+        r"|\b(?:project|feature|mia|kaam)\s+ka\s+(?:status|progress)\s+(?:kya\s+)?hai\b"
+        r"|(?:پروجیکٹ|فیچر|کام)\s+کی\s+(?:حالت|پیش\s+رفت)\s+کیا\s+ہے"
+        r"|ہم\s+کہاں\s+تک\s+پہنچے", re.I),
      frozenset({"project", "goal", "decision"})),
-    (re.compile(r"\bmy\s+goals?\b|\bwhat\s+am\s+i\s+(?:working\s+toward|aiming)\b", re.I),
+    (re.compile(
+        r"\bmy\s+goals?\b|\bwhat\s+am\s+i\s+(?:working\s+toward|aiming)\b"
+        r"|\bmera\s+(?:maqsad|hadaf|goal)\b|\bmere\s+goals?\b"
+        r"|میرا\s+(?:مقصد|ہدف)|میرے\s+مقاصد", re.I),
      frozenset({"goal"})),
 )
 INTENT_RECORD_CAP = 6
@@ -329,19 +345,60 @@ def assemble_memory_context(
                 continue
             scored.append((0.3 + _record_weight(record, conversation_id, now), "structured", record))
     if reranker is not None:
-        try:
-            boosts = reranker(prompt, [r for _, kind, r in scored if kind == "structured"])
-            scored = [
-                (
-                    score + max(-0.3, min(0.3, float(boosts.get(r.get("record_id", ""), 0.0))))
-                    if kind == "structured" else score,
-                    kind,
-                    r,
+        # Add a small, bounded recent candidate pool so embeddings can recover
+        # semantically related records that FTS5 could not find by shared words.
+        # Candidates are included only when the reranker returns a positive match.
+        semantic_candidate_ids: set[str] = set()
+        existing_ids = {
+            str(record.get("record_id") or record.get("item_id") or record.get("message_id") or "")
+            for _, _, record in scored
+        }
+        for item in store.list_items(limit=INTENT_POOL):
+            item_id = str(item.get("item_id") or "")
+            if item_id and item_id not in existing_ids:
+                score = (
+                    -0.05
+                    + _TRUST_WEIGHT.get(item.get("trust_level", "untrusted"), 0.0)
+                    + _KIND_WEIGHT.get(item.get("kind", ""), 0.0)
+                    + _recency(item.get("updated_at", ""), now)
                 )
-                for score, kind, r in scored
+                scored.append((score, "knowledge", item))
+                semantic_candidate_ids.add(item_id)
+                existing_ids.add(item_id)
+        for record in store.structured.recent(RECORD_TYPES, limit=INTENT_POOL):
+            record_id = str(record.get("record_id") or "")
+            if record_id and record_id not in existing_ids:
+                scored.append((-0.05 + _record_weight(record, conversation_id, now),
+                               "structured", record))
+                semantic_candidate_ids.add(record_id)
+                existing_ids.add(record_id)
+        for message in store.recent_messages(
+            limit=INTENT_POOL, exclude_message_ids=recent_ids
+        ):
+            message_id = str(message.get("message_id") or "")
+            if message_id and message_id not in existing_ids:
+                score = -0.05 + (0.1 if message.get("role") == "user" else 0.0)
+                score += _recency(message.get("created_at", ""), now)
+                scored.append((score, "conversation", message))
+                semantic_candidate_ids.add(message_id)
+                existing_ids.add(message_id)
+        try:
+            boosts = reranker(prompt, [record for _, _, record in scored])
+            reranked: list[tuple[float, str, dict[str, Any]]] = []
+            for score, kind, record in scored:
+                key = str(record.get("record_id") or record.get("item_id")
+                          or record.get("message_id") or "")
+                boost = max(-0.3, min(0.3, float(boosts.get(key, 0.0))))
+                if key in semantic_candidate_ids and boost < 0.05:
+                    continue
+                reranked.append((score + boost, kind, record))
+            scored = reranked
+        except Exception:  # optional local semantic retrieval must never block a reply
+            scored = [
+                entry for entry in scored
+                if str(entry[2].get("record_id") or entry[2].get("item_id")
+                       or entry[2].get("message_id") or "") not in semantic_candidate_ids
             ]
-        except Exception:  # an optional semantic layer must never break retrieval
-            pass
 
     scored.sort(key=lambda entry: entry[0], reverse=True)
     _add_linked_records(store, scored)

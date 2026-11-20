@@ -70,23 +70,19 @@ def _register_openai_compatible(
 
 
 def build_default_registry() -> ProviderRegistry:
-    """Register Ollama by default and FreeLLMAPI only when explicitly enabled."""
+    """Register local Ollama and explicitly configured direct provider adapters.
+
+    Cloud endpoints are ordinary provider IDs configured through the generic
+    OpenAI-compatible adapter. Mia does not launch or depend on gateway sidecars
+    or external routing control planes.
+    """
     registry = ProviderRegistry()
     ollama_url = os.getenv("MIA_OLLAMA_BASE_URL", "http://127.0.0.1:11434")
-    ollama_tools = (
-        os.getenv("MIA_OLLAMA_ENABLE_TOOL_CALLING", "false").strip().lower() == "true"
-    )
-    registry.register(
-        OllamaProvider(base_url=ollama_url, supports_tools=ollama_tools)
-    )
+    ollama_tools = _flag("MIA_OLLAMA_ENABLE_TOOL_CALLING")
+    registry.register(OllamaProvider(base_url=ollama_url, supports_tools=ollama_tools))
 
-    # FreeLLMAPI keeps its original variables; Omniroute follows the same scheme.
-    # Omniroute has no default URL: its endpoint is not assumed, the owner sets it.
-    _register_openai_compatible(registry, "freellmapi", "FREELLMAPI", "http://127.0.0.1:3001/v1")
-    _register_openai_compatible(registry, "omniroute", "OMNIROUTE", None)
-
-    # Further OpenAI-compatible endpoints: MIA_EXTRA_PROVIDERS=id1,id2 with
-    # MIA_PROVIDER_<ID>_BASE_URL etc. (ID upper-cased, '-' becomes '_').
+    # MIA_EXTRA_PROVIDERS=id1,id2 with MIA_PROVIDER_<ID>_* settings.
+    # Mia owns discovery, selection, budgets and fallback for every endpoint.
     for raw_id in os.getenv("MIA_EXTRA_PROVIDERS", "").split(","):
         provider_id = raw_id.strip().lower()
         if not provider_id:
@@ -117,18 +113,20 @@ def paid_route_policy():
     return RoutePolicy(allow_paid=enabled, max_request_cost_usd=cap)
 
 
-def apply_daily_cap(policy, spent_today_usd: float):
+def apply_daily_cap(policy, spent_today_usd: float | None):
     """Tighten a route policy by the remaining daily budget (MIA_MAX_DAILY_SPEND_USD).
 
-    Unset means no daily cap (the per-request cap still applies). A malformed,
-    non-finite or negative cap, or an unusable ledger total, disables paid
-    routing. Free and local routes are never affected.
+    The daily cap is mandatory whenever paid routing is enabled. Missing,
+    malformed, non-finite or negative caps, or an unusable ledger total, disable
+    paid routing. Free and local routes are never affected.
     """
     from .contracts import RoutePolicy
 
     raw = os.getenv("MIA_MAX_DAILY_SPEND_USD", "").strip()
-    if not raw or not policy.allow_paid:
+    if not policy.allow_paid:
         return policy
+    if not raw:
+        return RoutePolicy(allow_paid=False, max_request_cost_usd=0.0)
     try:
         cap = float(raw)
     except ValueError:
@@ -136,11 +134,46 @@ def apply_daily_cap(policy, spent_today_usd: float):
     if (
         not math.isfinite(cap)
         or cap < 0
+        or spent_today_usd is None
         or not math.isfinite(spent_today_usd)
         or spent_today_usd < 0
     ):
         return RoutePolicy(allow_paid=False, max_request_cost_usd=0.0)
     remaining = cap - spent_today_usd
+    if remaining <= 0:
+        return RoutePolicy(allow_paid=False, max_request_cost_usd=0.0)
+    return RoutePolicy(
+        allow_paid=True,
+        max_request_cost_usd=min(policy.max_request_cost_usd, remaining),
+    )
+
+
+def apply_monthly_cap(policy, spent_month_usd: float | None):
+    """Apply the mandatory UTC-calendar-month ceiling to paid inference.
+
+    A missing, malformed or unsafe cap fails closed. Free/local routes are
+    unaffected. The monthly ceiling is required whenever paid routing is enabled.
+    """
+    from .contracts import RoutePolicy
+
+    if not policy.allow_paid:
+        return policy
+    raw = os.getenv("MIA_MAX_MONTHLY_SPEND_USD", "").strip()
+    if not raw:
+        return RoutePolicy(allow_paid=False, max_request_cost_usd=0.0)
+    try:
+        cap = float(raw)
+    except ValueError:
+        return RoutePolicy(allow_paid=False, max_request_cost_usd=0.0)
+    if (
+        not math.isfinite(cap)
+        or cap < 0
+        or spent_month_usd is None
+        or not math.isfinite(spent_month_usd)
+        or spent_month_usd < 0
+    ):
+        return RoutePolicy(allow_paid=False, max_request_cost_usd=0.0)
+    remaining = cap - spent_month_usd
     if remaining <= 0:
         return RoutePolicy(allow_paid=False, max_request_cost_usd=0.0)
     return RoutePolicy(

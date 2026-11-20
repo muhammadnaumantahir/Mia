@@ -155,6 +155,7 @@ def test_read_only_tools(env):
 
     meta = ops.metadata("root_1", "src/a.py")
     assert meta["kind"] == "file" and meta["extension"] == ".py" and len(meta["sha256"]) == 64
+    assert meta["relative_path"] == "src/a.py"
     hits = ops.search_content("root_1", "needle")
     assert {h["relative_path"] for h in hits} == {"src/a.py", "src/b.py"}  # .env excluded
     cmp = ops.compare_files("root_1", "src/a.py", "src/b.py")

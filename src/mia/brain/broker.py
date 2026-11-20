@@ -62,6 +62,86 @@ class DefaultPermissionEvaluator:
         return GateDecision(True, "ok")
 
 
+class OwnerPermissionEvaluator(DefaultPermissionEvaluator):
+    """Bridge Brain tools to Mia's shared computer permission catalogue.
+
+    Read tools must map to a declared low-risk capability. Preview tools may
+    prepare an owner approval request, but do not execute the side effect; the
+    underlying adapter still binds that request to its exact payload.
+    """
+
+    _CAPABILITIES = {
+        "filesystem.list_directory": "filesystem.list",
+        "filesystem.search_filenames": "filesystem.search",
+        "filesystem.read_text": "filesystem.read",
+        "desktop.list_windows": "desktop.observe",
+        "desktop.inspect_window": "desktop.observe",
+        "applications.list": "apps.discover",
+        "system.read_resources": "system.status",
+        "system.list_processes": "process.top",
+        "browser.search_web": "browser.navigate",
+        "browser.navigate": "browser.navigate",
+        "filesystem.preview_write": "filesystem.write",
+        "applications.preview_launch": "apps.launch",
+        "browser.preview_click": "browser.click",
+    }
+
+    def __init__(
+        self,
+        permission_policy: Any,
+        capability_registry: Any,
+        *,
+        path_resolver: Any | None = None,
+        deny_permissions: Iterable[str] = (),
+    ) -> None:
+        super().__init__(deny_permissions=deny_permissions)
+        self.permission_policy = permission_policy
+        self.capability_registry = capability_registry
+        self.path_resolver = path_resolver
+
+    def evaluate(self, tool: ToolDefinition, arguments: dict[str, Any]) -> GateDecision:
+        baseline = super().evaluate(tool, arguments)
+        if not baseline.allowed:
+            return baseline
+
+        # Memory retrieval is governed by MemoryStore settings and the gateway's
+        # separate local-only data-egress gate, not by computer filesystem grants.
+        if tool.name == "memory.search_knowledge" and tool.permission == "memory.read":
+            return GateDecision(True, "ok")
+
+        capability = self._CAPABILITIES.get(tool.name)
+        if capability is None:
+            return GateDecision(
+                False,
+                "permission",
+                "tool has no owner-approved capability mapping",
+            )
+        try:
+            spec = self.capability_registry.get(capability)
+        except KeyError:
+            return GateDecision(
+                False,
+                "permission",
+                "tool capability is not registered on this Mia runtime",
+            )
+
+        path = self.path_resolver(tool, arguments) if self.path_resolver else None
+        decision = self.permission_policy.authorize(spec, path=path)
+        if not decision.allowed:
+            return GateDecision(False, "permission", decision.reason)
+
+        if tool.mode == "preview":
+            # Preview handlers only create a pending, exact-payload approval. The
+            # action's execute endpoint still consumes that separate approval.
+            return GateDecision(True, "ok")
+        if decision.requires_approval:
+            return GateDecision(
+                False,
+                "permission",
+                "this read tool requires an owner grant under the capability policy",
+            )
+        return GateDecision(True, "ok")
+
 @dataclass(slots=True)
 class ToolCallRecord:
     name: str

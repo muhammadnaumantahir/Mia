@@ -8,7 +8,7 @@ Expose one stable Mia model interface while supporting local inference and multi
 
 ## Logical components
 
-- Provider adapters: Ollama, FreeLLMAPI sidecar, or a later selected gateway.
+- Provider adapters: local Ollama and directly configured cloud/self-hosted OpenAI-compatible endpoints, all called by Mia.
 - Model registry: provider, model ID, capabilities, context, health, latency, prices, quota and terms metadata.
 - Task classifier: conversation, reasoning, coding, vision, research, speech or embedding.
 - Router: choose a suitable eligible candidate using task fit, capability, context, known cost, latency and reliability.
@@ -26,7 +26,7 @@ Default mode is local/free-first:
 4. If no eligible candidate exists, report that the task cannot be routed rather than silently spending money.
 5. Paid candidates are excluded unless paid mode is explicitly enabled, both prices are known and the estimated request cost is within the configured per-request cap.
 
-**Monthly spend enforcement is not implemented yet.** The environment variable for a monthly ceiling is reserved for a future usage ledger; do not enable paid inference until that ledger exists and has been tested. Unknown cloud prices are not treated as zero.
+**Budget enforcement:** paid inference is disabled by default. It requires explicit request, daily UTC and monthly UTC ceilings (`MIA_MAX_REQUEST_SPEND_USD`, `MIA_MAX_DAILY_SPEND_USD`, `MIA_MAX_MONTHLY_SPEND_USD`) plus `MIA_ALLOW_PAID=true`. Missing, malformed, negative or non-finite limits disable paid routes. The append-only usage ledger calculates daily and monthly spend. Before provider I/O, the gateway reserves the estimated maximum request charge in a SQLite `BEGIN IMMEDIATE` transaction against actual spend and all live reservations. The reservation is released on failure or consumed atomically with the usage row. It has a bounded expiry and is cleared on application startup (single-local-server assumption). Unknown cloud prices are not treated as zero. Provider token counts can differ from Mia's pre-call estimate; the reservation is a conservative admission guard, not a guarantee against inaccurate provider usage or upstream billing discrepancies.
 
 Routing should optimize the task, not simply choose the newest or largest model. Benchmark-based quality and reliability evidence by task type is still future work. Do not fabricate quality scores for newly discovered models.
 
@@ -49,7 +49,7 @@ A Mia provider adapter should implement:
 - secret redaction;
 - timeouts and retry policy.
 
-Streaming, model-specific capability metadata, monthly cost ledger and benchmark-based route quality remain outstanding.
+Streaming tool calls now reach the gateway layer; model-specific capability provenance and a persistent registry exist. Benchmark-based route quality, semantic caching, specialized multimodal paths and online route evaluation remain outstanding.
 
 ## Safety requirements
 
@@ -64,15 +64,16 @@ Ollama is marked as a local inference provider. Any remote-compatible provider i
 
 The chat tool loop withholds file and knowledge contents from non-local providers by default. `MIA_ALLOW_REMOTE_FILE_CONTEXT=true` is a separate owner opt-in that permits this data egress.
 
-## Streaming, usage ledger and daily budget
+## Streaming, usage ledger and request/daily/monthly budget
 
 - `POST /api/gateway/chat/stream` returns Server-Sent Events: `delta` (text fragments), then `done` (provider, model, token counts, cost, conversation id) or `error` (`partial: true` when text had already been sent). Streaming is text-only: tool-bearing chat stays on `POST /api/gateway/chat`; requests with tools passed to `ModelGateway.stream` use one buffered call.
 - Fallback to the next candidate happens only before the first token. A failure after output has started is surfaced, not retried on another model; the saved assistant message is marked `[response interrupted]`.
 - Ollama (NDJSON) and OpenAI-compatible (SSE, `stream_options.include_usage`) adapters report provider token counts when available. Ledger rows say `reported` or `estimated`.
 - Cost: free-tier routes record 0. Paid routes use reported tokens times the candidate prices; with no reported usage the worst-case estimate is recorded so spend is never undercounted. Invalid prices produce no cost value and such routes are already ineligible.
-- `UsageLedger` (SQLite `mia-usage.sqlite3` in `MIA_DATA_DIR`) is append-only. `GET /api/gateway/usage?days=N` returns totals per provider/model and today's UTC spend.
-- Daily cap: `MIA_MAX_DAILY_SPEND_USD` (optional) is enforced at runtime on top of `MIA_MAX_REQUEST_SPEND_USD`. Each request's cap is `min(per-request cap, remaining daily budget)`; once spend reaches the cap, paid routing is disabled. A malformed, non-finite or negative value disables paid routing. Paid routing still requires `MIA_ALLOW_PAID=true`.
-- Not yet done: streaming tool calls, a UI for the stream and usage view, a UI for the health view, rate-limit tracking from response headers beyond Retry-After (e.g. remaining-quota headers feeding `quota_remaining`), and mid-stream cost cut-off for paid models.
+- `UsageLedger` (SQLite `mia-usage.sqlite3` in `MIA_DATA_DIR`) is append-only. `GET /api/gateway/usage?days=N` returns totals per provider/model and today's UTC spend; the ledger also computes the current UTC calendar-month total.
+- Request/daily/monthly caps: `MIA_MAX_REQUEST_SPEND_USD`, `MIA_MAX_DAILY_SPEND_USD` and `MIA_MAX_MONTHLY_SPEND_USD` are all mandatory for paid routing. Each paid request reserves its estimated charge against the per-request ceiling and remaining daily/monthly allowance before provider I/O. A missing, malformed, non-finite or negative value disables paid routing. Paid routing still requires `MIA_ALLOW_PAID=true`. Reservation state is included in the `/gateway` console.
+- The `/gateway` console provides provider health and connection tests, model discovery, model settings, recent route decisions, usage and budget views, plus active in-flight reservation totals. Route-decision history is persisted in `mia-routing.sqlite3` with bounded retention; records contain route metadata only, never prompts, messages, tool arguments or credentials. The Assistant page surfaces the proactive inbox with text-only rendering and owner read/done/dismiss controls.
+- Not yet done: rate-limit remaining-quota header ingestion, mid-stream paid spend cut-off, semantic response cache, benchmark-driven quality/route evaluation, complete embedding and multimodal adapters, persistent provider health/circuit-breaker history, and remote owner-admin authentication (the app remains localhost-only). Paid inference should still remain off until real provider pricing/usage behavior is verified by the owner.
 
 ## Latency measurement
 
@@ -92,24 +93,24 @@ State is process-local and not persisted; a restart resets it. This does not rot
 
 ## Provider configuration (environment)
 
-OpenAI-compatible providers are registered from `MIA_<PREFIX>_*` variables; the API key
+Direct OpenAI-compatible providers are registered from `MIA_EXTRA_PROVIDERS` and `MIA_PROVIDER_<ID>_*` variables; the API key
 comes only from the OS credential store (`mia-credentials set <provider>`), never from
 the environment or the repository. Ollama is always registered; nothing else is, so a
 local-only setup needs no keys.
 
 | Variable | Meaning |
 |---|---|
-| `MIA_PROVIDER_<ID>_ENABLED` | Register an independently configured direct provider adapter; do not add FreeLLMAPI/OmniRoute as built-in providers |
+| `MIA_EXTRA_PROVIDERS=id1,id2` | Register independently configured direct provider adapters; do not add gateway sidecars |
 | `..._BASE_URL` | Provider base URL, validated (`gateway/urlpolicy.py`) |
 | `..._ROUTE_FREE` | Treat the route as free (default false) |
 | `..._DATA_LOCAL` | Treat data as staying local (default false) |
 | `..._ENABLE_TOOL_CALLING` | Advertise tool calling (default false) |
 | `..._TIMEOUT_SECONDS` | Request timeout, 1 to 600; invalid values use 90 |
 | `..._HEADERS` | JSON object of extra non-secret headers; `Authorization`, `Host` and framing headers are refused |
-| `MIA_EXTRA_PROVIDERS=id1,id2` | More OpenAI-compatible providers, configured as `MIA_PROVIDER_<ID>_*` |
+| `MIA_MAX_REQUEST_SPEND_USD`, `MIA_MAX_DAILY_SPEND_USD`, `MIA_MAX_MONTHLY_SPEND_USD` | All three valid ceilings are required before paid inference can be enabled |
 
 `ModelGateway.test_connection(provider_id)` lists models and returns a sanitized
 status (`ok`, `unreachable`, `auth_failed`, `invalid_response`, `unknown_provider`,
 `error`) with model count and latency; it never returns URLs, headers or bodies.
 Model discovery skips a provider whose credentials are rejected instead of failing.
-No HTTP endpoint exposes the connection test yet (no owner-only admin auth exists).
+The local `/api/gateway/providers/{provider_id}/test` endpoint returns a sanitized connection result. The app remains localhost-only; no authenticated remote owner-admin surface exists.

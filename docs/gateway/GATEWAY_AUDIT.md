@@ -1,5 +1,20 @@
 # AI Gateway audit (milestone 1)
 
+# Current implementation addendum — 2026-11-20
+
+> The body below records a historical 2026-11-19 baseline and plan. It is not the current implementation inventory. This addendum supersedes statements in that snapshot that still describe FreeLLMAPI/OmniRoute as runtime integrations or model registry/controls and the diagnostics UI as missing.
+
+Current branch: `development/complete-product-gaps`
+
+- Runtime factory now registers Ollama plus only explicitly listed generic direct providers (`MIA_EXTRA_PROVIDERS`, `MIA_PROVIDER_<ID>_*`). Legacy FreeLLMAPI/OmniRoute flags are ignored; neither is a built-in provider or required sidecar.
+- The persistent model registry, capability provenance, enable/disable, alias and preference storage are implemented. Per-model stored preferences now participate in gateway candidate ordering.
+- The gateway exposes a local `/gateway` console for provider health, sanitized connection tests, model discovery, model settings, usage, budgets and recent routing decisions.
+- The usage ledger now computes UTC calendar-month spend. Paid routing requires valid per-request, daily and monthly limits; any missing/invalid limit fails closed. Free/local routing remains available without cloud credentials.
+- The gateway API/admin surface remains local-only and unauthenticated. Do not bind it to a public interface.
+- Atomic in-flight paid-request reservations are implemented in this branch: `BEGIN IMMEDIATE` serializes reservations, live reservations are included in daily/monthly spend checks, and usage settlement removes the reservation in the same transaction. Concurrent overbooking, release/settlement, unknown-cost rejection and cancelled completion/stream reservation-retention tests are present but have not been executed in this environment. Invalid provider token counts are rejected; unknown paid cost does not consume the reservation. Remaining gateway engineering: remaining-quota headers; persistent health/circuit-breaker/decision history; provider discovery TTL; benchmark-driven quality routing; semantic cache; full multimodal/embedding adapters; token/context compaction and mid-stream paid spend cut-off.
+- Automated tests were added for direct provider configuration, monthly/daily budget caps, API console, model settings and persisted routing preferences. They have **not** been executed in this working environment; wait for CI runner evidence or a local run before recording them as passing. No live cloud provider has been contacted by this implementation task.
+
+
 Audit date: 2026-11-19. Method: reading `src/mia/gateway/*`, the gateway call sites
 in `src/mia/observatory/api.py`, `src/mia/brain/*`, `src/mia/agent/planner.py`, the
 existing gateway docs and tests, plus a baseline run of the existing suite.
@@ -172,3 +187,12 @@ None of these is marked "verified live".
   A validator bug (error cap not enforced in loops) was caught by the new tests and
   fixed. Local verification: `ruff` clean, `pytest` 1095 passed, 16 skipped (browser
   tests lacking Playwright/Chromium; mocked providers only).
+
+
+## 2026-11-20 fail-closed accounting addendum
+
+- New paid usage rows with unknown/invalid cost are rejected; their reservation is not silently released.
+- Historical paid rows with NULL cost now make daily/monthly spend unknown. `spend_since`, budget reservation and policy application fail closed instead of allowing SQL SUM to ignore NULL and effectively treat it as zero.
+- Usage summaries return `cost_usd: null` and an `unknown_cost_rows` count; the gateway dashboard renders “Unknown” and warns that paid routing is blocked until reconciliation.
+- Paid request and stream cancellation retain reservations until expiry because the provider may have processed billable tokens before cancellation.
+- Regression tests for historical NULL-cost rows, cancellation, unknown spend and dashboard-safe summaries have been added but have not been run after these changes. The earlier local test counts in this audit are historical and do not verify this addendum.

@@ -22,13 +22,14 @@ import sqlite3
 import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from .approvals import ApprovalError, ApprovalStore
 from .control import CURRENT_TASK_ID, AutomationControl, AutomationStopped
+from .permissions import Decision
 
 MAX_STEPS = 20
 TERMINAL_TASK_STATES = {"completed", "failed", "cancelled"}
@@ -85,14 +86,25 @@ def _lookup(data: Any, path: str) -> Any:
 
 
 class TaskEngine:
-    def __init__(self, database_path: str | Path, approvals: ApprovalStore,
-                 handlers: dict[str, StepHandler], *,
-                 control: AutomationControl | None = None) -> None:
+    def __init__(
+        self,
+        database_path: str | Path,
+        approvals: ApprovalStore,
+        handlers: dict[str, StepHandler],
+        *,
+        control: AutomationControl | None = None,
+        permission_policy: Any | None = None,
+        capability_registry: Any | None = None,
+        permission_path: Callable[[str, dict[str, Any]], str | None] | None = None,
+    ) -> None:
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self.approvals = approvals
         self.handlers = handlers
         self.control = control
+        self.permission_policy = permission_policy
+        self.capability_registry = capability_registry
+        self.permission_path = permission_path
         self._init()
         self._running: set[str] = set()
         self._cancel_callbacks: list[Callable[[str], Any]] = []
@@ -229,16 +241,73 @@ class TaskEngine:
                               (task_id, max(1, min(limit, 500)))).fetchall()
         return [dict(r) for r in reversed(rows)]
 
+    def _permission_decision(
+        self, capability: str, args: dict[str, Any], info: Inspection
+    ) -> Any | None:
+        """Apply the shared owner policy to capabilities with a real approval path.
+
+        Terminal execution already consults PermissionPolicy directly. Steps with
+        no approval adapter keep their existing read-only or narrowly-scoped flow.
+        """
+        if (
+            self.permission_policy is None
+            or self.capability_registry is None
+            or capability == "terminal.run"
+        ):
+            return None
+        handler = self.handlers[capability]
+        try:
+            spec = self.capability_registry.get(capability)
+        except KeyError:
+            return Decision(
+                allowed=False,
+                requires_approval=True,
+                reason="capability has no registered owner permission specification",
+            )
+        path = self.permission_path(capability, args) if self.permission_path else None
+        decision = self.permission_policy.authorize(spec, path=path)
+        # Adapter inspection can identify a consequential target more precisely
+        # than a generic catalogue row. Never let a lower-risk grant waive it.
+        if info.risk == "high" and decision.allowed and not decision.requires_approval:
+            decision = replace(
+                decision,
+                requires_approval=True,
+                reason="this target is high risk; per-action approval is mandatory",
+            )
+        # A capability without a one-time approval adapter cannot use a
+        # permission prompt to authorize its side effect. It must have an active
+        # matching owner grant; otherwise fail closed before the handler runs.
+        if (
+            decision.allowed
+            and decision.requires_approval
+            and not handler.idempotent
+            and handler.request_approval is None
+        ):
+            decision = replace(
+                decision,
+                allowed=False,
+                reason="this capability needs an owner grant; no per-action approval adapter is available",
+            )
+        return decision
+
     def plan_summary(self, task_id: str) -> list[dict[str, Any]]:
         """What the owner is about to be asked to approve, from current state, side-effect free."""
         out = []
         for step in self.get_task(task_id)["steps"]:
             handler = self.handlers[step["capability"]]
             try:
-                info = handler.inspect(self._resolve_args(task_id, step["args"], strict=False))
+                resolved = self._resolve_args(task_id, step["args"], strict=False)
+                info = handler.inspect(resolved)
+                permission = self._permission_decision(step["capability"], resolved, info)
+                needs_approval = (
+                    permission.requires_approval if permission is not None else info.needs_approval
+                )
+                summary = info.summary
+                if permission is not None and not permission.allowed:
+                    summary = f"PERMISSION DENIED: {permission.reason}; {summary}"
                 out.append({"step": step["idx"], "capability": step["capability"],
                             "description": step["description"], "risk": info.risk,
-                            "needs_approval": info.needs_approval, "summary": info.summary})
+                            "needs_approval": needs_approval, "summary": summary})
             except Exception as exc:
                 out.append({"step": step["idx"], "capability": step["capability"],
                             "description": step["description"], "risk": "unknown",
@@ -400,6 +469,14 @@ class TaskEngine:
         try:
             args = self._resolve_args(task_id, step["args"])
             info = await self._call(handler, handler.inspect, args)  # revalidates current state
+            permission = self._permission_decision(step["capability"], args, info)
+            if permission is not None and not permission.allowed:
+                self._fail(task_id, idx, f"Permission denied: {permission.reason}")
+                self._event(
+                    task_id, "permission_denied",
+                    f"Step {idx} refused by owner permission policy: {permission.reason}", idx,
+                )
+                return False
         except AutomationStopped:
             raise
         except Exception as exc:
@@ -407,7 +484,10 @@ class TaskEngine:
             return False
         self._set_step(task_id, idx, risk=info.risk)
         approval_id = step["approval_id"]
-        if info.needs_approval:
+        needs_approval = (
+            permission.requires_approval if permission is not None else info.needs_approval
+        )
+        if needs_approval:
             status = self.approvals.status(approval_id) if approval_id else None
             if approval_id is None or status in {None, "consumed", "expired", "rejected"}:
                 if status == "rejected":
@@ -429,7 +509,23 @@ class TaskEngine:
                 self._set_task(task_id, status="awaiting_approval")
                 return False
         else:
-            approval_id = None
+            # The shared owner grant authorizes this adapter action. Create its
+            # normal one-time adapter approval internally, then consume it in run().
+            # High-risk actions never reach this branch.
+            if permission is not None and handler.request_approval is not None:
+                try:
+                    approval_id = await self._call(handler, handler.request_approval, args)
+                    # The standing owner grant is the authorization for this
+                    # medium-risk action. Approve only the exact, freshly prepared
+                    # adapter payload so the adapter can still consume its normal
+                    # one-time, payload-bound token.
+                    self.approvals.approve(approval_id)
+                    self._set_step(task_id, idx, approval_id=approval_id)
+                except Exception as exc:
+                    self._fail(task_id, idx, f"Granted action could not be prepared: {exc}")
+                    return False
+            else:
+                approval_id = None
         self._set_step(task_id, idx, status="running", started_at=_now())
         self._event(task_id, "step_started", f"Step {idx} of {total}: {step['description']}", idx)
         outcome = Outcome(ok=False, error="not run")

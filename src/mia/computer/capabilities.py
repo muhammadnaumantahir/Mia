@@ -286,6 +286,12 @@ def default_registry() -> CapabilityRegistry:
             "Entries come from the owner allowlist file.", _obj(), _obj(items={"type": "array"}),
         ),
         CapabilitySpec(
+            "apps.discover", "Discover installed applications for local inventory.", V, low, 15,
+            "Results come from a fresh local application inventory scan.",
+            _obj(query=_S), _obj(items={"type": "array"}),
+            constraints=("Discovery is read-only and does not launch applications.",),
+        ),
+        CapabilitySpec(
             "apps.launch", "Launch one allowlisted application with fixed arguments.", X, med, 30,
             "Process ID returned and process existence is checked after launch.",
             _obj(app_id=_S), _obj(process_id=_I),
@@ -445,12 +451,6 @@ def default_registry() -> CapabilityRegistry:
             _obj(window=_S, control_id=_S, text=_S), _obj(status=_S),
             supported_os=("windows",), requires_modules=("pywinauto",), needs_display=True,
             side_effects=("ui_text_entry",),
-        ),
-        CapabilitySpec(
-            "apps.discover", "List installed application names (never launches them).", V, low, 30,
-            "Names come from Start Menu, installed-program registry or desktop entries.",
-            _obj(query=_S), _obj(items={"type": "array"}),
-            constraints=("Names only; launching needs an owner allowlist entry.",),
         ),
         CapabilitySpec(
             "system.status", "CPU, RAM, disk space, uptime and network interface state.", V, low, 15,

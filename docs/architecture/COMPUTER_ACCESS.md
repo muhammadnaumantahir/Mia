@@ -119,8 +119,9 @@ Install on Windows with `python -m pip install -e ".[computer]"`. This adapter i
 - API: `GET/POST /api/computer/permissions`, `DELETE /api/computer/permissions/{id}`,
   `POST /api/computer/permissions/revoke-all`, `GET /api/computer/permissions/history`. The API is localhost-only;
   authenticated owner identity is still required before any remote exposure.
-- Not yet done: existing adapters (filesystem write, app launch, browser click, UI text) still use their own
-  approval flow and do not yet call `PermissionPolicy.authorize`; this is wired in the milestones that touch them.
+- 2026-11-20: `TaskEngine` now consults `PermissionPolicy` for registered capabilities whose adapters expose an approval callback. Matching medium-risk grants can replace the extra approval prompt while the adapter still receives its exact one-time preview approval; high-risk actions always require per-action approval. Directory grants are checked against resolved filesystem paths.
+- The main direct API boundaries for file operations/writes, app launch, browser click/download/upload, browser preparation, process termination and desktop actions now consult `PermissionPolicy`. Actions without an approval-preview mechanism (browser fill/select/check/scroll/tabs/screenshot) require an active matching owner grant; consequential browser and desktop actions continue to require a one-time per-action approval.
+- Still not done: enforcement is not yet embedded inside every adapter method, window management remains on adapter-specific approval only, and AI Brain tool execution plus Voice-to-computer actions are not yet routed through one shared permission broker.
 
 ## File operations (Feature 4, M3)
 
@@ -139,7 +140,7 @@ Install on Windows with `python -m pip install -e ".[computer]"`. This adapter i
   `/api/computer/files/ops/{preview,execute}` (POST).
 - Limits: copies up to 100 MB / 5000 files; compare 512 KB per file; duplicate scan 5000 files. Office/PDF document
   reading remains via the existing knowledge ingestion path; no new document writers were added.
-- Like M2, these paths still use the one-time approval store directly; `PermissionPolicy` is not yet consulted.
+- Direct FileOperations API routes still use the one-time approval store directly; multi-step TaskEngine calls now perform shared permission checks before these adapter operations.
 
 ## Application, window and process control (Feature 4, M4)
 
@@ -163,7 +164,7 @@ Install on Windows with `python -m pip install -e ".[computer]"`. This adapter i
   actually gone. Elevated/administrator operations are not implemented.
 - **Verification status**: process and system code ran against real processes on Linux. Window, registry and hung-window
   code ran only against test doubles. **No real Windows run has happened.**
-- Policy engine wiring (`PermissionPolicy.authorize`) is still pending for these adapters.
+- Multi-step TaskEngine routes now consult `PermissionPolicy.authorize` for adapters with approval callbacks. The corresponding direct single-action routes still use the adapter approval store only.
 
 ## Terminal execution (Feature 4, M5)
 
@@ -261,6 +262,8 @@ sub-requests, goes through the URL policy (public web only; loopback/private/res
 **Verification status:** all desktop logic is tested with a fake UI Automation tree (17 tests). **Nothing has been run
 against a real Windows desktop**, real pywinauto element behavior (invoke patterns, toggle/selection state, scroll, `type_keys`
 quoting), or a real UAC prompt. Manual Windows verification is required before relying on this.
+
+> **2026-11-20 permission integration:** task plans and execution now evaluate the central owner permission catalogue for registered capabilities with an approval path. A matching medium-risk owner grant can bypass the separate approval pause, but the existing adapter still creates and consumes the exact request-specific one-time approval. High-risk operations (for example delete, process terminate, consequential browser click/upload and high-risk desktop actions) always wait for per-action approval. `terminal.run` remains governed directly by `TerminalExecutor` and the same policy. Directory grants use resolved filesystem paths and do not cover paths outside the grant. Direct API routes, no-approval browser preparation steps, and Brain/Voice tool integration remain separate pending work.
 
 ## Multi-step computer tasks (Feature 4, M8)
 

@@ -784,3 +784,25 @@ def test_local_engine_push_to_talk_transcribes_on_release(local_mic):
     c.turns(1)
     assert c.provider.user_prompts()[0] == "hello from the local engine"
     c.wait("window.__gum.tracks.every(t=>t.readyState==='ended')")
+
+
+def test_wake_phrase_ignores_unaddressed_speech_then_submits_after_hey_mia(ctx):
+    ctx.page.click("#wakeWordMode")
+    ctx.listening()
+    assert "Listening for 'Hey Mia'" in ctx.status()
+    ctx.say("Hello Mia, I am speaking to someone else")
+    ctx.sleep(0.1)
+    assert ctx.provider.requests == []
+
+    ctx.say("Hey Mia, which database did we choose for billing?")
+    ctx.turns(1)
+    assert "which database did we choose for billing" in ctx.provider.user_prompts()[0].lower()
+    assert "hey mia" not in ctx.provider.user_prompts()[0].lower()
+    ctx.wait("window.__tts.spoken.length>=1")
+    ctx.wait("window.__rec.live().length>0")
+    assert "Listening for 'Hey Mia'" in ctx.status()
+
+    ctx.page.click("#wakeWordMode")
+    ctx.wait("window.__rec.live().length===0")
+    assert ctx.js("document.getElementById('voiceMicBadge').dataset.on") == "false"
+    assert ctx.state() == "stopped"

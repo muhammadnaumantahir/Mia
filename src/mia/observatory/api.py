@@ -8,6 +8,8 @@ from __future__ import annotations
 import ast
 import asyncio
 import hashlib
+import hmac
+import ipaddress
 import json
 import math
 import os
@@ -35,17 +37,22 @@ from mia.agent.tasks import (
     TaskTransitionError,
 )
 from mia.agent.tools import ToolRegistry, ToolResult
+from mia.brain.broker import OwnerPermissionEvaluator, ToolBroker
 from mia.brain.capabilities import CapabilityRegistry
 from mia.brain.orchestrator import Brain, TurnRequest
 from mia.brain.plan import PlanStore
+from mia.brain.self_description import build_runtime_manifest, render_runtime_manifest
+from mia.codegraph.impact import analyze_impact
+from mia.codegraph.indexer import build_graph
+from mia.codegraph.watcher import CodeGraphWatcher
 from mia.computer.app_discovery import ApplicationDiscovery
 from mia.computer.applications import ApplicationLauncher, ApplicationLaunchError
 from mia.computer.approvals import ApprovalError, ApprovalStore
 from mia.computer.browser import BrowserAccessError, BrowserController
 from mia.computer.browser_actions import BrowserActions
-from mia.computer.capabilities import PermissionLevel, default_registry
+from mia.computer.capabilities import PermissionLevel, RiskLevel, default_registry
 from mia.computer.control import AutomationControl, AutomationStopped
-from mia.computer.desktop_control import DesktopController, make_window_guard
+from mia.computer.desktop_control import _CONSEQUENTIAL, DesktopController, make_window_guard
 from mia.computer.environment import detect_environment
 from mia.computer.fileops import FileOperationError, FileOperations
 from mia.computer.filesystem import FilesystemAccessError, FilesystemAdapter
@@ -72,12 +79,19 @@ from mia.gateway.contracts import (
     RoutePolicy,
     TransientProviderError,
 )
-from mia.gateway.factory import apply_daily_cap, build_default_registry, paid_route_policy
+from mia.gateway.factory import (
+    apply_daily_cap,
+    apply_monthly_cap,
+    build_default_registry,
+    paid_route_policy,
+)
 from mia.gateway.ledger import UsageLedger
-from mia.gateway.model_registry import ModelRegistry
+from mia.gateway.model_registry import ModelRegistry, ModelRegistryError
+from mia.gateway.selection import DecisionLog
 from mia.gateway.service import ModelGateway
 from mia.knowledge.document_ingestion import DocumentIngestionError, DocumentIngestor
 from mia.life.capture import capture_from_message as capture_curiosity_from_message
+from mia.life.reflect import Reflector
 from mia.life.runner import LifeRunner, LifeScheduler
 from mia.life.store import ITEM_STATES, LifeStore
 from mia.life.web import ResearchExplorer, normalise_research_url
@@ -88,6 +102,7 @@ from mia.memory.identity import (
 )
 from mia.memory.maintenance import MaintenanceService
 from mia.memory.relationships import RelationshipNotFoundError
+from mia.memory.semantic import LocalOllamaEmbeddingReranker
 from mia.memory.store import MemoryStore
 from mia.memory.structured import RECORD_TYPES, RecordNotFoundError, RecordStateError
 from mia.observatory.activity import ExperimentActivityCollector
@@ -141,6 +156,7 @@ class CapabilityDraftInput(BaseModel):
     )
     name: str = Field(min_length=1, max_length=120)
     objective: str = Field(min_length=1, max_length=4000)
+    permissions: list[str] = Field(default_factory=list, max_length=10)
 
 
 class CapabilityCandidateInput(BaseModel):
@@ -206,7 +222,7 @@ class ApplicationLaunchPreview(BaseModel):
 
 
 class ApplicationLaunchExecution(ApplicationLaunchPreview):
-    approval_id: str = Field(min_length=32, max_length=32)
+    approval_id: str | None = Field(default=None, min_length=32, max_length=32)
 
 
 class FileWritePreview(BaseModel):
@@ -216,7 +232,7 @@ class FileWritePreview(BaseModel):
 
 
 class FileWriteExecution(FileWritePreview):
-    approval_id: str = Field(min_length=32, max_length=32)
+    approval_id: str | None = Field(default=None, min_length=32, max_length=32)
 
 
 class ApprovalExecutionInput(BaseModel):
@@ -248,6 +264,14 @@ class ChatInput(BaseModel):
     conversation_id: str | None = Field(default=None, min_length=8, max_length=80)
     use_tools: bool = True
     interface: str = Field(default="text", pattern="^(text|voice)$")
+
+class GatewayModelSettingsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool | None = None
+    preference: int | None = Field(default=None, ge=-10, le=10)
+    alias: str | None = Field(default=None, max_length=64)
+    change_alias: bool = False
 
 
 class CapabilityPromotionInput(BaseModel):
@@ -487,7 +511,7 @@ class BrowserActionInput(BrowserRefInput):
 
 
 class BrowserActionExecution(BrowserActionInput):
-    approval_id: str = Field(min_length=32, max_length=32)
+    approval_id: str | None = Field(default=None, min_length=32, max_length=32)
 
 
 class TerminalCommandInput(BaseModel):
@@ -558,12 +582,12 @@ class DesktopActionInput(BaseModel):
 
 
 class DesktopActionExecution(DesktopActionInput):
-    approval_id: str = Field(min_length=32, max_length=32)
+    approval_id: str | None = Field(default=None, min_length=32, max_length=32)
     window_title: str = Field(min_length=1, max_length=240)
 
 
 class WindowActionExecution(WindowActionInput):
-    approval_id: str = Field(min_length=32, max_length=32)
+    approval_id: str | None = Field(default=None, min_length=32, max_length=32)
     window_title: str = Field(min_length=1, max_length=240)
 
 
@@ -578,7 +602,7 @@ class FileOperationInput(BaseModel):
 
 
 class FileOperationExecution(FileOperationInput):
-    approval_id: str = Field(min_length=32, max_length=32)
+    approval_id: str | None = Field(default=None, min_length=32, max_length=32)
 
 
 class PermissionGrantInput(BaseModel):
@@ -626,16 +650,41 @@ def create_app(
     app_discovery: ApplicationDiscovery | None = None,
     life: LifeStore | None = None,
     life_fetcher: Any | None = None,
+    enable_code_graph_watcher: bool = False,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
     model_gateway = gateway or ModelGateway(
         build_default_registry(),
         model_registry=ModelRegistry(data_dir / "mia-models.sqlite3"),
+        decisions=DecisionLog(database_path=data_dir / "mia-routing.sqlite3"),
     )
     ledger = usage_ledger or UsageLedger(data_dir / "mia-usage.sqlite3")
+    if isinstance(ledger, UsageLedger):
+        # This app is a single local server; reservations from a previous crashed
+        # process cannot represent work still running and are released on restart.
+        ledger.clear_reservations_on_startup()
+        model_gateway.usage_ledger = ledger
+        model_gateway.require_budget_reservations = True
     startup_handlers: list[Callable[[], Any]] = []
     shutdown_handlers: list[Callable[[], Any]] = []
+    code_graph_watcher: CodeGraphWatcher | None = None
+    if (
+        enable_code_graph_watcher
+        and os.getenv("MIA_CODE_GRAPH_WATCH_ENABLED", "true").strip().lower() != "false"
+    ):
+        try:
+            watch_interval = float(os.getenv("MIA_CODE_GRAPH_WATCH_INTERVAL_SECONDS", "5"))
+        except ValueError:
+            watch_interval = 5.0
+        watch_interval = min(60.0, max(1.0, watch_interval))
+        graph_root = Path(__file__).resolve().parents[3]
+        code_graph_watcher = CodeGraphWatcher(
+            graph_root, graph_root / "docs" / "code-graph" / "graph.json",
+            interval_seconds=watch_interval,
+        )
+        startup_handlers.append(code_graph_watcher.start)
+        shutdown_handlers.append(code_graph_watcher.stop)
 
     async def _call_handler(handler: Callable[[], Any]) -> None:
         if asyncio.iscoroutinefunction(handler):
@@ -660,6 +709,7 @@ def create_app(
         description="Local-first, evidence-backed evolution telemetry and AI gateway.",
     )
     app.state.observatory = observatory
+    app.state.code_graph_watcher = code_graph_watcher
     baseline_capture_service = baseline_capture or capture_baseline_manifest
     app.state.baseline_capture = baseline_capture_service
     app.state.gateway = model_gateway
@@ -685,6 +735,33 @@ def create_app(
     capability_registry = default_registry()
     app.state.permission_policy = policy
     app.state.capability_registry = capability_registry
+
+    def _computer_permission_requires_approval(
+        capability: str,
+        *,
+        path: str | None = None,
+        force_approval: bool = False,
+    ) -> bool:
+        """Evaluate the shared owner policy; unknown capabilities fail closed."""
+        try:
+            spec = capability_registry.get(capability)
+        except KeyError as exc:
+            # Unknown capabilities are never implicitly approvable; callers may
+            # otherwise ignore the boolean approval hint and execute anyway.
+            raise HTTPException(
+                status_code=403,
+                detail="computer capability is not registered on this Mia runtime",
+            ) from exc
+        decision = policy.authorize(spec, path=path)
+        if not decision.allowed:
+            raise HTTPException(status_code=403, detail=decision.reason)
+        return bool(decision.requires_approval or force_approval)
+
+    def _filesystem_permission_path(root_id: str, relative_path: str) -> str | None:
+        try:
+            return str(computer_files._resolve(root_id, relative_path or "."))
+        except Exception:
+            return None
     desktop_adapter = windows_ui or WindowsUIAdapter(approval_store)
     if desktop_adapter.window_guard is None:
         desktop_adapter.window_guard = make_window_guard()
@@ -705,14 +782,11 @@ def create_app(
     app.state.memory = memory_store
 
     def current_identity() -> tuple[str, int | None]:
-        """The stored identity prompt and version; the factory default if unreadable.
-
-        Identity lives in the memory database, so it is the same whichever provider
-        or model answers. A storage failure must not break ordinary chat.
-        """
+        """Combine the owner-editable profile with factual live runtime evidence."""
         try:
             record = memory_store.identity.active()
-            return render_identity_prompt(record["profile"]), record["version"]
+            identity_text = render_identity_prompt(record["profile"])
+            identity_version = record["version"]
         except Exception:
             observatory.record_event(
                 category="memory",
@@ -722,7 +796,34 @@ def create_app(
                 layer_id="SPS-05",
                 payload={},
             )
-            return CHAT_SYSTEM_PROMPT, None
+            identity_text = CHAT_SYSTEM_PROMPT
+            identity_version = None
+
+        try:
+            definitions = tool_registry.definitions()
+            tool_names = [
+                item.get("name") if isinstance(item, dict) else getattr(item, "name", None)
+                for item in definitions
+            ]
+            route_paths = [
+                route.path for route in app.routes
+                if isinstance(getattr(route, "path", None), str)
+            ]
+            manifest = build_runtime_manifest(
+                tool_names=tool_names,
+                provider_ids=model_gateway.providers.keys(),
+                route_paths=route_paths,
+                memory_enabled=memory_store is not None,
+                semantic_memory_enabled=(
+                    LocalOllamaEmbeddingReranker.from_env(cache=memory_store) is not None
+                ),
+                permission_broker_enabled=brain_broker is not None,
+                capability_registry_enabled=brain_capabilities is not None,
+            )
+            return identity_text + "\n\n" + render_runtime_manifest(manifest), identity_version
+        except Exception:
+            # Runtime evidence is supplemental; registry inspection must never break chat.
+            return identity_text, identity_version
 
     capture_service = CaptureService(memory_store)
     try:  # expired temporary memories are already excluded from retrieval; tidy their status
@@ -807,6 +908,8 @@ def create_app(
         browser_controller, approval_store, computer_files, control=control)
 
     def _browser_error(exc: Exception) -> HTTPException:
+        if isinstance(exc, HTTPException):
+            return exc
         if isinstance(exc, BrowserAccessError):
             return HTTPException(status_code=403, detail=str(exc))
         if isinstance(exc, ApprovalError):
@@ -1346,6 +1449,37 @@ def create_app(
     shutdown_handlers.append(stop_autonomy_runtime)
 
     # ---- autonomous life: curiosity backlog, activity journal, owner controls ----
+    def record_usage(
+        source: Any,
+        task_type: str,
+        estimated_input: int,
+        estimated_output: int,
+        *,
+        streamed: bool = False,
+        text: str = "",
+    ) -> None:
+        """Usage-ledger adapter for the Brain (CompletionResult or final StreamEvent)."""
+        usage = source.usage
+        ledger.record(
+            provider_id=source.provider_id,
+            model_id=source.model_id,
+            task_type=task_type,
+            input_tokens=usage.input_tokens if usage else None,
+            output_tokens=usage.output_tokens if usage else None,
+            estimated_input_tokens=estimated_input,
+            estimated_output_tokens=estimated_output,
+            cost_usd=source.cost_usd,
+            free_tier=source.free_tier,
+            data_local=source.data_local,
+            streamed=streamed,
+            reservation_id=getattr(source, "reservation_id", None),
+            **(
+                {"first_token_ms": source.first_token_ms, "total_ms": source.total_ms}
+                if streamed
+                else {"total_ms": source.latency_ms}
+            ),
+        )
+
     life_store = life or LifeStore(data_dir / "mia-life.sqlite3")
     life_background_enabled = os.getenv("MIA_LIFE_ENABLED", "false").strip().lower() == "true"
 
@@ -1363,12 +1497,30 @@ def create_app(
             },
         )
 
+    try:
+        life_reflection_timeout = float(
+            os.getenv("MIA_LIFE_MODEL_REFLECTION_TIMEOUT_SECONDS", "12")
+        )
+    except ValueError:
+        life_reflection_timeout = 12.0
+    if not 1.0 <= life_reflection_timeout <= 30.0:
+        life_reflection_timeout = 12.0
+
     life_runner = LifeRunner(
         life_store,
         memory_store,
         ResearchExplorer(life_store, memory_store, life_fetcher),
         resource_snapshot=resource_monitor_service.snapshot,
         on_cycle=record_life_cycle,
+        reflector=Reflector(
+            life_store,
+            gateway=model_gateway,
+            usage_recorder=record_usage,
+            model_enabled=os.getenv(
+                "MIA_LIFE_MODEL_REFLECTION_ENABLED", "false"
+            ).strip().lower() == "true",
+            model_timeout_seconds=life_reflection_timeout,
+        ),
     )
     life_scheduler = LifeScheduler(
         life_runner, interval_seconds=float(os.getenv("MIA_LIFE_INTERVAL_SECONDS", "300"))
@@ -1564,6 +1716,13 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok", "service": "mia"}
 
+    @app.get("/identity")
+    def identity_page() -> FileResponse:
+        page = Path(__file__).with_name("identity.html")
+        if not page.is_file():
+            raise HTTPException(status_code=404, detail="Identity page is not installed")
+        return FileResponse(page, media_type="text/html")
+
     @app.get("/memory")
     def memory_page() -> FileResponse:
         page = Path(__file__).with_name("memory.html")
@@ -1597,6 +1756,13 @@ def create_app(
         page = Path(__file__).with_name("dashboard.html")
         if not page.exists():
             raise HTTPException(status_code=404, detail="Dashboard asset not found")
+        return FileResponse(page, media_type="text/html")
+
+    @app.get("/gateway")
+    def gateway_page() -> FileResponse:
+        page = Path(__file__).resolve().parents[1] / "gateway" / "dashboard.html"
+        if not page.is_file():
+            raise HTTPException(status_code=404, detail="Gateway dashboard asset not found")
         return FileResponse(page, media_type="text/html")
 
     @app.get("/api/observatory/summary")
@@ -1763,6 +1929,7 @@ def create_app(
     @app.post("/api/browser/navigate")
     async def browser_navigate(item: BrowserNavigateInput) -> dict[str, Any]:
         try:
+            _computer_permission_requires_approval("browser.navigate")
             return await browser_controller.navigate(item.url)
         except BrowserAccessError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
@@ -1772,13 +1939,16 @@ def create_app(
             raise HTTPException(status_code=502, detail="Browser navigation failed") from exc
 
     @app.post("/api/browser/click/preview", status_code=201)
-    async def browser_click_preview(item: BrowserClickPreview) -> dict[str, str]:
+    async def browser_click_preview(item: BrowserClickPreview) -> dict[str, Any]:
+        requires_approval = _computer_permission_requires_approval(
+            "browser.click", force_approval=True
+        )
         current_url = browser_controller.current_url
         if not current_url:
             raise HTTPException(status_code=409, detail="Browser has no active page")
         try:
             state_digest = await browser_controller.current_state_digest()
-            return approval_store.request(
+            approval = approval_store.request(
                 action_id="browser.click",
                 payload={
                     "url": current_url,
@@ -1787,11 +1957,13 @@ def create_app(
                 },
                 summary=f"Click selector on {current_url}",
             )
+            return {**approval, "requires_approval": requires_approval}
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/browser/click/execute")
     async def browser_click_execute(item: BrowserClickExecution) -> dict[str, str]:
+        _computer_permission_requires_approval("browser.click", force_approval=True)
         current_url = browser_controller.current_url
         if not current_url:
             raise HTTPException(status_code=409, detail="Browser has no active page")
@@ -1847,6 +2019,8 @@ def create_app(
     @app.post("/api/browser/fill")
     async def browser_fill(item: BrowserFillInput) -> dict[str, Any]:
         try:
+            if _computer_permission_requires_approval("browser.fill"):
+                raise HTTPException(status_code=409, detail="Browser fill needs an active owner grant; grant browser.fill")
             return await browser_controller.fill(item.ref, item.text)
         except Exception as exc:
             raise _browser_error(exc) from exc
@@ -1854,6 +2028,8 @@ def create_app(
     @app.post("/api/browser/select")
     async def browser_select(item: BrowserSelectInput) -> dict[str, Any]:
         try:
+            if _computer_permission_requires_approval("browser.select"):
+                raise HTTPException(status_code=409, detail="Browser select needs an active owner grant; grant browser.select")
             return await browser_controller.select_option(item.ref, item.value)
         except Exception as exc:
             raise _browser_error(exc) from exc
@@ -1861,6 +2037,8 @@ def create_app(
     @app.post("/api/browser/check")
     async def browser_check(item: BrowserCheckInput) -> dict[str, Any]:
         try:
+            if _computer_permission_requires_approval("browser.check"):
+                raise HTTPException(status_code=409, detail="Browser check needs an active owner grant; grant browser.check")
             return await browser_controller.set_checked(item.ref, item.checked)
         except Exception as exc:
             raise _browser_error(exc) from exc
@@ -1868,6 +2046,8 @@ def create_app(
     @app.post("/api/browser/scroll")
     async def browser_scroll(item: BrowserScrollInput) -> dict[str, Any]:
         try:
+            if _computer_permission_requires_approval("browser.scroll"):
+                raise HTTPException(status_code=409, detail="Browser scroll needs an active owner grant; grant browser.scroll")
             return await browser_controller.scroll(item.direction, item.amount)
         except Exception as exc:
             raise _browser_error(exc) from exc
@@ -1882,6 +2062,8 @@ def create_app(
     @app.post("/api/browser/tabs/new", status_code=201)
     async def browser_tab_new(item: BrowserTabInput) -> dict[str, Any]:
         try:
+            if _computer_permission_requires_approval("browser.tabs"):
+                raise HTTPException(status_code=409, detail="Opening tabs needs an active owner grant; grant browser.tabs")
             return await browser_controller.new_tab(item.url)
         except Exception as exc:
             raise _browser_error(exc) from exc
@@ -1889,6 +2071,8 @@ def create_app(
     @app.post("/api/browser/tabs/switch")
     async def browser_tab_switch(item: BrowserTabInput) -> dict[str, Any]:
         try:
+            if _computer_permission_requires_approval("browser.tabs"):
+                raise HTTPException(status_code=409, detail="Switching tabs needs an active owner grant")
             if item.index is None:
                 raise ValueError("index is required")
             return await browser_controller.switch_tab(item.index)
@@ -1898,6 +2082,8 @@ def create_app(
     @app.post("/api/browser/tabs/close")
     async def browser_tab_close(item: BrowserTabInput) -> dict[str, Any]:
         try:
+            if _computer_permission_requires_approval("browser.tabs"):
+                raise HTTPException(status_code=409, detail="Closing tabs needs an active owner grant")
             if item.index is None:
                 raise ValueError("index is required")
             return await browser_controller.close_tab(item.index)
@@ -1907,6 +2093,8 @@ def create_app(
     @app.post("/api/browser/screenshot")
     async def browser_screenshot() -> dict[str, Any]:
         try:
+            if _computer_permission_requires_approval("browser.screenshot"):
+                raise HTTPException(status_code=409, detail="Screenshot capture needs an active owner grant")
             result = await browser_controller.screenshot()
         except Exception as exc:
             raise _browser_error(exc) from exc
@@ -1919,24 +2107,64 @@ def create_app(
     @app.post("/api/browser/actions/preview", status_code=201)
     async def browser_action_preview(item: BrowserActionInput) -> dict[str, Any]:
         try:
-            return await browser_actions.preview(
+            _, summary, _ = await browser_actions._plan(
+                item.kind, item.ref, item.root_id, item.relative_path
+            )
+            capability = {
+                "click": "browser.click_ref",
+                "download": "browser.download",
+                "upload": "browser.upload",
+            }[item.kind]
+            requires_approval = _computer_permission_requires_approval(
+                capability,
+                force_approval=item.kind == "upload" or summary.startswith("CONSEQUENTIAL"),
+            )
+            preview = await browser_actions.preview(
                 item.kind, item.ref, root_id=item.root_id, relative_path=item.relative_path)
+            if not requires_approval:
+                preview.update(approval_store.approve(preview["approval_id"]))
+            return {**preview, "requires_approval": requires_approval}
+        except HTTPException:
+            raise
         except Exception as exc:
             raise _browser_error(exc) from exc
 
     @app.post("/api/browser/actions/execute")
     async def browser_action_execute(item: BrowserActionExecution) -> dict[str, Any]:
         try:
+            _, summary, _ = await browser_actions._plan(
+                item.kind, item.ref, item.root_id, item.relative_path
+            )
+            capability = {
+                "click": "browser.click_ref",
+                "download": "browser.download",
+                "upload": "browser.upload",
+            }[item.kind]
+            requires_approval = _computer_permission_requires_approval(
+                capability,
+                force_approval=item.kind == "upload" or summary.startswith("CONSEQUENTIAL"),
+            )
+            approval_id = item.approval_id
+            if approval_id is None:
+                if requires_approval:
+                    raise HTTPException(status_code=409, detail="This browser action needs its own owner approval")
+                approval_id = (await browser_actions.preview(
+                    item.kind, item.ref, root_id=item.root_id, relative_path=item.relative_path
+                ))["approval_id"]
+            if not requires_approval and approval_store.status(approval_id) == "pending":
+                approval_store.approve(approval_id)
             result = await browser_actions.execute(
-                item.approval_id, item.kind, item.ref, root_id=item.root_id,
+                approval_id, item.kind, item.ref, root_id=item.root_id,
                 relative_path=item.relative_path)
+        except HTTPException:
+            raise
         except Exception as exc:
             raise _browser_error(exc) from exc
         observatory.record_event(
             category="computer", event_type=f"browser_{item.kind}",
-            summary=f"Approved browser {item.kind}: verified={result.get('verified')}",
+            summary=f"Browser {item.kind}: verified={result.get('verified')}",
             outcome="success" if result.get("verified") else "failure", layer_id="SPS-10",
-            payload={"approval_id": item.approval_id, "kind": item.kind})
+            payload={"approval_id": approval_id, "kind": item.kind})
         return result
 
     @app.post("/api/browser/close")
@@ -2100,7 +2328,13 @@ def create_app(
     @app.post("/api/computer/processes/terminate/preview", status_code=201)
     def computer_process_terminate_preview(item: ProcessTerminateInput) -> dict[str, Any]:
         try:
-            return processes.preview_terminate(item.pid, force=item.force)
+            requires_approval = _computer_permission_requires_approval(
+                "process.terminate", force_approval=True
+            )
+            preview = processes.preview_terminate(item.pid, force=item.force)
+            return {**preview, "requires_approval": requires_approval}
+        except HTTPException:
+            raise
         except ProcessAccessError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         except RuntimeError as exc:
@@ -2109,7 +2343,10 @@ def create_app(
     @app.post("/api/computer/processes/terminate/execute")
     def computer_process_terminate_execute(item: ProcessTerminateExecution) -> dict[str, Any]:
         try:
+            _computer_permission_requires_approval("process.terminate", force_approval=True)
             result = processes.execute_terminate(item.approval_id, item.pid, force=item.force)
+        except HTTPException:
+            raise
         except ProcessAccessError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         except ApprovalError as exc:
@@ -2128,9 +2365,13 @@ def create_app(
     @app.post("/api/desktop/windows/action/preview", status_code=201)
     def desktop_window_action_preview(item: WindowActionInput) -> dict[str, Any]:
         try:
-            return desktop_adapter.preview_window_action(
+            _computer_permission_requires_approval("desktop.window_action", force_approval=True)
+            preview = desktop_adapter.preview_window_action(
                 item.window_handle, item.action,
                 acknowledge_unsaved_risk=item.acknowledge_unsaved_risk)
+            return {**preview, "requires_approval": True}
+        except HTTPException:
+            raise
         except RuntimeError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except DesktopAccessError as exc:
@@ -2138,10 +2379,15 @@ def create_app(
 
     @app.post("/api/desktop/windows/action/execute")
     def desktop_window_action_execute(item: WindowActionExecution) -> dict[str, Any]:
+        if item.approval_id is None:
+            raise HTTPException(status_code=409, detail="Window management always needs its own owner approval")
         try:
+            _computer_permission_requires_approval("desktop.window_action", force_approval=True)
             result = desktop_adapter.execute_window_action(
                 item.approval_id, item.window_handle, item.window_title, item.action,
                 acknowledge_unsaved_risk=item.acknowledge_unsaved_risk)
+        except HTTPException:
+            raise
         except RuntimeError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ApprovalError as exc:
@@ -2158,6 +2404,8 @@ def create_app(
         return result
 
     def _desktop_error(exc: Exception) -> HTTPException:
+        if isinstance(exc, HTTPException):
+            return exc
         if isinstance(exc, AutomationStopped):
             return HTTPException(status_code=423, detail=str(exc))
         if isinstance(exc, DesktopAccessError):
@@ -2181,26 +2429,63 @@ def create_app(
     def desktop_action_preview(item: DesktopActionInput) -> dict[str, Any]:
         try:
             control.assert_active()
-            return desktop_ctl.preview(
+            preview = desktop_ctl.preview(
                 item.action, item.window_handle, automation_id=item.automation_id,
                 control_type=item.control_type, name=item.name, params=item.params)
+            capability = f"desktop.{item.action}"
+            requires_approval = _computer_permission_requires_approval(
+                capability,
+                force_approval=(
+                    item.action in {"keys", "click_at", "screenshot"}
+                    or str(preview.get("summary", "")).startswith("CONSEQUENTIAL")
+                ),
+            )
+            if not requires_approval:
+                preview.update(approval_store.approve(preview["approval_id"]))
+            return {**preview, "requires_approval": requires_approval}
+        except HTTPException:
+            raise
         except Exception as exc:
             raise _desktop_error(exc) from exc
 
     @app.post("/api/desktop/actions/execute")
     def desktop_action_execute(item: DesktopActionExecution) -> dict[str, Any]:
         try:
+            _, _, info, _ = desktop_ctl._plan(
+                item.action, item.window_handle, item.window_title, item.automation_id,
+                item.control_type, item.name, item.params,
+            )
+            force_approval = (
+                item.action in {"keys", "click_at", "screenshot"}
+                or bool(info and _CONSEQUENTIAL.search(str(info.get("name", ""))))
+            )
+            requires_approval = _computer_permission_requires_approval(
+                f"desktop.{item.action}", force_approval=force_approval
+            )
+            approval_id = item.approval_id
+            if approval_id is None:
+                if requires_approval:
+                    raise HTTPException(status_code=409, detail="This desktop action needs its own owner approval")
+                approval_id = desktop_ctl.preview(
+                    item.action, item.window_handle, window_title=item.window_title,
+                    automation_id=item.automation_id, control_type=item.control_type,
+                    name=item.name, params=item.params,
+                )["approval_id"]
+            if not requires_approval and approval_store.status(approval_id) == "pending":
+                approval_store.approve(approval_id)
             result = desktop_ctl.execute(
-                item.approval_id, item.action, item.window_handle, item.window_title,
+                approval_id, item.action, item.window_handle, item.window_title,
                 automation_id=item.automation_id, control_type=item.control_type,
                 name=item.name, params=item.params)
+        except HTTPException:
+            raise
         except Exception as exc:
             raise _desktop_error(exc) from exc
         observatory.record_event(
             category="computer", event_type=f"desktop_{item.action}",
-            summary=f"Approved desktop {item.action}: verified={result.get('verified')}",
+            summary=f"Desktop {item.action}: verified={result.get('verified')}",
             outcome="success" if result.get("verified") else "failure", layer_id="SPS-10",
-            payload={"approval_id": item.approval_id, "action": item.action,
+            payload={"approval_id": approval_id, "action": item.action,
                      "window_handle": item.window_handle})
         return result
 
@@ -2218,8 +2503,26 @@ def create_app(
         discovery=discovery, terminal=terminal_executor, browser=browser_controller,
         browser_actions=browser_actions, desktop=desktop_ctl, desktop_adapter=desktop_adapter,
         os_family=_env.os_family)
+    def computer_permission_path(capability: str, args: dict[str, Any]) -> str | None:
+        if not capability.startswith("filesystem.") or not args.get("root_id"):
+            return None
+        relative = args.get("relative_path")
+        if not isinstance(relative, str):
+            return None
+        try:
+            return str(computer_files._resolve(args["root_id"], relative))
+        except Exception:
+            return None
+
     task_engine = computer_tasks or TaskEngine(
-        data_dir / "computer-tasks.sqlite3", approval_store, task_handlers, control=control)
+        data_dir / "computer-tasks.sqlite3",
+        approval_store,
+        task_handlers,
+        control=control,
+        permission_policy=policy,
+        capability_registry=capability_registry,
+        permission_path=computer_permission_path,
+    )
     task_engine.recover()
     task_engine.on_cancel(terminal_executor.cancel_task)
     app.state.task_engine = task_engine
@@ -2372,29 +2675,52 @@ def create_app(
     @app.post("/api/computer/files/ops/preview", status_code=201)
     def computer_file_op_preview(item: FileOperationInput) -> dict[str, Any]:
         try:
-            return file_ops.preview(
+            requires_approval = _computer_permission_requires_approval(
+                f"filesystem.{item.op}",
+                path=_filesystem_permission_path(item.root_id, item.relative_path),
+            )
+            preview = file_ops.preview(
                 item.op, item.root_id, item.relative_path,
                 destination_path=item.destination_path, recovery_id=item.recovery_id,
             )
+            if not requires_approval:
+                preview.update(approval_store.approve(preview["approval_id"]))
+            return {**preview, "requires_approval": requires_approval}
         except (FilesystemAccessError, FileNotFoundError, FileOperationError, ValueError) as exc:
             raise _file_error(exc) from exc
 
     @app.post("/api/computer/files/ops/execute")
     def computer_file_op_execute(item: FileOperationExecution) -> dict[str, Any]:
         try:
+            requires_approval = _computer_permission_requires_approval(
+                f"filesystem.{item.op}",
+                path=_filesystem_permission_path(item.root_id, item.relative_path),
+            )
+            approval_id = item.approval_id
+            if approval_id is None:
+                if requires_approval:
+                    raise HTTPException(status_code=409, detail="This operation needs its own owner approval")
+                approval_id = file_ops.preview(
+                    item.op, item.root_id, item.relative_path,
+                    destination_path=item.destination_path, recovery_id=item.recovery_id,
+                )["approval_id"]
+            if not requires_approval and approval_store.status(approval_id) == "pending":
+                approval_store.approve(approval_id)
             result = file_ops.execute(
-                item.op, item.approval_id, item.root_id, item.relative_path,
+                item.op, approval_id, item.root_id, item.relative_path,
                 destination_path=item.destination_path, recovery_id=item.recovery_id,
             )
+        except HTTPException:
+            raise
         except (
             FilesystemAccessError, FileNotFoundError, FileOperationError, ApprovalError, ValueError
         ) as exc:
             raise _file_error(exc) from exc
         observatory.record_event(
             category="computer", event_type=f"file_{item.op}",
-            summary=f"Approved file operation {item.op} completed and verified",
+            summary=f"File operation {item.op} completed and verified",
             outcome="success", layer_id="SPS-10",
-            payload={"approval_id": item.approval_id, "op": item.op,
+            payload={"approval_id": approval_id, "op": item.op,
                      "source": result["operation"].get("source"),
                      "destination": result["operation"].get("destination")},
         )
@@ -2482,9 +2808,15 @@ def create_app(
         return {"items": app_launcher.list_applications()}
 
     @app.post("/api/computer/apps/launch/preview", status_code=201)
-    def computer_app_launch_preview(item: ApplicationLaunchPreview) -> dict[str, str]:
+    def computer_app_launch_preview(item: ApplicationLaunchPreview) -> dict[str, Any]:
         try:
-            return app_launcher.preview_launch(item.app_id)
+            requires_approval = _computer_permission_requires_approval("apps.launch")
+            preview = app_launcher.preview_launch(item.app_id)
+            if not requires_approval:
+                preview.update(approval_store.approve(preview["approval_id"]))
+            return {**preview, "requires_approval": requires_approval}
+        except HTTPException:
+            raise
         except ApplicationLaunchError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         except ApprovalError as exc:
@@ -2495,7 +2827,17 @@ def create_app(
         item: ApplicationLaunchExecution,
     ) -> dict[str, Any]:
         try:
-            result = app_launcher.execute_launch(item.app_id, item.approval_id)
+            requires_approval = _computer_permission_requires_approval("apps.launch")
+            approval_id = item.approval_id
+            if approval_id is None:
+                if requires_approval:
+                    raise HTTPException(status_code=409, detail="Launching this app needs its own owner approval")
+                approval_id = app_launcher.preview_launch(item.app_id)["approval_id"]
+            if not requires_approval and approval_store.status(approval_id) == "pending":
+                approval_store.approve(approval_id)
+            result = app_launcher.execute_launch(item.app_id, approval_id)
+        except HTTPException:
+            raise
         except ApplicationLaunchError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         except ApprovalError as exc:
@@ -2509,7 +2851,7 @@ def create_app(
             payload={
                 "app_id": item.app_id,
                 "process_id": result["process_id"],
-                "approval_id": item.approval_id,
+                "approval_id": approval_id,
             },
         )
         return result
@@ -2563,11 +2905,18 @@ def create_app(
     @app.post("/api/computer/files/write/preview", status_code=201)
     def computer_write_preview(item: FileWritePreview) -> dict[str, Any]:
         try:
-            return computer_files.preview_write(
+            requires_approval = _computer_permission_requires_approval(
+                "filesystem.write",
+                path=_filesystem_permission_path(item.root_id, item.relative_path),
+            )
+            preview = computer_files.preview_write(
                 item.root_id,
                 item.relative_path,
                 item.content,
             )
+            if not requires_approval:
+                preview.update(approval_store.approve(preview["approval_id"]))
+            return {**preview, "requires_approval": requires_approval}
         except FilesystemAccessError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         except (ValueError, OSError) as exc:
@@ -2587,8 +2936,21 @@ def create_app(
     @app.post("/api/computer/files/write/execute")
     def computer_write_execute(item: FileWriteExecution) -> dict[str, Any]:
         try:
+            requires_approval = _computer_permission_requires_approval(
+                "filesystem.write",
+                path=_filesystem_permission_path(item.root_id, item.relative_path),
+            )
+            approval_id = item.approval_id
+            if approval_id is None:
+                if requires_approval:
+                    raise HTTPException(status_code=409, detail="This write needs its own owner approval")
+                approval_id = computer_files.preview_write(
+                    item.root_id, item.relative_path, item.content
+                )["approval_id"]
+            if not requires_approval and approval_store.status(approval_id) == "pending":
+                approval_store.approve(approval_id)
             result = computer_files.execute_write(
-                approval_id=item.approval_id,
+                approval_id=approval_id,
                 root_id=item.root_id,
                 relative_path=item.relative_path,
                 content=item.content,
@@ -2609,7 +2971,7 @@ def create_app(
                 "root_id": item.root_id,
                 "sha256": result["sha256"],
                 "size_bytes": result["size_bytes"],
-                "approval_id": item.approval_id,
+                "approval_id": approval_id,
             },
         )
         return result
@@ -2817,10 +3179,174 @@ def create_app(
             "automatic_dispatch": autonomy_runtime.running,
         }
 
+    def _validate_capability_permissions(permissions: list[str]) -> list[str]:
+        """Allow only implemented non-admin, non-high-risk host capabilities."""
+        if len(permissions) > 10:
+            raise HTTPException(status_code=422, detail="A capability may declare at most 10 permissions")
+        clean = sorted(set(permissions))
+        for name in clean:
+            if not isinstance(name, str) or name not in task_engine.handlers:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Capability permission is not an implemented Mia task action: {name}",
+                )
+            try:
+                spec = capability_registry.get(name)
+            except KeyError as exc:
+                raise HTTPException(
+                    status_code=422, detail=f"Unknown computer permission: {name}"
+                ) from exc
+            if spec.permission >= PermissionLevel.ADMINISTRATIVE or spec.risk >= RiskLevel.HIGH:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"{name} is administrative or high-risk and cannot be delegated to generated capabilities",
+                )
+        return clean
+
+    def _capability_permission_authorizations(candidate: dict[str, Any]) -> dict[str, str]:
+        """Require active owner grants for every declared write/execute/interact scope.
+
+        Directory-bound grants are accepted here as a capability envelope; the
+        TaskEngine resolves the actual target path and rechecks scope at execution.
+        """
+        permissions = _validate_capability_permissions(candidate.get("permissions") or [])
+        grants = policy.active_grants()
+        authorizations: dict[str, str] = {}
+        for name in permissions:
+            spec = capability_registry.get(name)
+            if not spec.requires_approval_by_default:
+                authorizations[name] = "default-low-risk-read"
+                continue
+            matching = [
+                grant for grant in grants
+                if not grant["admin"]
+                and name in grant["capabilities"]
+                and PermissionLevel[grant["level"].upper()] >= spec.permission
+            ]
+            if not matching:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Capability permission {name} needs an active owner grant before activation or execution",
+                )
+            authorizations[name] = ",".join(sorted(grant["grant_id"] for grant in matching))
+        return authorizations
+
+    def _schema_type_matches(value: Any, schema: dict[str, Any]) -> bool:
+        expected = schema.get("type")
+        if expected == "string":
+            return isinstance(value, str)
+        if expected == "integer":
+            return isinstance(value, int) and not isinstance(value, bool)
+        if expected == "number":
+            return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+        if expected == "boolean":
+            return isinstance(value, bool)
+        if expected == "array":
+            if not isinstance(value, list):
+                return False
+            item_schema = schema.get("items")
+            return item_schema is None or all(
+                _schema_type_matches(item, item_schema) for item in value
+            )
+        if expected == "object":
+            if not isinstance(value, dict):
+                return False
+            properties = schema.get("properties") or {}
+            if schema.get("additionalProperties") is False and any(
+                key not in properties for key in value
+            ):
+                return False
+            if any(key not in value for key in schema.get("required", [])):
+                return False
+            return all(
+                key not in properties or _schema_type_matches(item, properties[key])
+                for key, item in value.items()
+            )
+        if expected == "null":
+            return value is None
+        return True
+
+    def _capability_action_tasks(
+        candidate: dict[str, Any], raw_actions: Any
+    ) -> list[dict[str, Any]]:
+        """Turn sandbox action requests into owner-reviewable TaskEngine plans only."""
+        if raw_actions is None:
+            return []
+        if not isinstance(raw_actions, list) or len(raw_actions) > 8:
+            raise HTTPException(
+                status_code=502, detail="Capability _mia_actions must be a list of at most 8 requests"
+            )
+        if raw_actions and not candidate.get("permissions"):
+            raise HTTPException(
+                status_code=403, detail="A permission-free capability cannot request host actions"
+            )
+        declared = set(candidate.get("permissions") or [])
+        prepared: list[dict[str, Any]] = []
+        for index, action in enumerate(raw_actions, start=1):
+            if not isinstance(action, dict) or set(action) - {"capability", "args", "description"}:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Capability action {index} must contain only capability, args and description",
+                )
+            name = action.get("capability")
+            args = action.get("args", {})
+            if not isinstance(name, str) or name not in declared:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Capability action {index} requests an undeclared permission",
+                )
+            if not isinstance(args, dict):
+                raise HTTPException(status_code=502, detail=f"Capability action {index} args must be an object")
+            try:
+                spec = capability_registry.get(name)
+                handler = task_engine.handlers[name]
+            except (KeyError, TypeError) as exc:
+                raise HTTPException(
+                    status_code=422, detail=f"Capability action {name} is unavailable on this runtime"
+                ) from exc
+            if not _schema_type_matches(args, spec.input_schema):
+                raise HTTPException(
+                    status_code=422, detail=f"Capability action {name} does not match its input schema"
+                )
+            missing = [key for key in handler.required if key not in args]
+            if missing:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Capability action {name} is missing required inputs: {', '.join(missing)}",
+                )
+            description = action.get("description", f"Requested by {candidate['name']}")
+            if not isinstance(description, str):
+                raise HTTPException(status_code=502, detail="Capability action description must be text")
+            prepared.append({
+                "capability": name,
+                "args": args,
+                "description": description[:200],
+            })
+
+        plans: list[dict[str, Any]] = []
+        for index, action in enumerate(prepared, start=1):
+            try:
+                task = task_engine.create_task(
+                    f"Capability {candidate['name']}: action {index}",
+                    [action],
+                    source="brain",
+                )
+            except TaskPlanError as exc:
+                raise HTTPException(status_code=422, detail=f"Could not create governed action task: {exc}") from exc
+            plans.append({
+                "task_id": task["task_id"],
+                "status": "planned_owner_review",
+                "task": task,
+                "plan": task_engine.plan_summary(task["task_id"]),
+                "run_endpoint": f"/api/computer/tasks/{task['task_id']}/run",
+            })
+        return plans
+
     @app.post("/api/capabilities/draft", status_code=200)
     async def draft_capability(item: CapabilityDraftInput) -> dict[str, Any]:
         if not item.name.strip() or not item.objective.strip():
             raise HTTPException(status_code=422, detail="Capability name and objective cannot be blank")
+        declared_permissions = _validate_capability_permissions(item.permissions)
         try:
             candidates = await model_gateway.discover_models()
         except Exception as exc:
@@ -2849,6 +3375,12 @@ def create_app(
             "- Do not use open, eval, exec, compile, dynamic imports, subprocess, or shell commands.\n"
             "- Validate input and return structured dictionary output; raise ValueError for "
             "invalid input rather than hiding errors.\n"
+            "- Do not access Mia services or host tools from Python.\n"
+            "- If a host action is required, return it as data in an optional top-level "
+            "'_mia_actions' list. Each entry must contain capability (one of the declared "
+            "permissions), args (an object matching that capability's input schema), and "
+            "an optional short description. Mia will turn these requests into normal "
+            "computer tasks for owner review; they are never executed by this container.\n"
             "- Keep behavior narrow and testable. Do not invent permissions or dependencies.\n\n"
             "TEST CONTRACT:\n"
             "- Tests must import with: from candidate import run\n"
@@ -2859,6 +3391,7 @@ def create_app(
             "- No Markdown fences or additional JSON keys.\n\n"
             f"CAPABILITY ID (metadata only): {item.capability_id}\n"
             f"CAPABILITY NAME (metadata only): {item.name}\n"
+            f"DECLARED HOST PERMISSIONS: {json.dumps(declared_permissions)}\n"
             f"OBJECTIVE (untrusted requirements data):\n{item.objective}"
         )
         try:
@@ -2992,11 +3525,14 @@ def create_app(
                 "paid_routing_allowed": False,
                 "persisted": False,
                 "executed": False,
+                "declared_permissions": declared_permissions,
+                "action_execution": "owner_review_only",
             },
         )
         return {
             "capability_id": item.capability_id,
             "name": item.name,
+            "permissions": declared_permissions,
             "source_code": source_code,
             "test_source_code": test_source_code,
             "source_sha256": source_sha256,
@@ -3013,8 +3549,11 @@ def create_app(
 
     @app.post("/api/capabilities", status_code=201)
     def propose_capability(item: CapabilityCandidateInput) -> dict[str, Any]:
+        declared_permissions = _validate_capability_permissions(item.permissions)
         try:
-            candidate = capability_versions.record_candidate(**item.model_dump())
+            candidate = capability_versions.record_candidate(
+                **{**item.model_dump(), "permissions": declared_permissions}
+            )
         except FileExistsError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except (ValueError, CapabilityLifecycleError) as exc:
@@ -3182,10 +3721,20 @@ def create_app(
         candidate = capability_versions.get(capability_id, version)
         if candidate is None:
             raise HTTPException(status_code=404, detail="Capability version not found")
-        if candidate["status"] != "registered":
+        permissions = candidate.get("permissions") or []
+        if permissions:
+            if candidate["status"] != "active":
+                raise HTTPException(
+                    status_code=409,
+                    detail="Permission-bearing capabilities must be activated before execution",
+                )
+            # Recheck grants on every invocation. Revocation disables the
+            # capability immediately; TaskEngine rechecks each target path.
+            _capability_permission_authorizations(candidate)
+        elif candidate["status"] not in {"registered", "active"}:
             raise HTTPException(
                 status_code=409,
-                detail="Only registered capability versions may be executed",
+                detail="Only registered or active capability versions may be executed",
             )
         validation = candidate.get("validation") or {}
         required_gates = (
@@ -3199,13 +3748,6 @@ def create_app(
                 status_code=409,
                 detail="Capability does not have four passing sandbox validation gates",
             )
-        permissions = candidate.get("permissions")
-        if permissions != []:
-            raise HTTPException(
-                status_code=403,
-                detail="One-shot execution is limited to permission-free capabilities",
-            )
-
         try:
             input_json = json.dumps(
                 item.input_data,
@@ -3334,6 +3876,15 @@ def create_app(
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+        result_data = dict(execution["result"])
+        raw_actions = result_data.pop("_mia_actions", None)
+        action_tasks = _capability_action_tasks(candidate, raw_actions)
+        execution_policy = (
+            "docker-pure-data-with-owner-reviewed-task-requests"
+            if candidate.get("permissions")
+            else "docker-pure-data-only"
+        )
+
         observatory.record_event(
             category="evolution",
             event_type="capability_executed",
@@ -3353,19 +3904,22 @@ def create_app(
                 ).encode("utf-8")),
                 "runner": execution["runner"],
                 "image_id": execution["image_id"],
-                "execution_policy": "permission-free-single-call",
-                "activated": False,
+                "execution_policy": execution_policy,
+                "activated": candidate["status"] == "active",
+                "action_task_ids": [task["task_id"] for task in action_tasks],
             },
         )
         return {
             "capability_id": capability_id,
             "version": version,
-            "result": execution["result"],
+            "result": result_data,
             "source_sha256": candidate["source_sha256"],
             "runner": execution["runner"],
             "image_id": execution["image_id"],
-            "execution_policy": "permission-free-single-call",
-            "activated": False,
+            "execution_policy": execution_policy,
+            "activated": candidate["status"] == "active",
+            "action_tasks": action_tasks,
+            "actions_executed": False,
         }
 
     @app.post("/api/capabilities/{capability_id}/{version}/activate")
@@ -3374,12 +3928,17 @@ def create_app(
     ) -> dict[str, Any]:
         # The body is optional so a disabled gate answers 409 before approval
         # details are even considered; once enabled, approval details are required.
+        candidate = capability_versions.get(capability_id, version)
+        if candidate is None:
+            raise HTTPException(status_code=404, detail="Capability version not found")
+        permission_authorizations = _capability_permission_authorizations(candidate)
         try:
             result = capability_versions.activate(
                 capability_id,
                 version,
                 approved_by=item.approved_by if item else "",
                 reason=item.reason if item else "",
+                permission_authorizations=permission_authorizations,
             )
         except CapabilityActivationBlocked as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -4253,49 +4812,42 @@ def create_app(
     def list_tools() -> dict[str, Any]:
         return {"items": tool_registry.definitions()}
 
-    def record_usage(
-        source: Any,
-        task_type: str,
-        estimated_input: int,
-        estimated_output: int,
-        *,
-        streamed: bool = False,
-        text: str = "",
-    ) -> None:
-        """Usage-ledger adapter for the Brain (CompletionResult or final StreamEvent)."""
-        usage = source.usage
-        ledger.record(
-            provider_id=source.provider_id,
-            model_id=source.model_id,
-            task_type=task_type,
-            input_tokens=usage.input_tokens if usage else None,
-            output_tokens=usage.output_tokens if usage else None,
-            estimated_input_tokens=estimated_input,
-            estimated_output_tokens=estimated_output,
-            cost_usd=source.cost_usd,
-            free_tier=source.free_tier,
-            data_local=source.data_local,
-            streamed=streamed,
-            **(
-                {"first_token_ms": source.first_token_ms, "total_ms": source.total_ms}
-                if streamed
-                else {"total_ms": source.latency_ms}
-            ),
-        )
-
     plan_store = PlanStore(data_dir / "mia-brain.sqlite3")
     brain_capabilities = CapabilityRegistry(db_path=data_dir / "mia-brain-capabilities.sqlite3")
     plan_store.recover_interrupted()
+    def brain_tool_permission_path(tool: Any, arguments: dict[str, Any]) -> str | None:
+        if not tool.name.startswith("filesystem.") or not arguments.get("root_id"):
+            return None
+        relative = arguments.get("relative_path")
+        if not isinstance(relative, str):
+            return None
+        try:
+            return str(computer_files._resolve(arguments["root_id"], relative))
+        except Exception:
+            return None
+
+    brain_broker = ToolBroker(
+        tool_registry,
+        evaluator=OwnerPermissionEvaluator(
+            policy,
+            capability_registry,
+            path_resolver=brain_tool_permission_path,
+        ),
+    )
     brain = Brain(
         gateway=model_gateway,
         memory=memory_store,
         tools=tool_registry,
         identity=current_identity,
         observatory=observatory,
-        route_policy=lambda: apply_daily_cap(paid_route_policy(), ledger.spend_today_utc()),
+        route_policy=lambda: apply_monthly_cap(
+            apply_daily_cap(paid_route_policy(), ledger.spend_today_utc()),
+            ledger.spend_month_utc(),
+        ),
         usage_recorder=record_usage,
         plan_store=plan_store,
         capabilities=brain_capabilities,
+        broker=brain_broker,
         capture=capture_from_message,
         on_reply=record_reply_usage,
         approval_status=approval_store.status,
@@ -4326,6 +4878,109 @@ def create_app(
     @app.get("/api/gateway/usage")
     def gateway_usage(days: int = 30) -> dict[str, Any]:
         return ledger.summary(days)
+
+    @app.get("/api/gateway/overview")
+    async def gateway_overview() -> dict[str, Any]:
+        """Privacy-safe owner snapshot for the local gateway console."""
+        registry = model_gateway.model_registry
+        models_snapshot = []
+        if registry is not None:
+            for record in registry.list(include_stale=True):
+                item = asdict(record)
+                item["key"] = record.key
+                item["effective_capabilities"] = sorted(record.effective_capabilities())
+                item["verification"] = record.verification()
+                models_snapshot.append(item)
+
+        providers_snapshot = []
+        for provider in model_gateway.providers.values():
+            try:
+                status = "online" if await provider.health() else "offline"
+            except Exception:
+                status = "unavailable"
+            providers_snapshot.append({"provider_id": provider.provider_id, "status": status})
+
+        def budget_limit(name: str) -> dict[str, Any]:
+            raw = os.getenv(name, "").strip()
+            if not raw:
+                return {"configured": False, "valid": False, "limit_usd": None}
+            try:
+                value = float(raw)
+            except ValueError:
+                return {"configured": True, "valid": False, "limit_usd": None}
+            valid = math.isfinite(value) and value >= 0
+            return {
+                "configured": True,
+                "valid": valid,
+                "limit_usd": value if valid else None,
+            }
+
+        request_budget = budget_limit("MIA_MAX_REQUEST_SPEND_USD")
+        daily_budget = budget_limit("MIA_MAX_DAILY_SPEND_USD")
+        monthly_budget = budget_limit("MIA_MAX_MONTHLY_SPEND_USD")
+        reservations = ledger.reservation_summary()
+        paid_requested = os.getenv("MIA_ALLOW_PAID", "false").strip().lower() == "true"
+        paid_available = (
+            paid_requested
+            and request_budget["valid"]
+            and request_budget["limit_usd"] > 0
+            and daily_budget["valid"]
+            and daily_budget["limit_usd"] > ledger.spend_today_utc() + reservations["reserved_today_utc_usd"]
+            and monthly_budget["valid"]
+            and monthly_budget["limit_usd"] > ledger.spend_month_utc() + reservations["reserved_month_utc_usd"]
+        )
+        return {
+            "usage": ledger.summary(30),
+            "budgets": {
+                "paid_requested": paid_requested,
+                "paid_routing_available": paid_available,
+                "request": request_budget,
+                "daily": daily_budget,
+                "monthly": monthly_budget,
+                "spent_today_utc_usd": ledger.spend_today_utc(),
+                "spent_month_utc_usd": ledger.spend_month_utc(),
+                "reservations": reservations,
+            },
+            "providers": providers_snapshot,
+            "health": model_gateway.health.snapshot(),
+            "models": models_snapshot,
+            "decisions": [
+                decision.to_dict() for decision in model_gateway.decisions.recent(20)
+            ],
+        }
+
+    @app.post("/api/gateway/models/{provider_id}/{model_id}/settings")
+    def update_gateway_model_settings(
+        provider_id: str, model_id: str, item: GatewayModelSettingsInput
+    ) -> dict[str, Any]:
+        registry = model_gateway.model_registry
+        if registry is None:
+            raise HTTPException(status_code=503, detail="Persistent model registry is unavailable")
+        if item.enabled is None and item.preference is None and not item.change_alias:
+            raise HTTPException(status_code=422, detail="No model setting was supplied")
+        try:
+            if item.enabled is not None:
+                registry.set_enabled(provider_id, model_id, item.enabled)
+            if item.preference is not None:
+                registry.set_preference(provider_id, model_id, item.preference)
+            if item.change_alias:
+                registry.set_alias(provider_id, model_id, item.alias)
+            record = registry.get(provider_id, model_id)
+            if record is None:
+                raise ModelRegistryError("unknown model")
+        except ModelRegistryError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        result = asdict(record)
+        result["key"] = record.key
+        result["effective_capabilities"] = sorted(record.effective_capabilities())
+        result["verification"] = record.verification()
+        return result
+
+    @app.get("/api/gateway/decisions")
+    def gateway_decisions(limit: int = 20) -> dict[str, Any]:
+        return {
+            "items": [decision.to_dict() for decision in model_gateway.decisions.recent(limit)]
+        }
 
     @app.post("/api/gateway/chat/stream")
     async def chat_stream(item: ChatInput) -> StreamingResponse:
@@ -4365,6 +5020,25 @@ def create_app(
                 state = "gateway_extra_not_installed"
             results.append({"provider_id": provider.provider_id, "status": state})
         return {"items": results}
+
+    @app.post("/api/gateway/providers/{provider_id}/test")
+    async def test_gateway_provider(provider_id: str) -> dict[str, Any]:
+        """Run a sanitized provider connection and model-list check."""
+        result = await model_gateway.test_connection(provider_id)
+        return asdict(result)
+
+    @app.post("/api/gateway/models/refresh")
+    async def refresh_gateway_models() -> dict[str, Any]:
+        try:
+            discovered = await model_gateway.discover_models()
+        except TransientProviderError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return {"count": len(discovered), "items": [
+            {"provider_id": item.provider_id, "model_id": item.model_id}
+            for item in discovered
+        ]}
 
     @app.get("/api/gateway/models")
     async def models() -> dict[str, Any]:
@@ -4448,7 +5122,82 @@ def create_app(
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Plan or step not found") from exc
 
+    def _authorize_code_graph_request(request: Request) -> None:
+        # Expose architecture metadata only to loopback clients unless the owner
+        # explicitly enables remote access with a strong token.
+        client_host = request.client.host if request.client else ""
+        forwarded = bool(request.headers.get("forwarded") or request.headers.get("x-forwarded-for"))
+        try:
+            loopback = ipaddress.ip_address(client_host).is_loopback
+        except ValueError:
+            loopback = client_host == "testclient"
+        if loopback and not forwarded:
+            return
+        configured = os.getenv("MIA_CODE_GRAPH_TOKEN", "")
+        supplied = request.headers.get("x-mia-code-graph-token", "")
+        remote_enabled = os.getenv("MIA_CODE_GRAPH_ALLOW_REMOTE", "false").strip().lower() == "true"
+        if remote_enabled and len(configured) >= 24 and hmac.compare_digest(supplied, configured):
+            return
+        raise HTTPException(
+            status_code=403,
+            detail="Code Graph is local-only; remote access requires explicit enablement and a configured token.",
+        )
+
+    @app.get("/api/code-graph")
+    def code_graph(request: Request) -> dict[str, Any]:
+        _authorize_code_graph_request(request)
+        root = Path(__file__).resolve().parents[3]
+        output = root / "docs" / "code-graph" / "graph.json"
+        try:
+            graph = build_graph(root, output=output)
+            watcher = app.state.code_graph_watcher
+            if watcher is not None:
+                watcher.last_error = None
+                watcher.last_commit = graph["commit"]
+            return graph
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Code Graph indexing failed: {type(exc).__name__}",
+            ) from exc
+
+    @app.get("/api/code-graph/impact")
+    def code_graph_impact(request: Request, base: str = "HEAD~1") -> dict[str, Any]:
+        _authorize_code_graph_request(request)
+        root = Path(__file__).resolve().parents[3]
+        try:
+            return analyze_impact(root, base)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Code Graph impact analysis failed: {type(exc).__name__}",
+            ) from exc
+
+    @app.post("/api/code-graph/refresh")
+    def refresh_code_graph(request: Request) -> dict[str, Any]:
+        return code_graph(request)
+
+    @app.get("/api/code-graph/status")
+    def code_graph_status(request: Request) -> dict[str, Any]:
+        _authorize_code_graph_request(request)
+        watcher = app.state.code_graph_watcher
+        return {
+            "watcher_enabled": watcher is not None,
+            "watcher_running": bool(watcher and watcher.running),
+            "last_error": watcher.last_error if watcher else None,
+            "last_commit": watcher.last_commit if watcher else None,
+        }
+
+    @app.get("/code-graph")
+    def code_graph_page() -> FileResponse:
+        page = Path(__file__).resolve().parents[1] / "codegraph" / "graph.html"
+        if not page.is_file():
+            raise HTTPException(status_code=404, detail="Code Graph interface is not installed")
+        return FileResponse(page, media_type="text/html")
+
     return app
 
 
-app = create_app()
+app = create_app(enable_code_graph_watcher=True)

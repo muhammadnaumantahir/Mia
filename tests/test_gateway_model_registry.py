@@ -157,3 +157,20 @@ async def test_gateway_discovery_syncs_registry_and_respects_owner_settings(tmp_
     second = await gateway.discover_models()
     assert {(c.provider_id, c.model_id) for c in second} == {("down", "pinned-manual")}
     assert registry.get("up", "m1").stale  # dropped by the provider, kept in the registry
+
+
+def test_persistent_model_preferences_affect_gateway_routing(reg):
+    from mia.gateway.contracts import ModelRequest, RoutePolicy
+
+    candidates = [
+        cand(model="low", free=True),
+        cand(model="preferred", free=True),
+    ]
+    reg.sync_discovered(candidates, ["p"])
+    reg.set_preference("p", "preferred", 8)
+
+    gateway = ModelGateway(ProviderRegistry(), model_registry=reg)
+    request = ModelRequest(task_type="chat", prompt="hello")
+    ordered = gateway._rank(candidates, request, RoutePolicy(), None)
+
+    assert [item.model_id for item in ordered] == ["preferred", "low"]

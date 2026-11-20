@@ -2,9 +2,9 @@ name: Mia CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, development/complete-product-gaps, 'integration/**']
   pull_request:
-    branches: [main]
+    branches: [main, development/complete-product-gaps, 'integration/**', 'feature/**']
 
 permissions:
   contents: read
@@ -32,5 +32,16 @@ jobs:
           python -m pip install -e ".[dev]"
       - name: Lint
         run: ruff check src tests
+      - name: Refresh Code Graph
+        if: hashFiles('scripts/update_code_graph.py') != ''
+        run: python scripts/update_code_graph.py
       - name: Test
         run: pytest
+      - name: Upload Code Graph snapshot
+        if: success() && matrix.os == 'ubuntu-latest' && hashFiles('scripts/update_code_graph.py') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: mia-code-graph-${{ github.sha }}
+          path: docs/code-graph/graph.json
+          if-no-files-found: error
+          retention-days: 7

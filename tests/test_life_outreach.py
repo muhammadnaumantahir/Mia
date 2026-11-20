@@ -13,7 +13,7 @@ from mia.memory.store import MemoryStore
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
 
-NOW = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
+NOW = datetime.now(UTC) + timedelta(days=1)
 
 
 def ok():
@@ -112,8 +112,9 @@ def test_quiet_hours_daily_cap_and_gap_suppress(tmp_path):
     life.update_settings({"min_outreach_gap_minutes": 0})
     assert engine.decide(cand2, life.get_settings(), NOW, owner_present=False) is None
     life.update_settings({"quiet_hours_enabled": True, "quiet_start_minute": 600, "quiet_end_minute": 800})
-    assert engine.decide(cand2, life.get_settings(), NOW, owner_present=False) == "quiet_hours"
-    assert engine.decide(cand2, life.get_settings(), NOW, owner_present=True) is None
+    quiet_now = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
+    assert engine.decide(cand2, life.get_settings(), quiet_now, owner_present=False) == "quiet_hours"
+    assert engine.decide(cand2, life.get_settings(), quiet_now, owner_present=True) is None
 
 
 def test_same_topic_cooldown_and_dismissal_memory(tmp_path):

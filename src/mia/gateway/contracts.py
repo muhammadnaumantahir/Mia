@@ -27,6 +27,13 @@ class TokenUsage:
     input_tokens: int
     output_tokens: int
 
+    def __post_init__(self) -> None:
+        # Provider usage is untrusted input: invalid counts must not turn a paid
+        # completion into an unpriced ledger row.
+        for name, value in (("input_tokens", self.input_tokens), ("output_tokens", self.output_tokens)):
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"{name} must be a non-negative integer")
+
 
 @dataclass(frozen=True, slots=True)
 class ProviderResponse:

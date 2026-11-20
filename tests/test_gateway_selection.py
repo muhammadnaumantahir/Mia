@@ -169,3 +169,20 @@ def test_gateway_validates_preferences_and_records_decisions():
     assert gw.preferences.mode is RoutingMode.LOCAL_FIRST
     gw._rank(POOL, REQ, RoutePolicy(), None)
     assert gw.decisions.recent(1)[0].mode == "local_first"
+
+
+def test_persistent_decision_log_survives_restart_and_remains_bounded(tmp_path):
+    path = tmp_path / "routing.sqlite3"
+    first = DecisionLog(capacity=3, database_path=path)
+    decisions = [
+        select(POOL, ModelRequest(task_type=f"task-{i}", prompt="x"), RoutePolicy())[1]
+        for i in range(5)
+    ]
+    for decision in decisions:
+        first.add(decision)
+
+    restarted = DecisionLog(capacity=3, database_path=path)
+    assert [item.task_type for item in restarted.recent()] == ["task-4", "task-3", "task-2"]
+    assert "prompt" not in repr(restarted.recent()[0].to_dict())
+    assert "TOP SECRET" not in repr(restarted.recent())
+    assert restarted.recent(0) == []

@@ -12,9 +12,11 @@ from fastapi.testclient import TestClient
 from mia.computer.approvals import ApprovalError, ApprovalStore
 from mia.computer.browser import BrowserAccessError, BrowserController
 from mia.computer.browser_actions import BrowserActions
+from mia.computer.capabilities import PermissionLevel, default_registry
 from mia.computer.control import AutomationControl
 from mia.computer.fileops import FileOperations
 from mia.computer.filesystem import FilesystemAdapter
+from mia.computer.permissions import PermissionPolicy
 from mia.computer.processes import ProcessManager
 from mia.computer.task_handlers import build_handlers
 from mia.computer.tasks import Inspection, Outcome, StepHandler, TaskEngine, TaskPlanError
@@ -649,3 +651,200 @@ def test_task_api_flow(tmp_path):
     assert paused["status"] == "paused"
     client.post("/api/computer/resume")
     assert client.post(f"/api/computer/tasks/{third}/run").json()["status"] == "awaiting_approval"
+
+
+def test_owner_permission_grant_covers_medium_task_without_extra_approval(tmp_path):
+    approvals = ApprovalStore(tmp_path / "approvals.sqlite3")
+    policy = PermissionPolicy(tmp_path / "permissions.sqlite3")
+    registry = default_registry()
+    target = tmp_path / "workspace" / "allowed.txt"
+    target.parent.mkdir()
+
+    policy.grant(
+        granted_by="owner",
+        capabilities=["filesystem.write"],
+        level=PermissionLevel.WRITE,
+        directory=str(target.parent),
+        kind="session",
+    )
+    executed = []
+
+    def request(args):
+        return approvals.request(
+            action_id="filesystem.write",
+            payload={"path": args["path"]},
+            summary="write file",
+        )["approval_id"]
+
+    def run_step(args, approval_id):
+        approvals.consume(
+            approval_id=approval_id,
+            action_id="filesystem.write",
+            payload={"path": args["path"]},
+        )
+        executed.append(args["path"])
+        return Outcome(True, True, {"path": args["path"]})
+
+    handlers = {
+        "filesystem.write": StepHandler(
+            "filesystem.write",
+            lambda args: Inspection("write target", "medium", True),
+            run_step,
+            request_approval=request,
+            idempotent=False,
+            required=("path",),
+        )
+    }
+    engine = TaskEngine(
+        tmp_path / "tasks.sqlite3",
+        approvals,
+        handlers,
+        permission_policy=policy,
+        capability_registry=registry,
+        permission_path=lambda _cap, args: args["path"],
+    )
+    task = engine.create_task(
+        "Write approved file",
+        [{"capability": "filesystem.write", "args": {"path": str(target)}}],
+    )
+    assert engine.plan_summary(task["task_id"])[0]["needs_approval"] is False
+    completed = run(engine.advance(task["task_id"]))
+    assert completed["status"] == "completed"
+    assert executed == [str(target)]
+    assert approvals.list_pending() == []
+    assert any(event["event"] == "authorize" and event["outcome"] == "allowed"
+               for event in policy.history())
+
+
+def test_high_risk_task_still_requires_per_action_approval_despite_grant(tmp_path):
+    approvals = ApprovalStore(tmp_path / "approvals.sqlite3")
+    policy = PermissionPolicy(tmp_path / "permissions.sqlite3")
+    registry = default_registry()
+    target = tmp_path / "workspace" / "delete.txt"
+    target.parent.mkdir()
+
+    policy.grant(
+        granted_by="owner",
+        capabilities=["filesystem.delete"],
+        level=PermissionLevel.WRITE,
+        directory=str(target.parent),
+        kind="session",
+    )
+    handler = StepHandler(
+        "filesystem.delete",
+        lambda args: Inspection("delete target", "high", True),
+        lambda args, approval_id: Outcome(True, True, {"approval": approval_id}),
+        request_approval=lambda args: approvals.request(
+            action_id="filesystem.delete",
+            payload={"path": args["path"]},
+            summary="delete target",
+        )["approval_id"],
+        idempotent=False,
+        required=("path",),
+    )
+    engine = TaskEngine(
+        tmp_path / "tasks.sqlite3",
+        approvals,
+        {"filesystem.delete": handler},
+        permission_policy=policy,
+        capability_registry=registry,
+        permission_path=lambda _cap, args: args["path"],
+    )
+    task = engine.create_task(
+        "Delete protected file",
+        [{"capability": "filesystem.delete", "args": {"path": str(target)}}],
+    )
+    assert engine.plan_summary(task["task_id"])[0]["needs_approval"] is True
+    waiting = run(engine.advance(task["task_id"]))
+    assert waiting["status"] == "awaiting_approval"
+    assert waiting["steps"][0]["status"] == "awaiting_approval"
+    assert len(approvals.list_pending()) == 1
+
+
+def test_directory_scoped_grant_does_not_cover_an_outside_path(tmp_path):
+    approvals = ApprovalStore(tmp_path / "approvals.sqlite3")
+    policy = PermissionPolicy(tmp_path / "permissions.sqlite3")
+    registry = default_registry()
+    allowed_dir = tmp_path / "workspace" / "allowed"
+    outside = tmp_path / "workspace" / "outside" / "file.txt"
+    allowed_dir.mkdir(parents=True)
+    outside.parent.mkdir(parents=True)
+
+    policy.grant(
+        granted_by="owner",
+        capabilities=["filesystem.write"],
+        level=PermissionLevel.WRITE,
+        directory=str(allowed_dir),
+        kind="session",
+    )
+    handler = StepHandler(
+        "filesystem.write",
+        lambda args: Inspection("write target", "medium", True),
+        lambda args, _approval: Outcome(True, True),
+        request_approval=lambda args: approvals.request(
+            action_id="filesystem.write", payload={"path": args["path"]}, summary="write"
+        )["approval_id"],
+        idempotent=False,
+        required=("path",),
+    )
+    engine = TaskEngine(
+        tmp_path / "tasks.sqlite3",
+        approvals,
+        {"filesystem.write": handler},
+        permission_policy=policy,
+        capability_registry=registry,
+        permission_path=lambda _cap, args: args["path"],
+    )
+    task = engine.create_task(
+        "Write outside grant",
+        [{"capability": "filesystem.write", "args": {"path": str(outside)}}],
+    )
+    assert engine.plan_summary(task["task_id"])[0]["needs_approval"] is True
+    waiting = run(engine.advance(task["task_id"]))
+    assert waiting["status"] == "awaiting_approval"
+
+
+def test_non_idempotent_task_without_permission_spec_fails_closed(tmp_path):
+    approvals = ApprovalStore(tmp_path / "unknown-approvals.sqlite3")
+    fake = Fakes(approvals)
+    policy = PermissionPolicy(tmp_path / "unknown-permissions.sqlite3")
+    engine = TaskEngine(
+        tmp_path / "unknown-tasks.sqlite3",
+        approvals,
+        fake.handlers(),
+        permission_policy=policy,
+        capability_registry=default_registry(),
+    )
+    task = engine.create_task("Unregistered side effect", [step("danger", v=42)])
+    plan = engine.plan_summary(task["task_id"])
+    assert plan[0]["needs_approval"] is True
+    assert "PERMISSION DENIED" in plan[0]["summary"]
+
+    result = run(engine.advance(task["task_id"]))
+    assert result["status"] == "failed"
+    assert fake.runs.get("danger") is None
+    assert any(event["kind"] == "permission_denied" for event in engine.events(task["task_id"]))
+
+
+def test_unregistered_read_capability_fails_closed_with_shared_policy(tmp_path):
+    approvals = ApprovalStore(tmp_path / "unknown-capability-approvals.sqlite3")
+    policy = PermissionPolicy(tmp_path / "unknown-capability-permissions.sqlite3")
+    handler = StepHandler(
+        "unregistered.read",
+        lambda _args: Inspection("read unknown resource", "low"),
+        lambda _args, _approval: Outcome(True, True, {"ok": True}),
+        idempotent=True,
+    )
+    engine = TaskEngine(
+        tmp_path / "unknown-capability-tasks.sqlite3",
+        approvals,
+        {"unregistered.read": handler},
+        permission_policy=policy,
+        capability_registry=default_registry(),
+    )
+    decision = engine._permission_decision(
+        "unregistered.read", {}, Inspection("read unknown resource", "low")
+    )
+    assert decision is not None
+    assert decision.allowed is False
+    assert "registered owner permission specification" in decision.reason

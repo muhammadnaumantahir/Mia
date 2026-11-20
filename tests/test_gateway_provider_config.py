@@ -31,29 +31,25 @@ def test_local_only_default_registers_only_ollama(env):
     assert factory.build_default_registry().ids() == ("ollama",)
 
 
-def test_omniroute_requires_explicit_base_url_and_key(env):
-    env.setenv("MIA_OMNIROUTE_ENABLED", "true")
-    with pytest.raises(RuntimeError, match="BASE_URL"):
-        factory.build_default_registry()
-    env.setenv("MIA_OMNIROUTE_BASE_URL", "https://omni.example.com/v1")
-    with pytest.raises(RuntimeError, match="credential store"):
-        factory.build_default_registry()
-    FakeStore.keys["omniroute"] = "sk-test"
+@pytest.mark.parametrize("legacy_id", ["FREELLMAPI", "OMNIROUTE"])
+def test_legacy_gateway_flags_do_not_register_sidecars(env, legacy_id):
+    env.setenv(f"MIA_{legacy_id}_ENABLED", "true")
+    env.setenv(f"MIA_{legacy_id}_BASE_URL", "https://legacy.example.com/v1")
+    FakeStore.keys[legacy_id.lower()] = "sk-test"
+    assert factory.build_default_registry().ids() == ("ollama",)
+
+
+def test_generic_provider_flags_headers_and_timeout_are_applied(env):
+    env.setenv("MIA_EXTRA_PROVIDERS", "cloud-one")
+    env.setenv("MIA_PROVIDER_CLOUD_ONE_BASE_URL", "https://cloud.example.com/v1")
+    env.setenv("MIA_PROVIDER_CLOUD_ONE_ROUTE_FREE", "true")
+    env.setenv("MIA_PROVIDER_CLOUD_ONE_TIMEOUT_SECONDS", "30")
+    env.setenv("MIA_PROVIDER_CLOUD_ONE_HEADERS", '{"X-Org": "mia"}')
+    FakeStore.keys["cloud-one"] = "sk-test"
+
     registry = factory.build_default_registry()
-    provider = registry.get("omniroute")
-    assert registry.ids() == ("ollama", "omniroute")
-    # Not free and not local unless the owner says so.
-    assert provider.free_tier is False and provider.data_local is False
-
-
-def test_flags_headers_and_timeout_are_applied(env):
-    env.setenv("MIA_OMNIROUTE_ENABLED", "true")
-    env.setenv("MIA_OMNIROUTE_BASE_URL", "https://omni.example.com/v1")
-    env.setenv("MIA_OMNIROUTE_ROUTE_FREE", "true")
-    env.setenv("MIA_OMNIROUTE_TIMEOUT_SECONDS", "30")
-    env.setenv("MIA_OMNIROUTE_HEADERS", '{"X-Org": "mia"}')
-    FakeStore.keys["omniroute"] = "sk-test"
-    provider = factory.build_default_registry().get("omniroute")
+    provider = registry.get("cloud-one")
+    assert registry.ids() == ("cloud-one", "ollama")
     assert provider.free_tier is True
     assert provider.timeout == 30.0
     assert provider._headers()["X-Org"] == "mia"
@@ -62,10 +58,10 @@ def test_flags_headers_and_timeout_are_applied(env):
 
 @pytest.mark.parametrize("raw", ["not json", "[1, 2]", '{"Authorization": "x"}'])
 def test_bad_header_config_fails_closed(env, raw):
-    env.setenv("MIA_OMNIROUTE_ENABLED", "true")
-    env.setenv("MIA_OMNIROUTE_BASE_URL", "https://omni.example.com/v1")
-    env.setenv("MIA_OMNIROUTE_HEADERS", raw)
-    FakeStore.keys["omniroute"] = "sk-test"
+    env.setenv("MIA_EXTRA_PROVIDERS", "cloud-one")
+    env.setenv("MIA_PROVIDER_CLOUD_ONE_BASE_URL", "https://cloud.example.com/v1")
+    env.setenv("MIA_PROVIDER_CLOUD_ONE_HEADERS", raw)
+    FakeStore.keys["cloud-one"] = "sk-test"
     with pytest.raises((RuntimeError, ValueError)):
         factory.build_default_registry()
 
@@ -75,9 +71,12 @@ def test_extra_provider_ids_validated_and_registered(env):
     env.setenv("MIA_PROVIDER_MY_LLM_BASE_URL", "https://llm.example.com/v1")
     FakeStore.keys["my-llm"] = "k"
     assert factory.build_default_registry().ids() == ("my-llm", "ollama")
-    env.setenv("MIA_EXTRA_PROVIDERS", "ollama")
-    with pytest.raises(RuntimeError, match="reserved"):
-        factory.build_default_registry()
+
+    for reserved in ("ollama", "freellmapi", "omniroute"):
+        env.setenv("MIA_EXTRA_PROVIDERS", reserved)
+        with pytest.raises(RuntimeError, match="reserved"):
+            factory.build_default_registry()
+
     env.setenv("MIA_EXTRA_PROVIDERS", "../x")
     with pytest.raises(RuntimeError, match="Invalid"):
         factory.build_default_registry()
@@ -89,7 +88,12 @@ def test_invalid_timeouts_use_default(raw):
 
 
 def test_header_validation_rejects_injection():
-    for bad in ({"A\r\nB": "x"}, {"X": "a\r\nInjected: 1"}, {"Host": "evil"}, {"Content-Type": "x"}):
+    for bad in (
+        {"A\r\nB": "x"},
+        {"X": "a\r\nInjected: 1"},
+        {"Host": "evil"},
+        {"Content-Type": "x"},
+    ):
         with pytest.raises(ValueError):
             validate_extra_headers(bad)
 
