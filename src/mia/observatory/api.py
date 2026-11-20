@@ -2435,29 +2435,48 @@ def create_app(
     @app.post("/api/computer/files/ops/preview", status_code=201)
     def computer_file_op_preview(item: FileOperationInput) -> dict[str, Any]:
         try:
-            return file_ops.preview(
+            requires_approval = _computer_permission_requires_approval(
+                f"filesystem.{item.op}",
+                path=_filesystem_permission_path(item.root_id, item.relative_path),
+            )
+            preview = file_ops.preview(
                 item.op, item.root_id, item.relative_path,
                 destination_path=item.destination_path, recovery_id=item.recovery_id,
             )
+            return {**preview, "requires_approval": requires_approval}
         except (FilesystemAccessError, FileNotFoundError, FileOperationError, ValueError) as exc:
             raise _file_error(exc) from exc
 
     @app.post("/api/computer/files/ops/execute")
     def computer_file_op_execute(item: FileOperationExecution) -> dict[str, Any]:
         try:
+            requires_approval = _computer_permission_requires_approval(
+                f"filesystem.{item.op}",
+                path=_filesystem_permission_path(item.root_id, item.relative_path),
+            )
+            approval_id = item.approval_id
+            if approval_id is None:
+                if requires_approval:
+                    raise HTTPException(status_code=409, detail="This operation needs its own owner approval")
+                approval_id = file_ops.preview(
+                    item.op, item.root_id, item.relative_path,
+                    destination_path=item.destination_path, recovery_id=item.recovery_id,
+                )["approval_id"]
             result = file_ops.execute(
-                item.op, item.approval_id, item.root_id, item.relative_path,
+                item.op, approval_id, item.root_id, item.relative_path,
                 destination_path=item.destination_path, recovery_id=item.recovery_id,
             )
+        except HTTPException:
+            raise
         except (
             FilesystemAccessError, FileNotFoundError, FileOperationError, ApprovalError, ValueError
         ) as exc:
             raise _file_error(exc) from exc
         observatory.record_event(
             category="computer", event_type=f"file_{item.op}",
-            summary=f"Approved file operation {item.op} completed and verified",
+            summary=f"File operation {item.op} completed and verified",
             outcome="success", layer_id="SPS-10",
-            payload={"approval_id": item.approval_id, "op": item.op,
+            payload={"approval_id": approval_id, "op": item.op,
                      "source": result["operation"].get("source"),
                      "destination": result["operation"].get("destination")},
         )
@@ -2626,11 +2645,16 @@ def create_app(
     @app.post("/api/computer/files/write/preview", status_code=201)
     def computer_write_preview(item: FileWritePreview) -> dict[str, Any]:
         try:
-            return computer_files.preview_write(
+            requires_approval = _computer_permission_requires_approval(
+                "filesystem.write",
+                path=_filesystem_permission_path(item.root_id, item.relative_path),
+            )
+            preview = computer_files.preview_write(
                 item.root_id,
                 item.relative_path,
                 item.content,
             )
+            return {**preview, "requires_approval": requires_approval}
         except FilesystemAccessError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         except (ValueError, OSError) as exc:
@@ -2650,8 +2674,19 @@ def create_app(
     @app.post("/api/computer/files/write/execute")
     def computer_write_execute(item: FileWriteExecution) -> dict[str, Any]:
         try:
+            requires_approval = _computer_permission_requires_approval(
+                "filesystem.write",
+                path=_filesystem_permission_path(item.root_id, item.relative_path),
+            )
+            approval_id = item.approval_id
+            if approval_id is None:
+                if requires_approval:
+                    raise HTTPException(status_code=409, detail="This write needs its own owner approval")
+                approval_id = computer_files.preview_write(
+                    item.root_id, item.relative_path, item.content
+                )["approval_id"]
             result = computer_files.execute_write(
-                approval_id=item.approval_id,
+                approval_id=approval_id,
                 root_id=item.root_id,
                 relative_path=item.relative_path,
                 content=item.content,
