@@ -124,6 +124,22 @@ def test_config_files_are_indexed_but_secret_material_is_excluded(tmp_path):
     assert "secrets/credentials.json" not in paths
     assert "private/signing.pem" not in paths
 
+    # Runtime user content is not source documentation and must stay out of the graph.
+    for directory in ("data", "workspace", "backups", "exports", "recordings", "transcripts"):
+        runtime = root / directory
+        runtime.mkdir()
+        (runtime / "private-note.json").write_text('{"owner":"private"}', encoding="utf-8")
+    refreshed = build_graph(root)
+    refreshed_paths = {
+        node.get("path") for node in refreshed["nodes"] if node["kind"] == "file"
+    }
+    assert not any(
+        path and path.split("/", 1)[0] in {
+            "data", "workspace", "backups", "exports", "recordings", "transcripts"
+        }
+        for path in refreshed_paths
+    )
+
 
 def test_literal_config_reads_and_writes_are_source_grounded(tmp_path):
     root = make_repo(tmp_path)
