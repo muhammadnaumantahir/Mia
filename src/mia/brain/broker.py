@@ -45,6 +45,23 @@ class PermissionEvaluator(Protocol):
     def evaluate(self, tool: ToolDefinition, arguments: dict[str, Any]) -> GateDecision: ...
 
 
+class DefaultPermissionEvaluator:
+    """Owner-configured policy. Only read and preview (approval-gated) modes are allowed."""
+
+    def __init__(self, deny_permissions: Iterable[str] = (),
+                 allowed_modes: Iterable[str] = ("read", "preview")) -> None:
+        env = os.getenv("MIA_BRAIN_DENY_PERMISSIONS", "")
+        self.deny = frozenset(deny_permissions) | frozenset(p.strip() for p in env.split(",") if p.strip())
+        self.modes = frozenset(allowed_modes)
+
+    def evaluate(self, tool: ToolDefinition, arguments: dict[str, Any]) -> GateDecision:
+        if tool.mode not in self.modes:
+            return GateDecision(False, "permission", f"mode '{tool.mode}' is not permitted")
+        if tool.permission in self.deny:
+            return GateDecision(False, "permission", f"permission '{tool.permission}' is denied by owner policy")
+        return GateDecision(True, "ok")
+
+
 class OwnerPermissionEvaluator(DefaultPermissionEvaluator):
     """Bridge Brain tools to Mia's shared computer permission catalogue.
 
@@ -124,24 +141,6 @@ class OwnerPermissionEvaluator(DefaultPermissionEvaluator):
                 "this read tool requires an owner grant under the capability policy",
             )
         return GateDecision(True, "ok")
-
-
-class DefaultPermissionEvaluator:
-    """Owner-configured policy. Only read and preview (approval-gated) modes are allowed."""
-
-    def __init__(self, deny_permissions: Iterable[str] = (),
-                 allowed_modes: Iterable[str] = ("read", "preview")) -> None:
-        env = os.getenv("MIA_BRAIN_DENY_PERMISSIONS", "")
-        self.deny = frozenset(deny_permissions) | frozenset(p.strip() for p in env.split(",") if p.strip())
-        self.modes = frozenset(allowed_modes)
-
-    def evaluate(self, tool: ToolDefinition, arguments: dict[str, Any]) -> GateDecision:
-        if tool.mode not in self.modes:
-            return GateDecision(False, "permission", f"mode '{tool.mode}' is not permitted")
-        if tool.permission in self.deny:
-            return GateDecision(False, "permission", f"permission '{tool.permission}' is denied by owner policy")
-        return GateDecision(True, "ok")
-
 
 @dataclass(slots=True)
 class ToolCallRecord:
