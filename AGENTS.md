@@ -78,3 +78,11 @@ Follow [Mia Independent AI Gateway direction](docs/architecture/AI_GATEWAY_DIREC
 - When touching legacy references, migrate the documentation/configuration to the independent architecture. Do not leave setup instructions that tell users to install or run either gateway.
 - Treat model availability, free quotas, pricing and terms as dynamic, sourced metadata. Unknown prices are never zero; paid routing stays fail-closed until request, daily and monthly limits are implemented and tested.
 - Preserve the ten SPS layers. The gateway is a supporting service, not an additional SPS layer.
+
+
+## Code Graph maintenance
+
+- After meaningful source or architecture changes, regenerate the graph with `python scripts/update_code_graph.py` and include the graph artifact when it is available.
+- Keep confirmed AST/source relationships separate from inferred/documented heuristics; every inferred edge must remain labelled.
+- Never execute or import indexed source code, index secrets/private runtime data, or let graph generation modify application source.
+- Report parser errors and unsupported constructs. A stale or missing graph is not a passing architecture check.
