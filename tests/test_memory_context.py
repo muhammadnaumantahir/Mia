@@ -344,3 +344,43 @@ def test_urdu_goal_question_retrieves_a_goal_without_shared_keywords(tmp_path):
 
     assert any(ref.ref_id == record_id for ref in packet.references)
 
+
+
+# ---------------------------------------------------- full-history semantics
+
+
+def test_semantic_history_candidates_include_old_messages_and_skip_temporary(tmp_path):
+    store = make_store(tmp_path)
+    old_id = store.append_message("conversation-old", "user", "Project Zephyr decision from the beginning")
+    for index in range(140):
+        store.append_message("conversation-new", "user", f"Unrelated recent discussion item {index}")
+    temporary = store.ensure_conversation("conversation-temp")
+    store.set_conversation_temporary(temporary, True)
+    store.append_message(temporary, "user", "Private temporary Zephyr secret")
+
+    candidates = store.all_messages_for_semantic()
+    ids = {item["message_id"] for item in candidates}
+    assert old_id in ids
+    assert all(item["conversation_id"] != temporary for item in candidates)
+    assert len(candidates) == 141
+
+
+def test_semantic_context_can_retrieve_a_message_outside_recent_history(tmp_path):
+    store = make_store(tmp_path)
+    conversation = store.ensure_conversation("conversation-current")
+    old_id = store.append_message("conversation-archive", "user",
+                                  "We selected Zephyr as the internal project codename")
+    for index in range(140):
+        store.append_message("conversation-archive", "user", f"Unrelated topic number {index}")
+
+    def semantic_match(_prompt, records):
+        assert any(record.get("message_id") == old_id for record in records)
+        return {str(record.get("message_id")): (0.25 if record.get("message_id") == old_id else 0.0)
+                for record in records}
+
+    packet = assemble_memory_context(
+        store, "What codename did we choose for that project?", conversation,
+        reranker=semantic_match,
+    )
+    assert old_id in {reference.ref_id for reference in packet.references}
+    assert "Zephyr" in packet.message["content"]
