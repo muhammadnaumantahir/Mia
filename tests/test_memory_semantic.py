@@ -114,3 +114,23 @@ def test_semantic_embedding_cache_is_cleared_when_structured_record_is_deleted(t
     store.set_embedding_cache("model", digest, [0.3, 0.7])
     assert store.structured.delete(record_id)
     assert store.get_embedding_cache("model", digest) is None
+
+
+def test_semantic_reranker_reuses_cached_document_embeddings(tmp_path):
+    from mia.memory.store import MemoryStore
+
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    calls = []
+
+    def fake_embed(texts):
+        calls.append(list(texts))
+        return [[1.0, 0.0] for _ in texts]
+
+    reranker = LocalOllamaEmbeddingReranker(
+        model="test-model", embedder=fake_embed, cache=store
+    )
+    records = [{"record_id": "record-1", "title": "Billing", "body": "PostgreSQL"}]
+    reranker("query one", records)
+    assert len(calls) == 2  # query and uncached document
+    reranker("query two", records)
+    assert len(calls) == 3  # only the new query; document vector came from SQLite
