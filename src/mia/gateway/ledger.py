@@ -268,29 +268,20 @@ class UsageLedger:
 
     def reservation_summary(self) -> dict[str, Any]:
         moment = _utc_now()
-        today = moment.replace(hour=0, minute=0, second=0, microsecond=0)
-        month = moment.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         with self._connection() as db:
             row = db.execute(
                 "SELECT COUNT(*) AS count, COALESCE(SUM(reserved_usd),0) AS reserved "
                 "FROM budget_reservations WHERE expires_at > ?",
                 (moment.isoformat(),),
             ).fetchone()
-            daily = db.execute(
-                "SELECT COALESCE(SUM(reserved_usd),0) FROM budget_reservations "
-                "WHERE expires_at > ?",
-                (moment.isoformat(),),
-            ).fetchone()[0]
-            monthly = db.execute(
-                "SELECT COALESCE(SUM(reserved_usd),0) FROM budget_reservations "
-                "WHERE expires_at > ?",
-                (moment.isoformat(),),
-            ).fetchone()[0]
+        active_reserved = float(row["reserved"])
+        # An in-flight call can cross a UTC day/month boundary. Count every
+        # unexpired reservation against the current window until usage is posted.
         return {
             "active_count": int(row["count"]),
-            "active_reserved_usd": float(row["reserved"]),
-            "reserved_today_utc_usd": float(daily),
-            "reserved_month_utc_usd": float(monthly),
+            "active_reserved_usd": active_reserved,
+            "reserved_today_utc_usd": active_reserved,
+            "reserved_month_utc_usd": active_reserved,
         }
 
     def window_summary(self, since: str, until: str) -> dict[str, Any]:
