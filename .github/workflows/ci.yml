@@ -33,11 +33,12 @@ jobs:
       - name: Lint
         run: ruff check src tests
       - name: Refresh Code Graph
+        if: hashFiles('scripts/update_code_graph.py') != ''
         run: python scripts/update_code_graph.py
       - name: Test
         run: pytest
       - name: Upload Code Graph snapshot
-        if: always() && matrix.os == 'ubuntu-latest'
+        if: always() && matrix.os == 'ubuntu-latest' && hashFiles('scripts/update_code_graph.py') != ''
         uses: actions/upload-artifact@v4
         with:
           name: mia-code-graph-${{ github.sha }}
