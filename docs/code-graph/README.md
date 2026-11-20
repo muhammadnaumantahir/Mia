@@ -10,7 +10,7 @@ only `docs/code-graph/graph.json` and the changelog artifact.
 python scripts/update_code_graph.py
 ```
 
-The index is regenerated when the graph page is opened or the refresh button is used.
+The production FastAPI app starts a lightweight background watcher that polls source-file metadata and atomically rebuilds the index after changes. The graph page also validates/rebuilds the source digest on access; the refresh button forces an update. Set `MIA_CODE_GRAPH_WATCH_ENABLED=false` to disable background watching. The interval is configurable with `MIA_CODE_GRAPH_WATCH_INTERVAL_SECONDS` (1–60 seconds).
 The API compares a SHA-256 digest of supported source/document files and rewrites the
 graph atomically only when the digest changes. The command can also be used after a
 source change or commit:
