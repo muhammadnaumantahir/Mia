@@ -170,3 +170,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Root cause: the fail-closed owner-grant policy for browser.fill/scroll/screenshot is intentional (tests/test_browser_api.py asserts it); the end-to-end test predated it. The test now asserts the 409 first, grants via POST /api/computer/permissions, then continues. No route or policy change; no assertion weakened.
 - Tests actually run: tests/test_browser_automation.py + tests/test_browser_api.py -> 15 passed; after final rebase tests/test_browser_automation.py -> 13 passed. Full suite not re-run after this change.
 
+## 2026-11-21T10:05Z — MIA-BASE-04 claimed
+
+- Agent: A5 (same session; resumed on owner Continue). Status: IN_PROGRESS. Paths: src/mia/codegraph/**, scripts/update_code_graph.py, graph tests/docs. A5 had no other IN_PROGRESS task.
+
