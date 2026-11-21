@@ -49,29 +49,40 @@ def _budget_for(analysis: IntentAnalysis) -> ContextBudget:
     return ContextBudget()
 
 
+# How many of the most recently updated conversations are searched for recall. The
+# eligibility check and the tail retrieval below share this, so "is there a prior
+# session?" can never disagree with "what was in it?".
+_PRIOR_CONVERSATION_SCAN = 50
+
+
+def _prior_persistent_conversation_ids(store: MemoryStore, conversation_id: str):
+    """Yield ids of other, non-temporary conversations that have messages, newest first.
+
+    Temporary chats are deliberately excluded from all cross-session recall, and the
+    current conversation is never its own predecessor.
+    """
+    for convo in store.list_conversations(limit=_PRIOR_CONVERSATION_SCAN):
+        if convo.get("temporary") or not convo.get("message_count", 0):
+            continue
+        cid = convo.get("id") or convo.get("conversation_id")
+        if cid and cid != conversation_id:
+            yield cid
+
+
 def _prior_conversation_tail(
     store: MemoryStore, conversation_id: str, limit: int = 6
 ) -> list[dict[str, Any]]:
     """Most recent turns from the latest *other* conversation (for 'continue where we stopped')."""
-    for convo in store.list_conversations(limit=50):
-        # Temporary chats are deliberately excluded from all cross-session recall.
-        if convo.get("temporary"):
-            continue
-        cid = convo.get("id") or convo.get("conversation_id")
-        if cid and cid != conversation_id:
-            msgs = store.get_messages(cid, limit=limit)
-            if msgs:
-                return msgs
+    for cid in _prior_persistent_conversation_ids(store, conversation_id):
+        msgs = store.get_messages(cid, limit=limit)
+        if msgs:
+            return msgs
     return []
+
 
 def has_persistent_prior_conversation(store: MemoryStore, conversation_id: str) -> bool:
     """Whether intent analysis may safely assume a prior persistent session exists."""
-    return any(
-        convo.get("message_count", 0) > 0
-        and not convo.get("temporary")
-        and (convo.get("id") or convo.get("conversation_id")) != conversation_id
-        for convo in store.list_conversations(limit=5)
-    )
+    return next(_prior_persistent_conversation_ids(store, conversation_id), None) is not None
 
 
 def build_context(

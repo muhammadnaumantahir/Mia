@@ -258,3 +258,38 @@ def test_persistent_history_counts_as_prior_context(store):
         "Continue where we stopped.",
         has_prior_context=has_persistent_prior_conversation(store, current),
     ).needs_clarification
+
+
+def test_prior_context_check_finds_persistent_history_behind_many_temporary_chats(store):
+    """The 'is there a prior session?' check must agree with the recall that follows it.
+
+    A run of recent temporary chats must not hide an older persistent conversation:
+    otherwise Mia would ask the owner to re-explain context it could actually recall.
+    """
+    older = store.ensure_conversation("older-persistent")
+    store.append_message(older, "user", "The persistent project is called Cedar.")
+    store.append_message(older, "assistant", "We planned the Cedar milestone sequence.")
+
+    for index in range(6):
+        temporary = store.ensure_conversation(f"temp-chat-{index}")
+        store.set_conversation_temporary(temporary, True)
+        store.append_message(temporary, "user", f"Throwaway thought {index}.")
+
+    current = store.ensure_conversation("current-after-temps")
+    store.append_message(current, "user", "Continue where we stopped.")
+
+    assert has_persistent_prior_conversation(store, current)
+    analysis = analyze_intent(
+        "Continue where we stopped.",
+        has_prior_context=has_persistent_prior_conversation(store, current),
+    )
+    assert not analysis.needs_clarification
+    built = build_context(
+        store, identity_text="You are Mia.", prompt="Continue where we stopped.",
+        conversation_id=current, analysis=analysis,
+        candidates=[cand("m")], required_capabilities=frozenset(),
+        recent_messages=store.get_messages(current, limit=12),
+    )
+    content = " ".join(message["content"] for message in built.messages)
+    assert "Cedar" in content
+    assert "Throwaway thought" not in content
