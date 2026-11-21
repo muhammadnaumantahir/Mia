@@ -35,6 +35,15 @@ _READ_CLAIM = re.compile(
 _HEDGES = re.compile(
     r"\b(i think|i believe|probably|might be|not sure|i'm unsure|i am unsure|possibly|may be|"
     r"i can't verify|cannot verify|as far as i know)\b", re.I)
+_MUTATING_CLAIM_UR = re.compile(
+    r"(?:\b(?:maine|main ne)\b[^.\n]{0,70}\b(?:delete|deleted|bana|banaya|bana\s+diya|"
+    r"bhej|bhej\s+di|save|saved|update|updated|install|installed|change|changed)\b|"
+    r"میں نے[^۔\n]{0,70}(?:ڈیلیٹ|حذف|بنا دیا|بنا دی|بھیج دی|محفوظ کر|اپ ڈیٹ کر|تبدیل کر))",
+    re.I)
+_READ_CLAIM_UR = re.compile(
+    r"(?:\b(?:maine|main ne)\b[^.\n]{0,60}\b(?:check|inspect|read|search|dekh|dekha|"
+    r"parh|parha|scan|review)\b|میں نے[^۔\n]{0,60}(?:چیک|دیکھ|پڑھ|تلاش|معائنہ))",
+    re.I)
 _MEMORY_CITE = re.compile(r"\[M(\d+)\]")
 
 
@@ -189,7 +198,7 @@ def evaluate_response(
             issues.append(Issue("invalid_structured_output", problem, "error"))
 
     executed = ledger.any_executed
-    claimed_mutation = bool(_MUTATING_CLAIM.search(text) or _MUTATING_CLAIM_B.search(text))
+    claimed_mutation = bool(_MUTATING_CLAIM.search(text) or _MUTATING_CLAIM_B.search(text)\n                            or _MUTATING_CLAIM_UR.search(text))
     if claimed_mutation:
         # Registered tools are read/preview only, so a mutation claim is only
         # supportable by a verified, owner-approved execution record.
@@ -199,7 +208,7 @@ def evaluate_response(
             issues.append(Issue("unverified_completion_claim",
                                 "text claims an action was performed without an execution record"))
             out = out.rstrip() + UNVERIFIED_NOTE
-    if _READ_CLAIM.search(text) and not executed:
+    if (_READ_CLAIM.search(text) or _READ_CLAIM_UR.search(text)) and not executed:
         issues.append(Issue("unverified_inspection_claim",
                             "text claims to have inspected something but no tool completed"))
     failed = ledger.by_status("failed")
