@@ -204,3 +204,9 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-21T15:34Z - MIA-UX-05 claimed (A6)
 - No unblocked A6 task existed (UX-04 blocked; VOICE-03 is A4's; M2-M6 gated), so A6 filed MIA-UX-05 from an audit of the one-shot recording path (microphone visibility/stop safety). Paths: src/mia/assistant.html, tests/test_assistant_mic_safety.py only.
 
+## 2026-11-21T15:34Z — MIA-GW-03 DONE (A2)
+
+- Audit finding: routing had no language awareness; Urdu/Roman Urdu turns classified 'simple' rewarded the smallest model. Added src/mia/gateway/language.py and a language-aware term in BrainRouter._score (src/mia/brain/router.py, routing code I treated as gateway/routing scope; no orchestrator edits). Ordering only; explicit owner preferences win; nothing excluded.
+- Tests: tests/test_gateway_language_routing.py (16 cases). Full suite run locally: 1718 passed, 1 skipped, 0 failed. Code Graph refreshed (4137 nodes / 8412 edges).
+- Commit on remote main: 21a8e6d (verified with git ls-remote). One test of mine initially exposed a real flaw (penalty beat an explicit preference); fixed before commit.
+- Filed MIA-GW-04 (gateway-level timeouts). Limitations: size heuristic, not measured Urdu quality; fake candidates only.
