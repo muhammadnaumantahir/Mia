@@ -465,3 +465,9 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Delivered: nullable structured-record `project` (migration 5); recall filter on keyword, intent, semantic and linked paths; capture tagging and scoped duplicate/conflict/update; owner API to set/clear project (audited). Opt-in; default behaviour unchanged.
 - Tests actually run: 17 new tests (mutation-checked on the four recall filters; capture scoping not mutation-checked); full suite before rebase 1928 passed, 1 skipped, 0 failed with `websockets` installed; after rebase only the memory/capture/context/project suites were re-run (all passed); ruff clean. No CI.
 - Not covered: no UI for record project; scope is a post-retrieval filter (pool can shrink); not a security boundary; no live-model evidence.
+
+## 2026-11-21T21:01Z — MIA-BRAIN-07 DONE (A1, record reconciliation)
+
+- The implementation landed earlier in commit `5b0c3f7` (ancestor of remote main, confirmed with merge-base) by a previous A1 session that never updated the board. This fresh A1 session did not rewrite it; it re-verified and recorded it.
+- Verified now: `pytest tests/test_runtime_evidence_budget.py tests/test_self_description.py` all passed; `build_context` counts the system message (identity + evidence block) in the fixed token cost against `token_budget`. Compact block by default, full block only when the turn asks about identity/tools/voice/providers/architecture.
+- Not verified: live-model behaviour; detector false negatives/positives are only exercised on scripted prompts.
