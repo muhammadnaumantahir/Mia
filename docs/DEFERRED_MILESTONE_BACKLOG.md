@@ -34,9 +34,12 @@ A task is complete only when:
 
 **Existing live tasks:** `MIA-BRAIN-06`, `MIA-BRAIN-07`, `MIA-EVAL-05` and any other P1 rows on the live task board. Do not recreate them under new IDs.
 
+**Additional A2 queue:** `MIA-GW-05` is a focused gateway-readiness audit so the gateway specialist has a first-milestone task after the existing gateway slices.
+
 | Task | Specialist | Dependencies | Bounded scope and acceptance criteria |
 |---|---|---|---|
 | MIA-M1-08 — Conversation-first acceptance traceability audit | A1 + A3 | Existing P1 tasks inspected | Map every M1 roadmap exit criterion to concrete source modules, automated tests and owner checks. Identify only demonstrable gaps; create child tasks with unique IDs and exact paths. Deliver a traceability matrix with no duplicate work and no unsupported completion claims. |
+| MIA-GW-05 — Conversation gateway readiness audit | A2 | MIA-GW-01 through MIA-GW-04 reviewed | Trace the live gateway end-to-end against M1 requirements: local-first behavior, provider/model discovery, routing, fallback, cancellation, streaming, credential isolation, usage ledger, request/daily/monthly budgets and truthful capability reporting. Implement only the highest-impact source-backed gap not already covered by GW-03/GW-04; add fake-provider regression tests. Never add FreeLLMAPI or OmniRoute runtime dependencies. |
 | MIA-M1-09 — Text/voice shared-Brain end-to-end contract | A1 + A4 | Existing text and voice routes available | Trace a text turn and each supported voice path through identity, context, Brain, gateway, verification, persistence and response. Add integration tests proving shared identity/memory/context and consistent permission/error handling. Fix only verified integration gaps. |
 | MIA-M1-10 — Memory lifecycle owner controls audit | A1 + A6 | Memory store and existing retention controls | Audit inspect, correct, export and delete flows for conversation and structured memory. Implement missing owner-facing/API controls with provenance, confirmation for destructive actions, retention consistency and tests proving deleted data is not recalled. Do not duplicate existing retention work. |
 | MIA-M1-11 — Multilingual voice quality and fallback audit | A4 + A3 | Existing voice pipeline and evaluation fixtures | Audit actual STT/TTS engines, streaming, English/Urdu/Roman Urdu handling, language selection, transcript correction, failure fallback and latency reporting. Add deterministic adapter tests and quality fixtures; do not claim real speech quality from synthetic audio. |
