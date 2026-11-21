@@ -6,7 +6,7 @@ This registry is a live-session directory, not a historical record. Previous ses
 | Agent ID | Specialization | Session / model label | Current task | Status | Last heartbeat (UTC) |
 |---|---|---|---|---|---|
 | A1 | Brain, identity & memory | UNREGISTERED | — | OFFLINE | — |
-| A2 | AI Gateway & model routing | UNREGISTERED | — | OFFLINE | — |
+| A2 | AI Gateway & model routing | Anthropic Claude Sonnet 5.5 (claude.ai chat session, 2026-11-22) | — | ACTIVE | 2026-11-21T19:27Z |
 | A3 | Reasoning quality & judge models | UNREGISTERED | — | OFFLINE | — |
 | A4 | Voice & wake word | UNREGISTERED | — | OFFLINE | — |
 | A5 | Code Graph & governed self-development | UNREGISTERED | — | OFFLINE | — |
