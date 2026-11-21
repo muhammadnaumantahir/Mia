@@ -36,6 +36,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Advisory retention for conversation history (None keeps it). Applied only
     # when the owner runs the retention action; nothing is deleted automatically.
     "conversation_retention_days": None,
+    # Advisory retention for *retired* structured records (superseded, outdated,
+    # archived, rejected, expired). None keeps them. Live records are never covered,
+    # and nothing is deleted until the owner runs the retention action.
+    "structured_retention_days": None,
 }
 
 
@@ -69,6 +73,12 @@ def validate_setting(key: str, value: Any) -> Any:
             return None
         if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 36500:
             raise ValueError("conversation_retention_days must be null or 1 to 36500")
+        return value
+    if key == "structured_retention_days":
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 36500:
+            raise ValueError("structured_retention_days must be null or 1 to 36500")
         return value
     raise ValueError(f"unknown memory setting: {key}")  # pragma: no cover
 

@@ -344,6 +344,7 @@ class MemorySettingsInput(BaseModel):
     auto_save_min_confidence: float | None = None
     pending_retention_days: int | None = None
     conversation_retention_days: int | None = None
+    structured_retention_days: int | None = None
 
 
 class RelationshipInput(BaseModel):
@@ -390,6 +391,13 @@ class ConversationTemporaryInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     temporary: bool
+
+
+class StructuredRetentionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    older_than_days: int | None = Field(default=None, ge=1, le=36500)
+    dry_run: bool = True
 
 
 class ConversationProjectInput(BaseModel):
@@ -4434,6 +4442,28 @@ def create_app(
                     "conversations": result["conversations"]["count"],
                     "items": result["items"]["count"],
                 },
+            )
+        return result
+
+    @app.post("/api/memory/records/retention")
+    def purge_retired_records(item: StructuredRetentionInput) -> dict[str, Any]:
+        """Preview (default) or apply retention to retired structured records only."""
+        try:
+            result = memory_store.purge_retired_records(
+                item.older_than_days, dry_run=item.dry_run
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not item.dry_run:
+            observatory.record_event(
+                category="memory",
+                event_type="structured_retention_purge",
+                summary=(
+                    f"Owner purged {result['count']} retired memory records older than "
+                    f"{result['days']} days"
+                ),
+                outcome="success",
+                payload={"older_than_days": result["days"], "records": result["count"]},
             )
         return result
 

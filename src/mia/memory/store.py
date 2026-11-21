@@ -894,6 +894,47 @@ class MemoryStore:
                 db.execute("DELETE FROM memory_embedding_cache")
         return result
 
+    def purge_retired_records(
+        self, days: int | None = None, *, dry_run: bool = True, actor: str = "owner"
+    ) -> dict[str, Any]:
+        """Owner-triggered retention for retired structured records.
+
+        Only superseded, outdated, archived, rejected and expired records last changed
+        more than ``days`` ago are covered; live and pending records never are. ``days``
+        defaults to the ``structured_retention_days`` setting, and the call is refused when
+        neither is set. Defaults to a dry run. Each deletion removes the record's search,
+        history, relationship and usage rows and is audited by id only (never the text).
+        Source conversation messages are untouched: conversation retention governs them.
+        """
+        if days is None:
+            days = self.settings.get("structured_retention_days")
+            if days is None:
+                raise ValueError(
+                    "no structured-memory retention period is set: pass older_than_days "
+                    "or configure structured_retention_days"
+                )
+        if isinstance(days, bool) or not isinstance(days, int) or not 1 <= days <= 36500:
+            raise ValueError("days must be a whole number from 1 to 36500")
+        cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
+        records = self.structured.retired_older_than(cutoff)
+        count = len(records)
+        if not dry_run:
+            count = sum(
+                1 for r in records
+                if self.structured.delete(r["record_id"], chain=False, actor=actor)
+            )
+        return {
+            "cutoff": cutoff,
+            "days": days,
+            "dry_run": dry_run,
+            "count": count,
+            "sample": [
+                {"id": r["record_id"], "type": r["record_type"], "title": r["title"],
+                 "status": r["status"]}
+                for r in records[:20]
+            ],
+        }
+
     @staticmethod
     def _decode_item(row: sqlite3.Row) -> dict[str, Any]:
         result = dict(row)

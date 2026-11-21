@@ -57,6 +57,8 @@ STATUSES = frozenset(
     }
 )
 RETRIEVABLE = ("active", "completed")
+# Out of use and out of retrieval; the only statuses a retention purge may remove.
+RETIRED = ("superseded", "outdated", "archived", "rejected", "expired")
 PROVENANCE = frozenset(
     {"owner_provided", "observed", "source_backed", "inferred", "hypothesis", "validated"}
 )
@@ -768,6 +770,20 @@ class StructuredMemory:
                 (match_query, _now(), max(1, min(int(limit), 100))),
             ).fetchall()
         return [self._decode(row) for row in rows]
+
+    def retired_older_than(self, cutoff: str) -> list[dict[str, Any]]:
+        """Retired records last changed before ``cutoff`` (ISO timestamp), oldest first.
+
+        Live (active/completed) and pending records are never returned.
+        """
+        marks = ",".join("?" for _ in RETIRED)
+        with self._connect() as db:
+            rows = db.execute(
+                f"SELECT record_id, record_type, title, status FROM structured_memory "
+                f"WHERE status IN ({marks}) AND updated_at < ? ORDER BY updated_at, record_id",
+                (*RETIRED, cutoff),
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def due_for_expiry(self, *, now: str | None = None) -> list[str]:
         """Ids of temporary memories past their expiry (what ``expire_due`` would expire)."""
