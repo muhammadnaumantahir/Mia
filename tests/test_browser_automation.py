@@ -523,6 +523,12 @@ def test_browser_api_end_to_end(server, tmp_path):
         name = next(e["ref"] for e in obs["elements"] if e["name"] == "Your name")
         pw = next(e["ref"] for e in obs["elements"] if e["type"] == "password")
         order = next(e["ref"] for e in obs["elements"] if e["name"] == "Place order")
+        # Fill, scroll and screenshot are fail-closed until the owner grants them (see test_browser_api.py).
+        blocked = client.post("/api/browser/fill", json={"ref": name, "text": "Api User"})
+        assert blocked.status_code == 409
+        granted = client.post("/api/computer/permissions", json={
+            "capabilities": ["browser.fill", "browser.scroll", "browser.screenshot"], "level": "interact", "kind": "session"})
+        assert granted.status_code == 201, granted.text
         assert client.post("/api/browser/fill", json={"ref": name, "text": "Api User"}).json()["verified"]
         assert client.post("/api/browser/fill", json={"ref": pw, "text": "x"}).status_code == 403
         assert client.post("/api/browser/fill", json={"ref": "nope", "text": "x"}).status_code == 422
