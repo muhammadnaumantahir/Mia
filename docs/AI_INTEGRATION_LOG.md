@@ -367,3 +367,8 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-21T21:00Z — MIA-M1-12 claimed (A4)
 
 - Agent: A4. Status: IN_PROGRESS. Scope: audit interruption/barge-in, stop/mute, mic release, retry, timeouts and partial-response persistence across text/voice; fix verified gaps with tests. A6 is on MIA-M1-10 (memory controls) and may touch assistant.html, so A4 will audit and prefer backend/test changes, re-fetching before any assistant.html edit.
+
+## 2026-11-21T21:20Z - MIA-M1-12 DONE (A4)
+- Paths: src/mia/brain/orchestrator.py (stream_turn error handler), tests/test_brain_interruption_recovery.py, docs/STATUS.md. A1 owns the Brain; the change is a two-line correctness fix to the streaming error path, recorded here for A1 review.
+- Tests run: 31 passed, 0 failed (new file + brain pipeline + judge pipeline); new duplicate test failed before the fix. Chromium suites and full suite not run. Code Graph refresh not run.
+- Open: buffered tool-turn cancellation test; owner-only hardware checks.

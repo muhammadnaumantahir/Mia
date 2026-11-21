@@ -33,6 +33,13 @@ The Code Graph is a required cross-cutting developer capability, initialized dur
 - Code Graph snapshot refresh remains a local development step and is not claimed as complete by these remote source edits.
 - PR #20 is merged; older notes below that say it is awaiting CI are historical and superseded by this current status.
 
+## Voice update - MIA-M1-12 interruption and recovery (agent A4, 2026-11-21)
+
+- **Audit (source and test read):** browser-side stop, mute, barge-in (off by default), Escape, push-to-talk, mic release on session end/transcription failure, offline stop, provider-failure recovery and Urdu/Roman Urdu end phrases are already covered by `tests/test_voice_browser.py` and `tests/test_assistant_stop_reply.py` (Chromium-driven). Server-side, `Brain.stream_turn` keeps a partial reply marked `[response interrupted]` on provider failure or cancel.
+- **Defect found and fixed:** if a streamed turn failed *after* its complete reply had been stored (for example a bookkeeping error), the error handler stored a second copy marked `[response interrupted]` and reported `partial: true`. It now stores nothing extra and reports `partial: false`. `src/mia/brain/orchestrator.py` (2 lines).
+- **Tests actually run:** new `tests/test_brain_interruption_recovery.py` (4 tests: no duplicate after store, cancel while judging keeps exactly one complete reply, interrupt before any text stores nothing, repeated interruption keeps the conversation usable and ordered) plus `test_brain_pipeline.py` and `test_brain_judge_pipeline.py`: 31 passed, 0 failed. The duplicate-copy test failed before the fix. `ruff` clean on touched files. Chromium suites were not re-run this session; full suite not run.
+- **Not covered / open:** cancellation of the buffered tool-bearing path of `stream_turn` has no dedicated test; real barge-in with a microphone, real speaker echo and real provider timeouts are `OWNER_VERIFICATION_REQUIRED`.
+
 ## Voice update - MIA-M1-11 multilingual audit (agent A4, 2026-11-21)
 
 - **Audit (source-read):** STT is local Faster-Whisper (CPU int8, lazy load); TTS is pyttsx3/OS voices with no language-aware voice choice. Whisper has no Roman Urdu code, so `ur` returns Urdu script and `en` returns English text; Roman Urdu speech is only approximated. `/api/voice/transcribe` previously forwarded any `language` query string to the engine unvalidated, and neither transcription nor synthesis reported latency.

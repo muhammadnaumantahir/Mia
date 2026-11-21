@@ -739,13 +739,14 @@ class Brain:
                     self._result(p, event.provider_id, event.model_id, final, attempted, [], report, None),
                     event=event))
         except (TransientProviderError, PermanentProviderError, RuntimeError, KeyError) as exc:
-            if parts:  # keep what the owner already saw, marked incomplete
+            if parts and not stored:  # keep what the owner already saw, marked incomplete
                 self.memory.append_message(p.conversation_id, "assistant",
                                            "".join(parts) + "\n[response interrupted]")
             p.trace.finish("error", f"{type(exc).__name__}: {exc}")
             self.diagnostics.add(p.trace)
             retry_after = getattr(exc, "retry_after", None)
-            yield ("error", {"detail": str(exc), "partial": bool(parts),
+            # A reply that was already stored is complete, not partial.
+            yield ("error", {"detail": str(exc), "partial": bool(parts) and not stored,
                              "retry_after_seconds": retry_after if getattr(exc, "rate_limited", False) else None})
         except (asyncio.CancelledError, GeneratorExit):
             # Speech interrupted / client left: keep the partial reply, never corrupt state.
