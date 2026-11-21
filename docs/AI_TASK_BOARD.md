@@ -35,6 +35,17 @@ This is the shared queue. Always refresh it from `main` before claiming or chang
 | MIA-BASE-04 | P1 | A5 | OPEN | Audit Code Graph freshness and impact analysis against current main after the recent multi-agent changes. Verify graph/test provenance, stale detection and source-to-test impact; fix one concrete gap with deterministic tests. Record indexed commit and local refresh limitations. Paths: `src/mia/codegraph/**`, `scripts/update_code_graph.py`, graph tests/docs. Code Graph maintenance remains cross-cutting. |
 | MIA-FIX-01 | P1 | A5 | DONE (duplicate of MIA-BASE-03; commit ffef797) | Duplicate browser permission test report; resolved by MIA-BASE-03. |
  
+## Deferred roadmap milestones (not assigned)
+
+The implementation-ready M2–M6 backlog is in [`docs/DEFERRED_MILESTONE_BACKLOG.md`](DEFERRED_MILESTONE_BACKLOG.md). It contains scoped tasks, dependencies, suggested specialist roles and acceptance criteria for:
+- M2 — Immersive 3D holographic interaction
+- M3 — Personal digital life and everyday assistance
+- M4 — Secure computer intelligence and control
+- M5 — Self-programming, custom models and governed evolution
+- M6 — Evolution Observatory and 30-day experiment
+
+**All M2–M6 tasks are DEFERRED / NOT ASSIGNED.** Suggested specialist roles are not claims or active assignments. Do not divert agents from M1. Re-audit source and tests after M1 before assigning, because some future-phase foundations may already exist.
+
 ## Continue and queue rules
 
 - On every owner **Continue**, each available agent resumes its own `IN_PROGRESS` task before taking new work. A status-only response is not sufficient when development is possible.
