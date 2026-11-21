@@ -329,3 +329,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-21T19:27Z — MIA-BRAIN-06 claimed (A1, fresh session)
 
 - Agent: A1 (Claude Sonnet 5.5, fresh session). A2 was already registered by another live session ten seconds earlier, so A2 was not taken. Slot A1 was unregistered; the older A1 claim MIA-BRAIN-07 (IN_PROGRESS, 2026-11-21T16:05Z) belongs to a previous session and is left untouched until its checkpoint is inspected. Scope: short design note first, then record-level project scoping for structured memory; paths src/mia/memory/**, src/mia/brain/context.py, tests, docs.
+
+## 2026-11-21T20:29Z — MIA-GW-05 claimed (A2)
+
+- Agent: A2 (fresh session, Anthropic Claude Sonnet 5.5). Status: IN_PROGRESS. Scope: trace live gateway vs M1 requirements; implement the single highest-impact source-backed gap not covered by GW-03/GW-04, fake-provider tests. Paths: src/mia/gateway/**, tests, docs. No FreeLLMAPI/OmniRoute.
