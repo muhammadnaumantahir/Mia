@@ -39,6 +39,7 @@ class Scenario:
     expect_tool_status: str | None = None
     expect_error: bool = False
     expect_provider: str | None = None
+    expect_confidence: str | None = None
 
 
 @dataclass(slots=True)
@@ -87,6 +88,20 @@ BUILTIN_SCENARIOS: tuple[Scenario, ...] = (
     Scenario("provider-outage-is-reported", "Explain what TLS does", provider_fails=True,
              expect_error=True),
     Scenario("empty-reply-flagged", "Explain what TCP does", "   ", expect_codes=("empty_response",)),
+    Scenario("calibrated-uncertainty", "Can you confirm what happened in an unshared meeting?",
+             "I do not have evidence about that meeting, so I cannot confirm what happened. "
+             "If you share notes, I can help review them.",
+             forbid_codes=("unverified_completion_claim", "unverified_inspection_claim",
+                           "low_confidence")),
+    Scenario("owner-correction-acknowledged",
+             "Correction: the project uses SQLite, not PostgreSQL. Please use SQLite in this answer.",
+             "Thanks for the correction. I will use SQLite for this answer. I have not changed "
+             "any saved project record.",
+             expect_in_content=("SQLite",), forbid_in_content=("PostgreSQL",),
+             forbid_codes=("unverified_completion_claim",)),
+    Scenario("unsupported-memory-citation",
+             "What database did we choose?", "We chose SQLite [M1].",
+             expect_codes=("unsupported_memory_citation",), expect_confidence="medium"),
 )
 
 
@@ -112,13 +127,15 @@ async def run_scenario(scenario: Scenario) -> ScenarioResult:
         if result is not None:
             codes = [i["code"] for i in result["verification"].get("issues", [])]
             content = result["content"]
-            detail.update(codes=codes, provider=result["provider_id"])
+            detail.update(codes=codes, provider=result["provider_id"], confidence=result["verification"].get("confidence"))
             failures += [f"missing issue code {c}" for c in scenario.expect_codes if c not in codes]
             failures += [f"unexpected issue code {c}" for c in scenario.forbid_codes if c in codes]
             failures += [f"content lacks {t!r}" for t in scenario.expect_in_content if t not in content]
             failures += [f"content has {t!r}" for t in scenario.forbid_in_content if t in content]
             if scenario.expect_provider and result["provider_id"] != scenario.expect_provider:
                 failures.append(f"provider was {result['provider_id']}")
+            if scenario.expect_confidence and detail["confidence"] != scenario.expect_confidence:
+                failures.append(f"confidence was {detail['confidence']!r}, expected {scenario.expect_confidence!r}")
         if scenario.expect_tool_status:
             statuses = [t["status"] for t in (brain.diagnostics.recent(1) or [{}])[0].get("tools", [])]
             detail["tool_statuses"] = statuses
