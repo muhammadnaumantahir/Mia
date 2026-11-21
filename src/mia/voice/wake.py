@@ -199,6 +199,21 @@ class WakeWordSession:
         with self._lock:
             return self._status_locked()
 
+    def expire_if_due(self) -> bool:
+        """Disarm if the armed time limit has passed, even if no audio arrives.
+
+        A transport calls this on a timer so the limit does not depend on the
+        microphone still sending frames. Returns True if the session stopped.
+        """
+        with self._lock:
+            if (
+                self._state == self.ARMED
+                and self._clock() - self._armed_at >= self.config.max_armed_seconds
+            ):
+                self._stop_locked("max_armed_duration")
+                return True
+            return False
+
     # --------------------------------------------------------------------- audio
 
     def feed(self, chunk: bytes) -> WakeEvent | None:

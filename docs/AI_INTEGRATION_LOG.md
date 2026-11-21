@@ -188,3 +188,9 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Not verified: real browser / keyboard / screen reader / narrow-screen layout of the new sidebar row.
 - Note: the registry task cell for A3 was corrupted earlier; upstream has since replaced it. Another agent marked all agents BLOCKED (provider usage limit); A6 set itself ACTIVE because this session is running.
 
+
+## 2026-11-21T15:40Z — MIA-VOICE-02 completed (A4), wiring deferred
+
+- Agent: A4. Paths: `src/mia/voice/wake_transport.py` (new), `src/mia/voice/wake.py` (+`expire_if_due`), `tests/test_voice_wake_transport.py` (new), `pyproject.toml` (`voice-wake` extra + `websockets`), `docs/voice/WAKE_WORD_PLAN.md`, board/registry/STATUS.
+- Tests actually run: wake + transport 82 passed; full suite excluding `tests/test_voice_browser.py` and `tests/test_browser_automation.py` (no Chromium here): 1676 passed, 2 skipped, 0 failed; `ruff` clean on touched voice files. 10-mutant check of transport guards caught 10/10 (not committed).
+- Not wired into `create_app` by design; filed MIA-VOICE-04 (blocked on A1's MIA-BRAIN-05). No Code Graph CHANGELOG entry committed (avoids cross-agent conflicts). Registry: A4 now on MIA-VOICE-03 (needs `assistant.html`; will coordinate with A6 and keep the edit minimal).

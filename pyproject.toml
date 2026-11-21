@@ -38,6 +38,8 @@ tts = [
 ]
 voice-wake = [
   "openwakeword>=0.6,<1",
+  # uvicorn needs a WebSocket implementation for the wake-word audio transport.
+  "websockets>=13,<18",
 ]
 monitoring = [
   "psutil>=6,<8",

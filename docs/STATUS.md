@@ -43,6 +43,11 @@ The Code Graph is a required cross-cutting developer capability, initialized dur
 - **Follow-ups on the board:** MIA-VOICE-02 (loopback transport), MIA-BRAIN-04 (self-description must not infer a wake word from route names), MIA-UX-02 (UI), MIA-VOICE-03 (Urdu / Roman Urdu stop commands; today English-only).
 - Code Graph: refreshed locally with `python scripts/update_code_graph.py` (3,936 nodes, 7,924 edges, 0 parse errors; includes `voice/wake.py`); the tracked `docs/code-graph/CHANGELOG.md` entry was deliberately not committed to avoid cross-agent conflicts and wrong-commit attribution.
 
+## Voice update - MIA-VOICE-02 (agent A4, 2026-11-21)
+
+- **Implemented and tested locally:** `src/mia/voice/wake_transport.py`, a loopback-only WebSocket/REST transport for the offline wake word (strict owner opt-in message, same-origin and no-proxy checks, one connection, stop on message/REST/socket-close/stall/time limit, metadata-only events). 31 tests, including a real uvicorn server with a real WebSocket client; a 10-mutant check of the guards was caught 10/10. Full suite excluding the Chromium files: 1676 passed, 2 skipped, 0 failed.
+- **Still not operational:** the routes are deliberately **not registered** in `create_app` (waits for MIA-BRAIN-05 so Mia cannot describe a route as a working wake word), and there is no UI (MIA-UX-04) and no real-speech verification (`OWNER_VERIFICATION_REQUIRED`).
+
 ## A6 / MIA-UX-01 — Stop generating (2026-11-21)
 
 - The Assistant page now has a **Stop ■** control (and Esc, after speech interruption takes priority) that cancels an in-flight text reply through an `AbortController`. A streamed reply keeps the text that had already arrived and is labelled "Stopped by you … partial reply"; a partial reply is never spoken aloud. If the tool-enabled (buffered) request is stopped, Mia says the server may already have processed it. The status line (`#hint`) is now an `aria-live` region.

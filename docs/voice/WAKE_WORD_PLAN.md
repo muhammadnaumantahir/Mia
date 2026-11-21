@@ -98,6 +98,24 @@ sandbox - not the owner's laptop**:
 3. Owner-trained "Hey Mia" model and threshold tuning on the owner's real environment.
 4. Optional browser-side (option B) or paired-agent (option C) detector for remote deployments.
 
+## 6a. Transport implemented (MIA-VOICE-02, `src/mia/voice/wake_transport.py`) - not yet wired
+
+`register_wake_routes(app, ...)` provides `WS /api/voice/wake/stream`, `GET /api/voice/wake/status` and
+`POST /api/voice/wake/stop`. It is **not called by `create_app`** until MIA-BRAIN-05 lands, so no wake route
+exists in a running Mia and nothing can claim a wake word.
+
+Protocol v1 (WebSocket): server sends `ready` (`pcm_s16le`, 16000 Hz, 1280-sample frames). Client sends text
+`{"type":"start","owner_opt_in":true}` (strictly `true`) -> `status`; then binary PCM chunks (any size up to
+~2.5 s). Server sends `{"type":"wake","label","score"}` (no audio). `{"type":"stop"}`, a socket close, REST stop,
+an audio stall (15 s), the time limit or the activation-storm guard all end listening and produce a `stopped`
+message with `stop_reason`. Errors: `opt_in_required`, `unavailable`, `bad_audio`, `audio_before_start`,
+`bad_message`, `unknown_type`, `message_too_large`.
+
+Guards: loopback client address, no proxy-forwarding headers, Origin absent or same-origin on a loopback host
+(blocks cross-site and DNS-rebinding), one connection at a time, REST endpoints loopback-only, arming possible
+only through the WebSocket opt-in message. The `voice-wake` extra now also installs `websockets` (bare
+`uvicorn` cannot serve WebSockets).
+
 ## 7. Owner verification (cannot be automated here)
 
 See `docs/voice/OWNER_VERIFICATION.md` section G. `OWNER_VERIFICATION_REQUIRED`: real microphone detection,
