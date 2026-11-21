@@ -845,6 +845,7 @@ def create_app(
             if (settings.get("memory_enabled") and settings.get("capture_mode") != "off"
                     and not memory_store.is_conversation_temporary(conversation_id)):
                 import re
+
                 from mia.memory.capture import screen_sentence
 
                 sentences = [
@@ -857,7 +858,7 @@ def create_app(
                     r"your\s+memory)|yaad\s+rakho|yaad\s+rakhna|bhool\s+jao|یاد\s+رکھ|بھول)",
                     text or "", re.I,
                 ))
-            eligible = [] if explicit_command else [
+                eligible = [] if explicit_command else [
                     sentence for sentence in sentences
                     if 4 <= len(sentence.split()) <= 40
                     and len(sentence) <= 300

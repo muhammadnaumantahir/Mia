@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from mia.gateway.contracts import ModelCandidate, ModelRequest
 from mia.gateway.registry import ProviderRegistry
 from mia.gateway.service import ModelGateway
-from mia.memory.context import assemble_memory_context
+from mia.memory.context import ContextBudget, assemble_memory_context
 from mia.memory.store import MemoryStore
 from mia.memory.structured import RecordNotFoundError, RecordStateError
 from mia.observatory.api import create_app

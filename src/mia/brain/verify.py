@@ -199,7 +199,11 @@ def evaluate_response(
             issues.append(Issue("invalid_structured_output", problem, "error"))
 
     executed = ledger.any_executed
-    claimed_mutation = bool(_MUTATING_CLAIM.search(text) or _MUTATING_CLAIM_B.search(text)\n                            or _MUTATING_CLAIM_UR.search(text))
+    claimed_mutation = bool(
+        _MUTATING_CLAIM.search(text)
+        or _MUTATING_CLAIM_B.search(text)
+        or _MUTATING_CLAIM_UR.search(text)
+    )
     if claimed_mutation:
         # Registered tools are read/preview only, so a mutation claim is only
         # supportable by a verified, owner-approved execution record.
@@ -224,7 +228,9 @@ def evaluate_response(
         issues.append(Issue("unsupported_memory_citation",
                             "reply cites a memory item that was not provided"))
     hedges = len(_HEDGES.findall(text))
-    if stripped and (hedges >= 3 or (len(stripped) < 25 and hedges >= 1)):
+    # "Short" is counted in words, not characters, so a five-word Roman Urdu or
+    # Urdu-script hedge is judged the same way as a five-word English one.
+    if stripped and (hedges >= 3 or (len(stripped.split()) <= 6 and hedges >= 1)):
         issues.append(Issue("low_confidence", "reply is heavily hedged"))
 
     codes = {i.code for i in issues}
