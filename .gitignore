@@ -50,3 +50,7 @@ Desktop.ini
 
 # Node / frontend tooling if later added
 node_modules/
+
+# MIA-HOLO-02 renderer spike (generated)
+spikes/holo-renderer/node_modules/
+spikes/holo-renderer/spike.html
