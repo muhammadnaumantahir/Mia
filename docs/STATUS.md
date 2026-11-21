@@ -186,3 +186,14 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - Added regression tests for temporary-chat isolation and strict context-budget adherence.
 - Tests are authored but not executed in this environment. CI is intentionally skipped. This fix is directly in the conversation-first memory/continuity path.
 
+
+
+## Multi-agent development system initialized (2026-11-21)
+
+- Added a six-worker specialist model: A1 Brain/identity/memory; A2 AI Gateway/model routing; A3 reasoning quality/parallel judges; A4 voice/wake word; A5 Code Graph/governed self-development; A6 experience/UI/interaction.
+- Added a separate coordinator role; it is not counted as a seventh worker.
+- Added a shared task board, agent registry, integration log, master prompt and six role-specific instructions.
+- Initial tasks focus on the highest-priority open development work. The full 3D interface and later roadmap phases remain gated by conversation-first completion.
+- All six registry slots are currently UNREGISTERED/OFFLINE. No external agents have been connected or started by this repository setup.
+- Work remains on main only. Parallel analysis/disjoint implementation is allowed, but task claims, shared-file updates and pushes must be serialized and based on the latest remote state.
+- This setup commit does not implement or verify the six feature workstreams and does not imply that tests were run.
