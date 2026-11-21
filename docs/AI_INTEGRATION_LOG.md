@@ -392,3 +392,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Limitations: scripted providers only, no live-model quality; voice turn-taking/interruption remain browser tests outside the suite.
 - Open for MIA-M1-09 (A1+A4): assistant.html never sends interface="voice" (see M1_TRACEABILITY row 4). A3 did not touch assistant.html or orchestrator.py.
 - A3 status: IDLE. Not claimed next: MIA-EVAL-05 (P2) is held by a prior A3 session's claim with no checkpoint found in this log; it should be inspected by the owner/coordinator before reassignment.
+
+## 2026-11-21T20:46Z — MIA-GW-06 created and claimed (A2)
+
+- Agent: A2. No eligible A2 task remained (M1 queue fully DONE/claimed; M2+ have no A2-only work and later milestones are gated). Created MIA-GW-06 from the documented GW-04 limitation: per-turn total deadline across fallback candidates. Paths: src/mia/gateway/service.py, tests/test_gateway_turn_deadline.py, docs.
