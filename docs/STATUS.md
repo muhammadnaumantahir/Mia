@@ -67,6 +67,12 @@ The Code Graph is a required cross-cutting developer capability, initialized dur
 - Evidence: `tests/test_assistant_project_control.py` (4 tests, all failing against the previous page; includes a Node harness running the real control functions against a fake DOM/fetch). Full local run: 1696 tests, 1694 passed, 1 skipped, 1 failed. `ruff check` clean on the new test file.
 - Not verified: real browser rendering, keyboard/screen-reader behaviour, narrow-screen layout of the new sidebar row.
 
+## A6 / MIA-UX-05 - Microphone visibility and stop safety (2026-11-21)
+
+- Audit finding fixed: the one-shot **Record** button never updated the always-visible mic badge (it read "Mic off" while recording), kept the microphone open until after transcription finished, ignored Esc, and was not released on page hide. Now the badge shows "Mic on - Recording", the button exposes `aria-pressed`, the microphone is released the moment recording stops (before the transcription request), Esc stops recording (checked before speech interruption), and `pagehide` discards an active recording and releases the mic. Microphone use stays opt-in (user-initiated click only); nothing here starts capture automatically.
+- Evidence: `tests/test_assistant_mic_safety.py` (3 tests; the Node harness runs the real `startRecording` with a fake microphone/recorder and a pending transcription request; all fail against the previous page). Full local run: 1780 tests, 1778 passed, 2 skipped, 0 failed; `ruff check src tests` clean.
+- Not verified: real browsers/microphones (browser mic indicator, permission prompts), mobile Safari/bfcache behaviour, screen readers. OWNER_VERIFICATION_REQUIRED. Voice Conversation mode and wake-word code were not changed.
+
 ## Status inventory (component status, not execution order)
 
 The following table records prior workstream status. It is an implementation inventory, not the development sequence; docs/ROADMAP.md is authoritative for execution order.

@@ -167,7 +167,7 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
  <div class="voice-preview" id="voicePreview" aria-live="polite"></div>
  <p class="voice-privacy">Browser engine: recognition uses your browser's speech service and may require internet; the browser may process microphone audio outside Mia. Local engine: audio is transcribed on this computer by Faster-Whisper (optional voice extra) and is not stored. The microphone starts only after you press Start voice, Enable Hey Mia, or hold the talk button in push-to-talk, and is released when the session ends. Hey Mia is an explicit opt-in browser wake phrase; browser recognition stays active while armed, the Mic on indicator remains visible, and Stop voice or Mute mic stops listening. The Microphone choice applies to the local engine and Local record; the browser engine uses the browser's default microphone. Esc or Interrupt stops Mia speaking.</p>
  <textarea id="prompt" rows="2" placeholder="Message Mia… (English or Roman Urdu)" aria-label="Message Mia"></textarea>
-<div class="composerfoot"><div class="hint" id="hint" role="status" aria-live="polite">Enter to send · Shift + Enter for a new line</div><div class="actions"><button class="send" id="mic" type="button" title="Record one clip and transcribe locally with Faster-Whisper" style="background:#1c3930;color:#a9ebcb;border:1px solid #356451">Local record</button><select id="taskType" aria-label="Task type"><option value="chat">General</option><option value="reasoning">Reasoning</option><option value="coding">Coding</option><option value="research">Research</option></select><label style="font-size:11px;color:#94aaa2;display:flex;align-items:center;gap:5px"><input id="useTools" type="checkbox" checked> Tools</label><label style="font-size:11px;color:#94aaa2;display:flex;align-items:center;gap:5px"><input id="speakReplies" type="checkbox"> Speak</label><select id="voiceChoice" aria-label="Speech voice" title="Installed browser voices" style="max-width:110px"><option value="">Default voice</option></select><button class="send" id="send" type="submit">Send ↗</button><button class="send stop" id="stopReply" type="button" hidden aria-label="Stop generating this reply (Esc)" title="Stop generating (Esc)">Stop ■</button></div></div>
+<div class="composerfoot"><div class="hint" id="hint" role="status" aria-live="polite">Enter to send · Shift + Enter for a new line</div><div class="actions"><button class="send" id="mic" type="button" aria-pressed="false" title="Record one clip and transcribe locally with Faster-Whisper" style="background:#1c3930;color:#a9ebcb;border:1px solid #356451">Local record</button><select id="taskType" aria-label="Task type"><option value="chat">General</option><option value="reasoning">Reasoning</option><option value="coding">Coding</option><option value="research">Research</option></select><label style="font-size:11px;color:#94aaa2;display:flex;align-items:center;gap:5px"><input id="useTools" type="checkbox" checked> Tools</label><label style="font-size:11px;color:#94aaa2;display:flex;align-items:center;gap:5px"><input id="speakReplies" type="checkbox"> Speak</label><select id="voiceChoice" aria-label="Speech voice" title="Installed browser voices" style="max-width:110px"><option value="">Default voice</option></select><button class="send" id="send" type="submit">Send ↗</button><button class="send stop" id="stopReply" type="button" hidden aria-label="Stop generating this reply (Esc)" title="Stop generating (Esc)">Stop ■</button></div></div>
 </form>
 <div class="bottomnote">Voice input can be hands-free or push-to-talk, using the browser speech service or local Faster-Whisper (optional voice extra). Speech output can use offline system voices with the optional TTS extra, or browser voices as fallback.<br>Push-to-talk and model-requested tools are optional per message. File and knowledge contents stay local by default; writes, launches and browser clicks always require an approval card. Hey Mia wake phrase mode is opt-in and uses the browser speech service (not offline local wake-word detection). Optional background dispatch is off by default and limited to owner-approved read-only system checks. Do not send secrets to cloud models.</div>
 </section></main></div>
@@ -829,6 +829,11 @@ async function speakReply(text,{force=false}={}){
  }
 }
 
+function releaseRecordingStream(){
+ // Release the microphone immediately; never wait for transcription or a network call.
+ try{activeStream?.getTracks().forEach(track=>track.stop());}catch(error){}
+ activeStream=null;
+}
 async function startRecording(){
  if(voiceMode){$('hint').textContent='Stop Voice Conversation before starting a local recording.';return;}
  if(!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder){
@@ -842,7 +847,8 @@ async function startRecording(){
   audioChunks=[];
   mediaRecorder.ondataavailable=event=>{if(event.data.size)audioChunks.push(event.data);};
   mediaRecorder.onstop=async()=>{
-   recording=false;$('mic').textContent='🎙 Record';$('mic').disabled=true;
+   recording=false;$('mic').textContent='🎙 Record';$('mic').disabled=true;$('mic').setAttribute('aria-pressed','false');
+   releaseRecordingStream();setMicBadge(false);
    $('hint').textContent='Transcribing locally…';
    try{
     const blob=new Blob(audioChunks,{type:mediaRecorder.mimeType||'audio/webm'});
@@ -856,13 +862,14 @@ async function startRecording(){
     $('prompt').focus();
     $('hint').textContent=result.text?'Transcript ready — review it, then press Send.':'No speech was detected.';
    }catch(error){$('hint').textContent=error.message;}
-   finally{activeStream?.getTracks().forEach(track=>track.stop());activeStream=null;$('mic').disabled=false;}
+   finally{releaseRecordingStream();$('mic').disabled=false;}
   };
   mediaRecorder.start();
-  recording=true;$('mic').textContent='■ Stop recording';$('hint').textContent='Recording… press Stop when finished.';
+  recording=true;$('mic').textContent='■ Stop recording';$('mic').setAttribute('aria-pressed','true');setMicBadge(true,'Recording');
+  $('hint').textContent='Recording… press Stop or Esc when finished.';
  }catch(error){
   $('hint').textContent='Microphone permission or device error: '+error.message;
-  activeStream?.getTracks().forEach(track=>track.stop());activeStream=null;
+  releaseRecordingStream();recording=false;setMicBadge(false);$('mic').setAttribute('aria-pressed','false');
  }
 }
 $('mic').addEventListener('click',()=>{
@@ -1580,6 +1587,7 @@ $('voiceMute').addEventListener('click',toggleVoiceMute);
 $('voicePtt').addEventListener('pointerdown',event=>{event.preventDefault();try{event.target.setPointerCapture(event.pointerId);}catch(error){}pttDown();});
 ['pointerup','pointercancel','lostpointercapture'].forEach(name=>$('voicePtt').addEventListener(name,pttUp));
 document.addEventListener('keydown',event=>{
+ if(event.key==='Escape'&&recording&&mediaRecorder){event.preventDefault();try{mediaRecorder.stop();}catch(error){releaseRecordingStream();recording=false;setMicBadge(false);}return;}
  if(event.key==='Escape'&&voiceSpeaking){event.preventDefault();interruptSpeech();return;}
  if(event.key==='Escape'&&chatBusy&&chatAbort){event.preventDefault();chatAbort.abort();return;}
  if(event.code==='Space'&&voiceMode&&voicePushToTalk&&!/^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)){
@@ -1640,7 +1648,11 @@ $('purgeConfirm').addEventListener('click',async()=>{
   $('purgeConfirm').hidden=true;purgeDays=null;loadConversationList();
  }catch(e){$('purgeResult').textContent=e.message;}
 });
-window.addEventListener('pagehide',()=>{if(voiceMode)stopVoiceConversation('Voice session ended.');cancelSpeech();});
+window.addEventListener('pagehide',()=>{
+ if(voiceMode)stopVoiceConversation('Voice session ended.');
+ if(recording&&mediaRecorder){recording=false;try{mediaRecorder.onstop=null;mediaRecorder.stop();}catch(error){}releaseRecordingStream();setMicBadge(false);}
+ cancelSpeech();
+});
 $('refreshMemory').addEventListener('click',loadMemoryRecords);
 refreshVoices();
 refreshMicDevices();
