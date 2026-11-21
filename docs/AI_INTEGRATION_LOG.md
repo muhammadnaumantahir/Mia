@@ -447,3 +447,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Tests actually run: new file 41 passed; full suite 2050 passed, 1 skipped; `ruff check src tests` clean. Mutation checks: disabling the TTL check fails 2 tests; removing the expiry filter fails 1.
 - Limits: no UI consumes the contract yet; chat, voice and wake evidence is client-reported (the backend has no in-flight-turn tracker, so it cannot see a running chat turn by itself); `paused`/`completed` tasks add no state; no live-hardware evidence. Interface for A1/A4: HOLO-04 should post client evidence to `/api/runtime/resolve`; adding an evidence kind means adding it to `EVIDENCE_KINDS` with a backing and test.
 - Next: MIA-HOLO-02 (renderer spike) depends on HOLO-01, now done.
+
+## 2026-11-21T20:59Z — MIA-HOLO-02 claimed (A6)
+
+- Agent: A6. Dependency MIA-HOLO-01 is DONE. Scope: compare browser 3D options (bundle size, WebGL support, Windows hardware, licensing, accessibility), build a minimal isolated renderer spike, document an evidence-based choice and fallback. No full visual build. New files only plus docs.
