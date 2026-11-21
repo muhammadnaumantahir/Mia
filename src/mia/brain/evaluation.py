@@ -24,6 +24,7 @@ from mia.gateway.service import ModelGateway
 from mia.memory.store import MemoryStore
 
 from .orchestrator import Brain, TurnRequest
+from .self_description import build_runtime_manifest, render_runtime_manifest
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +63,12 @@ class Scenario:
     # judge requests with this raw reply (so the outcome does not depend on who answered).
     judge_reply: str | None = None
     expect_judge_consensus: str | None = None
+    # Identity / capability inventory: replaces the default one-line identity with this text
+    # (scenarios build it from the real runtime-manifest renderer, never hand-written).
+    identity_text: str | None = None
+    # Provider switch: prior turns are served by "eval"; it is then disabled and the evaluated
+    # turn can only be served by a second scripted provider, "eval-b".
+    switch_provider: bool = False
 
 
 @dataclass(slots=True)
@@ -81,11 +88,14 @@ class _Provider:
         # Scripted replies: earlier turns first, then the evaluated reply (which repeats).
         self._queue = [reply for _prompt, reply in scenario.prior_turns]
         self.requests: list[list[dict[str, Any]]] = []
+        self.enabled = True
 
     async def health(self) -> bool:
-        return True
+        return self.enabled
 
     async def list_models(self) -> list[ModelCandidate]:
+        if not self.enabled:
+            return []
         return [ModelCandidate(self.provider_id, "scripted", frozenset({"chat", "tools"}), 32768, True, True,
                                True, data_local=True)]
 
@@ -242,9 +252,85 @@ _EXTENDED_SCENARIOS: tuple[Scenario, ...] = (
              category="uncertainty", expect_codes=("low_confidence",), expect_confidence="medium"),
 )
 
+# Identity text for the identity/capability scenarios comes from the real manifest renderer, so
+# these scenarios fail if the live self-description stops reaching the model.
+_MANIFEST = render_runtime_manifest(build_runtime_manifest(
+    tool_names=["memory.search"], provider_ids=["ollama"], route_paths=["/assistant", "/api/chat"],
+    memory_enabled=True, semantic_memory_enabled=False, permission_broker_enabled=True,
+    capability_registry_enabled=True))
+_IDENTITY = "You are Mia, the owner's personal AI companion.\n" + _MANIFEST
+_ATLAS = (("My project is called Atlas and it uses SQLite.", "Got it: Atlas uses SQLite."),)
+
+_ROADMAP_SCENARIOS: tuple[Scenario, ...] = (
+    # ---- identity and capability inventory (MIA-EVAL-06) ------------------------------
+    Scenario("identity-evidence-reaches-the-model", "Who are you and how do you work?",
+             "I am Mia, built on the SPS framework.", category="identity", identity_text=_IDENTITY,
+             expect_context=("LIVE RUNTIME EVIDENCE", "SPS-01 Software DNA Core", "10 canonical layers"),
+             forbid_context=("SPS-11",)),
+    Scenario("identity-roman-urdu-evidence-reaches-the-model", "Aap kaun hain aur kya kar sakti hain?",
+             "Main Mia hoon.", category="identity", language="roman-urdu", identity_text=_IDENTITY,
+             expect_context=("LIVE RUNTIME EVIDENCE", "SPS-10 Execution Core")),
+    Scenario("capability-inventory-lists-only-registered-tools", "Which tools can you use right now?",
+             "I have memory.search.", category="capability-inventory", identity_text=_IDENTITY,
+             expect_context=("Registered tools (1): memory.search",
+                             "Offline wake-word detection: not registered"),
+             forbid_context=("browser.open", "Offline wake-word detection: operational")),
+    # ---- the serving provider changes between turns ------------------------------------
+    Scenario("provider-switch-keeps-conversation-history", "Which database does it use?",
+             "Atlas uses SQLite.", category="provider-switch", language="en", prior_turns=_ATLAS,
+             switch_provider=True, expect_provider="eval-b", expect_context=("Atlas", "SQLite")),
+    Scenario("provider-switch-roman-urdu-keeps-history", "Woh kaun sa database use karta hai?",
+             "Atlas SQLite use karta hai.", category="provider-switch", language="roman-urdu",
+             prior_turns=(("Mera project Atlas hai aur woh SQLite use karta hai.",
+                           "Samajh gaya, Atlas SQLite use karta hai."),),
+             switch_provider=True, expect_provider="eval-b", expect_context=("Atlas", "SQLite")),
+)
+
 BUILTIN_SCENARIOS: tuple[Scenario, ...] = tuple(
     replace(s, category=_CORE_CATEGORIES.get(s.name, s.category)) for s in _CORE_SCENARIOS
-) + _EXTENDED_SCENARIOS
+) + _EXTENDED_SCENARIOS + _ROADMAP_SCENARIOS
+
+
+# Priority 1 exit criterion 1 lists what the conversation evaluation must cover. Each area is
+# either exercised by scenarios in this suite (``categories``) or, where it needs a browser or a
+# device, covered by named test files outside it (``elsewhere``). Nothing may be unaccounted for.
+COVERAGE_MANIFEST: dict[str, dict[str, tuple[str, ...]]] = {
+    "identity/self-description": {"categories": ("identity",)},
+    "capability inventory": {"categories": ("capability-inventory",)},
+    "memory recall": {"categories": ("memory", "memory-conflict")},
+    "follow-up continuity": {"categories": ("continuity",)},
+    "cross-session/provider continuity": {"categories": ("provider-switch",)},
+    "open-ended reasoning / unsupported claims": {"categories": ("unsupported-claims", "tool-failure")},
+    "ambiguity": {"categories": ("ambiguity",)},
+    "uncertainty": {"categories": ("uncertainty",)},
+    "corrections": {"categories": ("corrections",)},
+    "voice turn-taking": {"elsewhere": ("tests/test_voice_browser.py",)},
+    "interruption and recovery": {"elsewhere": ("tests/test_assistant_stop_reply.py",
+                                                "tests/test_assistant_error_recovery.py")},
+}
+COVERAGE_LANGUAGES = ("en", "roman-urdu", "ur")
+
+
+def coverage_report(scenarios: tuple[Scenario, ...] = BUILTIN_SCENARIOS,
+                    repo_root: Path | None = None) -> dict[str, Any]:
+    """Which roadmap areas have scenarios here, which live in other tests, which are missing."""
+    present = {s.category for s in scenarios}
+    root = repo_root or Path(__file__).resolve().parents[3]
+    in_suite: dict[str, list[str]] = {}
+    elsewhere: dict[str, list[str]] = {}
+    missing: list[str] = []
+    for area, spec in COVERAGE_MANIFEST.items():
+        found = [c for c in spec.get("categories", ()) if c in present]
+        files = [f for f in spec.get("elsewhere", ()) if (root / f).is_file()]
+        if found:
+            in_suite[area] = found
+        elif files:
+            elsewhere[area] = files
+        else:
+            missing.append(area)
+    languages = {s.language for s in scenarios}
+    return {"in_suite": in_suite, "elsewhere": elsewhere, "missing": missing,
+            "missing_languages": [lang for lang in COVERAGE_LANGUAGES if lang not in languages]}
 
 
 async def run_scenario(scenario: Scenario) -> ScenarioResult:
@@ -255,9 +341,15 @@ async def run_scenario(scenario: Scenario) -> ScenarioResult:
         if scenario.judge_reply is not None:
             for extra in ("judge-a", "judge-b"):
                 registry.register(_Provider(scenario, extra))
+        second: _Provider | None = None
+        if scenario.switch_provider:
+            second = _Provider(scenario, "eval-b")
+            second.enabled = False
+            registry.register(second)
+        identity_text = scenario.identity_text or "You are Mia."
         memory = MemoryStore(Path(tmp) / "m.sqlite3")
         brain = Brain(gateway=ModelGateway(registry), memory=memory,
-                      tools=_eval_tools(scenario.tools), identity=lambda: ("You are Mia.", 1),
+                      tools=_eval_tools(scenario.tools), identity=lambda: (identity_text, 1),
                       judge_policy=lambda: JudgePolicy(enabled=scenario.judge_reply is not None))
         failures: list[str] = []
         detail: dict[str, Any] = {}
@@ -277,12 +369,17 @@ async def run_scenario(scenario: Scenario) -> ScenarioResult:
                 earlier = await brain.run_turn(TurnRequest(
                     prior_prompt, conversation_id=conversation_id, use_tools=False))
                 conversation_id = earlier["conversation_id"]
-            requests_before = len(provider.requests)
+            active = provider
+            if second is not None:  # the serving provider changes between turns
+                provider.enabled, second.enabled = False, True
+                second._queue = []  # eval-b only ever gives the evaluated reply
+                active = second
+            requests_before = len(active.requests)
             result = await brain.run_turn(TurnRequest(
                 scenario.prompt, conversation_id=conversation_id,
                 use_tools=bool(scenario.tool_calls)))
-            if len(provider.requests) > requests_before:
-                context = _text(provider.requests[requests_before])
+            if len(active.requests) > requests_before:
+                context = _text(active.requests[requests_before])
                 detail["context_chars"] = len(context)
                 failures += [f"model context lacks {t!r}" for t in scenario.expect_context
                              if t not in context]

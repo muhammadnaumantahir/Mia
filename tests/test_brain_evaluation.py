@@ -94,3 +94,70 @@ async def test_judge_scenario_negative_control_and_lowering_is_real():
         expect_judge_consensus="supported", expect_confidence="high"))
     assert not wrong.passed
     assert any("judge consensus" in f for f in wrong.failures)
+
+
+# ---- MIA-EVAL-06: roadmap coverage, identity/capability and provider-switch scenarios -----------
+
+from dataclasses import replace  # noqa: E402
+
+from mia.brain.evaluation import coverage_report  # noqa: E402
+from mia.brain.self_description import build_runtime_manifest, render_runtime_manifest  # noqa: E402
+
+
+def _scenario(name):
+    return next(s for s in BUILTIN_SCENARIOS if s.name == name)
+
+
+def test_every_roadmap_area_is_in_the_suite_or_in_a_named_test_file():
+    report = coverage_report()
+    assert report["missing"] == [] and report["missing_languages"] == []
+    assert {"identity/self-description", "capability inventory",
+            "cross-session/provider continuity"} <= set(report["in_suite"])
+    assert {"voice turn-taking", "interruption and recovery"} <= set(report["elsewhere"])
+
+
+def test_coverage_report_flags_an_area_with_no_scenario():
+    without_identity = tuple(s for s in BUILTIN_SCENARIOS if s.category != "identity")
+    report = coverage_report(without_identity)
+    assert report["missing"] == ["identity/self-description"]
+    no_urdu = tuple(s for s in BUILTIN_SCENARIOS if s.language != "ur")
+    assert coverage_report(no_urdu)["missing_languages"] == ["ur"]
+
+
+async def test_identity_and_capability_scenarios_pass():
+    names = ("identity-evidence-reaches-the-model", "identity-roman-urdu-evidence-reaches-the-model",
+             "capability-inventory-lists-only-registered-tools")
+    results = [await run_scenario(_scenario(n)) for n in names]
+    assert [(r.name, r.failures) for r in results if not r.passed] == []
+
+
+async def test_identity_scenario_fails_when_the_manifest_does_not_reach_the_model():
+    plain = replace(_scenario("identity-evidence-reaches-the-model"), identity_text=None)
+    result = await run_scenario(plain)
+    assert not result.passed
+    assert any("LIVE RUNTIME EVIDENCE" in f for f in result.failures)
+
+
+async def test_capability_scenario_fails_when_an_unregistered_tool_is_listed():
+    manifest = render_runtime_manifest(build_runtime_manifest(
+        tool_names=["memory.search", "browser.open"], provider_ids=["ollama"],
+        route_paths=["/assistant"], memory_enabled=True, semantic_memory_enabled=False,
+        permission_broker_enabled=True, capability_registry_enabled=True))
+    leaky = replace(_scenario("capability-inventory-lists-only-registered-tools"),
+                    identity_text="You are Mia.\n" + manifest)
+    result = await run_scenario(leaky)
+    assert not result.passed and any("browser.open" in f for f in result.failures)
+
+
+async def test_provider_switch_scenarios_are_served_by_the_second_provider():
+    for name in ("provider-switch-keeps-conversation-history",
+                 "provider-switch-roman-urdu-keeps-history"):
+        result = await run_scenario(_scenario(name))
+        assert result.passed, (name, result.failures)
+        assert result.detail["provider"] == "eval-b"
+
+
+async def test_provider_switch_check_is_not_vacuous():
+    no_switch = replace(_scenario("provider-switch-keeps-conversation-history"), switch_provider=False)
+    result = await run_scenario(no_switch)
+    assert not result.passed and any("provider was eval" in f for f in result.failures)
