@@ -33,6 +33,16 @@ The Code Graph is a required cross-cutting developer capability, initialized dur
 - Code Graph snapshot refresh remains a local development step and is not claimed as complete by these remote source edits.
 - PR #20 is merged; older notes below that say it is awaiting CI are historical and superseded by this current status.
 
+## Voice update - MIA-VOICE-01 (agent A4, 2026-11-21)
+
+- **Implemented and tested locally:** an offline wake-word core in `src/mia/voice/wake.py` (replaceable detector contract; session that is off by default, needs an explicit owner opt-in, is always time-bounded, stops immediately and drops late audio; threshold/patience/cooldown/activation-storm guards; no audio retention; fail-closed scoring; optional openWakeWord adapter that takes an owner-supplied model and never downloads one) and a truthful `offline_wake_word` capability report in `GET /api/voice/status`.
+- **Not operational:** there is **no audio transport and no UI**, so Mia does **not** have an offline wake word. The status report says `operational: false` / `audio_transport_not_available`. The browser "Hey Mia" phrase is unchanged (online, page must stay open).
+- **Audit findings (verified 2026-11-21, see `docs/voice/WAKE_WORD_PLAN.md`):** openWakeWord code is Apache-2.0 but its **pre-trained models are CC BY-NC-SA 4.0 (non-commercial)**; wake words are English-only; on Linux with Python 3.13 `pip install openwakeword` fails because upstream pins `tflite-runtime` (a `--no-deps` install with onnxruntime works; Windows uses ONNX).
+- **Evidence actually run:** `tests/test_voice_wake.py` (51 tests) and new `tests/test_voice_api.py` cases pass; a 9-mutant check of the safety properties was caught 9/9; full suite excluding the Chromium-based files (`test_voice_browser.py`, `test_browser_automation.py`, not run - no Chromium here): 1330 passed, 2 skipped, 0 failed; `ruff check` clean on touched files. The adapter and session were run once against the real openWakeWord engine in a scratch environment (about 3-5 ms CPU per 80 ms frame on a 2-core Linux sandbox; 0 activations on 20 s of synthetic noise).
+- **Not verified:** detection of real speech, false-accept and missed-wake rates, Windows install and CPU use, any "Hey Mia" model - `OWNER_VERIFICATION_REQUIRED` (`docs/voice/OWNER_VERIFICATION.md` section G). Synthetic noise is not evidence of false-accept performance.
+- **Follow-ups on the board:** MIA-VOICE-02 (loopback transport), MIA-BRAIN-04 (self-description must not infer a wake word from route names), MIA-UX-02 (UI), MIA-VOICE-03 (Urdu / Roman Urdu stop commands; today English-only).
+- Code Graph: refreshed locally with `python scripts/update_code_graph.py` (3,936 nodes, 7,924 edges, 0 parse errors; includes `voice/wake.py`); the tracked `docs/code-graph/CHANGELOG.md` entry was deliberately not committed to avoid cross-agent conflicts and wrong-commit attribution.
+
 ## Status inventory (component status, not execution order)
 
 The following table records prior workstream status. It is an implementation inventory, not the development sequence; docs/ROADMAP.md is authoritative for execution order.
