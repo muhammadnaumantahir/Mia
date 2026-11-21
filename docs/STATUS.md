@@ -28,6 +28,7 @@ The Code Graph is a required cross-cutting developer capability, initialized dur
 - Added regression coverage for temporary-only history, persistent prior history, Urdu-script and Roman Urdu continuation, past-issue, past-decision and preference references.
 - Added a Brain integration regression test that disables the first provider between turns and verifies a second provider receives the original conversation context from the shared persistent conversation store. This verifies provider-independent context storage, not live model answer quality.
 - Expanded the deterministic Brain evaluation set with calibrated uncertainty, explicit owner-correction acknowledgement without falsely claiming persistent mutation, and rejection of unsupported memory citations. Evaluation records now include verifier confidence and can assert an expected confidence level.
+- Extended deterministic result verification to recognize common Roman Urdu and Urdu-script claims of completed file actions and repository inspection, plus common uncertainty phrases. Added parameterized regression cases; this improves language coverage but is not a general Urdu language parser.
 - Changes are committed directly to `main`. Tests are authored but have not been executed in this environment; no CI run was used.
 - Code Graph snapshot refresh remains a local development step and is not claimed as complete by these remote source edits.
 - PR #20 is merged; older notes below that say it is awaiting CI are historical and superseded by this current status.
