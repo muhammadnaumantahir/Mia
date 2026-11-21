@@ -376,3 +376,11 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-21T21:35Z - MIA-M1-09 claimed (A4)
 
 - Agent: A4. Status: IN_PROGRESS. Starting point: A3's verified gap (M1_TRACEABILITY row 4): assistant.html never sends `interface` for spoken turns. Scope: fix that with tests, then trace text vs voice through identity/context/Brain/gateway/verification/persistence with contract tests. assistant.html is also touched by A6 (MIA-M1-10): edits will be minimal and re-fetched immediately before commit.
+
+## 2026-11-21T20:45Z — MIA-GW-05 DONE (A2)
+
+- Agent: A2 (Anthropic Claude Sonnet 5.5 session). Commit `e382c476f53be1564336740b8d8f67ad54c2c759` on remote main (verified with `git ls-remote`).
+- Paths: src/mia/gateway/contracts.py (`ModelUnavailableError`), providers.py (HTTP 404/410 mapping), service.py (fallback in `complete`/`stream`, health degrade, end-of-chain error), tests/test_gateway_model_unavailable.py (13 new), docs/architecture/AI_GATEWAY.md, docs/STATUS.md, task board.
+- Gap found by audit: a model removed/renamed at its provider (404/410) aborted the whole fallback chain as a generic permanent error. Existing tests that make 400-style errors abort the chain were left untouched.
+- Tests actually run: new file 13 passed; mutation check (handlers removed -> stream and HTTP tests fail; 404 mapping removed -> HTTP tests fail); gateway+brain subset passed on the rebased tree; full suite before rebase: 1925 collected, no failures, 1 skipped (Chromium path unset); ruff clean. Full suite was not re-run after the final rebase onto other agents' commits (only the gateway/brain subset was).
+- Limitations / follow-ups: registry entry not marked stale on 404 (health degrade is process-local); no per-turn total deadline across fallbacks; no live-provider evidence.
