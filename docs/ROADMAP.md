@@ -2,7 +2,7 @@
 
 **Product direction:** Mia is being built first as an intelligent, natural, voice-enabled conversational companion. The longer-term destination is a personal AI operating system that understands the owner, helps with daily life, controls the computer safely and improves its own capabilities under governance.
 
-**Execution rule:** Work strictly from the highest-priority incomplete phase downward. An AI coding agent must not begin lower-priority feature work while a higher-priority phase still has unfinished development acceptance criteria, except to resolve a direct prerequisite, an integration defect or a security issue that blocks the current phase. CI and owner-only physical testing are not development gates; they are reported separately.
+**Execution rule:** Preserve strict milestone priority while allowing six-agent parallel throughput. Each agent resumes its own active task, then selects the highest-priority dependency-ready OPEN task. A later milestone may begin parallel implementation when every implementation task in the immediately preceding milestone is either DONE or already IN_PROGRESS under another agent; if any earlier task remains OPEN, claim it first. Agents must not abandon their own earlier-milestone task to jump ahead. Explicit task dependencies remain mandatory. This handoff rule does not waive milestone exit criteria: a milestone cannot be declared complete/release-ready until all its development acceptance criteria pass. CI and owner-only physical testing are reported separately.
 
 The roadmap is sequenced by product priority, dependency and evidence—not by artificial release dates. The canonical ten-layer SPS architecture is preserved throughout.
 
@@ -79,7 +79,7 @@ Exit criteria:
 
 ## Priority 2 — Immersive 3D holographic interaction
 
-**Goal:** Make the completed conversational companion feel like a polished, responsive Jarvis-style assistant.
+**Goal:** Make the conversational companion feel like a polished, responsive Jarvis-style assistant. Dependency-ready M2 tasks may be developed in parallel once M1 implementation tasks are all DONE or claimed by other agents; M1 remains an acceptance/release gate.
 
 Work:
 - Build the full 3D holographic interface as a real interaction surface, not a static visual mockup.
