@@ -86,6 +86,13 @@ The Code Graph is a required cross-cutting developer capability, initialized dur
 - Evidence: `tests/test_assistant_mic_safety.py` (3 tests; the Node harness runs the real `startRecording` with a fake microphone/recorder and a pending transcription request; all fail against the previous page). Full local run: 1780 tests, 1778 passed, 2 skipped, 0 failed; `ruff check src tests` clean.
 - Not verified: real browsers/microphones (browser mic indicator, permission prompts), mobile Safari/bfcache behaviour, screen readers. OWNER_VERIFICATION_REQUIRED. Voice Conversation mode and wake-word code were not changed.
 
+## A6 / MIA-UX-06 - Read-only Quality controls panel (2026-11-21)
+
+- The AI Gateway dashboard (`/gateway`) now has a **Quality controls** section showing the effective advisory-judges policy and counters (`/api/brain/judges`) and the quality-escalation policy and counters (`/api/gateway/escalation`). Both are off by default and the panel says so; it has no switches or write requests. It uses the server's own authority wording ("advisory only...") and counter scope notes, shows paid escalation as "Requested but not effective" when a cap blocks it, and one failing endpoint only marks its own card Unavailable. Values render as text (hostile strings are not parsed as markup).
+- Also fixed a pre-existing defect: `src/mia/gateway/dashboard.html` had ~6 KB of duplicated, truncated script after `</html>` (present since the first integration commit), which browsers append to the page as visible text. It was removed and a regression test added.
+- Evidence: `tests/test_gateway_quality_panel.py` (3 tests; all fail against the previous dashboard; a Node harness renders the page's real functions from the real live API payloads in default and enabled configurations). Full local run: 1840 tests, 1837 passed, 2 skipped, 1 failed; `ruff check src tests` clean.
+- Not verified: real-browser rendering/layout (including the new 2-column grid on narrow screens) and screen readers. OWNER_VERIFICATION_REQUIRED. Counters are process-local and reset on restart, as the API states.
+
 ## Status inventory (component status, not execution order)
 
 The following table records prior workstream status. It is an implementation inventory, not the development sequence; docs/ROADMAP.md is authoritative for execution order.
