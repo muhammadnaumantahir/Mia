@@ -175,3 +175,54 @@ def test_retrieval_can_be_disabled(store, monkeypatch):
                    content="We decided to use PostgreSQL for the billing service.", trust_level="user")
     built = _build(store, "Which database did we choose for the billing service?", [cand("m")])
     assert not built.memory_retrieved
+
+def test_continue_recall_skips_temporary_previous_conversations(store):
+    older = store.ensure_conversation("older-session")
+    store.append_message(older, "user", "The persistent project is called Cedar.")
+    store.append_message(older, "assistant", "We planned the Cedar milestone sequence.")
+
+    temporary = store.ensure_conversation("temporary-session")
+    store.set_conversation_temporary(temporary, True)
+    store.append_message(temporary, "user", "Temporary-only phrase: cobalt-otter.")
+    store.append_message(temporary, "assistant", "This temporary discussion must stay isolated.")
+
+    current = store.ensure_conversation("current-session")
+    store.append_message(current, "user", "Continue where we stopped.")
+    built = build_context(
+        store, identity_text="You are Mia.", prompt="Continue where we stopped.",
+        conversation_id=current,
+        analysis=analyze_intent("Continue where we stopped.", has_prior_context=True),
+        candidates=[cand("m")], required_capabilities=frozenset(),
+        recent_messages=store.get_messages(current, limit=12),
+    )
+
+    content = " ".join(message["content"] for message in built.messages)
+    assert "Cedar" in content
+    assert "cobalt-otter" not in content
+    assert "temporary discussion" not in content
+
+
+def test_previous_conversation_tail_respects_context_token_budget(store):
+    older = store.ensure_conversation("older-budget")
+    for index in range(6):
+        role = "user" if index % 2 == 0 else "assistant"
+        content = f"old-turn-{index} " + ("x" * 108)
+        store.append_message(older, role, content)
+
+    current = store.ensure_conversation("current-budget")
+    prompt = "Continue where we stopped."
+    store.append_message(current, "user", prompt)
+    built = build_context(
+        store, identity_text="You are Mia.", prompt=prompt,
+        conversation_id=current,
+        analysis=analyze_intent(prompt, has_prior_context=True),
+        candidates=[cand("m")], required_capabilities=frozenset(),
+        recent_messages=store.get_messages(current, limit=12),
+        token_budget=80,
+    )
+
+    content = " ".join(message["content"] for message in built.messages)
+    assert built.estimated_tokens <= 80
+    assert "old-turn-5" in content
+    assert "old-turn-0" not in content
+
