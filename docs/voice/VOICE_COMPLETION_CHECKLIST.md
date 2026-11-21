@@ -50,5 +50,5 @@ implemented and covered by a test that was actually run.
 - [x] Truthful `offline_wake_word` capability report in `/api/voice/status` (`operational` stays false until a transport exists)
 - [x] License/platform audit recorded in `docs/voice/WAKE_WORD_PLAN.md` (models are CC BY-NC-SA 4.0; Linux + Python 3.13 install needs `--no-deps`)
 - [ ] Audio transport + UI for offline wake word (MIA-VOICE-02)
-- [ ] Urdu / Roman Urdu stop and end commands (today `END_PHRASES` / `STOP_SPEAKING_PHRASES` in `assistant.html` are English-only) (MIA-VOICE-03)
+- [x] Urdu / Roman Urdu stop and end commands (MIA-VOICE-03; tested with scripted transcripts only - real recognizer spellings are OWNER_VERIFICATION_REQUIRED)
 - [ ] OWNER_VERIFICATION_REQUIRED: real-microphone detection, false-accept/miss rates, Windows install (section G)

@@ -1171,8 +1171,14 @@ class LocalRecognizer{
 let voiceEngineName='browser';
 function recognitionEngine(){return $('voiceEngine').value==='local'?LocalRecognizer:SpeechRecognitionAPI;}
 function engineBadgeLabel(){return voiceEngineName==='local'?'local Faster-Whisper (this PC)':'browser speech service';}
-const END_PHRASES=['stop listening','stop voice','goodbye mia','sleep mia','end conversation'];
-const STOP_SPEAKING_PHRASES=['stop speaking','stop talking','be quiet'];
+// English, Roman Urdu and Urdu script. Every phrase is only a command when the whole utterance is
+// short (see classifyVoiceCommand), so a longer question containing these words stays a normal prompt.
+const END_PHRASES=['stop listening','stop voice','goodbye mia','sleep mia','end conversation',
+ 'sunna band karo','sunna band kar do','suna band karo','khuda hafiz mia','allah hafiz mia',
+ 'سننا بند کرو','سننا بند کر دو','خدا حافظ میا','اللہ حافظ میا'];
+const STOP_SPEAKING_PHRASES=['stop speaking','stop talking','be quiet',
+ 'chup ho jao','chup ho jao mia','chup karo','bolna band karo','bas karo',
+ 'چپ ہو جاؤ','چپ ہو جاو','چپ کرو','بولنا بند کرو','بس کرو'];
 function normalizeCommandText(text){
  return String(text||'').toLowerCase().replace(/[^\p{L}\p{N}\s']/gu,' ').replace(/\s+/g,' ').trim();
 }

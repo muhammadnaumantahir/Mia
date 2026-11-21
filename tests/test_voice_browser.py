@@ -9,6 +9,7 @@ a physical microphone or speaker works; see docs/voice/OWNER_VERIFICATION.md.
 from __future__ import annotations
 
 import asyncio
+import json
 import socket
 import threading
 import time
@@ -346,6 +347,66 @@ def test_long_question_containing_stop_words_is_a_normal_prompt(ctx):
     ctx.turns(1)
 
 
+@pytest.mark.parametrize(
+    "phrase,expected",
+    [
+        ("Sunna band karo", "end"),
+        ("mia sunna band kar do", "end"),
+        ("Khuda hafiz Mia", "end"),
+        ("اللہ حافظ میا", "end"),
+        ("سننا بند کرو", "end"),
+        ("Chup ho jao", "stopSpeaking"),
+        ("chup karo yaar", "stopSpeaking"),
+        ("Bas karo.", "stopSpeaking"),
+        ("بس کرو", "stopSpeaking"),
+        ("چپ ہو جاؤ میا", "stopSpeaking"),
+        ("بولنا بند کرو", "stopSpeaking"),
+        ("Goodbye Mia", "end"),
+        ("be quiet", "stopSpeaking"),
+    ],
+)
+def test_multilingual_voice_commands_are_classified(ctx, phrase, expected):
+    assert ctx.js(f"classifyVoiceCommand({json.dumps(phrase)})") == expected
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "mujhe batao ke bacchon ko bas karo kehne ka sahi tareeqa kya hai",
+        "mujhe sunna band karo wali app ki setting kahan milti hai",
+        "مجھے بتاؤ کہ بچوں کو بس کرو کہنے کا صحیح طریقہ کیا ہے",
+        "پڑوسی کی چپ کرو والی آواز کیسے بند کروں جب وہ بہت زور سے گانا چلائیں",
+        "chup ho jao ka matlab kya hota hai English mein batao please",
+        "hello mia",
+        "",
+    ],
+)
+def test_long_or_unrelated_urdu_text_is_not_a_voice_command(ctx, phrase):
+    assert ctx.js(f"classifyVoiceCommand({json.dumps(phrase)})") is None
+
+
+@pytest.mark.parametrize("phrase", ["Sunna band karo", "سننا بند کرو"])
+def test_urdu_end_phrases_stop_the_session_without_ai_call(ctx, phrase):
+    ctx.start()
+    ctx.listening()
+    ctx.say(phrase)
+    ctx.wait("document.getElementById('voiceOrb').dataset.state==='stopped'")
+    ctx.sleep(1.2)
+    assert ctx.js("window.__rec.live().length") == 0
+    assert ctx.provider.requests == []
+    assert ctx.js("document.getElementById('voiceMicBadge').dataset.on") == "false"
+
+
+@pytest.mark.parametrize("phrase", ["Chup ho jao", "بس کرو"])
+def test_urdu_stop_speaking_phrases_keep_the_session_alive(ctx, phrase):
+    ctx.start()
+    ctx.listening()
+    ctx.say(phrase)
+    ctx.wait("window.__rec.instances.length>=2 && window.__rec.live().length===1")
+    assert ctx.provider.requests == []
+    assert ctx.state() in {"ready", "listening"}
+
+
 def test_end_conversation_button_cancels_speech_and_never_restarts(ctx):
     ctx.provider.reply = "Speaking for a while."
     ctx.js("window.__tts.duration=10000")
@@ -567,7 +628,6 @@ def test_privacy_disclosure_and_mic_badge(ctx):
 # endpoint is mocked because Faster-Whisper model weights cannot be downloaded in CI.
 # ---------------------------------------------------------------------------------------------
 
-import json  # noqa: E402
 import math  # noqa: E402
 import struct  # noqa: E402
 import wave  # noqa: E402

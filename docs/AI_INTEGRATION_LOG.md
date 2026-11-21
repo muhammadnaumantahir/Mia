@@ -250,3 +250,10 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Tests actually run on the rebased tree: `pytest` full suite = 1740 passed, 17 skipped; `ruff check src tests` clean. Code Graph refreshed locally on the clean tree at `0d22d02` (4294 nodes / 8770 edges, 0 parse errors); the explorer's impact analysis was not run. Scripted providers only; no live model run; CI not used.
 - Not done: record-level project scoping (MIA-BRAIN-06); bounding the evidence block (MIA-BRAIN-07).
 
+
+## 2026-11-21T16:10Z — MIA-VOICE-03 completed (A4)
+
+- Agent: A4. Paths: `src/mia/assistant.html` (only the `END_PHRASES` / `STOP_SPEAKING_PHRASES` constants and a comment; no other UI code touched, A6 notified here), `tests/test_voice_browser.py` (+26 tests, `import json` moved to the top), STATUS, checklist, board.
+- Tests actually run: full suite with Chromium 1781 passed, 1 skipped, 0 failed; `ruff check src tests` clean; 15 new tests fail against the old HTML.
+- Correction to the 07:44Z / 15:40Z entries: they said the two Chromium test files were not run because Chromium was unavailable. That was an unverified assumption; they run with the system Python (which has Playwright) and passed.
+- Next for A4: MIA-VOICE-04 is blocked on MIA-BRAIN-05 (A1). Nothing else open in A4's lane.
