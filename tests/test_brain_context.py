@@ -46,6 +46,14 @@ def test_greetings_are_lightweight():
     ("Use my usual development preferences.", "preference"),
     ("Break this task into smaller steps.", "decompose_previous"),
     ("Explain why you selected this approach.", "explain_choice"),
+    ("jahan chora tha wahan se continue karo", "continuation"),
+    ("جہاں چھوڑا تھا وہیں سے جاری رکھو", "continuation"),
+    ("kal wala issue jo hum ne discuss kiya tha", "past_issue"),
+    ("کل والا مسئلہ یاد ہے؟", "past_issue"),
+    ("hum ne kya faisla kiya tha?", "past_decision"),
+    ("ہم نے کیا فیصلہ کیا تھا؟", "past_decision"),
+    ("meri pasandeeda preference kya hai?", "preference"),
+    ("میری پسندیدہ ترجیح کیا ہے؟", "preference"),
 ])
 def test_user_examples_resolve_to_references(text, ref):
     a = analyze_intent(text, has_prior_context=True)
