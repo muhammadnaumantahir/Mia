@@ -546,22 +546,23 @@ def test_context_relationship_expansion_is_bounded(tmp_path):
         body="Plan the Atlas platform migration.",
     )
     linked_ids = []
-    previous = root
     for index in range(7):
         record_id, _ = store.structured.add(
             record_type="episode",
             title=f"Independent milestone {index}",
             body=f"Complete operational milestone number {index}.",
         )
-        store.relationships.add(previous, record_id, "follows")
+        store.relationships.add(root, record_id, "follows")
         linked_ids.append(record_id)
-        previous = record_id
 
     packet = assemble_memory_context(
-        store, "Atlas platform migration", conversation_for(store)
+        store,
+        "Atlas platform migration",
+        conversation_for(store),
+        budget=ContextBudget(max_records=10),
     )
 
     returned_ids = {reference.ref_id for reference in packet.references}
     assert root in returned_ids
-    assert len(returned_ids.intersection(linked_ids)) <= 4
+    assert len(returned_ids.intersection(linked_ids)) == 4
 
