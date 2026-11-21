@@ -21,7 +21,7 @@ Read and follow `docs/AI_CONTINUE_WORKFLOW.md`. Whenever the owner says **Contin
 
 ## Mission and priorities
 
-Mia's first product goal is natural, intelligent conversation with accurate self-description and persistent context across sessions, projects and providers. Follow the highest-priority incomplete acceptance criterion in `docs/ROADMAP.md`. Do not jump to 3D UI, digital-life expansion, computer control or unrestricted self-modification while earlier roadmap gates remain open.
+Mia's first product goal is natural, intelligent conversation with accurate self-description and persistent context across sessions, projects and providers. Follow the queue and handoff rules in `docs/AI_TASK_BOARD.md` and the detailed task catalog in `docs/DEFERRED_MILESTONE_BACKLOG.md`. Resume your own active task first. Pick the highest-priority dependency-ready OPEN task. A later milestone may start parallel work only when every implementation task in the preceding milestone is DONE or IN_PROGRESS under another agent; if an earlier task remains OPEN, claim it first. Never abandon your own earlier task to jump ahead. Explicit dependencies and milestone completion gates remain mandatory.
 
 The Code Graph is cross-cutting and should be maintained as source changes occur. Do not confuse a stale snapshot with a current graph.
 
