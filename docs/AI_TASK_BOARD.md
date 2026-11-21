@@ -59,7 +59,7 @@ The detailed task definitions, dependencies, scope and acceptance criteria are i
 | Task | Priority | Suggested owner | Status | Scope / acceptance |
 |---|---:|---|---|---|
 | MIA-M1-08 | P1 | A1 + A3 | DONE (A3, commit 87a9b36 on main, 2026-11-21T20:34Z) | Trace every M1 exit criterion to source, tests and owner checks; create only evidence-backed gap tasks. |
-| MIA-M1-09 | P1 | A1 + A4 | OPEN | Trace text and voice through shared identity, context, Brain, gateway, verification and persistence; add end-to-end contract tests and fix verified gaps. |
+| MIA-M1-09 | P1 | A1 + A4 | IN_PROGRESS (A4, claimed 2026-11-21T21:35Z; A1 busy on MIA-BRAIN-06; starts from the verified gap in docs/M1_TRACEABILITY.md row 4) | Trace text and voice through shared identity, context, Brain, gateway, verification and persistence; add end-to-end contract tests and fix verified gaps. |
 | MIA-M1-10 | P1 | A1 + A6 | IN_PROGRESS (A6 fresh Claude Sonnet 5.5 session, claimed 2026-11-21T20:31Z) | Audit memory inspect/correct/export/delete; implement missing owner controls, provenance and no-recall-after-delete tests. |
 | MIA-M1-11 | P1 | A4 + A3 | DONE (A4, commit f0e99af on main, 2026-11-21) | Audit multilingual STT/TTS, streaming, language handling, fallback and latency; add deterministic tests without claiming real-speech quality. |
 | MIA-M1-12 | P1 | A4 + A6 | DONE (A4, commit 26eebbd on main, 2026-11-21; browser side already covered by existing tests, server-side duplicate-reply defect fixed) | Verify interruption, barge-in, stop/mute, mic release, retry, timeouts and partial-response recovery across text/voice. |

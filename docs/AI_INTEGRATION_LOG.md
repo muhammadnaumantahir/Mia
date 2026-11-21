@@ -372,3 +372,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Paths: src/mia/brain/orchestrator.py (stream_turn error handler), tests/test_brain_interruption_recovery.py, docs/STATUS.md. A1 owns the Brain; the change is a two-line correctness fix to the streaming error path, recorded here for A1 review.
 - Tests run: 31 passed, 0 failed (new file + brain pipeline + judge pipeline); new duplicate test failed before the fix. Chromium suites and full suite not run. Code Graph refresh not run.
 - Open: buffered tool-turn cancellation test; owner-only hardware checks.
+
+## 2026-11-21T21:35Z - MIA-M1-09 claimed (A4)
+
+- Agent: A4. Status: IN_PROGRESS. Starting point: A3's verified gap (M1_TRACEABILITY row 4): assistant.html never sends `interface` for spoken turns. Scope: fix that with tests, then trace text vs voice through identity/context/Brain/gateway/verification/persistence with contract tests. assistant.html is also touched by A6 (MIA-M1-10): edits will be minimal and re-fetched immediately before commit.
