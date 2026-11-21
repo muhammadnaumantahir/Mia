@@ -53,7 +53,10 @@ def _prior_conversation_tail(
     store: MemoryStore, conversation_id: str, limit: int = 6
 ) -> list[dict[str, Any]]:
     """Most recent turns from the latest *other* conversation (for 'continue where we stopped')."""
-    for convo in store.list_conversations(limit=10):
+    for convo in store.list_conversations(limit=50):
+        # Temporary chats are deliberately excluded from all cross-session recall.
+        if convo.get("temporary"):
+            continue
         cid = convo.get("id") or convo.get("conversation_id")
         if cid and cid != conversation_id:
             msgs = store.get_messages(cid, limit=limit)
@@ -141,10 +144,17 @@ def build_context(
         budget_left -= cost
     kept.reverse()
     if extra_turns and budget_left > 0:
-        extra_cost = estimate_tokens(extra_turns)
-        if extra_cost > budget_left:
-            extra_turns = extra_turns[-2:]
-        kept = [*extra_turns, *kept]
+        # Recent turns in the active conversation take precedence. Add only the
+        # newest contiguous suffix of the prior conversation that fits the budget.
+        selected: list[dict[str, Any]] = []
+        for message in reversed(extra_turns):
+            cost = estimate_tokens([message])
+            if cost > budget_left:
+                break
+            selected.append(message)
+            budget_left -= cost
+        if selected:
+            kept = [*reversed(selected), *kept]
     if trimmed:
         notes.append(f"trimmed {trimmed} older message(s) to fit the context budget")
     messages = tuple([system, *memory_block, *kept])
