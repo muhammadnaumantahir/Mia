@@ -1,30 +1,34 @@
 # Mia AI agent registry
 
-Six specialist worker slots are available. Agents register their own sessions before claiming work. The coordinator is a separate orchestration role and is not a seventh worker.
+Six specialist worker slots are available: A1–A6. The coordinator is not a worker.
+This registry is a live-session directory, not a historical record. Previous session registrations have been reset. Each newly launched agent must register itself before claiming a task.
 
 | Agent ID | Specialization | Session / model label | Current task | Status | Last heartbeat (UTC) |
 |---|---|---|---|---|---|
-| A1 | Brain, identity & memory | Claude (Anthropic), claude.ai chat session | MIA-BRAIN-07 | ACTIVE | 2026-11-21T16:05Z |
-| A2 | AI Gateway & model routing | Claude (Anthropic), claude.ai chat session | — | IDLE | 2026-11-21T16:10Z |
-| A3 | Reasoning quality & judge models | Claude (Anthropic), claude.ai chat session | MIA-EVAL-05 | ACTIVE (session resumed) | 2026-11-21T16:04Z |
-| A4 | Voice & wake word | Claude (Anthropic), claude.ai chat session | — | IDLE | 2026-11-21T17:30Z |
-| A5 | Code Graph & governed self-development | Claude (Anthropic), claude.ai chat session | MIA-EVOL-02 | ACTIVE | 2026-11-21T17:00Z |
-| A6 | Experience, UI & interaction | Claude (Anthropic), claude.ai chat session | - | IDLE (no unblocked A6 task) | 2026-11-21T16:15Z |
+| A1 | Brain, identity & memory | UNREGISTERED | — | OFFLINE | — |
+| A2 | AI Gateway & model routing | UNREGISTERED | — | OFFLINE | — |
+| A3 | Reasoning quality & judge models | UNREGISTERED | — | OFFLINE | — |
+| A4 | Voice & wake word | UNREGISTERED | — | OFFLINE | — |
+| A5 | Code Graph & governed self-development | UNREGISTERED | — | OFFLINE | — |
+| A6 | Experience, UI & interaction | UNREGISTERED | — | OFFLINE | — |
 
-## Registration protocol
+## Fresh-session registration
 
-An agent updates only its own row with:
-- a non-secret session label identifying the AI tool/vendor/model (do not expose tokens or account identifiers);
-- task ID it has claimed;
-- status `ACTIVE`, `IDLE` or `BLOCKED`;
-- UTC heartbeat timestamp.
+Every newly launched agent must:
+1. Read the master prompt, specialization guide, task board, task catalog, Continue workflow and current integration-log checkpoints.
+2. Select an available worker slot matching its specialization. If that slot belongs to a live session, do not overwrite it. Choose another unregistered slot only if its specialization is a reasonable fit; otherwise report the conflict.
+3. Register only its own row with a non-secret session/model label, task initially —, status ACTIVE and current UTC heartbeat. Fetch the latest registry and SHA immediately before writing.
+4. Claim exactly one eligible OPEN task from the 55-task M1–M6 catalog/board, respecting priority, dependencies, file ownership and milestone handoff rules. Update the task board and registry; refresh both files immediately before writes.
+5. If no task is eligible, report the exact dependency/blocker. Do not fabricate work or mark another agent's task complete.
 
-Before registering or updating, fetch the latest registry and SHA. Do not overwrite another agent's row from a stale copy. If the update conflicts, re-fetch and merge the changes.
+## Session lifecycle
 
-## Lease and handoff
+- Heartbeats are informational, not locks. A stale timestamp does not prove a session is running.
+- On pause/usage limit, save a checkpoint to docs/AI_INTEGRATION_LOG.md, keep the task IN_PROGRESS, and set the registry row OFFLINE with task retained.
+- On task completion, verify the remote main commit, update the task board and log, then set the row IDLE and clear the task before claiming another.
+- A newly launched session must register fresh and inspect any previous task checkpoint before resuming it.
+- Never claim an agent is running in the background.
 
-A registry heartbeat is informational, not a lock. A task board claim and verified remote commit are the source of truth. When a task is complete or a session pauses, clear its current task and set status to `IDLE` or `OFFLINE`. A coordinator may reassign an abandoned task only after checking the integration log and remote main history.
+## History policy
 
-## Usage-limit behavior
-
-A provider usage limit means the session is temporarily unavailable; it does not mean its task is complete or that it is working in the background. Preserve the active task and checkpoint in the integration log. When the owner can send another Continue to that same session, it must resume the task from the checkpoint. Do not register a second identity for the same continuing session.
+The registry intentionally contains no previous-session history. Preserve docs/AI_INTEGRATION_LOG.md and Git commit history as the durable development audit trail; do not erase implementation evidence, completed task records or owner checkpoints when resetting live registrations.
