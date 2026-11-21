@@ -397,3 +397,9 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - Behaviour: `complete()` and `stream()` clamp every attempt (and the wait for the first streamed chunk) to what is left of the turn budget and stop starting new candidates once it is spent, raising the usual aggregated transient error (cause `ProviderTimeout`) and recording a `deadline` event. A stream that is already producing text is never cut off by the deadline (the idle timeout still applies). Consumer cancellation still propagates. A timed-out attempt is treated like any attempt timeout (health/breaker failure, paid reservation held until expiry).
 - Verified locally: `tests/test_gateway_turn_deadline.py` (10 tests, hung/slow fakes with tiny real timeouts); three mutation checks (no loop-top check, no clamp, stream guard cutting off active output) each fail the intended tests. Full suite on the rebased tree: no failures, 1 skipped (Chromium path unset); ruff clean.
 - Limits: the budget bounds time to a first answer, not total generation time; the attempt that crosses the deadline is penalised like a normal timeout; the default (300s) is a judgement call for slow local cold-loads and is owner-tunable; no live-provider evidence.
+
+## 2026-11-21 — MIA-HOLO-01 (A6): runtime-state contract
+
+- **Implemented (commit 1691e42):** a typed, evidence-based interface state contract and read-only routes (`/api/runtime/contract`, `/state`, `/resolve`). Nothing renders yet; no activity is inferred from animation.
+- **Verified here:** 41 new tests; full suite 2050 passed, 1 skipped; ruff clean.
+- **Not done:** UI binding (MIA-HOLO-04); server-side tracking of in-flight chat turns.

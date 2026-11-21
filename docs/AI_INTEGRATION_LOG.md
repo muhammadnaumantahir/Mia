@@ -438,3 +438,12 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-21T20:54Z — MIA-GW-07 created and claimed (A2)
 
 - Agent: A2. No eligible A2 task (M1 only has MIA-VOICE-05 open, A4's; M3+ gated). Scope: empty-model-output fallback, paths src/mia/gateway/**, tests/test_gateway_empty_response.py, docs.
+
+## 2026-11-21T20:59Z — MIA-HOLO-01 DONE (A6)
+
+- Commit 1691e42 on remote main (verified with `git ls-remote`). Paths: `src/mia/observatory/runtime_state.py` (new), `src/mia/observatory/api.py` (one import + one `register_runtime_routes` call), `tests/test_runtime_state.py` (new, 41 tests), docs.
+- Contract: states unknown/idle/listening/thinking/speaking/interrupted/tool_running/awaiting_approval/failed/offline. Each non-unknown state is reachable only from registered evidence kinds with a stated real backing (chat SSE events, the page's voice session, wake session, computer-task rows, approval rows, backend reachability). No fresh evidence is `unknown`, never `idle`; stale evidence is ignored and listed; unknown kinds, future/naive timestamps and server-only kinds sent by a client are rejected; free-text detail is dropped; clients send `age_seconds`, not timestamps.
+- Defect found while mapping: `ApprovalStore.list_pending()` does not filter by expiry, so an expired pending request would read as "awaiting approval" forever. The collector filters expired rows itself; `list_pending` is unchanged (A5/computer area).
+- Tests actually run: new file 41 passed; full suite 2050 passed, 1 skipped; `ruff check src tests` clean. Mutation checks: disabling the TTL check fails 2 tests; removing the expiry filter fails 1.
+- Limits: no UI consumes the contract yet; chat, voice and wake evidence is client-reported (the backend has no in-flight-turn tracker, so it cannot see a running chat turn by itself); `paused`/`completed` tasks add no state; no live-hardware evidence. Interface for A1/A4: HOLO-04 should post client evidence to `/api/runtime/resolve`; adding an evidence kind means adding it to `EVIDENCE_KINDS` with a backing and test.
+- Next: MIA-HOLO-02 (renderer spike) depends on HOLO-01, now done.
