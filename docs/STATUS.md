@@ -378,3 +378,9 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - Fix: `ModelUnavailableError(PermanentProviderError)`; adapters raise it for HTTP 404/410; `complete()`/`stream()` fall back to the next candidate (before any streamed text), degrade only that candidate in the health tracker (so it is ranked after healthy ones next turn), leave the circuit breaker alone, and release a paid reservation (the request was rejected before processing). If every candidate is gone a permanent `ModelUnavailableError` is raised (502 via the existing handler, no misleading retry hint); a transient failure elsewhere still takes precedence. HTTP 400/422, credential, and empty-output semantics are unchanged.
 - Verified locally: `tests/test_gateway_model_unavailable.py` (13 tests, fake providers + mocked HTTP); mutation-checked (removing the handlers or the 404/410 mapping fails the tests). Full suite: 1925 collected, no failures, 1 skipped (Chromium path not configured), ruff clean.
 - Not covered / follow-ups: the model registry is not yet marked stale on a 404 (health degrade only, process-local); a per-turn total deadline across fallback candidates (noted in GW-04) is still open; no live-provider evidence.
+
+## 2026-11-21 — MIA-M1-10 (A6): memory delete/export owner controls
+
+- **Implemented (commit 3703885):** retention purge now removes usage rows and is audited; conversation deletion is audited, reports the structured memories captured from it, and can opt in to forgetting them (`DELETE /api/conversations/{id}?forget_derived=true`, preview at `GET /api/conversations/{id}/derived-memory`); export carries each conversation's `temporary` and `project`.
+- **Verified here:** 15 new tests; full suite 1926 passed, 1 skipped before the final rebase; ruff clean. Scripted data only.
+- **Not done:** UI for these actions, import/restore, audit log in the export.

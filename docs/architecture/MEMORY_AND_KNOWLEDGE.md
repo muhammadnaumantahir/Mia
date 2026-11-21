@@ -84,7 +84,7 @@ Verified with local automated tests only (mocked providers, no live model): rest
 
 **Known limits:** capture is heuristic English pattern matching, not a model; it misses things by design. Contradictions phrased with unrelated wording are not detected. There is no tombstone, so an automatic suggestion about a forgotten (not rejected) topic can be proposed again. Knowledge items (`memory_items`) still have trust levels only, not lifecycle states.
 
-Endpoints: `POST /api/memory/capture`, `POST /api/memory/records/{id}/(edit|approve|reject|confirm|archive|outdated|restore|temporary)`, `GET/PUT /api/memory/settings`, `POST/DELETE /api/memory/relationships`, `POST /api/conversations/{id}/temporary`, `GET /api/memory/replies/{id}/usage`. Chat responses include `memory_capture`.
+Endpoints: `POST /api/memory/capture`, `POST /api/memory/records/{id}/(edit|approve|reject|confirm|archive|outdated|restore|temporary)`, `GET/PUT /api/memory/settings`, `POST/DELETE /api/memory/relationships`, `POST /api/conversations/{id}/temporary`, `GET /api/memory/replies/{id}/usage`, `GET /api/conversations/{id}/derived-memory`, `DELETE /api/conversations/{id}[?forget_derived=true]` (keeps memories captured from the conversation unless opted in; always lists them). Chat responses include `memory_capture`.
 
 ## Retrieval (upgraded 2026-11-20)
 
