@@ -201,3 +201,6 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Delivered: opt-in Project control and conversation-list project badge in src/mia/assistant.html; tests/test_assistant_project_control.py. Still unverified: real browser, keyboard, screen reader, narrow-screen layout.
 - Next for A6: MIA-UX-04 (wake-word UI) remains blocked on MIA-VOICE-02 + MIA-BRAIN-05; MIA-VOICE-03 needs assistant.html (coordinate with A4).
 
+## 2026-11-21T15:34Z - MIA-UX-05 claimed (A6)
+- No unblocked A6 task existed (UX-04 blocked; VOICE-03 is A4's; M2-M6 gated), so A6 filed MIA-UX-05 from an audit of the one-shot recording path (microphone visibility/stop safety). Paths: src/mia/assistant.html, tests/test_assistant_mic_safety.py only.
+
