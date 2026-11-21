@@ -69,6 +69,35 @@ def test_unverified_mutation_claims_are_flagged_and_annotated(text):
     assert "no record of actually performing" in r.annotated_text and r.confidence != "high"
 
 
+@pytest.mark.parametrize("text", [
+    "Maine folder delete kar diya.",
+    "Main ne email bhej di.",
+    "میں نے فائل ڈیلیٹ کر دی۔",
+    "میں نے فولڈر بنا دیا۔",
+])
+def test_urdu_and_roman_urdu_mutation_claims_are_flagged(text):
+    report = evaluate_response(text, analysis=A, ledger=OperationLedger())
+    assert "unverified_completion_claim" in report.codes()
+    assert "no record of actually performing" in report.annotated_text
+
+
+@pytest.mark.parametrize("text", [
+    "Maine repo check kar liya.",
+    "Main ne files read kar li hain.",
+    "میں نے فائلیں چیک کر لی ہیں۔",
+])
+def test_urdu_and_roman_urdu_inspection_claims_need_tool_evidence(text):
+    report = evaluate_response(text, analysis=A, ledger=OperationLedger())
+    assert "unverified_inspection_claim" in report.codes()
+
+
+def test_urdu_and_roman_urdu_uncertainty_phrases_are_detected():
+    for text in ("Shayad yeh kaam kare.", "Mumkin hai jawab ghalat ho.",
+                 "شاید یہ کام کرے۔", "ممکن ہے جواب غلط ہو۔"):
+        report = evaluate_response(text, analysis=A, ledger=OperationLedger())
+        assert "low_confidence" in report.codes()
+
+
 def test_mutation_claim_even_with_completed_read_tool_is_still_unverified():
     led = OperationLedger()
     led.set(led.add("list files"), "completed")
