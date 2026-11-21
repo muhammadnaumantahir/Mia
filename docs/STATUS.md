@@ -22,6 +22,13 @@ The Code Graph is a required cross-cutting developer capability, initialized dur
 
 **Implementation truth (not a completion claim):** main now includes the core runtime integration: independent AI Gateway, bounded semantic-memory option, structured/FTS memory and multilingual deterministic capture/recall, owner-editable versioned identity and UI, shared Brain pipeline, browser/local voice engines, opt-in browser wake phrase, governed computer adapters, task runtime, proactive inbox, and Code Graph. Core integration PR #3 merged to main at `7325708`; Code Graph PR #12 and identity/multilingual memory work were included in that integration. PR #20 is the clean-main follow-up for canonical SPS self-description and multilingual conversation-evaluation fixtures, currently under fresh CI. Important gaps remain: quality evaluation and owner correction/consolidation for model-assisted extraction, richer relationship-aware recall coverage, stronger cross-session/provider continuity, reasoning/judge evaluation, and offline always-on wake-word detection. Full-retained-history semantic candidate retrieval is implemented on `main`; its tests are authored but have not been run locally. Physical device checks and owner deployment remain separately tracked.
 
+## Latest development update (2026-11-21)
+
+- Fixed a cross-session intent-analysis privacy gap: temporary conversations no longer count as prior persistent context when the Brain decides whether a vague continuation request can be resolved. The existing recall path already excluded temporary sessions; this aligns intent detection with that rule.
+- Added regression coverage for temporary-only history (must still clarify) and persistent prior history (may resolve continuation).
+- Changes committed directly to `main`. Tests are authored but have not been executed in this environment; no CI run was requested or used as a gate.
+- Code Graph snapshot refresh remains a local development step and is not claimed as complete by this remote source edit.
+
 ## Status inventory (component status, not execution order)
 
 The following table records prior workstream status. It is an implementation inventory, not the development sequence; docs/ROADMAP.md is authoritative for execution order.
