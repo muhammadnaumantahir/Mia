@@ -798,6 +798,8 @@ def create_app(
     memory_store = memory or MemoryStore(data_dir / "mia-memory.sqlite3")
     app.state.memory = memory_store
 
+    runtime_evidence_failure_reported: list[bool] = []
+
     def current_identity() -> tuple[str, int | None]:
         """Combine the owner-editable profile with factual live runtime evidence."""
         try:
@@ -828,7 +830,7 @@ def create_app(
             ]
             manifest = build_runtime_manifest(
                 tool_names=tool_names,
-                provider_ids=model_gateway.providers.keys(),
+                provider_ids=model_gateway.providers.ids(),
                 route_paths=route_paths,
                 memory_enabled=memory_store is not None,
                 semantic_memory_enabled=(
@@ -836,10 +838,26 @@ def create_app(
                 ),
                 permission_broker_enabled=brain_broker is not None,
                 capability_registry_enabled=brain_capabilities is not None,
+                # Operational evidence, not route names. A4 passes transport_available=True
+                # here once the loopback audio transport is wired (MIA-VOICE-02).
+                offline_wake_word=offline_wake_word_status(),
             )
             return identity_text + "\n\n" + render_runtime_manifest(manifest), identity_version
-        except Exception:
+        except Exception as exc:
             # Runtime evidence is supplemental; registry inspection must never break chat.
+            # But a silent failure here means Mia answers without live self-knowledge, so
+            # record it (once per process, to avoid flooding the observatory every turn).
+            if not runtime_evidence_failure_reported:
+                runtime_evidence_failure_reported.append(True)
+                observatory.record_event(
+                    category="brain",
+                    event_type="runtime_evidence_failure",
+                    summary="Live runtime evidence could not be built; chat is running "
+                            "without it",
+                    outcome="error",
+                    layer_id="SPS-05",
+                    payload={"error_type": type(exc).__name__},
+                )
             return identity_text, identity_version
 
     capture_service = CaptureService(memory_store)

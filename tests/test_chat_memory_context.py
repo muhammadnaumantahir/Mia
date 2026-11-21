@@ -10,6 +10,17 @@ from mia.memory.store import MemoryStore
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
 
+EVIDENCE_MARKER = "\n\nLIVE RUNTIME EVIDENCE"
+
+
+def persona_of(system_prompt: str) -> str:
+    """The model-independent persona, without the live runtime-evidence block.
+
+    The evidence block reports the live registries (e.g. which provider adapters are
+    configured), so it legitimately differs when providers change; the persona must not.
+    """
+    return system_prompt.split(EVIDENCE_MARKER, 1)[0]
+
 DECISION = "We decided to use PostgreSQL for the billing service for transactional safety."
 QUESTION = "Which database did we choose for the billing service?"
 
@@ -110,7 +121,9 @@ def test_chat_retrieves_relevant_memory_with_provenance(tmp_path, monkeypatch):
     assert refs[0]["provenance"] == "owner-provided" and refs[0]["source"] == "Architecture review"
 
     messages = provider.last_messages
-    assert messages[0] == {"role": "system", "content": identity_system_prompt()}
+    assert messages[0]["role"] == "system"
+    assert persona_of(messages[0]["content"]) == identity_system_prompt()
+    assert EVIDENCE_MARKER in messages[0]["content"]  # live self-knowledge is attached
     block = provider.memory_blocks()
     assert len(block) == 1 and "PostgreSQL" in block[0]["content"]
     assert messages[-1] == {"role": "user", "content": QUESTION}
@@ -155,7 +168,8 @@ def test_continuity_survives_restart_and_model_switch(tmp_path, monkeypatch):
         },
     )
     assert follow_up.status_code == 200
-    assert second.last_messages[0] == identity_before  # identical identity, different model
+    # identical identity, different model
+    assert persona_of(second.last_messages[0]["content"]) == persona_of(identity_before["content"])
     seen = json.dumps(second.last_messages)
     assert "Understood, PostgreSQL." in seen  # prior turns persisted across the restart
     assert len(second.memory_blocks()) == 1 and "transactional safety" in seen
@@ -249,7 +263,7 @@ def test_stream_endpoint_uses_context_and_reports_references(tmp_path, monkeypat
     events = parse_sse(response.text)
     assert events[-1][0] == "done"
     assert [r["ref_id"] for r in events[-1][1]["context_references"]] == [item_id]
-    assert provider.last_messages[0]["content"] == identity_system_prompt()
+    assert persona_of(provider.last_messages[0]["content"]) == identity_system_prompt()
     assert len(provider.memory_blocks()) == 1
 
 

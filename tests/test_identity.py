@@ -20,6 +20,17 @@ from mia.memory.store import MemoryStore
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
 
+EVIDENCE_MARKER = "\n\nLIVE RUNTIME EVIDENCE"
+
+
+def persona_of(system_prompt: str) -> str:
+    """The model-independent persona, without the live runtime-evidence block.
+
+    The evidence block reports the live registries (e.g. which provider adapters are
+    configured), so it legitimately differs when providers change; the persona must not.
+    """
+    return system_prompt.split(EVIDENCE_MARKER, 1)[0]
+
 # ----------------------------------------------------------------- store level
 
 
@@ -353,9 +364,12 @@ def test_identity_is_identical_across_restart_and_provider_switch(tmp_path, monk
     assert memory_b is not memory_a
     reply = client_b.post("/api/gateway/chat", json={"prompt": "hello again", "use_tools": False})
     assert reply.status_code == 200
-    assert provider_b.system_prompt == prompt_a
+    assert persona_of(provider_b.system_prompt) == persona_of(prompt_a)
     for model_label in ("model-alpha", "model-beta", "local-a", "local-b"):
-        assert model_label not in prompt_a
+        assert model_label not in persona_of(prompt_a)  # the persona names no model
+    # the live evidence, by contrast, truthfully reports each run's own configured provider
+    assert "Configured provider adapters (1): local-a" in prompt_a
+    assert "Configured provider adapters (1): local-b" in provider_b.system_prompt
 
 
 def test_streaming_chat_also_uses_the_stored_identity(tmp_path, monkeypatch):
@@ -389,6 +403,7 @@ def test_identity_storage_failure_does_not_break_chat(tmp_path, monkeypatch):
     monkeypatch.setattr(memory.identity, "active", broken)
     response = client.post("/api/gateway/chat", json={"prompt": "hello", "use_tools": False})
     assert response.status_code == 200
-    assert provider.system_prompt == identity_system_prompt()
+    assert persona_of(provider.system_prompt) == identity_system_prompt()
+    assert EVIDENCE_MARKER in provider.system_prompt  # the fallback persona still gets evidence
     events = observatory.list_events(limit=50)
     assert any(e["event_type"] == "identity_load_failure" for e in events)

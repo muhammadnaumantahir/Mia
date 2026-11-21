@@ -62,3 +62,24 @@ def test_multilingual_conversation_evaluation_set(tmp_path):
     assert manifest_case["expected_architecture_phrase"] in rendered
     assert "Browser wake phrase: available" in rendered
     assert "Offline wake-word detection: not registered" in rendered
+
+
+def test_eval_identity_question_never_claims_wake_word_from_a_route_name():
+    """Identity/capability turn: a wake-named route must not let Mia claim hands-free listening."""
+    manifest = build_runtime_manifest(
+        tool_names=["memory.search"],
+        provider_ids=["ollama"],
+        route_paths=["/assistant", "/api/chat", "/api/voice/wake/status", "/api/voice/wake/stream"],
+        memory_enabled=True,
+        semantic_memory_enabled=False,
+        permission_broker_enabled=True,
+        capability_registry_enabled=True,
+        offline_wake_word={
+            "engine_installed": False, "model_configured": False,
+            "audio_transport_available": False, "operational": False,
+            "reason": "engine_not_installed",
+        },
+    )
+    rendered = render_runtime_manifest(manifest)
+    assert "Offline wake-word detection: not operational (engine_not_installed)" in rendered
+    assert "Browser wake phrase: available" in rendered  # the opt-in browser path stays truthful
