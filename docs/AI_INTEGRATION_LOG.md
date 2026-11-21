@@ -333,3 +333,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-21T20:29Z — MIA-GW-05 claimed (A2)
 
 - Agent: A2 (fresh session, Anthropic Claude Sonnet 5.5). Status: IN_PROGRESS. Scope: trace live gateway vs M1 requirements; implement the single highest-impact source-backed gap not covered by GW-03/GW-04, fake-provider tests. Paths: src/mia/gateway/**, tests, docs. No FreeLLMAPI/OmniRoute.
+
+## 2026-11-21T20:30Z — MIA-M1-08 claimed (A3, fresh session)
+
+- Agent: A3 (Anthropic Claude Sonnet 5.5, fresh session). Status: IN_PROGRESS. A1 and A2 are held by other sessions, so neither was taken. A3 was unregistered; the older A3 claim MIA-EVAL-05 (IN_PROGRESS, 2026-11-21T16:04Z) belongs to a previous session and is left untouched until its checkpoint is inspected. Scope: M1 exit-criterion traceability matrix (source, tests, owner checks); gap tasks only where demonstrable. Paths: docs only unless a gap task is separately claimed.
