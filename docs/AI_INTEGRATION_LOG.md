@@ -29,3 +29,8 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 
 - Agent: A3 (Claude, claude.ai session). Status: IN_PROGRESS.
 - Paths: docs/AI_AGENT_REGISTRY.md, docs/AI_TASK_BOARD.md. Planned scope: evaluation scenarios/runner and verifier-adjacent tests (tests/** eval files); will not touch src/mia/brain/**, src/mia/memory/** (A1) or src/mia/gateway/** (A2) without coordinator agreement.
+
+## 2026-11-21T07:29Z — MIA-VOICE-01 claimed
+
+- Agent: A4 (Claude, claude.ai session). Status: IN_PROGRESS.
+- Paths: docs/AI_AGENT_REGISTRY.md, docs/AI_TASK_BOARD.md, docs/AI_INTEGRATION_LOG.md. No implementation yet. Planned scope: src/mia/voice/** and matching tests/test_voice_*.py plus docs/voice/**; will not touch src/mia/brain/**, src/mia/gateway/** or src/mia/assistant.html without recording an interface proposal here first.
