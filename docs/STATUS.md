@@ -403,3 +403,11 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - **Implemented (commit 1691e42):** a typed, evidence-based interface state contract and read-only routes (`/api/runtime/contract`, `/state`, `/resolve`). Nothing renders yet; no activity is inferred from animation.
 - **Verified here:** 41 new tests; full suite 2050 passed, 1 skipped; ruff clean.
 - **Not done:** UI binding (MIA-HOLO-04); server-side tracking of in-flight chat turns.
+
+## 2026-11-21 — MIA-GW-07 (A2): empty-model-output fallback
+
+- Gap: an empty or unusable reply from one model (gateway "empty response", "only invalid tool calls", Ollama/OpenAI-compatible "neither text nor tool calls") raised `PermanentProviderError`, aborting the whole fallback chain even though it is model output rather than a request fault, and structured-output failures already fell through to the next candidate.
+- Fix: `EmptyResponseError(PermanentProviderError)` raised by the adapters (empty text and no tool calls; non-string payload types stay plain permanent) and the gateway. `complete()`/`stream()` record an `invalid_output` event, keep the provider healthy (breaker/health untouched), hold a paid reservation until expiry (tokens may have been billed) and try the next candidate. If every candidate fails the error stays permanent ("No model produced a valid response: ..."), now also for streams. 400-style request faults, credentials and a single failing candidate behave as before.
+- Test hygiene fix: free-first routing meant the paid-reservation test I wrote for GW-05 never actually attempted the paid candidate. It now uses the paid candidate alone and a mutation proves it bites.
+- Verified locally: `tests/test_gateway_empty_response.py` (10 tests) plus corrected GW-05 test; four mutation checks (handlers removed, reservation hold removed, adapters plain, gone-model hold added) each fail the intended tests. Full suite on the rebased tree: no failures, 1 skipped (Chromium path unset); ruff clean.
+- Limits: an empty reply is not retried on the same model; no quality scoring of weak-but-nonempty replies (Brain verification/escalation own that); no live-provider evidence.

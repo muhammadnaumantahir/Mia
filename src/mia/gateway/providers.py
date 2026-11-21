@@ -12,6 +12,7 @@ from typing import Any
 
 from .contracts import (
     AuthenticationProviderError,
+    EmptyResponseError,
     ModelCandidate,
     ModelRequest,
     ModelUnavailableError,
@@ -228,7 +229,7 @@ class OllamaProvider:
         if not isinstance(content, str):
             content = ""
         if not content and not tool_calls:
-            raise PermanentProviderError("Ollama response did not contain text or tool calls")
+            raise EmptyResponseError("Ollama response did not contain text or tool calls")
         return ProviderResponse(
             content=content,
             tool_calls=tool_calls,
@@ -451,8 +452,12 @@ class OpenAICompatibleProvider:
         tool_calls = _normalise_tool_calls(message.get("tool_calls") or [])
         if content is None:
             content = ""
-        if not isinstance(content, str) or (not content and not tool_calls):
+        if not isinstance(content, str):
             raise PermanentProviderError(
+                f"{self.provider_id} returned neither text nor structured tool calls"
+            )
+        if not content and not tool_calls:
+            raise EmptyResponseError(
                 f"{self.provider_id} returned neither text nor structured tool calls"
             )
         raw_usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else {}

@@ -79,6 +79,10 @@ The chat tool loop withholds file and knowledge contents from non-local provider
 
 HTTP 404/410 from a provider raises `ModelUnavailableError` (a `PermanentProviderError` subclass). It describes the model or endpoint, not the request, so the gateway falls back to the next eligible candidate in `complete()` and `stream()` (streaming only before the first token). The candidate is degraded in the health tracker so it is ranked after healthy ones on later turns; the circuit breaker is not touched because the provider is reachable; a paid reservation is released because the request was rejected before processing. When every candidate is gone the gateway raises `ModelUnavailableError` (not a retryable error). A transient failure on another candidate takes precedence in the final error. Other 4xx responses (400, 422), credential errors and empty or invalid output keep their previous semantics. Not yet done: marking the registry entry stale on 404, and a per-turn total deadline across fallbacks.
 
+## Empty-output fallback (MIA-GW-07)
+
+A reply with no text and no valid tool calls raises `EmptyResponseError` (a `PermanentProviderError` subclass). It is model output, not a request fault, so `complete()` and `stream()` try the next eligible candidate: the provider stays healthy, an `invalid_output` event is logged and a paid reservation is held until expiry. When every candidate fails the gateway raises a permanent "No model produced a valid response" error. Malformed payload types, HTTP 400-style faults and credential errors still abort the chain.
+
 ## Per-turn deadline (MIA-GW-06)
 
 `MIA_GATEWAY_TURN_DEADLINE_S` (default 300, `off` disables) bounds the total wait for a first answer across all fallback candidates. Each attempt, and the wait for the first streamed chunk, is clamped to the remaining budget; once it is spent no further candidate is started and the usual aggregated transient error is raised with a `ProviderTimeout` cause. It never interrupts a stream that is already producing text and does not limit total generation time.

@@ -127,12 +127,13 @@ async def test_paid_reservation_is_released_when_model_is_gone(tmp_path, monkeyp
     monkeypatch.setenv("MIA_MAX_DAILY_SPEND_USD", "5")
     monkeypatch.setenv("MIA_MAX_MONTHLY_SPEND_USD", "5")
     ledger = UsageLedger(tmp_path / "usage.sqlite3")
-    a, b = Scripted("a", gone()), Scripted("b", "free answer")
-    g = gw(a, b)
+    a = Scripted("a", gone())
+    g = gw(a)
     g.usage_ledger = ledger
     policy = RoutePolicy(allow_paid=True, max_request_cost_usd=1.0)
-    result = await g.complete(REQ, [cand("a", 0.9, free=False, price=1.0), cand("b", 0.1)], policy)
-    assert result.content == "free answer"
+    with pytest.raises(ModelUnavailableError):
+        await g.complete(REQ, [cand("a", 0.9, free=False, price=1.0)], policy)
+    assert a.calls == 1  # the paid candidate really was attempted (free-first ranking not in play)
     assert ledger.reservation_summary()["active_count"] == 0  # rejected before processing: no hold
 
 

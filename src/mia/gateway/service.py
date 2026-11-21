@@ -12,6 +12,7 @@ from typing import Any
 
 from .contracts import (
     AuthenticationProviderError,
+    EmptyResponseError,
     ModelCandidate,
     ModelRequest,
     ModelUnavailableError,
@@ -365,6 +366,13 @@ class ModelGateway:
         self.health.record_failure(candidate, TransientProviderError(str(exc)))
         self.events.add("model_unavailable", name, _brief(exc))
 
+    def _note_empty_output(
+        self, candidate_name: str, exc: Exception, invalid: list[str]
+    ) -> None:
+        """Record an unusable model reply; the provider answered, so it stays healthy."""
+        self.events.add("invalid_output", candidate_name, _brief(exc))
+        invalid.append(f"{candidate_name}: {exc}"[:160])
+
     def _release_budget_reservation(self, reservation_id: str | None) -> None:
         if reservation_id and self.usage_ledger is not None:
             self.usage_ledger.release_reservation(reservation_id)
@@ -513,7 +521,7 @@ class ModelGateway:
                 if isinstance(response, str):
                     response = ProviderResponse(content=response)
                 if not response.content and not response.tool_calls:
-                    raise PermanentProviderError("Provider returned an empty response")
+                    raise EmptyResponseError("Provider returned an empty response")
                 tool_calls, tool_issues = self._screen(request, response.tool_calls)
                 structured: Any = None
                 problem: str | None = None
@@ -553,6 +561,13 @@ class ModelGateway:
                 # Keep the reservation until expiry instead of silently refunding it.
                 keep_reservation = reservation_id is not None
                 raise
+            except EmptyResponseError as exc:
+                self.health.record_success(candidate)
+                self.breaker.record_success(provider_id)
+                settled = True
+                keep_reservation = reservation_id is not None  # tokens may have been billed
+                self._note_empty_output(candidate_name, exc, invalid)
+                continue
             except ModelUnavailableError as exc:
                 self._note_model_unavailable(candidate, candidate_name, exc)
                 unavailable.append(candidate_name)
@@ -625,6 +640,7 @@ class ModelGateway:
         budget_blocked: list[str] = []
         unavailable: list[str] = []
         deadline = self._new_deadline()
+        invalid: list[str] = []
 
         for candidate in ranked:
             provider_id = candidate.provider_id
@@ -672,7 +688,7 @@ class ModelGateway:
                     if isinstance(response, str):
                         response = ProviderResponse(content=response)
                     if not response.content and not response.tool_calls:
-                        raise PermanentProviderError("Provider returned an empty response")
+                        raise EmptyResponseError("Provider returned an empty response")
                     chunks: list[StreamChunk] = [
                         StreamChunk(
                             delta=response.content or "",
@@ -711,10 +727,10 @@ class ModelGateway:
                         if chunk.finish_reason or chunk.usage or chunk.tool_calls:
                             final = chunk
                     if not text_parts and not final.tool_calls:
-                        raise PermanentProviderError("Provider returned an empty response")
+                        raise EmptyResponseError("Provider returned an empty response")
                 out_calls, out_issues = self._screen(request, final.tool_calls)
                 if final.tool_calls and not out_calls and not text_sent:
-                    raise PermanentProviderError("model returned only invalid tool calls")
+                    raise EmptyResponseError("model returned only invalid tool calls")
                 self.health.record_success(candidate)
                 self.breaker.record_success(provider_id)
                 settled = True
@@ -744,6 +760,15 @@ class ModelGateway:
                 # Retain its reservation until TTL rather than silently refunding it.
                 keep_reservation = reservation_id is not None
                 raise
+            except EmptyResponseError as exc:
+                if emitted:
+                    raise
+                self.health.record_success(candidate)
+                self.breaker.record_success(provider_id)
+                settled = True
+                keep_reservation = reservation_id is not None
+                self._note_empty_output(candidate_name, exc, invalid)
+                continue
             except ModelUnavailableError as exc:
                 if emitted:
                     raise
@@ -784,6 +809,10 @@ class ModelGateway:
                 if not keep_reservation:
                     self._release_budget_reservation(reservation_id)
 
+        if invalid:
+            raise PermanentProviderError(
+                "No model produced a valid response: " + "; ".join(invalid[:3])
+            )
         if last_error:
             raise _aggregate_failure(attempted, last_error) from last_error
         if unavailable:

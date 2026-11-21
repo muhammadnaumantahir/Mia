@@ -118,6 +118,14 @@ class ModelUnavailableError(PermanentProviderError):
     """
 
 
+class EmptyResponseError(PermanentProviderError):
+    """The model answered with nothing usable (no text, no valid tool calls).
+
+    This is a model-output failure, not a request fault, so the gateway may try the
+    next eligible candidate. The provider itself is reachable and stays healthy.
+    """
+
+
 class StreamInterruptedError(TransientProviderError):
     """A stream failed after text was already delivered; ``partial_text`` is what was sent."""
 
