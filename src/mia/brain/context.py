@@ -64,6 +64,15 @@ def _prior_conversation_tail(
                 return msgs
     return []
 
+def has_persistent_prior_conversation(store: MemoryStore, conversation_id: str) -> bool:
+    """Whether intent analysis may safely assume a prior persistent session exists."""
+    return any(
+        convo.get("message_count", 0) > 0
+        and not convo.get("temporary")
+        and (convo.get("id") or convo.get("conversation_id")) != conversation_id
+        for convo in store.list_conversations(limit=5)
+    )
+
 
 def build_context(
     store: MemoryStore,
