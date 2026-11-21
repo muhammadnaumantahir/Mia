@@ -107,3 +107,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Incident (mine): de4f185 accidentally included git conflict markers in docs/code-graph/CHANGELOG.md (docs only, no code impact); fixed in 84d43a7 keeping both graph entries.
 - Observed, not mine: main briefly had syntax errors in brain/verify.py and observatory/api.py (A1 fixed in 5887f86); gateway hard-fails empty provider replies, so the empty_response trigger is unreachable on the non-streaming path.
 - Limitations: no live-provider quality evidence; streaming turns do not escalate; no settings UI. Follow-up filed as MIA-GW-02.
+
+## 2026-11-21T08:40Z — MIA-BRAIN-03 claimed
+
+- Agent: A1. Status: IN_PROGRESS. Owner approved project-scoped continuity (conversation belongs to a project; recall prefers that project's history). Constraints: opt-in, owner-visible, temporary chats stay isolated. Paths: src/mia/memory/** (schema/store), src/mia/brain/context.py, src/mia/observatory/api.py (project routes only) and tests. Will not touch gateway (A2), voice (A4) or assistant.html (A6) without an interface note here.
