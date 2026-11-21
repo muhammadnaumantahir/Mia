@@ -149,3 +149,10 @@ Report implemented, locally tested, unverified, owner-verification-required, blo
 - Keep confirmed AST/source relationships separate from inferred/documented heuristics; every inferred edge must remain labelled.
 - Never execute or import indexed source code, index secrets/private runtime data, or let graph generation modify tracked application source or documentation. Generated snapshots/history belong only in ignored artifacts/runtime data.
 - Report parser errors and unsupported constructs. A stale or missing graph is not a passing architecture check.
+
+
+## Six-agent parallel development system
+
+The repository now defines six specialist worker agents and one separate coordinator role. Before claiming work, every AI agent must read `docs/AI_DEVELOPMENT_SYSTEM.md`, register in `docs/AI_AGENT_REGISTRY.md`, claim an eligible item in `docs/AI_TASK_BOARD.md`, and use the master prompt at `prompts/AI_MASTER_AGENT.md` plus its role in `prompts/AI_AGENT_SPECIALIZATIONS.md`.
+
+The six roles are A1 Brain/identity/memory, A2 AI Gateway/model routing, A3 reasoning quality/parallel judges, A4 voice/wake word, A5 Code Graph/governed self-development, and A6 experience/UI/interaction. The coordinator is not a seventh worker. All existing roadmap, security, SPS, independent-gateway and main-only Git requirements remain binding. Parallelize disjoint work; serialize shared-file edits and remote pushes. A task is not complete until its commit is verified on remote `main` and evidence is recorded.
