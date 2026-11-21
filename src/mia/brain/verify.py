@@ -32,6 +32,14 @@ _READ_CLAIM = re.compile(
     r"\bI(?:'ve| have)?\s+(?:just\s+|now\s+)?(inspected|read|listed|searched|checked|scanned|"
     r"analy[sz]ed the (?:files|project|repo|repository|code)|looked (?:at|through)|reviewed the (?:files|project|code))\b",
     re.I)
+# Wording that counts as honestly telling the owner something failed (English, Roman Urdu, Urdu).
+# "failed", "failure", "cannot" etc. must match: a reply that says so is not "silent" about it.
+_FAILURE_REPORT = re.compile(
+    r"\b(?:fail(?:ed|s|ing|ure|ures)?|couldn't|could not|can't|cannot|unable|errors?|errored|"
+    r"didn't work|did not work|blocked|unsuccessful(?:ly)?|wasn't able|was not able)\b"
+    r"|\b(?:nakaam|nakam|nahi ho (?:saka|saki|paya|payi)|nahin ho (?:saka|saki))\b"
+    r"|ناکام|نہیں ہو (?:سکا|سکی|پایا|پائی)",
+    re.I)
 _HEDGES = re.compile(
     r"\b(i think|i believe|probably|might be|not sure|i'm unsure|i am unsure|possibly|may be|"
     r"i can't verify|cannot verify|as far as i know|shayad|mumkin hai|mujhe yaqeen nahi|"
@@ -217,8 +225,7 @@ def evaluate_response(
         issues.append(Issue("unverified_inspection_claim",
                             "text claims to have inspected something but no tool completed"))
     failed = ledger.by_status("failed")
-    if failed and not re.search(r"\b(fail|couldn't|could not|unable|error|didn't work|did not work|blocked)\b",
-                                text, re.I):
+    if failed and not _FAILURE_REPORT.search(text):
         issues.append(Issue("failure_not_reported",
                             f"{len(failed)} operation(s) failed but the reply does not say so"))
         out = out.rstrip() + "\n\nNote: " + "; ".join(

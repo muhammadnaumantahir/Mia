@@ -163,3 +163,36 @@ def test_recovery_advice_by_class():
     assert "approval" in recovery_advice("needs_approval", "launch app")
     assert "FileNotFound" in recovery_advice("permanent", "read x", "FileNotFound: /a")
     assert "could not complete" in recovery_advice("unknown-class", "x")
+
+
+def _ledger_with_failed_tool():
+    led = OperationLedger()
+    led.set(led.add("tool call notes.lookup"), "failed", "scripted failure")
+    return led
+
+
+@pytest.mark.parametrize("text", [
+    "The lookup failed, so I cannot confirm what your notes say.",
+    "That request failure means I have no results yet.",
+    "I'm unable to reach your notes right now.",
+    "Sorry, I couldn't open it.",
+    "I can't read that file at the moment.",
+    "Lookup nakam ho gaya, is liye main confirm nahi kar sakti.",
+    "Yeh kaam nahi ho saka.",
+    "تلاش ناکام ہو گئی۔",
+    "یہ کام نہیں ہو سکا۔",
+])
+def test_honest_failure_reports_in_three_languages_are_not_flagged_as_silent(text):
+    report = evaluate_response(text, analysis=A, ledger=_ledger_with_failed_tool())
+    assert "failure_not_reported" not in report.codes()
+
+
+@pytest.mark.parametrize("text", [
+    "Here are your notes.",
+    "Sab theek hai, yeh rahe aap ke notes.",
+    "یہ رہے آپ کے نوٹس۔",
+])
+def test_silent_reply_after_failed_tool_is_still_annotated(text):
+    report = evaluate_response(text, analysis=A, ledger=_ledger_with_failed_tool())
+    assert "failure_not_reported" in report.codes()
+    assert "failed" in report.annotated_text
