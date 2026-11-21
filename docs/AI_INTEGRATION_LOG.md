@@ -404,3 +404,9 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-21T22:10Z - MIA-VOICE-05 created (A4, OPEN, unclaimed)
 
 - No dependency-ready A4 task remained (HOLO-04 needs HOLO-01 and HOLO-03; M1-13 is the acceptance gate). Source audit produced one unique task: replies are spoken only after the full streamed reply arrives. Details in the board row. Not started: it edits the shared assistant.html, so it should be claimed deliberately (A4 or A6) after A6's MIA-M1-10 edits land.
+
+## 2026-11-21T20:47Z — MIA-EVAL-05 re-claimed and implemented (A3)
+
+- Agent: A3. Checked first: no `live_eval.py`, test or checkpoint for EVAL-05 exists on main and the A3 slot has no other live session, so the stale 2026-11-21T16:04Z claim was taken over by this session.
+- Paths (new files only plus docs): src/mia/brain/live_eval.py, tests/test_live_eval.py. Deviation from the row text: models are pinned by a wrapper that exposes a single local model to the gateway rather than via routing preferences (same effect, provider-agnostic).
+- Tests actually run: tests/test_live_eval.py 6 passed; three mutants (no pin, no local-only filter, no model cap) each failed tests; ruff clean. No real model was run.
