@@ -411,3 +411,7 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - Test hygiene fix: free-first routing meant the paid-reservation test I wrote for GW-05 never actually attempted the paid candidate. It now uses the paid candidate alone and a mutation proves it bites.
 - Verified locally: `tests/test_gateway_empty_response.py` (10 tests) plus corrected GW-05 test; four mutation checks (handlers removed, reservation hold removed, adapters plain, gone-model hold added) each fail the intended tests. Full suite on the rebased tree: no failures, 1 skipped (Chromium path unset); ruff clean.
 - Limits: an empty reply is not retried on the same model; no quality scoring of weak-but-nonempty replies (Brain verification/escalation own that); no live-provider evidence.
+
+## 2026-11-21T21:01Z A1 record-level project scoping (MIA-BRAIN-06)
+
+- Structured memory records can be scoped to a project (opt-in, default unscoped). Project conversations never recall another project's records, including via links; capture in a project conversation tags records and never confirms/supersedes another project's. Commit `44f45e6`. Verified with fake-provider/unit tests only; no UI and no live-model evidence.

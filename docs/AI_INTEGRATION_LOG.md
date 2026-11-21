@@ -458,3 +458,10 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Paths: src/mia/gateway/{contracts,providers,service}.py, tests/test_gateway_empty_response.py (10 new), tests/test_gateway_model_unavailable.py (GW-05 reservation test corrected: it never attempted the paid candidate because of free-first ranking), docs/architecture/AI_GATEWAY.md, docs/STATUS.md, task board.
 - Tests actually run: new tests pass; four mutation checks fail the intended tests; full suite before the last rebase: no failures, 1 skipped (Chromium path unset); after the rebase the gateway subset (all passed) and ruff only. 
 - A2 status: IDLE. Remaining candidate A2 work (not claimed): rate-limit remaining-quota header ingestion, mid-stream paid-spend cut-off. No eligible M1 A2 task; M3+ gated.
+
+## 2026-11-21T21:01Z — MIA-BRAIN-06 DONE (A1)
+
+- Commit `44f45e6` verified on remote main (merge-base check after push). Paths: src/mia/memory/{schema,structured,context,capture}.py, src/mia/observatory/api.py, tests/test_record_project_scope.py, docs/architecture/MEMORY_AND_KNOWLEDGE.md.
+- Delivered: nullable structured-record `project` (migration 5); recall filter on keyword, intent, semantic and linked paths; capture tagging and scoped duplicate/conflict/update; owner API to set/clear project (audited). Opt-in; default behaviour unchanged.
+- Tests actually run: 17 new tests (mutation-checked on the four recall filters; capture scoping not mutation-checked); full suite before rebase 1928 passed, 1 skipped, 0 failed with `websockets` installed; after rebase only the memory/capture/context/project suites were re-run (all passed); ruff clean. No CI.
+- Not covered: no UI for record project; scope is a post-retrieval filter (pool can shrink); not a security boundary; no live-model evidence.
