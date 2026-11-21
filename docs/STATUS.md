@@ -253,3 +253,8 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - **Implemented:** `mia.brain.judges` - opt-in, bounded advisory judges (cap 3, concurrency/timeouts/cancellation, local-only for sensitive turns, paid/remote opt-in with fail-closed unknown prices, independent of the answering model, strict JSON votes, quorum else deterministic fallback; may only lower confidence).
 - **Verified here:** 20 fake-provider tests pass (commit 387420f). Not run against any live model.
 - **Not done:** pipeline wiring and owner settings (MIA-EVAL-03, needs A1/A2); live judge quality is OWNER_VERIFICATION_REQUIRED.
+
+## 2026-11-21 — MIA-GW-02 (A2): escalation visibility
+
+- Added read-only `GET /api/gateway/escalation` and an `escalation` block in `/api/gateway/overview` (effective policy + process-local counters). Streaming escalation is documented as intentionally unsupported. No write surface; no persistence of counters.
+- Verified locally: full suite 1644 passed, 1 skipped, 1 failed (`tests/test_browser_automation.py::test_browser_api_end_to_end`, pre-existing, untouched). Fake providers only; no live-provider claim. Not browser-verified: no dashboard UI was added.

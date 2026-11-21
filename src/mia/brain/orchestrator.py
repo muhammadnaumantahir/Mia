@@ -25,7 +25,12 @@ from mia.gateway.contracts import (
     RoutePolicy,
     TransientProviderError,
 )
-from mia.gateway.escalation import EscalationPolicy, decide_escalation, escalation_policy_from_env
+from mia.gateway.escalation import (
+    EscalationPolicy,
+    EscalationStats,
+    decide_escalation,
+    escalation_policy_from_env,
+)
 from mia.gateway.service import CompletionResult, ModelGateway, StreamEvent
 from mia.memory.store import MemoryStore
 
@@ -138,6 +143,7 @@ class Brain:
         self.on_reply = on_reply
         self.approval_status = approval_status
         self.escalation_policy = escalation_policy
+        self.escalation_stats = EscalationStats()
 
     # ------------------------------------------------------------------ events
     def _event(self, **kwargs: Any) -> None:
@@ -388,12 +394,14 @@ class Brain:
         if not decision.escalate or decision.target is None or decision.request is None:
             if before.confidence == "low":
                 p.trace.event("escalation_skipped", reason=decision.reason)
+                self.escalation_stats.record("skipped", decision.reason)
             return keep
         target_key = f"{decision.target.provider_id}/{decision.target.model_id}"
         try:
             res: CompletionResult = await self.gateway.complete(decision.request, [decision.target], p.policy)
         except Exception as exc:  # the original reply stands; escalation must never fail the turn
             p.trace.event("escalation_failed", target=target_key, error=type(exc).__name__)
+            self.escalation_stats.record("failed")
             return keep
         self._usage(res, p.analysis.category, decision.request.estimated_input_tokens,
                     decision.request.max_output_tokens)
@@ -404,6 +412,7 @@ class Brain:
                   and rank[after.confidence] > rank[before.confidence])
         p.trace.event("escalation", target=target_key, accepted=better,
                       before=before.confidence, after=after.confidence, trigger=decision.reason)
+        self.escalation_stats.record("accepted" if better else "rejected")
         if not better:
             return keep
         return res.content, res.provider_id, res.model_id, [*attempted, *res.attempted_candidates]

@@ -129,3 +129,7 @@ Provider failures already fall back across candidates. `src/mia/gateway/escalati
 Settings (all optional): `MIA_ESCALATION_ENABLED`, `MIA_ESCALATION_MAX_ATTEMPTS`, `MIA_ESCALATION_MAX_LATENCY_MS`, `MIA_ESCALATION_MAX_OUTPUT_TOKENS`, `MIA_ESCALATION_ALLOW_PAID`, `MIA_ESCALATION_MAX_COST_USD`.
 
 Evidence limits: tests use fake providers and prove policy behaviour only, not live model quality. The gateway already hard-fails empty provider replies, so `empty_response` is effectively unreachable on the non-streaming path today; in practice the trigger is `low_confidence` combined with another verifier issue. Streaming escalation and judge-model orchestration are not implemented (A3's parallel-judge work builds on this contract).
+
+### Escalation visibility (read-only)
+
+`GET /api/gateway/escalation` (also under `escalation` in `/api/gateway/overview`) returns the effective policy (including whether paid escalation is actually effective, which also requires the normal paid route policy) and process-local counters: attempted, accepted, rejected-not-better, failed, skipped plus skip reasons. There is no write endpoint; settings stay in environment variables. Counters reset on restart and are not a billing record: spend from escalation attempts is recorded by the normal usage ledger. Streaming turns do not escalate (`streaming: "not_supported"`) by design: text has already reached the owner, so a silent swap is not possible.

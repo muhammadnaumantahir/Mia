@@ -32,6 +32,8 @@ from __future__ import annotations
 import math
 import os
 import re
+import threading
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 
@@ -210,3 +212,55 @@ def escalation_policy_from_env() -> EscalationPolicy:
         allow_paid=flag("MIA_ESCALATION_ALLOW_PAID"),
         max_extra_cost_usd=number("MIA_ESCALATION_MAX_COST_USD", 0.0),
     )
+
+
+def policy_snapshot(policy: EscalationPolicy, route_policy: RoutePolicy) -> dict[str, object]:
+    """Read-only, secret-free view of the effective escalation policy."""
+    paid_effective = bool(
+        policy.enabled and policy.allow_paid and route_policy.allow_paid
+        and policy.max_extra_cost_usd > 0 and route_policy.max_request_cost_usd > 0
+    )
+    return {
+        "enabled": policy.enabled,
+        "max_extra_attempts": max(0, min(int(policy.max_extra_attempts), HARD_MAX_EXTRA_ATTEMPTS)),
+        "max_extra_latency_ms": policy.max_extra_latency_ms,
+        "max_extra_output_tokens": policy.max_extra_output_tokens,
+        "allow_paid_requested": policy.allow_paid,
+        "paid_escalation_effective": paid_effective,
+        "max_extra_cost_usd": policy.max_extra_cost_usd,
+        "eligible_codes": sorted(policy.eligible_codes),
+        "streaming": "not_supported",
+    }
+
+
+class EscalationStats:
+    """Process-local counters (reset on restart; not persisted, not a billing record).
+
+    Spend from escalation attempts is still recorded by the normal usage ledger.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._counts: Counter[str] = Counter()
+        self._skips: Counter[str] = Counter()
+
+    def record(self, outcome: str, reason: str = "") -> None:
+        """outcome: skipped | accepted | rejected | failed."""
+        with self._lock:
+            self._counts[outcome] += 1
+            if outcome == "skipped" and reason:
+                self._skips[reason[:80]] += 1
+
+    def snapshot(self) -> dict[str, object]:
+        with self._lock:
+            c = self._counts
+            return {
+                "attempted": c["accepted"] + c["rejected"] + c["failed"],
+                "accepted": c["accepted"],
+                "rejected_not_better": c["rejected"],
+                "failed": c["failed"],
+                "skipped": c["skipped"],
+                "skip_reasons": dict(self._skips.most_common(10)),
+                "scope": "process-local since start",
+            }
+

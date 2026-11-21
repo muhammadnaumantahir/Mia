@@ -79,6 +79,7 @@ from mia.gateway.contracts import (
     RoutePolicy,
     TransientProviderError,
 )
+from mia.gateway.escalation import policy_snapshot
 from mia.gateway.factory import (
     apply_daily_cap,
     apply_monthly_cap,
@@ -5033,6 +5034,10 @@ def create_app(
             "decisions": [
                 decision.to_dict() for decision in model_gateway.decisions.recent(20)
             ],
+            "escalation": {
+                "policy": policy_snapshot(brain.escalation_policy(), paid_route_policy()),
+                "stats": brain.escalation_stats.snapshot(),
+            },
         }
 
     @app.post("/api/gateway/models/{provider_id}/{model_id}/settings")
@@ -5061,6 +5066,14 @@ def create_app(
         result["effective_capabilities"] = sorted(record.effective_capabilities())
         result["verification"] = record.verification()
         return result
+
+    @app.get("/api/gateway/escalation")
+    def gateway_escalation() -> dict[str, Any]:
+        """Read-only effective quality-escalation policy and process-local counters."""
+        return {
+            "policy": policy_snapshot(brain.escalation_policy(), paid_route_policy()),
+            "stats": brain.escalation_stats.snapshot(),
+        }
 
     @app.get("/api/gateway/decisions")
     def gateway_decisions(limit: int = 20) -> dict[str, Any]:

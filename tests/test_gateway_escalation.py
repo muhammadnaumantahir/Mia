@@ -203,3 +203,33 @@ def test_worse_or_equal_escalation_keeps_the_original_reply(tmp_path, monkeypatc
     assert (weak.calls, strong.calls) == (1, 1)  # exactly one extra attempt, never a loop
     assert result["content"] == WEAK and result["provider_id"] == "a"
     assert turn_events(client, "escalation")[0]["accepted"] is False
+
+
+def test_escalation_endpoint_is_read_only_and_reflects_policy_and_counters(tmp_path, monkeypatch):
+    monkeypatch.setenv("MIA_ESCALATION_ENABLED", "true")
+    monkeypatch.delenv("MIA_ALLOW_PAID", raising=False)
+    monkeypatch.setenv("MIA_ESCALATION_ALLOW_PAID", "true")
+    monkeypatch.setenv("MIA_ESCALATION_MAX_COST_USD", "1")
+    weak, strong = Fake("a", "tiny-1b", WEAK), Fake("b", "big-70b", GOOD)
+    client = client_for(tmp_path, monkeypatch, weak, strong)
+    info = client.get("/api/gateway/escalation").json()
+    assert info["policy"]["enabled"] is True and info["policy"]["streaming"] == "not_supported"
+    assert info["policy"]["allow_paid_requested"] is True
+    assert info["policy"]["paid_escalation_effective"] is False  # route-level paid is off
+    assert info["stats"]["attempted"] == 0
+    chat(client, "conv-esc-stats-1")
+    stats = client.get("/api/gateway/escalation").json()["stats"]
+    assert stats["attempted"] == 1 and stats["accepted"] == 1
+    assert client.get("/api/gateway/overview").json()["escalation"]["stats"]["accepted"] == 1
+    assert client.post("/api/gateway/escalation", json={}).status_code == 405  # no write surface
+
+
+def test_stats_count_skips_with_reasons():
+    from mia.gateway.escalation import EscalationStats
+    s = EscalationStats()
+    s.record("skipped", "extra-attempt limit reached")
+    s.record("failed")
+    snap = s.snapshot()
+    assert snap["skipped"] == 1 and snap["failed"] == 1 and snap["attempted"] == 1
+    assert snap["skip_reasons"] == {"extra-attempt limit reached": 1}
+
