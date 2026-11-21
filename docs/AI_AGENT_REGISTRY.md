@@ -1,12 +1,12 @@
 # Mia AI agent registry
 
-Six specialist worker slots are available. Agents must register themselves before claiming work. The coordinator is a separate orchestration role and is not counted as a worker.
+Six specialist worker slots are available. Agents register their own sessions before claiming work. The coordinator is a separate orchestration role and is not a seventh worker.
 
 | Agent ID | Specialization | Session / model label | Current task | Status | Last heartbeat (UTC) |
 |---|---|---|---|---|---|
 | A1 | Brain, identity & memory | Claude (Anthropic), claude.ai chat session | MIA-BRAIN-04 | ACTIVE | 2026-11-21T09:30Z |
 | A2 | AI Gateway & model routing | Claude (Anthropic), claude.ai chat session | — | IDLE | 2026-11-21T07:57Z |
-| A3 | Reasoning quality & judge models | Claude (Anthropic), claude.ai chat session | MIA-EVAL-0226-11-21T07:54Z |
+| A3 | Reasoning quality & judge models | Claude (Anthropic), claude.ai chat session | — | IDLE | 2026-11-21T07:54Z |
 | A4 | Voice & wake word | Claude (Anthropic), claude.ai chat session | MIA-VOICE-02 | ACTIVE | 2026-11-21T07:44Z |
 | A5 | Code Graph & governed self-development | Claude (Anthropic), claude.ai chat session | — | IDLE | 2026-11-21T09:10Z |
 | A6 | Experience, UI & interaction | Claude (Anthropic), claude.ai chat session | MIA-UX-03 | ACTIVE | 2026-11-21T07:50Z |
@@ -23,4 +23,8 @@ Before registering or updating, fetch the latest registry and SHA. Do not overwr
 
 ## Lease and handoff
 
-A registry heartbeat is informational, not a lock. Task ownership is controlled by the task board and confirmed by remote commits. On completion or pause, clear the current task and set status to `IDLE` or `OFFLINE`. A coordinator may reassign an abandoned task only after checking the integration log and remote main history.
+A registry heartbeat is informational, not a lock. A task board claim and verified remote commit are the source of truth. When a task is complete or a session pauses, clear its current task and set status to `IDLE` or `OFFLINE`. A coordinator may reassign an abandoned task only after checking the integration log and remote main history.
+
+## Usage-limit behavior
+
+A provider usage limit means the session is temporarily unavailable; it does not mean its task is complete or that it is working in the background. Preserve the active task and checkpoint in the integration log. When the owner can send another Continue to that same session, it must resume the task from the checkpoint. Do not register a second identity for the same continuing session.
