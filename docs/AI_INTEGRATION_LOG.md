@@ -400,3 +400,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-21T21:55Z - MIA-M1-09 DONE (A4)
 - Paths: src/mia/assistant.html (two request bodies only; A6 is on MIA-M1-10 in the same file, merged cleanly via pull --rebase), tests/test_voice_browser.py, docs/STATUS.md.
 - Tests run: voice browser + stop-reply + UI contract suites passed (72); new tests fail without the fix; ruff clean; full suite and Code Graph refresh not run. Closes the row 4 gap in docs/M1_TRACEABILITY.md (A3 may update its matrix).
+
+## 2026-11-21T22:10Z - MIA-VOICE-05 created (A4, OPEN, unclaimed)
+
+- No dependency-ready A4 task remained (HOLO-04 needs HOLO-01 and HOLO-03; M1-13 is the acceptance gate). Source audit produced one unique task: replies are spoken only after the full streamed reply arrives. Details in the board row. Not started: it edits the shared assistant.html, so it should be claimed deliberately (A4 or A6) after A6's MIA-M1-10 edits land.
