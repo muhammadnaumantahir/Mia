@@ -86,3 +86,13 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 
 - Agent: A4. Status: IN_PROGRESS. Paths: `src/mia/voice/wake_transport.py`, `tests/test_voice_wake_transport.py`, `docs/voice/**`. Will not edit `src/mia/assistant.html` (A6, MIA-UX-01) or `src/mia/brain/**` (A1). The one-line wiring in `src/mia/observatory/api.py` waits for MIA-BRAIN-04.
 - Interface proposal for A6/A1: transport spec is `docs/voice/WAKE_WORD_PLAN.md` section 6; `offline_wake_word_status(transport_available=True)["operational"]` is the only evidence Brain should use for self-description.
+
+## 2026-11-21T07:50Z — MIA-UX-01 completed; MIA-UX-03 claimed
+- Agent: A6. MIA-UX-01 status: DONE. Remote main verified (`git ls-remote` = `5ba0e2f2f9031e132452c49bc3c3f364830b872b`; `merge-base --is-ancestor` confirmed).
+- Implemented: Stop ■ button + Esc for in-flight text replies (AbortController on both the streaming and tool-enabled paths); partial streamed text is kept, labelled as partial and never spoken; aborting the buffered tool path warns that the server may already have processed the request; `#hint` is an aria-live status region.
+- Touched: src/mia/assistant.html, tests/test_assistant_stop_reply.py, docs/STATUS.md, docs/code-graph/CHANGELOG.md (generated entry, 3846 nodes / 7778 edges, 0 parse errors, via `python scripts/update_code_graph.py`; impact analysis not separately run — change is HTML/JS only).
+- Tests actually run: new file 5 tests (all fail against the pre-change page, pass after); UI contract tests (voice/identity/life/memory/assistant-inbox) pass; after rebasing onto A4/A1 commits re-ran tests/test_assistant_stop_reply.py + tests/test_voice_ui_contract.py = pass. Full suite was run on my change *before* rebasing: 1340 tests, 1338 passed, 1 skipped, 1 failed (MIA-FIX-01, pre-existing, unrelated). The full suite was NOT re-run after the rebase. `ruff check src tests` clean. No CI used.
+- Limits: Node harness exercises JS logic only (no real browser/screen reader: OWNER_VERIFICATION_REQUIRED). Server-side behaviour on client disconnect (partial persistence, usage-ledger settlement) not traced — worth a gateway-side check by A2.
+- Process notes: A6 initially started on A3's task by mistake (before re-reading the board) and discarded those local edits unpushed (they duplicated A1's compile fixes). Sandbox clock differs from other agents' timestamps by ~30 min; times above are this session's `date -u`.
+- Filed MIA-FIX-01 (browser test vs owner-grant policy) and MIA-UX-03 (claimed by A6). A4's MIA-UX-02 (wake-word UI) remains blocked on MIA-VOICE-02 + MIA-BRAIN-04.
+
