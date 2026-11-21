@@ -31,7 +31,9 @@ import re
 from collections.abc import Callable
 from typing import Any
 
+from mia.memory.context import record_in_scope
 from mia.memory.safety import find_secret
+from mia.memory.store import normalise_project_name, project_key
 from mia.memory.structured import MAX_BODY, MAX_TITLE, RecordNotFoundError
 
 DUPLICATE_SIMILARITY = 0.8
@@ -327,7 +329,8 @@ class CaptureService:
         subject = self._subject(content)
         title = _title_for(subject, re.sub(r"^(?:that|this)\s+", "", content, flags=re.I))
         origin = {**(origin_base or {}), "capture": "explicit"}
-        dup, conflicts, rejected = self._compare(rtype, title, content)
+        project = self._conversation_project(origin_base)
+        dup, conflicts, rejected = self._compare(rtype, title, content, project)
         if dup:
             entry = {"reason": "duplicate", "record_id": dup["record_id"], "title": dup["title"]}
             # the owner said it again, explicitly: that confirms an earlier suggestion
@@ -349,7 +352,7 @@ class CaptureService:
             record_id, _ = self.memory.structured.add(
                 record_type=rtype, title=title, body=content, provenance="owner_provided",
                 importance=min(1.0, _IMPORTANCE.get(rtype, 0.5) + 0.1), origin=origin,
-                actor="capture",
+                project=project, actor="capture",
             )
         except ValueError as exc:
             result["skipped"].append({"reason": "invalid", "detail": str(exc)})
@@ -397,7 +400,9 @@ class CaptureService:
         if find_secret(new_text):
             result["skipped"].append({"reason": "credential"})
             return result
-        matches = self._find_matches(_clean_body(topic))
+        matches = self._find_matches(
+            _clean_body(topic), self._conversation_project(origin_base)
+        )
         if len(matches) > 1:
             result["needs_clarification"] = (
                 "More than one memory matches; nothing was changed. Tell me which: "
@@ -429,6 +434,7 @@ class CaptureService:
         model_candidates: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         seen: set[str] = set()
+        project = self._conversation_project(origin_base)
         for sentence in re.split(r"(?<=[.!?])\s+|\n+", body):
             sentence = _clean_body(sentence)
             if not sentence or len(sentence.split()) < MIN_SENTENCE_WORDS:
@@ -457,7 +463,7 @@ class CaptureService:
             if key in seen:
                 continue
             seen.add(key)
-            dup, conflicts, rejected = self._compare(rtype, title, sentence)
+            dup, conflicts, rejected = self._compare(rtype, title, sentence, project)
             if dup:
                 result["skipped"].append({"reason": "duplicate", "record_id": dup["record_id"]})
                 self._reinforce(dup)
@@ -481,7 +487,7 @@ class CaptureService:
                     record_type=rtype, title=title, body=sentence, provenance="observed",
                     confidence=confidence, evidence=[{"type": "message", "ref": origin_base["message_id"]}],
                     status="active" if auto_save else "pending", importance=_IMPORTANCE.get(rtype, 0.5),
-                    origin=origin, actor="capture",
+                    origin=origin, project=project, actor="capture",
                 )
             except ValueError as exc:
                 result["skipped"].append({"reason": "invalid", "detail": str(exc)})
@@ -570,11 +576,28 @@ class CaptureService:
             users = users[:-1]  # the current message was already appended
         return _clean_body(users[-1]["content"]) if users else ""
 
+    def _conversation_project(self, origin_base: dict[str, Any] | None) -> str | None:
+        """The owner-assigned project of the capturing conversation, if any (opt-in)."""
+        conversation_id = (origin_base or {}).get("conversation_id")
+        if not conversation_id:
+            return None
+        convo = self.memory.get_conversation(str(conversation_id)) or {}
+        try:
+            return normalise_project_name(convo.get("project"))
+        except ValueError:
+            return None
+
     def _compare(
-        self, record_type: str, title: str, text: str
+        self, record_type: str, title: str, text: str, project: str | None = None
     ) -> tuple[dict[str, Any] | None, list[dict[str, Any]], bool]:
-        """Return (duplicate, conflicts, previously_rejected) against existing records."""
+        """Return (duplicate, conflicts, previously_rejected) against existing records.
+
+        In a project conversation only that project's records and unscoped records are
+        compared, so a statement never confirms or supersedes another project's record.
+        """
         from mia.memory.structured import normalise_title
+
+        wanted = project_key(project)
 
         title_key = normalise_title(title)
         dup: dict[str, Any] | None = None
@@ -584,6 +607,8 @@ class CaptureService:
             # duplicates are matched across record types (the same sentence is the same
             # memory whatever it is labelled); conflicts only within the same type
             for rec in self.memory.structured.list(status=status, limit=MAX_COMPARE):
+                if not record_in_scope(rec, wanted):
+                    continue
                 sim = similarity(text, rec["body"])
                 same_title = normalise_title(rec["title"]) == title_key
                 if sim >= DUPLICATE_SIMILARITY:
@@ -598,16 +623,18 @@ class CaptureService:
                                       "title_key_match": same_title})
         return dup, conflicts, rejected
 
-    def _find_matches(self, query: str) -> list[dict[str, Any]]:
+    def _find_matches(self, query: str, project: str | None = None) -> list[dict[str, Any]]:
+        wanted = project_key(project)
         found = self.memory.retrieve_records(query, limit=6)
         records = []
         for hit in found:
             record = self.memory.structured.get(hit["record_id"])
-            if record:
+            if record and record_in_scope(record, wanted):
                 records.append(record)
         if not records:
             records = [
                 r for r in self.memory.structured.list(query=query, limit=6)
                 if r["status"] in {"active", "completed", "pending", "outdated", "archived"}
+                and record_in_scope(r, wanted)
             ]
         return records

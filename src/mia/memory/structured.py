@@ -149,6 +149,12 @@ def _clean_origin(origin: dict[str, Any] | None) -> dict[str, Any]:
     return origin
 
 
+def _clean_project(project: str | None) -> str | None:
+    from mia.memory.store import normalise_project_name  # lazy: store imports this module
+
+    return normalise_project_name(project)
+
+
 def _check_content(title: str, body: str, details: dict[str, Any] | None) -> None:
     reject_secret(title, field="title")
     reject_secret(body, field="body")
@@ -209,9 +215,14 @@ class StructuredMemory:
         temporary: bool = False,
         expires_at: str | None = None,
         origin: dict[str, Any] | None = None,
+        project: str | None = None,
         actor: str = "owner",
     ) -> tuple[str, list[str]]:
-        """Create a record. Returns (record_id, ids of competing active records)."""
+        """Create a record. Returns (record_id, ids of competing active records).
+
+        ``project`` is an optional owner-visible scope (MIA-BRAIN-06): a scoped record
+        is recalled only into conversations of the same project (or with no project).
+        """
         with self._connect() as db:
             return self._insert(
                 db,
@@ -228,6 +239,7 @@ class StructuredMemory:
                 temporary=temporary,
                 expires_at=expires_at,
                 origin=origin,
+                project=project,
                 actor=actor,
             )
 
@@ -274,6 +286,7 @@ class StructuredMemory:
                 temporary=bool(old["temporary"]),
                 expires_at=old["expires_at"],
                 origin={"corrects": record_id},
+                project=old["project"],  # a correction keeps the record's project scope
                 actor=actor,
                 audit_action="record_corrected",
             )
@@ -537,6 +550,34 @@ class StructuredMemory:
                 target_id=record_id,
                 detail={"expires_at": expiry},
             )
+
+    def set_project(
+        self, record_id: str, project: str | None, *, actor: str = "owner"
+    ) -> bool:
+        """Scope a record to a project, or with ``None`` clear the scope (owner opt-in).
+
+        Returns False when nothing changed. Raises ValueError for an invalid name and
+        RecordNotFoundError for an unknown record. The change is audited.
+        """
+        name = _clean_project(project)
+        with self._connect() as db:
+            row = self._row(db, record_id)
+            if row["project"] == name:
+                return False
+            self._snapshot(db, row, actor, "project_changed")
+            db.execute(
+                "UPDATE structured_memory SET project = ?, updated_at = ? WHERE record_id = ?",
+                (name, _now(), record_id),
+            )
+            AuditLog.write(
+                db,
+                actor=actor,
+                action="record_project_set",
+                target_type="memory_record",
+                target_id=record_id,
+                detail={"from": row["project"], "to": name},
+            )
+        return True
 
     def expire_due(self, *, now: str | None = None, actor: str = "maintenance") -> list[str]:
         """Expire temporary memories past their expiry; they stop being retrieved."""
@@ -989,6 +1030,7 @@ class StructuredMemory:
             for key in (
                 "record_type", "title", "body", "status", "provenance", "confidence",
                 "importance", "temporary", "expires_at", "details_json", "origin_json",
+                "project",
             )
         }
         db.execute(
@@ -1021,6 +1063,7 @@ class StructuredMemory:
         temporary: bool = False,
         expires_at: str | None = None,
         origin: dict[str, Any] | None = None,
+        project: str | None = None,
         actor: str = "owner",
         audit_action: str = "record_created",
     ) -> tuple[str, list[str]]:
@@ -1051,6 +1094,7 @@ class StructuredMemory:
         if is_temporary and expiry is None:
             raise ValueError("a temporary memory needs an expires_at timestamp")
         origin_json = json.dumps(_clean_origin(origin), ensure_ascii=False, sort_keys=True)
+        clean_project = _clean_project(project)
         record_id = uuid.uuid4().hex
         key = normalise_title(title)
         now = _now()
@@ -1061,8 +1105,8 @@ class StructuredMemory:
                 record_id, record_type, title, title_key, body, status, provenance,
                 confidence, evidence_json, details_json, supersedes_id,
                 created_at, updated_at, resolved_at,
-                importance, temporary, expires_at, origin_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                importance, temporary, expires_at, origin_json, project
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record_id, record_type, title, key, body, status, provenance,
@@ -1070,6 +1114,7 @@ class StructuredMemory:
                 json.dumps(links, ensure_ascii=False), details_json, supersedes_id,
                 now, now, now if status == "completed" else None,
                 clean_importance, 1 if is_temporary else 0, expiry, origin_json,
+                clean_project,
             ),
         )
         if status in RETRIEVABLE:
@@ -1085,6 +1130,7 @@ class StructuredMemory:
                 "provenance": provenance,
                 "status": status,
                 "conflicts_with": competing,
+                **({"project": clean_project} if clean_project else {}),
             },
         )
         return record_id, competing

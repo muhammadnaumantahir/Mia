@@ -161,3 +161,24 @@ DOCX, XLSX and PPTX are ZIP-based containers. Before an optional parser is loade
 
 `POST /api/memory/purge` lets the owner remove conversations and/or knowledge items whose last update is older than `older_than_days` (minimum 1). It never runs automatically. The default is `dry_run: true`, which returns counts and up to 20 sample titles per kind without deleting anything; deletion requires an explicit `dry_run: false`. A real purge runs in one transaction (messages, items and their full-text index rows) and records a `retention_purge` Observatory event with counts only. There is no automatic expiry, and the Observatory event log and usage ledger are not touched. The assistant sidebar's Memory cleanup panel previews first and only offers deletion for the previewed age, behind a browser confirmation.
 
+
+## Record-level project scoping (MIA-BRAIN-06)
+
+Design note. Structured records carry an optional `project` (nullable column added by
+migration 5; `NULL` = unscoped, the default, so existing records and behaviour are unchanged).
+
+- **Opt-in.** A record is scoped only when the owner sets a project (API `project` field on
+  create, `POST /api/memory/records/{id}/project`, audited) or when it is captured in a
+  conversation the owner has already assigned to a project.
+- **Recall.** A conversation with no project recalls any record (original behaviour). A
+  conversation in a project recalls that project's records and unscoped records, never
+  another project's. The rule (`mia.memory.context.record_in_scope`) is applied to keyword,
+  intent, semantic and linked-record candidates, so a relationship link cannot carry an
+  out-of-scope record into a prompt.
+- **Capture.** Duplicate/conflict checks and explicit "update X" only consider in-scope
+  records, so a statement in one project never confirms or supersedes another project's
+  record. "Forget X" stays unscoped on purpose: owner deletion is never blocked by scope.
+  Temporary conversations are still never captured from. Corrections keep the project.
+- **Limits.** Scope is a recall filter applied after retrieval, so a pool dominated by
+  another project's records can return fewer candidates. Project names match
+  case-insensitively and are not a permission boundary or a security control. No UI yet.

@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from mia.memory.store import MemoryStore, extract_query_terms
+from mia.memory.store import MemoryStore, extract_query_terms, project_key
 from mia.memory.structured import RECORD_TYPES, normalise_title
 
 _TRUST_WEIGHT = {"user": 0.25, "trusted": 0.15, "untrusted": 0.0}
@@ -244,12 +244,28 @@ def _record_weight(record: dict[str, Any], conversation_id: str, now: datetime) 
     return weight
 
 
+def record_in_scope(record: dict[str, Any], wanted_project: str | None) -> bool:
+    """Whether a structured record may be recalled into a conversation (MIA-BRAIN-06).
+
+    ``wanted_project`` is the conversation's project key (``None`` = no project).
+    A conversation with no project keeps the original behaviour (any record). A
+    conversation in a project sees that project's records and unscoped records, and
+    never another project's records.
+    """
+    if wanted_project is None:
+        return True
+    key = project_key(record.get("project"))
+    return key is None or key == wanted_project
+
+
 def _dedupe_key(text: str) -> str:
     return re.sub(r"\W+", "", text.lower())[:160]
 
 
 def _add_linked_records(
-    store: MemoryStore, scored: list[tuple[float, str, dict[str, Any]]]
+    store: MemoryStore,
+    scored: list[tuple[float, str, dict[str, Any]]],
+    wanted_project: str | None = None,
 ) -> None:
     """Follow up to two hops of non-private links from the best retrieved records.
 
@@ -285,6 +301,8 @@ def _add_linked_records(
                 record = store.structured.get(other)
                 if not record or record["status"] not in {"active", "completed"}:
                     continue
+                if not record_in_scope(record, wanted_project):
+                    continue  # a link never carries another project's record in
                 score = frontier[anchor] - (0.05 * depth)
                 record["_linked_via"] = link["relation"]
                 scored.append((score, "structured", record))
@@ -322,12 +340,19 @@ def assemble_memory_context(
         return EMPTY_PACKET
     now = now or datetime.now(UTC)
 
+    current_convo = store.get_conversation(conversation_id) or {}
+    wanted_project = project_key(current_convo.get("project"))
+
     recent_ids = store.recent_message_ids(conversation_id, budget.recent_window)
     items = store.retrieve_items(prompt, limit=budget.candidate_pool)
     messages = store.retrieve_messages(
         prompt, limit=budget.candidate_pool, exclude_message_ids=recent_ids
     )
-    records = store.retrieve_records(prompt, limit=budget.candidate_pool)
+    records = [
+        record
+        for record in store.retrieve_records(prompt, limit=budget.candidate_pool)
+        if record_in_scope(record, wanted_project)
+    ]
     lexical_record_ids = {record["record_id"] for record in records}
 
     scored: list[tuple[float, str, dict[str, Any]]] = []
@@ -360,6 +385,8 @@ def assemble_memory_context(
         for record in store.structured.recent(intent_types, limit=INTENT_POOL):
             if record["record_id"] in lexical_record_ids:
                 continue
+            if not record_in_scope(record, wanted_project):
+                continue
             scored.append((0.3 + _record_weight(record, conversation_id, now), "structured", record))
     if reranker is not None:
         # Add a small, bounded recent candidate pool so embeddings can recover
@@ -384,7 +411,9 @@ def assemble_memory_context(
                 existing_ids.add(item_id)
         for record in store.structured.recent(RECORD_TYPES, limit=INTENT_POOL):
             record_id = str(record.get("record_id") or "")
-            if record_id and record_id not in existing_ids:
+            if record_id and record_id not in existing_ids and record_in_scope(
+                record, wanted_project
+            ):
                 scored.append((-0.05 + _record_weight(record, conversation_id, now),
                                "structured", record))
                 semantic_candidate_ids.add(record_id)
@@ -419,7 +448,7 @@ def assemble_memory_context(
             ]
 
     scored.sort(key=lambda entry: entry[0], reverse=True)
-    _add_linked_records(store, scored)
+    _add_linked_records(store, scored, wanted_project)
 
     references: list[MemoryReference] = []
     blocks: list[str] = []

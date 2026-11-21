@@ -324,6 +324,13 @@ class MemoryRecordInput(BaseModel):
     importance: float | None = None
     temporary: bool = False
     expires_at: str | None = Field(default=None, max_length=40)
+    project: str | None = Field(default=None, max_length=64)
+
+
+class MemoryRecordProject(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project: str | None = Field(default=None, max_length=64)
 
 
 class MemoryRecordEdit(BaseModel):
@@ -4634,6 +4641,7 @@ def create_app(
                 importance=item.importance,
                 temporary=item.temporary,
                 expires_at=item.expires_at,
+                project=item.project,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -4698,6 +4706,26 @@ def create_app(
             {"record_id": new_id, "supersedes_id": record_id, "conflicts_with": conflicts},
         )
         return {"record_id": new_id, "supersedes_id": record_id, "conflicts_with": conflicts}
+
+    @app.post("/api/memory/records/{record_id}/project")
+    def set_memory_record_project(
+        record_id: str, item: MemoryRecordProject
+    ) -> dict[str, Any]:
+        """Scope a record to a project, or clear the scope with ``null`` (owner opt-in)."""
+        try:
+            changed = memory_store.structured.set_project(record_id, item.project)
+        except RecordNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Record not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if changed:
+            _record_event(
+                "record_project_set",
+                "Owner changed the project scope of a memory record",
+                {"record_id": record_id, "project": item.project},
+            )
+        return {"record_id": record_id, "project": memory_store.structured.get(record_id)["project"],
+                "changed": changed}
 
     @app.post("/api/memory/records/{record_id}/status")
     def set_memory_record_status(record_id: str, item: MemoryRecordStatus) -> dict[str, str]:
