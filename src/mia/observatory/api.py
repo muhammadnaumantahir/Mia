@@ -39,6 +39,7 @@ from mia.agent.tasks import (
 from mia.agent.tools import ToolRegistry, ToolResult
 from mia.brain.broker import OwnerPermissionEvaluator, ToolBroker
 from mia.brain.capabilities import CapabilityRegistry
+from mia.brain.judges import policy_snapshot as judge_policy_snapshot
 from mia.brain.orchestrator import Brain, TurnRequest
 from mia.brain.plan import PlanStore
 from mia.brain.self_description import build_runtime_manifest, render_runtime_manifest
@@ -5126,6 +5127,12 @@ def create_app(
             "policy": policy_snapshot(brain.escalation_policy(), paid_route_policy()),
             "stats": brain.escalation_stats.snapshot(),
         }
+
+    @app.get("/api/brain/judges")
+    def brain_judges() -> dict[str, Any]:
+        """Read-only advisory-judge policy and process-local counters (opt-in; off by default)."""
+        return {"policy": judge_policy_snapshot(brain.judge_policy()),
+                "stats": brain.judge_stats.snapshot()}
 
     @app.get("/api/gateway/decisions")
     def gateway_decisions(limit: int = 20) -> dict[str, Any]:

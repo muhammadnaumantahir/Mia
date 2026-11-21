@@ -27,7 +27,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
+import os
 import re
+import threading
+from collections import Counter
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 
@@ -262,3 +266,69 @@ def combine_confidence(verifier_confidence: str, report: JudgeReport) -> str:
         lowered = {"high": "medium", "medium": "low", "low": "low"}[current]
         return lowered
     return current
+
+
+# ---------------------------------------------------------------- owner policy + counters
+def judge_policy_from_env() -> JudgePolicy:
+    """Opt-in policy from the environment. Invalid values fail closed (back to defaults)."""
+
+    def flag(name: str) -> bool:
+        return os.getenv(name, "false").strip().lower() == "true"
+
+    def number(name: str, default: float) -> float:
+        try:
+            value = float(os.getenv(name, "") or default)
+        except ValueError:
+            return default
+        return value if math.isfinite(value) and value >= 0 else default
+
+    return JudgePolicy(
+        enabled=flag("MIA_JUDGES_ENABLED"),
+        max_judges=int(number("MIA_JUDGES_MAX", 2)),
+        max_concurrency=max(1, int(number("MIA_JUDGES_CONCURRENCY", 2))),
+        per_judge_timeout_s=number("MIA_JUDGES_TIMEOUT_S", 20.0) or 20.0,
+        total_timeout_s=number("MIA_JUDGES_TOTAL_TIMEOUT_S", 30.0) or 30.0,
+        allow_remote=flag("MIA_JUDGES_ALLOW_REMOTE"),
+        allow_paid=flag("MIA_JUDGES_ALLOW_PAID"),
+        max_total_cost_usd=number("MIA_JUDGES_MAX_COST_USD", 0.0),
+    )
+
+
+def policy_snapshot(policy: JudgePolicy) -> dict[str, object]:
+    """Read-only owner view. Paid judges additionally need the gateway route policy to allow paid."""
+    return {
+        "enabled": policy.enabled,
+        "max_judges": max(0, min(policy.max_judges, HARD_MAX_JUDGES)),
+        "hard_max_judges": HARD_MAX_JUDGES,
+        "max_concurrency": policy.max_concurrency,
+        "per_judge_timeout_s": policy.per_judge_timeout_s,
+        "total_timeout_s": policy.total_timeout_s,
+        "allow_remote": policy.allow_remote,
+        "allow_paid": policy.allow_paid,
+        "max_total_cost_usd": policy.max_total_cost_usd,
+        "authority": "advisory only: may lower confidence, never raise it or change permissions",
+    }
+
+
+class JudgeStats:
+    """Process-local counters (reset on restart; not persisted, not a billing record)."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._counts: Counter[str] = Counter()
+        self._skips: Counter[str] = Counter()
+
+    def record(self, outcome: str, reason: str = "") -> None:
+        """outcome: skipped | ran | lowered_confidence | failed."""
+        with self._lock:
+            self._counts[outcome] += 1
+            if outcome == "skipped" and reason:
+                self._skips[reason[:80]] += 1
+
+    def snapshot(self) -> dict[str, object]:
+        with self._lock:
+            c = self._counts
+            return {"ran": c["ran"], "lowered_confidence": c["lowered_confidence"],
+                    "failed": c["failed"], "skipped": c["skipped"],
+                    "top_skip_reasons": dict(self._skips.most_common(5)),
+                    "note": "process-local; judge spend is recorded by the normal usage ledger"}

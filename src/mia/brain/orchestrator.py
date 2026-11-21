@@ -31,6 +31,7 @@ from mia.gateway.escalation import (
     decide_escalation,
     escalation_policy_from_env,
 )
+from mia.gateway.judge_call import make_judge_call
 from mia.gateway.service import CompletionResult, ModelGateway, StreamEvent
 from mia.memory.store import MemoryStore
 
@@ -39,6 +40,15 @@ from .capabilities import CapabilityRegistry
 from .context import BuiltContext, build_context, has_persistent_prior_conversation
 from .diagnostics import DiagnosticsLog, TurnTrace, scrub
 from .intent import IntentAnalysis, analyze_intent
+from .judges import (
+    JudgeCall,
+    JudgePolicy,
+    JudgeStats,
+    combine_confidence,
+    judge_policy_from_env,
+    run_judges,
+    should_judge,
+)
 from .plan import Plan, PlanRunner, PlanStep, PlanStore, RunPolicy, StepOutcome, summarize_plan
 from .planning import generate_plan
 from .router import BrainRouter, NoSuitableModel, RouteDecision, RoutingPreferences
@@ -124,6 +134,8 @@ class Brain:
         on_reply: Callable[[str, str, list[dict[str, Any]]], None] | None = None,
         approval_status: Callable[[str], str | None] | None = None,
         escalation_policy: Callable[[], EscalationPolicy] = escalation_policy_from_env,
+        judge_policy: Callable[[], JudgePolicy] = judge_policy_from_env,
+        judge_call: JudgeCall | None = None,
     ) -> None:
         self.gateway, self.memory, self.tools, self.identity = gateway, memory, tools, identity
         self.observatory = observatory
@@ -144,6 +156,12 @@ class Brain:
         self.approval_status = approval_status
         self.escalation_policy = escalation_policy
         self.escalation_stats = EscalationStats()
+        self.judge_policy = judge_policy
+        self.judge_stats = JudgeStats()
+        self._judge_call = judge_call or make_judge_call(
+            gateway, lambda: self.route_policy(),
+            on_result=lambda res, req: self._usage(
+                res, "judge", req.estimated_input_tokens, req.max_output_tokens))
 
     # ------------------------------------------------------------------ events
     def _event(self, **kwargs: Any) -> None:
@@ -357,6 +375,7 @@ class Brain:
         text, provider, model, attempted = await self._maybe_escalate(
             p, text, provider, model, attempted, ledger, bool(pending or plan is not None))
         final, report = self._finish_text(p, text, ledger)
+        report = await self._maybe_judge(p, final, provider, model, report)
         self._store_reply(p, final)
         p.trace.execution = {**p.trace.execution, "provider_model": f"{provider}/{model}",
                              "attempted": attempted}
@@ -416,6 +435,53 @@ class Brain:
         if not better:
             return keep
         return res.content, res.provider_id, res.model_id, [*attempted, *res.attempted_candidates]
+
+    # ------------------------------------------------------------------ judges
+    async def _maybe_judge(self, p: Prepared, answer: str, provider: str, model: str,
+                           report: dict[str, Any]) -> dict[str, Any]:
+        """Advisory second opinion (MIA-EVAL-03). Opt-in, bounded, never fails the turn.
+
+        Judges may only keep or lower the verifier's confidence. They never change the reply
+        text, permissions or approvals. Streamed turns are not judged yet.
+        """
+        try:
+            policy = self.judge_policy()
+        except Exception:
+            return report
+        if not policy.enabled or p.built is None or not answer.strip():
+            return report
+        codes = [str(i.get("code")) for i in report.get("issues", [])]
+        go, why = should_judge(policy, category=p.analysis.category,
+                               complexity=p.analysis.complexity, issue_codes=codes,
+                               high_impact=p.analysis.high_impact)
+        if not go:
+            self.judge_stats.record("skipped", why)
+            return report
+        try:
+            private = bool(p.built.memory_retrieved or p.built.references
+                           or self.preferences().local_only)
+            judged = await run_judges(
+                policy, list(p.built.candidates), prompt=p.request.prompt, answer=answer,
+                call=self._judge_call, category=p.analysis.category,
+                complexity=p.analysis.complexity, issue_codes=codes, sensitive=private,
+                high_impact=p.analysis.high_impact, generator_key=f"{provider}/{model}")
+        except Exception as exc:  # judges are advisory: the verified reply stands
+            p.trace.event("judges_failed", error=type(exc).__name__)
+            self.judge_stats.record("failed")
+            return report
+        p.trace.event("judges", **judged.to_dict())
+        if not judged.ran:
+            self.judge_stats.record("skipped", judged.skipped_reason)
+            return report
+        self.judge_stats.record("ran")
+        lowered = combine_confidence(str(report.get("confidence")), judged)
+        updated = {**report, "judges": judged.to_dict()}
+        if lowered != report.get("confidence"):
+            updated["confidence"] = lowered
+            self.judge_stats.record("lowered_confidence")
+        p.trace.verification = {**p.trace.verification, "confidence": updated["confidence"],
+                                "judges": judged.to_dict()}
+        return updated
 
     # ------------------------------------------------------------------ tool loop
     async def _tool_loop(self, p: Prepared, ledger: OperationLedger,
