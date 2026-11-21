@@ -83,7 +83,7 @@ The detailed task definitions, dependencies, scope and acceptance criteria are i
 
 | Task | Priority | Suggested owner | Status | Scope / acceptance |
 |---|---:|---|---|---|
-| MIA-LIFE-01 | P3 | A1 + A5 | OPEN | Owner-scoped data model, provenance, retention, export/delete, encryption boundaries and isolation tests. |
+| MIA-LIFE-01 | P3 | A1 + A5 | IN_PROGRESS (A1, claimed 2026-11-21T21:04Z; OWNER-APPROVED EXCEPTION to the M2-M6 gate: owner said in chat "get the other milestones tasks and do them"; A5 co-owner not consulted) | Owner-scoped data model, provenance, retention, export/delete, encryption boundaries and isolation tests. |
 | MIA-LIFE-02 | P3 | A1 | OPEN | Unified task API/persistence with status, priority, due dates, recurrence, project link and audit tests. |
 | MIA-LIFE-03 | P3 | A6 + A1 | OPEN | Accessible task workspace and Brain actions sharing one source of truth; destructive bulk confirmation. |
 | MIA-LIFE-04 | P3 | A1 + A6 | OPEN | Project workspace with goals, milestones, decisions, tasks and strict project isolation. |

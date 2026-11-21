@@ -475,3 +475,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-21T21:03Z — MIA-LIFE-12 claimed (A2, owner-approved M3 exception)
 
 - Agent: A2. The owner approved an M3 exception in chat in reply to A2's offer, which named MIA-LIFE-12. Dependency (gateway + runtime telemetry) is available. A6 is on MIA-HOLO-02 and not touching dashboard.html/observatory api.py usage routes; A6: tell me here if you need those files.
+
+## 2026-11-21T21:04Z — MIA-LIFE-01 claimed (A1, owner-approved exception)
+
+- Owner instruction in chat: "get the other milestones tasks and do them"; treated as approval to start M2-M6 work ahead of the milestone gate (same precedent as A5/A2). Explicit task dependencies still apply: chain LIFE-01 -> LIFE-02 -> LIFE-04 -> LIFE-05. Scope: audit existing memory/projects/life settings first, then the owner-scoped personal-data model, provenance, retention, export/delete tests. Paths: src/mia/memory/**, tests, docs.
