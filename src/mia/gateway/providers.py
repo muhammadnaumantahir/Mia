@@ -14,6 +14,7 @@ from .contracts import (
     AuthenticationProviderError,
     ModelCandidate,
     ModelRequest,
+    ModelUnavailableError,
     PermanentProviderError,
     ProviderResponse,
     StreamChunk,
@@ -78,6 +79,10 @@ def _http_error(name: str, exc: Exception, httpx: Any) -> Exception:
         if status in (401, 403):
             # Never retried: repeating a rejected credential cannot succeed.
             return AuthenticationProviderError(f"{name} rejected the credentials (HTTP {status})")
+        if status in (404, 410):
+            # Model removed/renamed or wrong endpoint: not the request's fault, so the
+            # gateway may try another candidate.
+            return ModelUnavailableError(f"{name} could not find the model or endpoint (HTTP {status})")
         return PermanentProviderError(f"{name} rejected the request with HTTP {status}")
     return TransientProviderError(f"{name} request failed")
 

@@ -108,6 +108,16 @@ class PermanentProviderError(RuntimeError):
     """A non-transient provider failure that should not be retried automatically."""
 
 
+class ModelUnavailableError(PermanentProviderError):
+    """The provider reported this model/endpoint as not found (HTTP 404/410).
+
+    Unlike other permanent errors this says nothing about the request itself (the
+    model was removed, renamed or never existed), so the gateway may fall back to
+    the next eligible candidate. It is not a provider outage: the circuit breaker
+    is not tripped.
+    """
+
+
 class StreamInterruptedError(TransientProviderError):
     """A stream failed after text was already delivered; ``partial_text`` is what was sent."""
 

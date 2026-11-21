@@ -14,6 +14,7 @@ from .contracts import (
     AuthenticationProviderError,
     ModelCandidate,
     ModelRequest,
+    ModelUnavailableError,
     PermanentProviderError,
     ProviderResponse,
     RoutePolicy,
@@ -317,6 +318,15 @@ class ModelGateway:
         )
         return reservation_id, reservation_id is not None
 
+    def _note_model_unavailable(self, candidate: ModelCandidate, name: str, exc: Exception) -> None:
+        """Record a not-found model so later turns rank it after healthy candidates.
+
+        Only the candidate is penalised; the provider is reachable, so the circuit
+        breaker is untouched.
+        """
+        self.health.record_failure(candidate, TransientProviderError(str(exc)))
+        self.events.add("model_unavailable", name, _brief(exc))
+
     def _release_budget_reservation(self, reservation_id: str | None) -> None:
         if reservation_id and self.usage_ledger is not None:
             self.usage_ledger.release_reservation(reservation_id)
@@ -428,6 +438,7 @@ class ModelGateway:
         skipped: list[str] = []
         budget_blocked: list[str] = []
         invalid: list[str] = []
+        unavailable: list[str] = []
 
         for candidate in ranked:
             provider_id = candidate.provider_id
@@ -498,6 +509,10 @@ class ModelGateway:
                 # Keep the reservation until expiry instead of silently refunding it.
                 keep_reservation = reservation_id is not None
                 raise
+            except ModelUnavailableError as exc:
+                self._note_model_unavailable(candidate, candidate_name, exc)
+                unavailable.append(candidate_name)
+                continue
             except AuthenticationProviderError as exc:
                 # Provider-specific: pause it and try another; never retried in a loop.
                 self.breaker.record_auth_failure(provider_id)
@@ -529,6 +544,10 @@ class ModelGateway:
             )
         if last_error:
             raise _aggregate_failure(attempted, last_error) from last_error
+        if unavailable:
+            raise ModelUnavailableError(
+                "No eligible model could be found at its provider: " + ", ".join(unavailable[:3])
+            )
         if budget_blocked:
             raise RuntimeError("Paid inference was blocked because its spend budget is reserved or exhausted")
         if skipped:
@@ -560,6 +579,7 @@ class ModelGateway:
         last_error: Exception | None = None
         skipped: list[str] = []
         budget_blocked: list[str] = []
+        unavailable: list[str] = []
 
         for candidate in ranked:
             provider_id = candidate.provider_id
@@ -674,6 +694,12 @@ class ModelGateway:
                 # Retain its reservation until TTL rather than silently refunding it.
                 keep_reservation = reservation_id is not None
                 raise
+            except ModelUnavailableError as exc:
+                if emitted:
+                    raise
+                self._note_model_unavailable(candidate, candidate_name, exc)
+                unavailable.append(candidate_name)
+                continue
             except AuthenticationProviderError as exc:
                 self.breaker.record_auth_failure(provider_id)
                 settled = True
@@ -710,6 +736,10 @@ class ModelGateway:
 
         if last_error:
             raise _aggregate_failure(attempted, last_error) from last_error
+        if unavailable:
+            raise ModelUnavailableError(
+                "No eligible model could be found at its provider: " + ", ".join(unavailable[:3])
+            )
         if budget_blocked:
             raise RuntimeError("Paid inference was blocked because its spend budget is reserved or exhausted")
         if skipped:
