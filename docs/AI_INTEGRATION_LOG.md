@@ -142,3 +142,15 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Commit on remote main: 24e591e (verified with git ls-remote). Rebase conflict in docs/STATUS.md resolved by keeping both agents' sections; no markers remain.
 - Tests run: full suite 1644 passed, 1 skipped, 1 failed (tests/test_browser_automation.py::test_browser_api_end_to_end, pre-existing). Code Graph refreshed (4012 nodes / 8102 edges).
 - Limitations: counters not persisted; no dashboard UI; fake providers only.
+
+## 2026-11-21T09:15Z — MIA-BRAIN-03 completed
+
+- Agent: A1. Status: DONE. Remote main verified via `git ls-remote`: `ba7f6cf` (rebased over A2's MIA-GW-02 commits).
+- Owner approved the design: opt-in project assignment; recall prefers the project's history. Implemented: memory schema migration 4 (`conversations.project`, NULL default); `MemoryStore.set_conversation_project` (normalised, <=64 chars, control characters rejected, audited as `conversation_project_set`); `POST /api/conversations/{id}/project` (null clears); project shown in conversation listings.
+- Recall rule (`src/mia/brain/context.py`): conversation in a project -> same project first, then unassigned, never another project; temporary chats always excluded; a conversation with no project keeps the previous behaviour. Prior-session check and tail share one generator.
+- Decisions to flag: (1) fallback to unassigned chats is a stricter reading of "prefers"; another project's chats are never recalled into a project. (2) A conversation with no project can still recall any project's latest chat (unchanged); revisit if the owner wants strict separation.
+- Touched: src/mia/memory/schema.py, src/mia/memory/store.py, src/mia/brain/context.py, src/mia/observatory/api.py (new route + model only), tests/test_project_continuity.py, docs/code-graph/CHANGELOG.md.
+- Tests actually run: full suite on the rebased tree = 1633 passed, 16 skipped; `ruff check src tests` clean. Two isolation tests were mutation-checked (a mutation letting other projects' chats through made both fail; source restored). One test of mine had a creation-order flaw that made it vacuous; found by the mutation check and fixed.
+- Code Graph: `python scripts/update_code_graph.py` run locally (4026 nodes / 8152 edges); its CHANGELOG entry is committed. It recorded the parent commit `946d180` because the tree was uncommitted at the time. I resolved a CHANGELOG merge conflict with A2's entry by keeping both. No impact analysis via the explorer was run.
+- Limits: no UI control yet (filed MIA-UX-02 for A6); structured memory records are not project-scoped (MIA-BRAIN-04); no live model run; CI not used.
+

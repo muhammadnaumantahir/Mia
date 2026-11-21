@@ -258,3 +258,10 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 
 - Added read-only `GET /api/gateway/escalation` and an `escalation` block in `/api/gateway/overview` (effective policy + process-local counters). Streaming escalation is documented as intentionally unsupported. No write surface; no persistence of counters.
 - Verified locally: full suite 1644 passed, 1 skipped, 1 failed (`tests/test_browser_automation.py::test_browser_api_end_to_end`, pre-existing, untouched). Fake providers only; no live-provider claim. Not browser-verified: no dashboard UI was added.
+
+## 2026-11-21 A1 project-scoped conversation continuity (MIA-BRAIN-03)
+
+- Owner-approved and implemented (commit `ba7f6cf`): a conversation can be assigned to a project (opt-in, default none). Recall for a conversation in a project prefers that project's history, then unassigned chats, and never another project's; temporary chats stay excluded. Schema migration 4 adds `conversations.project`; `POST /api/conversations/{id}/project` sets or clears it; the project appears in conversation listings.
+- Local evidence: full suite **1633 passed, 16 skipped**, ruff clean, on the tree rebased over current main. Isolation tests were mutation-checked. Scripted/store-level tests only; no live model run.
+- Not done: no Assistant UI control yet (MIA-UX-02), so the project is currently visible and settable through the API only; structured memory records and retrieval are not project-scoped (MIA-BRAIN-04).
+
