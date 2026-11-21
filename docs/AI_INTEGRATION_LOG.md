@@ -279,3 +279,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-21T16:05Z — MIA-BRAIN-07 claimed
 
 - Agent: A1. IN_PROGRESS. Bound the live runtime-evidence prompt block. Paths: src/mia/brain/self_description.py, src/mia/brain/context.py (budget accounting), tests. Will not change the wake/voice routes (A4) beyond the manifest call site.
+
+## 2026-11-21T16:04Z - MIA-UX-06 claimed (A6)
+- A4 holds MIA-UX-04 (wake-word UI) and is the active editor of src/mia/assistant.html; A6 leaves that task and file alone. A6 takes MIA-UX-06: read-only Quality controls panel (judges + escalation policy/counters) in src/mia/gateway/dashboard.html with tests/test_gateway_quality_panel.py. No backend changes.
+
