@@ -4413,9 +4413,38 @@ def create_app(
             "messages": memory_store.get_messages(conversation_id, limit=50),
         }
 
+    @app.get("/api/conversations/{conversation_id}/derived-memory")
+    def conversation_derived_memory(conversation_id: str) -> dict[str, Any]:
+        """Preview of the structured memories captured from a conversation."""
+        records = memory_store.derived_records_for_conversation(conversation_id)
+        return {"conversation_id": conversation_id, "records": records, "count": len(records)}
+
     @app.delete("/api/conversations/{conversation_id}")
-    def delete_conversation(conversation_id: str) -> dict[str, bool]:
-        return {"deleted": memory_store.delete_conversation(conversation_id)}
+    def delete_conversation(
+        conversation_id: str, forget_derived: bool = False
+    ) -> dict[str, Any]:
+        """Delete a conversation. Memories captured from it are kept (and listed in the
+        response) unless the owner opts in with ``forget_derived=true``."""
+        outcome = memory_store.delete_conversation_report(
+            conversation_id, forget_derived=forget_derived
+        )
+        if outcome["deleted"] or outcome["forgotten_records"]:
+            observatory.record_event(
+                category="memory",
+                event_type="conversation_deleted",
+                summary=(
+                    "Owner deleted a conversation"
+                    + (f" and forgot {outcome['forgotten_records']} derived memories"
+                       if outcome["forgotten_records"] else "")
+                ),
+                outcome="success",
+                layer_id="SPS-05",
+                payload={
+                    "derived_records": len(outcome["derived_records"]),
+                    "forgotten_records": outcome["forgotten_records"],
+                },
+            )
+        return outcome
 
     @app.post("/api/knowledge/ingest", status_code=201)
     def ingest_document(

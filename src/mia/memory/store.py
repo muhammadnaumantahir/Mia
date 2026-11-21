@@ -431,7 +431,7 @@ class MemoryStore:
         with self._connection() as db:
             conversations = db.execute(
                 """
-                SELECT conversation_id, title, created_at, updated_at
+                SELECT conversation_id, title, created_at, updated_at, temporary, project
                 FROM conversations
                 ORDER BY created_at, conversation_id
                 """
@@ -462,7 +462,14 @@ class MemoryStore:
             "exported_at": _now(),
             "conversations": [
                 {
-                    **dict(row),
+                    "conversation_id": row["conversation_id"],
+                    "title": row["title"],
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                    # Owner-set controls; omitting them would silently turn a private
+                    # (temporary) conversation or a project assignment into nothing.
+                    "temporary": bool(row["temporary"]),
+                    "project": row["project"],
                     "messages": messages_by_conversation.get(
                         str(row["conversation_id"]), []
                     ),
@@ -497,7 +504,46 @@ class MemoryStore:
             ).fetchone()
         return dict(row) if row else None
 
-    def delete_conversation(self, conversation_id: str) -> bool:
+    def derived_records_for_conversation(self, conversation_id: str) -> list[dict[str, Any]]:
+        """Structured memories captured from this conversation (owner provenance view).
+
+        A record is derived when its origin names the conversation or one of its
+        messages. Only ids, type, title and status are returned.
+        """
+        with self._connection() as db:
+            rows = db.execute(
+                """
+                SELECT record_id, record_type, title, status
+                FROM structured_memory
+                WHERE json_extract(origin_json, '$.conversation_id') = ?
+                   OR json_extract(origin_json, '$.message_id') IN (
+                        SELECT message_id FROM conversation_messages WHERE conversation_id = ?)
+                ORDER BY created_at, record_id
+                """,
+                (conversation_id, conversation_id),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def delete_conversation(
+        self, conversation_id: str, *, forget_derived: bool = False, actor: str = "owner"
+    ) -> bool:
+        return self.delete_conversation_report(
+            conversation_id, forget_derived=forget_derived, actor=actor
+        )["deleted"]
+
+    def delete_conversation_report(
+        self, conversation_id: str, *, forget_derived: bool = False, actor: str = "owner"
+    ) -> dict[str, Any]:
+        """Delete a conversation and say what it leaves behind.
+
+        Memories captured from the conversation are separate records and stay
+        recallable unless the owner opts in with ``forget_derived``; they are always
+        listed so the owner can see them. Each derived record is deleted on its own
+        (no correction chain), so an owner correction of one is not swept away.
+        ``forget_derived`` also works after the conversation is already gone. The
+        audit entry holds ids and counts only, never message or memory text.
+        """
+        derived = self.derived_records_for_conversation(conversation_id)
         with self._connection() as db:
             db.execute(
                 "DELETE FROM memory_usage WHERE conversation_id = ?", (conversation_id,)
@@ -508,7 +554,28 @@ class MemoryStore:
             )
             if cursor.rowcount:
                 db.execute("DELETE FROM memory_embedding_cache")
-        return cursor.rowcount > 0
+                AuditLog.write(
+                    db,
+                    actor=actor,
+                    action="conversation_deleted",
+                    target_type="conversation",
+                    target_id=conversation_id,
+                    detail={
+                        "derived_records": len(derived),
+                        "forget_derived": bool(forget_derived),
+                    },
+                )
+        forgotten = 0
+        if forget_derived:
+            forgotten = sum(
+                1 for record in derived
+                if self.structured.delete(record["record_id"], chain=False, actor=actor)
+            )
+        return {
+            "deleted": cursor.rowcount > 0,
+            "derived_records": derived,
+            "forgotten_records": forgotten,
+        }
 
     def purge_messages(self, message_ids: list[str], *, actor: str = "owner") -> int:
         """Delete specific chat messages (and their search-index rows). Returns the count."""
@@ -871,8 +938,25 @@ class MemoryStore:
                             (row["conversation_id"],),
                         )
                         db.execute(
+                            "DELETE FROM memory_usage WHERE conversation_id = ?",
+                            (row["conversation_id"],),
+                        )
+                        db.execute(
                             "DELETE FROM conversations WHERE conversation_id = ?",
                             (row["conversation_id"],),
+                        )
+                    if rows:
+                        AuditLog.write(
+                            db,
+                            actor="owner",
+                            action="conversations_retention_purge",
+                            target_type="conversation",
+                            target_id=f"{len(rows)} conversations",
+                            detail={
+                                "days": days,
+                                "count": len(rows),
+                                "ids": [r["conversation_id"] for r in rows[:50]],
+                            },
                         )
             if items:
                 rows = db.execute(
@@ -888,6 +972,23 @@ class MemoryStore:
                     for row in rows:
                         db.execute("DELETE FROM memory_fts WHERE item_id = ?", (row["item_id"],))
                         db.execute("DELETE FROM memory_items WHERE item_id = ?", (row["item_id"],))
+                        db.execute(
+                            "DELETE FROM memory_usage WHERE ref_type = 'knowledge' AND ref_id = ?",
+                            (row["item_id"],),
+                        )
+                    if rows:
+                        AuditLog.write(
+                            db,
+                            actor="owner",
+                            action="items_retention_purge",
+                            target_type="knowledge_item",
+                            target_id=f"{len(rows)} items",
+                            detail={
+                                "days": days,
+                                "count": len(rows),
+                                "ids": [r["item_id"] for r in rows[:50]],
+                            },
+                        )
             if not dry_run and (
                 result["conversations"]["count"] or result["items"]["count"]
             ):
