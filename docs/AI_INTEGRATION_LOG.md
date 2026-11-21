@@ -434,3 +434,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Paths: src/mia/gateway/service.py, tests/test_gateway_turn_deadline.py (10 new), docs/architecture/AI_GATEWAY.md, docs/STATUS.md, task board.
 - Tests actually run: new file 10 passed; 3 mutation checks each failed the intended tests; full suite before the final rebase: no failures, 1 skipped (Chromium path unset); after the rebase only the gateway subset was re-run (passed); ruff clean.
 - Remaining A2 candidates (not claimed): mark registry entry stale on HTTP 404; a mid-stream paid-spend cut-off and rate-limit header ingestion (listed as not-yet-done in AI_GATEWAY.md). M2+ A2 tasks are gated until the M2 queue is accounted for. A2 status: IDLE.
+
+## 2026-11-21T20:54Z — MIA-GW-07 created and claimed (A2)
+
+- Agent: A2. No eligible A2 task (M1 only has MIA-VOICE-05 open, A4's; M3+ gated). Scope: empty-model-output fallback, paths src/mia/gateway/**, tests/test_gateway_empty_response.py, docs.
