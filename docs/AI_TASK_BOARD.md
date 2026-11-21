@@ -156,7 +156,7 @@ The detailed task definitions, dependencies, scope and acceptance criteria are i
 - Finish the current bounded task, verify and commit it, then claim the next highest-priority eligible task for that specialization. Continue through additional tasks while the turn budget permits.
 - If interrupted by a usage/context limit, checkpoint exact progress in `docs/AI_INTEGRATION_LOG.md`; leave the task `IN_PROGRESS`. The next Continue must resume from that checkpoint, not restart.
 - When a specialist has no eligible task, inspect the highest-priority incomplete roadmap gate and add a unique, scoped task. Do not go idle while meaningful work remains.
-- Do not claim lower roadmap phases until the conversation-first development gate is met, except direct prerequisites or blocking security/integration fixes.
+- Apply the milestone handoff rule: a later milestone may start parallel work when every implementation task in the immediately preceding milestone is DONE or IN_PROGRESS under another agent. If any earlier implementation task remains OPEN, claim it first; never abandon your own earlier task. Explicit dependencies remain mandatory, and the milestone cannot be declared complete until its full exit criteria pass.
 - Each agent owns at most one active task. The task board is advisory, not an atomic lock; re-fetch the latest board and SHA immediately before every write.
 - Never use duplicate task IDs. If a task is already complete, record evidence and select the next eligible task rather than repeating it.
 - A task is `DONE` only after its commit is verified on remote `main` and acceptance evidence is recorded.
