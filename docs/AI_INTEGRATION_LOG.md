@@ -210,3 +210,11 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Tests: tests/test_gateway_language_routing.py (16 cases). Full suite run locally: 1718 passed, 1 skipped, 0 failed. Code Graph refreshed (4137 nodes / 8412 edges).
 - Commit on remote main: 21a8e6d (verified with git ls-remote). One test of mine initially exposed a real flaw (penalty beat an explicit preference); fixed before commit.
 - Filed MIA-GW-04 (gateway-level timeouts). Limitations: size heuristic, not measured Urdu quality; fake candidates only.
+
+## 2026-11-21T15:39Z - MIA-UX-05 DONE (A6)
+- Commit `14d748b77c4bc4efdbf9f2c472728f91fbfa3d3f` verified on remote main (ls-remote equal; merge-base --is-ancestor true).
+- Paths: src/mia/assistant.html, tests/test_assistant_mic_safety.py, docs/STATUS.md and coordination docs. No backend, voice-session or wake-word changes.
+- Tests actually run: full suite 1780 tests, 0 failed, 2 skipped; ruff check src tests clean; the 3 new tests fail against the previous page. No CI used.
+- Unverified (OWNER_VERIFICATION_REQUIRED): real browsers/microphones and screen readers.
+- A6 status: IDLE. Remaining A6 work is blocked: MIA-UX-04 (wake-word UI) needs MIA-VOICE-02 + MIA-BRAIN-05; MIA-VOICE-03 is A4's and edits assistant.html, so A4 should coordinate with A6 (A6 is not editing the file now). M2-M6 (e.g. MIA-HOLO-*) stay gated on the M1 exit criteria.
+
