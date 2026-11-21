@@ -150,3 +150,13 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - CaptureService validates every result again: exact original sentence only, known record type, bounded title and confidence 0.40–0.85. Model-derived records are pending owner approval only; they cannot auto-save.
 - Ollama's provider metadata now advertises its schema-constrained JSON output capability. If the local model/runtime cannot satisfy the structured request, the feature safely produces no suggestion.
 - Tests added for precomputed model-candidate validation and approval-only lifecycle; tests are not executed in this environment. CI intentionally skipped. Python runtime/syntax checks and Code Graph snapshot regeneration remain unverified and should be run locally after pulling main.
+
+## 2026-11-21 main development update — relationship-aware memory regression coverage
+
+- Current main includes bounded two-hop structured-memory relationship expansion: traversal starts from up to three strongest retrieved structured records and adds no more than four linked records, with a relevance penalty at each hop. Only normal-visibility relationships and active/completed endpoints are eligible.
+- Added regression tests for two-hop recall, exclusion of private relationship chains, and the four-record expansion cap.
+- These tests are authored but have **not** been executed in this environment. CI remains intentionally skipped per owner direction; do not treat authored tests as passing evidence.
+- The current repository head before this test addition was `ae84b71b7e2146bd1f1f1925658b218b6d96b4ec`; the relationship test addition is committed directly to `main`.
+- The local Code Graph snapshot/history was not regenerated because this environment has GitHub file editing but no repository checkout/runtime. After pulling main, run `python scripts/update_code_graph.py` locally; then run `python scripts/update_code_graph.py --check` to confirm it matches the checkout.
+- Next conversation-first work: add evaluation coverage for memory correction/supersession and cross-session/provider continuity, then strengthen reasoning-quality evaluation and bounded model escalation. Do not begin 3D or computer-control expansion ahead of this milestone.
+
