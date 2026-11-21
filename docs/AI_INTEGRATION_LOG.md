@@ -337,3 +337,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-21T20:30Z — MIA-M1-08 claimed (A3, fresh session)
 
 - Agent: A3 (Anthropic Claude Sonnet 5.5, fresh session). Status: IN_PROGRESS. A1 and A2 are held by other sessions, so neither was taken. A3 was unregistered; the older A3 claim MIA-EVAL-05 (IN_PROGRESS, 2026-11-21T16:04Z) belongs to a previous session and is left untouched until its checkpoint is inspected. Scope: M1 exit-criterion traceability matrix (source, tests, owner checks); gap tasks only where demonstrable. Paths: docs only unless a gap task is separately claimed.
+
+## 2026-11-21T20:33Z — MIA-M1-11 claimed (A4, fresh session)
+
+- Agent: A4 (Anthropic Claude Sonnet 5.5, fresh session). Status: IN_PROGRESS. A1-A3 are held by other sessions; A4 was unregistered with no open A4 claim. Scope: audit actual STT/TTS, streaming, EN/Urdu/Roman Urdu handling, fallback and latency reporting; deterministic adapter tests and fixtures only, no real-speech quality claims. Paths: src/mia/voice/**, tests, docs.
