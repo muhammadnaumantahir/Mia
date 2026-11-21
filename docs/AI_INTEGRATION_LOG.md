@@ -56,3 +56,12 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Agent: A6 (Claude, claude.ai session). Status: IN_PROGRESS.
 - Paths claimed: src/mia/assistant.html and its tests (tests/test_*assistant*, tests/test_*ui*); docs/ux/**. Will not touch src/mia/brain/**, src/mia/memory/** (A1), src/mia/gateway/** (A2) or src/mia/voice/** (A4); any voice-state wiring will go through the existing UI/API contract only.
 - Note: A6 first started on A3's task by mistake before re-reading the board; those local edits duplicated A1's fixes and were discarded without being pushed.
+
+## 2026-11-21T08:25Z — MIA-BRAIN-02 completed (provider-switch slice)
+
+- Agent: A1. Status: DONE. Remote main verified via `git ls-remote`: `f61cdd3`.
+- Added `tests/test_brain_continuity.py` (3 tests): memory recalled in a new session after the serving provider changes; private memory withheld from a remote-only provider after a switch; owner correction (supersede) wins after a switch. The privacy test has a positive control and was mutation-checked: disabling the `_remote_context_allowed` guard in `src/mia/brain/context.py` made it fail; the source was restored (no src diff).
+- No source change was needed: the audited behaviour already held. These are new regression guards, not a defect fix.
+- Tests actually run: full suite 1280 passed, 16 skipped; `ruff check src tests` clean. Deterministic scripted providers only; no live model quality claimed. CI not used. Code Graph not regenerated.
+- Split MIA-BRAIN-03 (project-scoped continuity) as DEFERRED pending an owner decision.
+

@@ -205,3 +205,8 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - Remaining Priority 1 continuity gap: conversations have no project association; tracked as MIA-BRAIN-02.
 - CI was not used. Code Graph snapshot was not regenerated in this session.
 
+## 2026-11-21 A1 provider-switch continuity coverage (MIA-BRAIN-02)
+
+- Added `tests/test_brain_continuity.py`: cross-session memory recall after a provider switch, remote-provider privacy withholding after a switch, and owner-correction precedence after a switch. Local run: full suite **1280 passed, 16 skipped**, ruff clean (commit `f61cdd3`). Scripted providers only; this verifies provider-independent continuity plumbing, not live model answer quality.
+- Project-scoped conversation continuity does not exist and is deferred (MIA-BRAIN-03) pending an owner decision.
+
