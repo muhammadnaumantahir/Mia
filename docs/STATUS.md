@@ -298,3 +298,10 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - **Implemented:** advisory judges now run after verification when the owner opts in (`MIA_JUDGES_ENABLED=true`; off by default). Judges can only lower confidence, never change the reply, permissions or approvals; sensitive/memory-using or local-only turns use local judges only; remote and paid judges need separate opt-ins and the gateway route policy; failures fall back to the deterministic verifier. Trace event `judges`, `verification.judges`, and read-only `GET /api/brain/judges`.
 - **Verified here:** 28 new fake-provider tests; full suite 1783 passed, 2 skipped (commit 9c29972).
 - **Not done:** streamed turns, owner UI panel (MIA-UX-06), live judge-model quality (OWNER_VERIFICATION_REQUIRED).
+
+## 2026-11-21 A1 retention policy and live self-description fix (MIA-BRAIN-04, MIA-BRAIN-05)
+
+- Structured-memory retention is implemented as an owner action (commit `ee6fe3f`): configurable period (default keep), dry-run preview, retired records only, audited, never automatic. This closes the "retention policy for structured records" gap listed earlier in this file.
+- **Correction to earlier status:** the live runtime-evidence block that lets Mia describe its own capabilities was never being attached to chat prompts because of a swallowed `AttributeError` (`ProviderRegistry.keys()`); fixed in `0d22d02`. Until then, self-description relied on the persona text alone. Wake-word capability is now derived from `offline_wake_word_status()` evidence instead of route names.
+- Local evidence on the rebased tree: **1740 passed, 17 skipped**, ruff clean; scripted providers only. Not verified: behaviour with live models. Open follow-ups: record-level project scoping (MIA-BRAIN-06) and bounding the larger system prompt (MIA-BRAIN-07).
+
