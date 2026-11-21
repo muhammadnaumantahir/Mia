@@ -157,7 +157,7 @@ experiment/            Runtime-created experiment data (gitignored)
 
 ## Contributing / AI coding agents
 
-Read AGENTS.md and always follow the conversation-first order in docs/ROADMAP.md. Keep implementation modular, add tests, update the source/license register when dependencies or upstream code change, and never mark a capability complete based on documentation alone.
+Read AGENTS.md and always follow the conversation-first order in docs/ROADMAP.md. Mia supports a six-specialist-agent workflow coordinated through [the shared task board](docs/AI_TASK_BOARD.md), [agent registry](docs/AI_AGENT_REGISTRY.md), [development rules](docs/AI_DEVELOPMENT_SYSTEM.md), and [master/specialist prompts](prompts/AI_MASTER_AGENT.md). All agents commit directly to main; parallelize disjoint work and serialize shared-file writes/pushes. Keep implementation modular, add tests, update the source/license register when dependencies or upstream code change, and never mark a capability complete based on documentation alone.
 
 ## License
 
