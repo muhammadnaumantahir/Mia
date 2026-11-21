@@ -33,6 +33,14 @@ The Code Graph is a required cross-cutting developer capability, initialized dur
 - Code Graph snapshot refresh remains a local development step and is not claimed as complete by these remote source edits.
 - PR #20 is merged; older notes below that say it is awaiting CI are historical and superseded by this current status.
 
+## Voice update - MIA-M1-09 text/voice parity (agent A4, 2026-11-21)
+
+- **Gap (from A3's `docs/M1_TRACEABILITY.md` row 4, re-verified in source):** `assistant.html` never sent `interface` on `/api/gateway/chat` or `/chat/stream`, so every spoken turn was recorded server-side as `text` and the voice-turn policy (no judge latency on spoken replies, `orchestrator.py`) never applied to real UI voice turns. Server tests passed only because they set the field by hand.
+- **Fixed:** `submitPrompt` now sends `interface: "voice"` when the reply is spoken (`voiceReply`) and `"text"` otherwise, on both request paths (2-line change in `src/mia/assistant.html`). Identity, context, Brain, gateway, verification and persistence remain one shared pipeline.
+- **Tests actually run:** two new Chromium tests in `tests/test_voice_browser.py` (spoken turn posts `interface: voice`; typed turn posts `text`); both fail without the HTML change. `test_voice_browser.py`, `test_assistant_stop_reply.py`, `test_voice_ui_contract.py`: all passed (72 tests, 0 failed). `ruff` clean. Full suite not run.
+- **Behaviour note:** a prompt typed while voice mode is on is also treated as a spoken-reply turn (that is the existing `voiceReply` meaning), so its reply is spoken and not judged.
+- **Not verified:** real microphone turns end-to-end; `OWNER_VERIFICATION_REQUIRED`.
+
 ## Voice update - MIA-M1-12 interruption and recovery (agent A4, 2026-11-21)
 
 - **Audit (source and test read):** browser-side stop, mute, barge-in (off by default), Escape, push-to-talk, mic release on session end/transcription failure, offline stop, provider-failure recovery and Urdu/Roman Urdu end phrases are already covered by `tests/test_voice_browser.py` and `tests/test_assistant_stop_reply.py` (Chromium-driven). Server-side, `Brain.stream_turn` keeps a partial reply marked `[response interrupted]` on provider failure or cancel.

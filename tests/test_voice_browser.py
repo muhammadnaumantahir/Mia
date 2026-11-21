@@ -866,3 +866,38 @@ def test_wake_phrase_ignores_unaddressed_speech_then_submits_after_hey_mia(ctx):
     ctx.wait("window.__rec.live().length===0")
     assert ctx.js("document.getElementById('voiceMicBadge').dataset.on") == "false"
     assert ctx.state() == "stopped"
+
+
+def _chat_bodies(ctx):
+    import json as _json
+
+    bodies = []
+    ctx.page.on(
+        "request",
+        lambda r: bodies.append(_json.loads(r.post_data or "{}"))
+        if r.method == "POST" and "/api/gateway/chat" in r.url else None,
+    )
+    return bodies
+
+
+def test_spoken_turn_declares_voice_interface_and_typed_turn_declares_text(ctx):
+    """MIA-M1-09: the server's voice-turn policy (e.g. no judge latency) needs `interface`."""
+    bodies = _chat_bodies(ctx)
+    ctx.start()
+    ctx.listening()
+    ctx.say("Which database did we choose for the billing service?")
+    ctx.turns(1)
+    ctx.wait("window.__tts.spoken.length>=1")
+    assert bodies and bodies[-1]["interface"] == "voice"
+    ctx.js("document.getElementById('endVoice') && document.getElementById('endVoice').click()")
+
+
+def test_typed_turn_without_voice_mode_declares_text_interface(ctx):
+    bodies = _chat_bodies(ctx)
+    ctx.js("document.getElementById('prompt').value='Tell me about the billing database';"
+           "document.getElementById('send').click()")
+    ctx.turns(1)
+    deadline = time.time() + 5
+    while time.time() < deadline and not bodies:
+        time.sleep(0.05)
+    assert bodies and bodies[-1]["interface"] == "text"

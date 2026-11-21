@@ -935,7 +935,7 @@ async function submitPrompt(prompt,{voiceReply=false}={}){
  try{
   const useTools=$('useTools').checked;let result;
   if(useTools){
-   const response=await fetch('/api/gateway/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,task_type:taskType,max_output_tokens:1024,conversation_id:conversationId,use_tools:true}),signal:chatSignal});
+   const response=await fetch('/api/gateway/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,task_type:taskType,max_output_tokens:1024,conversation_id:conversationId,use_tools:true,interface:voiceReply?'voice':'text'}),signal:chatSignal});
    result=await response.json();if(!response.ok){const httpFailure=new Error(result.detail||'The model request failed.');httpFailure.status=response.status;throw httpFailure;}
    conversationId=result.conversation_id;
    const assistantBubble=addMessage('assistant',result.content,result.provider_id+' · '+result.model_id);
@@ -943,7 +943,7 @@ async function submitPrompt(prompt,{voiceReply=false}={}){
    renderApprovalCards(result.pending_actions||[]);
   }else{
    const bubble=addMessage('assistant','…');
-   const streamed=await streamReply({prompt,task_type:taskType,max_output_tokens:1024,conversation_id:conversationId},bubble,chatSignal);
+   const streamed=await streamReply({prompt,task_type:taskType,max_output_tokens:1024,conversation_id:conversationId,interface:voiceReply?'voice':'text'},bubble,chatSignal);
    if(streamed.aborted){
     // Never speak, cite or record a partial reply as if it were complete.
     if(!streamed.text)bubble.textContent='(Stopped before any text arrived.)';

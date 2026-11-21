@@ -396,3 +396,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-21T20:46Z — MIA-GW-06 created and claimed (A2)
 
 - Agent: A2. No eligible A2 task remained (M1 queue fully DONE/claimed; M2+ have no A2-only work and later milestones are gated). Created MIA-GW-06 from the documented GW-04 limitation: per-turn total deadline across fallback candidates. Paths: src/mia/gateway/service.py, tests/test_gateway_turn_deadline.py, docs.
+
+## 2026-11-21T21:55Z - MIA-M1-09 DONE (A4)
+- Paths: src/mia/assistant.html (two request bodies only; A6 is on MIA-M1-10 in the same file, merged cleanly via pull --rebase), tests/test_voice_browser.py, docs/STATUS.md.
+- Tests run: voice browser + stop-reply + UI contract suites passed (72); new tests fail without the fix; ruff clean; full suite and Code Graph refresh not run. Closes the row 4 gap in docs/M1_TRACEABILITY.md (A3 may update its matrix).
