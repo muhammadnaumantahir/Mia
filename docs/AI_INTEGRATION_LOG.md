@@ -111,3 +111,11 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-21T08:40Z — MIA-BRAIN-03 claimed
 
 - Agent: A1. Status: IN_PROGRESS. Owner approved project-scoped continuity (conversation belongs to a project; recall prefers that project's history). Constraints: opt-in, owner-visible, temporary chats stay isolated. Paths: src/mia/memory/** (schema/store), src/mia/brain/context.py, src/mia/observatory/api.py (project routes only) and tests. Will not touch gateway (A2), voice (A4) or assistant.html (A6) without an interface note here.
+
+## 2026-11-21T07:54Z — MIA-EVAL-01 DONE, MIA-EVAL-02 claimed (A3)
+
+- Commit 186f5d0 on remote main (verified). Paths: src/mia/brain/evaluation.py, src/mia/brain/verify.py, tests/test_brain_evaluation.py, tests/test_brain_verify.py, tests/test_source_compiles.py.
+- Tests run: full suite 1618 passed, 1 failed, 1 skipped (failure = MIA-FIX-01, browser grant, out of scope); after rebase onto A2 commits only targeted suites were re-run (eval, verify, escalation, pipeline, routing, compile guard) and passed; `python -m mia.brain.evaluation` 23/23.
+- Verifier defect fixed: honest "failed/failure/cannot" (and Roman Urdu/Urdu) wording was flagged failure_not_reported. A tool-failure scenario initially false-passed because the tool was refused at stage `offered`; scenarios now assert real tool status.
+- Limits: scripted providers only; no live-model quality claim. Code Graph regenerated locally (4003 nodes, 8088 edges); tracked CHANGELOG change reverted, not committed.
+- MIA-EVAL-02 claimed (A3): new files only (src/mia/brain/judges.py, tests/test_brain_judges.py); will not edit gateway/** (A2) or orchestrator without agreement.

@@ -234,3 +234,10 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - **Verified here:** `tests/test_gateway_escalation.py` (fake providers) passes; full suite run locally: 1405 passed, 1 skipped, 1 failed (`tests/test_browser_automation.py::test_browser_api_end_to_end`, failing before this change and untouched by it). No live-provider quality claim is made.
 - **Not done:** streaming-turn escalation, judge-model orchestration, owner-facing settings UI.
 
+
+## 2026-11-21 Reasoning-quality evaluation (MIA-EVAL-01, agent A3)
+
+- **Implemented:** `mia.brain.evaluation` now has 23 deterministic scenarios (memory conflicts through the real supersede path, real tool failures, English/Roman Urdu/Urdu continuity, multilingual unsupported claims, uncertainty) with assertions on what the model actually received; `summarize()` reports by category/language and always states `live_model_quality: not_measured`.
+- **Fixed:** verifier no longer treats honest "failed/cannot" wording (incl. Roman Urdu/Urdu) as silent failure; added `tests/test_source_compiles.py` guard.
+- **Verified here:** full suite 1618 passed, 1 failed (MIA-FIX-01, browser grant), 1 skipped; scenario runner 23/23 (commit 186f5d0).
+- **Not done:** parallel judge models (MIA-EVAL-02), live-model evaluation (OWNER_VERIFICATION_REQUIRED).
