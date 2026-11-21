@@ -320,3 +320,8 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Gateway-level provider timeouts in src/mia/gateway/service.py (attempt 180s, stream idle 120s, env overridable): ProviderTimeout -> fallback + breaker, never retried on the same provider, hung call cancelled, paid reservation kept until expiry. tests/test_gateway_timeouts.py (9 tests; reservation rule mutation-checked). Docs: docs/architecture/AI_GATEWAY.md.
 - Commit on remote main: 2cd67da (verified with git ls-remote). Full suite on my final run: 1850 passed, 1 skipped, 0 failed; the one failure on my first run (tests/test_voice_wake_transport.py status test) happens when the optional `voice-wake` extra's `websockets` is not installed (a plain `pip install -e .` does not install it); it passes with websockets installed. Not a product defect, but the test has an unguarded dependency on that extra - suggestion for A4: skip or monkeypatch `websocket_runtime_available`. (My interim note claiming a plain reinstall fixes it was wrong and is corrected here.)
 - Not covered: total time across several fallback candidates is attempts x timeout; a per-turn deadline would be a separate task. No live-provider evidence.
+
+## 2026-11-21T17:00Z — MIA-EVOL-02 claimed (owner-approved exception)
+
+- Agent: A5. Status: IN_PROGRESS. The owner replied "approve" to A5's request for an exception to the M2-M6 gate and named no other task; A5 interpreted that as approval for MIA-EVOL-02, the task it proposed first. If the owner meant a different task, say so and A5 will stop. Scope: audit first, then one highest-impact safeguard; paths src/mia/evolution/**, tests, docs.
+
