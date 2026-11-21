@@ -4,6 +4,7 @@
 **Coordinator:** master-prompt role (not a worker slot)  
 **Branch policy:** direct commits to `main` only  
 **Last reconciled:** 2026-11-21
+**Detailed task definitions:** [Milestone task catalog](DEFERRED_MILESTONE_BACKLOG.md) (M1–M6).
 
 This is the shared queue. Always refresh it from `main` before claiming or changing a task. The roadmap and acceptance criteria in `docs/ROADMAP.md` are authoritative. Follow `docs/AI_CONTINUE_WORKFLOW.md` on every Continue request.
 
@@ -47,16 +48,106 @@ This is the shared queue. Always refresh it from `main` before claiming or chang
 | MIA-EVOL-02 | P2 | A5 | IN_PROGRESS (A5, claimed 2026-11-21T17:00Z) | OWNER-APPROVED EXCEPTION to the M2-M6 gate (owner replied "approve" in chat to A5's proposal of MIA-EVOL-02). Audit the existing `src/mia/evolution/**` pipeline against docs/DEFERRED_MILESTONE_BACKLOG.md MIA-EVOL-02 and the Priority 5 exit criteria, then implement the single highest-impact missing safeguard with tests. No generated code may run in the privileged host process; failed validation must block activation. Paths: `src/mia/evolution/**`, matching tests/docs. Dependency MIA-EVOL-01 is not done; scope stays to the validation pipeline. |
 | MIA-FIX-01 | P1 | A5 | DONE (duplicate of MIA-BASE-03; commit ffef797) | Duplicate browser permission test report; resolved by MIA-BASE-03. |
  
-## Deferred roadmap milestones (not assigned)
+## Milestone task queue (M1–M6)
 
-The implementation-ready M2–M6 backlog is in [`docs/DEFERRED_MILESTONE_BACKLOG.md`](DEFERRED_MILESTONE_BACKLOG.md). It contains scoped tasks, dependencies, suggested specialist roles and acceptance criteria for:
-- M2 — Immersive 3D holographic interaction
-- M3 — Personal digital life and everyday assistance
-- M4 — Secure computer intelligence and control
-- M5 — Self-programming, custom models and governed evolution
-- M6 — Evolution Observatory and 30-day experiment
+The detailed task definitions, dependencies, scope and acceptance criteria are in [the milestone task catalog](DEFERRED_MILESTONE_BACKLOG.md). The rows below make those tasks discoverable and claimable. `OPEN` means unclaimed; it does not bypass the milestone handoff or task dependencies.
 
-**All M2–M6 tasks are DEFERRED / NOT ASSIGNED.** Suggested specialist roles are not claims or active assignments. Do not divert agents from M1. Re-audit source and tests after M1 before assigning, because some future-phase foundations may already exist.
+### Additional M1 tasks
+
+| Task | Priority | Suggested owner | Status | Scope / acceptance |
+|---|---:|---|---|---|
+| MIA-M1-08 | P1 | A1 + A3 | OPEN | Trace every M1 exit criterion to source, tests and owner checks; create only evidence-backed gap tasks. |
+| MIA-M1-09 | P1 | A1 + A4 | OPEN | Trace text and voice through shared identity, context, Brain, gateway, verification and persistence; add end-to-end contract tests and fix verified gaps. |
+| MIA-M1-10 | P1 | A1 + A6 | OPEN | Audit memory inspect/correct/export/delete; implement missing owner controls, provenance and no-recall-after-delete tests. |
+| MIA-M1-11 | P1 | A4 + A3 | OPEN | Audit multilingual STT/TTS, streaming, language handling, fallback and latency; add deterministic tests without claiming real-speech quality. |
+| MIA-M1-12 | P1 | A4 + A6 | OPEN | Verify interruption, barge-in, stop/mute, mic release, retry, timeouts and partial-response recovery across text/voice. |
+| MIA-M1-13 | P1 | Coordinator + A1/A3/A4/A6 | BLOCKED (M1 acceptance gate) | Final M1 evidence report after all M1 implementation tasks are DONE; separates automated completion from owner-only checks. |
+
+### M2 — Immersive 3D holographic interaction
+
+| Task | Priority | Suggested owner | Status | Scope / acceptance |
+|---|---:|---|---|---|
+| MIA-HOLO-01 | P2 | A6 + A1 | OPEN | Typed runtime-state/event contract tied to real backend evidence; tests for stale/unknown states. |
+| MIA-HOLO-02 | P2 | A6 | OPEN | 3D renderer spike and evidence-based architecture choice; include licensing, bundle, WebGL and low-power fallback. |
+| MIA-HOLO-03 | P2 | A6 | OPEN | Responsive holographic scene and visual states, isolated from Brain/business logic; deterministic tests. |
+| MIA-HOLO-04 | P2 | A6 + A4 + A1 | OPEN | Bind actual conversation/voice/task/tool/approval events; test reconnect, cancellation and offline states. |
+| MIA-HOLO-05 | P2 | A6 | OPEN | Accessible non-3D fallback, reduced motion, keyboard/screen-reader labels, contrast and narrow-screen tests. |
+| MIA-HOLO-06 | P2 | A6 + A5 | OPEN | Profile frame/resource/bundle budgets; implement throttling and graceful degradation with repeatable checks. |
+
+### M3 — Personal digital life
+
+| Task | Priority | Suggested owner | Status | Scope / acceptance |
+|---|---:|---|---|---|
+| MIA-LIFE-01 | P3 | A1 + A5 | OPEN | Owner-scoped data model, provenance, retention, export/delete, encryption boundaries and isolation tests. |
+| MIA-LIFE-02 | P3 | A1 | OPEN | Unified task API/persistence with status, priority, due dates, recurrence, project link and audit tests. |
+| MIA-LIFE-03 | P3 | A6 + A1 | OPEN | Accessible task workspace and Brain actions sharing one source of truth; destructive bulk confirmation. |
+| MIA-LIFE-04 | P3 | A1 + A6 | OPEN | Project workspace with goals, milestones, decisions, tasks and strict project isolation. |
+| MIA-LIFE-05 | P3 | A1 + A3 | OPEN | Evidence-cited daily/weekly briefing and goal follow-up; quiet hours, timezone and no invented facts. |
+| MIA-LIFE-06 | P3 | A5 + A1 | OPEN | Owner-selected file indexing/search/summaries with source locations, path isolation and deletion tests. |
+| MIA-LIFE-07 | P3 | A5 + A6 | OPEN | Scoped browser research with citations, source provenance and prompt-injection tests. |
+| MIA-LIFE-08 | P3 | A1 + A5 | OPEN | Bounded workflow composer/runtime with preview, checkpoints, permissions, cancellation and audit. |
+| MIA-LIFE-09 | P3 | A2 + A6 | OPEN | Notification center with quiet hours, deduplication, expiry, snooze and timezone tests. |
+| MIA-LIFE-10 | P3 | A1 + A5 | OPEN | Personal knowledge graph with typed, source-backed links, confidence, correction and deletion. |
+| MIA-LIFE-11 | P3 | A2 + A5 | OPEN | Encrypted backup/restore, integrity check, restore preview and recovery tests. |
+| MIA-LIFE-12 | P3 | A2 + A6 | OPEN | Real usage, spend, latency, CPU/RAM/storage dashboard; unknown values remain unknown. |
+| MIA-LIFE-13 | P3 | A2 + A5 | OPEN | Authenticated device sync/remote access, revocation and conflict tests; no public unauthenticated service. |
+| MIA-LIFE-14 | P3 | A1 + A3 | OPEN | Bounded proactive suggestions with evidence, relevance/novelty, quiet hours, caps and opt-out. |
+
+### M4 — Secure computer intelligence and control
+
+| Task | Priority | Suggested owner | Status | Scope / acceptance |
+|---|---:|---|---|---|
+| MIA-COMP-01 | P4 | A5 + A1 | OPEN | Threat model and typed capability contract covering trust, permissions, side effects and recovery. |
+| MIA-COMP-02 | P4 | A2 + A5 | OPEN | Authenticated outbound-only local companion pairing, device scopes, replay protection and revocation. |
+| MIA-COMP-03 | P4 | A5 | OPEN | Least-privilege Windows companion lifecycle with visible status and safe reconnect. |
+| MIA-COMP-04 | P4 | A1 + A5 | OPEN | Central permission broker enforced at execution boundary; deny-by-default and bypass/race tests. |
+| MIA-COMP-05 | P4 | A5 | OPEN | Disposable sandbox with filesystem/network/process/resource limits and adversarial escape tests. |
+| MIA-COMP-06 | P4 | A5 | OPEN | Scoped filesystem/document adapter; traversal/symlink denial, preview, exact approval and recovery. |
+| MIA-COMP-07 | P4 | A5 + A6 | OPEN | Isolated browser automation with approval boundaries, prompt-injection defense and integration tests. |
+| MIA-COMP-08 | P4 | A5 | OPEN | Allowlisted desktop app/process operations; no arbitrary shell; sensitive termination approval. |
+| MIA-COMP-09 | P4 | A1 + A6 | OPEN | Approval UX, audit, cancellation and undo/recovery for supported actions; race/disconnect tests. |
+| MIA-COMP-10 | P4 | A4 + A6 | OPEN | Voice-driven computer actions through same Brain and broker as text; confirmation and interruption tests. |
+| MIA-COMP-11 | P4 | A5 + A3 | OPEN | Adversarial security regression and owner handoff for pairing, sandbox, permissions, secrets and audit. |
+
+### M5 — Self-programming and custom models
+
+| Task | Priority | Suggested owner | Status | Scope / acceptance |
+|---|---:|---|---|---|
+| MIA-EVOL-01 | P5 | A1 + A3 | OPEN | Evidence-based capability-gap discovery from consented failures, corrections, evaluations and goals. |
+| MIA-EVOL-03 | P5 | A5 | OPEN | Candidate generation in disposable workspace with bounded calls, allowlisted paths, provenance and immutable diff. |
+| MIA-EVOL-04 | P5 | A5 + A3 | OPEN | Reproducible static/unit/integration/security validation; failed checks block registration. |
+| MIA-EVOL-05 | P5 | A1 + A5 | OPEN | Versioned capability contracts, permissions, dependencies, lineage, evidence and retirement state. |
+| MIA-EVOL-06 | P5 | A1 + A5 | OPEN | Owner-approved staged activation, monitoring, immutable decisions and tested rollback; governance immutable. |
+| MIA-EVOL-07 | P5 | A5 + A3 | OPEN | Disposable autonomous evolution research only; no production secrets/data/privileges/side effects; containment tests. |
+| MIA-EVOL-08 | P5 | A3 + A2 | OPEN | Custom foundation-model feasibility study: data rights, compute, cost, benchmark and evidence-based go/no-go. |
+| MIA-EVOL-09 | P5 | A3 + A2 | OPEN | Optional small-model adaptation experiment only after lawful data and feasible go decision; reproducible held-out comparison. |
+
+**Existing MIA-EVOL-02 remains IN_PROGRESS under A5** and is not duplicated here.
+
+### M6 — Evolution Observatory and 30-day experiment
+
+| Task | Priority | Suggested owner | Status | Scope / acceptance |
+|---|---:|---|---|---|
+| MIA-OBS-01 | P6 | A3 + A5 | OPEN | Versioned measurement definitions and immutable evidence schema; missing values distinct from zero. |
+| MIA-OBS-02 | P6 | A3 + A5 | OPEN | Immutable Day 0 baseline capture with commit, model/config, environment and benchmark evidence. |
+| MIA-OBS-03 | P6 | A2 + A5 | OPEN | Opt-in daily telemetry/snapshot scheduler with resource bounds, idempotency and honest paused/offline days. |
+| MIA-OBS-04 | P6 | A3 + A5 | OPEN | Attribute metric changes to commits/models/config/capability events; distinguish correlation from causation. |
+| MIA-OBS-05 | P6 | A3 | OPEN | Versioned benchmark suite for conversation, memory, reasoning, voice, tools, safety, cost and resources. |
+| MIA-OBS-06 | P6 | A6 + A3 | OPEN | Evidence-linked observatory dashboard with before/after trends and missing/failure days; no fake data. |
+| MIA-OBS-07 | P6 | A3 + A6 | OPEN | Reproducible Day 0–30 report with sample sizes, confounders, missing days and rollback history. |
+| MIA-OBS-08 | P6 | A1 + A6 | OPEN | Owner-controlled start/pause/resume/stop/export lifecycle; owner runs and reviews real experiment. |
+
+### Queue and milestone handoff rules
+
+- `OPEN` tasks are candidates, not permission to ignore priority.
+- Within a milestone, agents select the highest-priority dependency-ready task matching their specialization.
+- A later milestone becomes eligible for parallel work only after every implementation task in the immediately preceding milestone is `DONE` or `IN_PROGRESS` under another agent. An agent must not leave its own earlier-milestone task unfinished to start lower-priority work.
+- A task with unmet explicit dependencies is not eligible even if its milestone is unlocked.
+- `MIA-M1-13` is the final M1 acceptance gate: it is blocked until all M1 implementation tasks are done. M2 work may be prepared/implemented in parallel after the M1 implementation queue is fully accounted for, but M1 cannot be declared complete until the gate passes.
+- Apply the same pattern to milestone acceptance: parallel work can begin once prior work is accounted for; milestone completion still requires all exit criteria.
+- The task board is advisory, not an atomic lock. Re-fetch it and its SHA immediately before every claim/write; serialize shared-file writes and main commits.
+- Re-audit source/tests before claiming any task; existing implementation may satisfy some or all acceptance criteria. Mark existing work done only with source/test/commit evidence.
+
 
 ## Continue and queue rules
 
