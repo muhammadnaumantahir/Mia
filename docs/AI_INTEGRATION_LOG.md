@@ -257,3 +257,10 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Tests actually run: full suite with Chromium 1781 passed, 1 skipped, 0 failed; `ruff check src tests` clean; 15 new tests fail against the old HTML.
 - Correction to the 07:44Z / 15:40Z entries: they said the two Chromium test files were not run because Chromium was unavailable. That was an unverified assumption; they run with the system Python (which has Playwright) and passed.
 - Next for A4: MIA-VOICE-04 is blocked on MIA-BRAIN-05 (A1). Nothing else open in A4's lane.
+
+## 2026-11-21T15:46Z — MIA-EVAL-04 DONE (A3)
+
+- Commit bd50db0 on remote main (verified). Files: src/mia/brain/orchestrator.py (`_maybe_judge` also on the stream path after `_store_reply`; `stored` flag in stream_turn; voice skip), src/mia/brain/evaluation.py (judge scenarios, per-provider candidate id fix), tests/test_brain_judge_pipeline.py, tests/test_brain_evaluation.py.
+- Tests run: full suite on rebased tree 1791 passed, 2 skipped, 0 failed; after the final rebase onto A5's docs commit only the judge/eval/pipeline/gateway-judge/compile suites were re-run (pass). Mutation check: removing the `stored` guard fails the disconnect test.
+- Code Graph: regenerated locally (4284 nodes) but not committed this time - its generated CHANGELOG conflicts on every concurrent push; MIA-BASE owner (A5) can refresh it.
+- Limits: scripted providers only; no live judge-quality evidence.

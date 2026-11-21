@@ -312,3 +312,9 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - **Correction to earlier status:** the live runtime-evidence block that lets Mia describe its own capabilities was never being attached to chat prompts because of a swallowed `AttributeError` (`ProviderRegistry.keys()`); fixed in `0d22d02`. Until then, self-description relied on the persona text alone. Wake-word capability is now derived from `offline_wake_word_status()` evidence instead of route names.
 - Local evidence on the rebased tree: **1740 passed, 17 skipped**, ruff clean; scripted providers only. Not verified: behaviour with live models. Open follow-ups: record-level project scoping (MIA-BRAIN-06) and bounding the larger system prompt (MIA-BRAIN-07).
 
+
+## 2026-11-21 Judges: streaming, voice, scenarios (MIA-EVAL-04, agent A3)
+
+- **Implemented:** streamed text turns are judged after the reply is stored; voice turns are never judged; 3 judge scenarios in the scenario runner (26 total, 26/26 pass).
+- **Verified here:** full suite 1791 passed, 2 skipped (before final rebase); targeted suites re-run after it (commit bd50db0).
+- **Not done:** owner UI panel (MIA-UX-06, A6); live judge-model quality (OWNER_VERIFICATION_REQUIRED).
