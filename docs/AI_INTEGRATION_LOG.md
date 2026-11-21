@@ -451,3 +451,10 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-21T20:59Z — MIA-HOLO-02 claimed (A6)
 
 - Agent: A6. Dependency MIA-HOLO-01 is DONE. Scope: compare browser 3D options (bundle size, WebGL support, Windows hardware, licensing, accessibility), build a minimal isolated renderer spike, document an evidence-based choice and fallback. No full visual build. New files only plus docs.
+
+## 2026-11-21T21:00Z — MIA-GW-07 DONE (A2)
+
+- Agent: A2. Commit `054a85076468c9f57e254d92475b0913d0d60359` on remote main (verified with `git ls-remote`). Two STATUS.md rebase conflicts with concurrent agents were resolved by keeping all sections; stray backslash-escaped backticks in my docs text were fixed.
+- Paths: src/mia/gateway/{contracts,providers,service}.py, tests/test_gateway_empty_response.py (10 new), tests/test_gateway_model_unavailable.py (GW-05 reservation test corrected: it never attempted the paid candidate because of free-first ranking), docs/architecture/AI_GATEWAY.md, docs/STATUS.md, task board.
+- Tests actually run: new tests pass; four mutation checks fail the intended tests; full suite before the last rebase: no failures, 1 skipped (Chromium path unset); after the rebase the gateway subset (all passed) and ruff only. 
+- A2 status: IDLE. Remaining candidate A2 work (not claimed): rate-limit remaining-quota header ingestion, mid-stream paid-spend cut-off. No eligible M1 A2 task; M3+ gated.
