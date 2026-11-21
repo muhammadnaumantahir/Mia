@@ -30,7 +30,7 @@ from mia.memory.store import MemoryStore
 
 from .broker import BrokerStepExecutor, ToolBroker
 from .capabilities import CapabilityRegistry
-from .context import BuiltContext, build_context
+from .context import BuiltContext, build_context, has_persistent_prior_conversation
 from .diagnostics import DiagnosticsLog, TurnTrace, scrub
 from .intent import IntentAnalysis, analyze_intent
 from .plan import Plan, PlanRunner, PlanStep, PlanStore, RunPolicy, StepOutcome, summarize_plan
@@ -170,9 +170,8 @@ class Brain:
         active_plan = (self.plan_store.latest_for_conversation(
             conversation_id, ("awaiting_input", "awaiting_approval", "running", "partial"))
             if self.plan_store else None)
-        has_prior = len(recent) > 1 or any(
-            c.get("message_count", 0) > 0 and (c.get("conversation_id") or c.get("id")) != conversation_id
-            for c in self.memory.list_conversations(limit=5))
+        has_prior = len(recent) > 1 or has_persistent_prior_conversation(
+            self.memory, conversation_id)
         task_hint = None if request.task_type in {"chat", "general", ""} else request.task_type
         analysis = analyze_intent(request.prompt, task_hint=task_hint, has_prior_context=has_prior,
                                   active_task=active_plan is not None)
