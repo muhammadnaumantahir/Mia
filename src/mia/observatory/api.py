@@ -111,6 +111,7 @@ from mia.observatory.activity import ExperimentActivityCollector
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider
 from mia.voice.tts import Pyttsx3SpeechSynthesizer, SpeechSynthesisError, SpeechSynthesizer
 from mia.voice.wake import offline_wake_word_status
+from mia.voice.wake_transport import register_wake_routes, websocket_runtime_available
 
 from .baseline import BaselineCaptureError, capture_baseline_manifest
 from .snapshot_capture import ExperimentSnapshotCapturer, SnapshotCaptureError
@@ -838,9 +839,11 @@ def create_app(
                 ),
                 permission_broker_enabled=brain_broker is not None,
                 capability_registry_enabled=brain_capabilities is not None,
-                # Operational evidence, not route names. A4 passes transport_available=True
-                # here once the loopback audio transport is wired (MIA-VOICE-02).
-                offline_wake_word=offline_wake_word_status(),
+                # Operational evidence, not route names: the transport counts as available
+                # only if the server can really upgrade WebSockets (MIA-VOICE-04).
+                offline_wake_word=offline_wake_word_status(
+                    transport_available=websocket_runtime_available()
+                ),
             )
             return identity_text + "\n\n" + render_runtime_manifest(manifest), identity_version
         except Exception as exc:
@@ -3130,7 +3133,9 @@ def create_app(
             "always_listening": False,
             # Capability evidence, not registration: operational only when the engine,
             # an owner-supplied model and an audio transport all exist.
-            "offline_wake_word": offline_wake_word_status(),
+            "offline_wake_word": offline_wake_word_status(
+                transport_available=websocket_runtime_available()
+            ),
         }
 
     @app.get("/api/voice/tts/voices")
@@ -3177,6 +3182,10 @@ def create_app(
             media_type="audio/wav",
             headers={"Cache-Control": "no-store"},
         )
+
+    # Loopback-only offline wake-word transport. Registering routes does not start any
+    # listening: arming needs an explicit owner opt-in message on the WebSocket.
+    register_wake_routes(app, record_event=observatory.record_event)
 
     @app.post("/api/voice/transcribe")
     async def transcribe_voice(request: Request) -> dict[str, Any]:

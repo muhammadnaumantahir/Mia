@@ -264,3 +264,10 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Tests run: full suite on rebased tree 1791 passed, 2 skipped, 0 failed; after the final rebase onto A5's docs commit only the judge/eval/pipeline/gateway-judge/compile suites were re-run (pass). Mutation check: removing the `stored` guard fails the disconnect test.
 - Code Graph: regenerated locally (4284 nodes) but not committed this time - its generated CHANGELOG conflicts on every concurrent push; MIA-BASE owner (A5) can refresh it.
 - Limits: scripted providers only; no live judge-quality evidence.
+
+## 2026-11-21T16:35Z — MIA-VOICE-04 completed (A4)
+
+- Agent: A4. Paths: `src/mia/observatory/api.py` (import, one `register_wake_routes(...)` call, `transport_available=websocket_runtime_available()` at the two status call sites incl. A1's manifest call), `src/mia/voice/wake_transport.py` (+`websocket_runtime_available`), `tests/test_voice_wake_wiring.py` (new, 8 tests), docs.
+- Interface note for A1/A6: `offline_wake_word.operational` is true only with engine + owner-supplied model + WebSocket runtime. UI (MIA-UX-04) should read `GET /api/voice/status` -> `offline_wake_word`, then open `WS /api/voice/wake/stream` per `docs/voice/WAKE_WORD_PLAN.md` section 6a, and must show a visible Stop.
+- Tests actually run: full suite with Chromium 1835 passed, 1 skipped, 0 failed; ruff clean.
+- Known limitation recorded: status cannot detect a non-loopback bind.

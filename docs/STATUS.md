@@ -55,6 +55,12 @@ The Code Graph is a required cross-cutting developer capability, initialized dur
 - **Correction:** earlier entries said Chromium tests could not be run here. They can; they were skipped only because the test venv lacked the Python `playwright` package. 48 such tests passed on 2026-11-21 before this change.
 - **Not verified:** real spoken Urdu through Whisper or the browser speech service (transcript spellings vary, so some phrasings will not match), and `bas karo` is an everyday idiom that may occasionally stop speech when said to someone else in a short utterance.
 
+## Voice update - MIA-VOICE-04 (agent A4, 2026-11-21)
+
+- **Implemented:** the offline wake-word routes (`WS /api/voice/wake/stream`, `GET /api/voice/wake/status`, `POST /api/voice/wake/stop`) are registered by `create_app`. Nothing listens at startup; arming needs the WebSocket opt-in message, loopback client, same-origin and no proxy headers. `offline_wake_word.operational` now also requires a WebSocket runtime (`websockets` or `wsproto`), used by both `/api/voice/status` and Mia's runtime self-description.
+- **Tests actually run:** full suite including Chromium: 1835 passed, 1 skipped, 0 failed; `ruff check src tests` clean; 8 new integration tests (4 of 4 wiring mutants caught).
+- **Still not operational end to end:** no UI (MIA-UX-04, A6) and no real-speech or real-microphone verification (`OWNER_VERIFICATION_REQUIRED`). `operational` cannot know whether the server is bound to loopback; a remotely hosted Mia would report operational while the transport correctly refuses non-loopback clients.
+
 ## A6 / MIA-UX-01 — Stop generating (2026-11-21)
 
 - The Assistant page now has a **Stop ■** control (and Esc, after speech interruption takes priority) that cancels an in-flight text reply through an `AbortController`. A streamed reply keeps the text that had already arrived and is labelled "Stopped by you … partial reply"; a partial reply is never spoken aloud. If the tool-enabled (buffered) request is stopped, Mia says the server may already have processed it. The status line (`#hint`) is now an `aria-live` region.

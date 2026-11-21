@@ -100,9 +100,8 @@ sandbox - not the owner's laptop**:
 
 ## 6a. Transport implemented (MIA-VOICE-02, `src/mia/voice/wake_transport.py`) - not yet wired
 
-`register_wake_routes(app, ...)` provides `WS /api/voice/wake/stream`, `GET /api/voice/wake/status` and
-`POST /api/voice/wake/stop`. It is **not called by `create_app`** until MIA-BRAIN-05 lands, so no wake route
-exists in a running Mia and nothing can claim a wake word.
+**Update (MIA-VOICE-04): the routes are now registered by `create_app`; listening still never starts without the WebSocket opt-in message, and `operational` additionally requires a WebSocket runtime.** `register_wake_routes(app, ...)` provides `WS /api/voice/wake/stream`, `GET /api/voice/wake/status` and
+`POST /api/voice/wake/stop`. MIA-BRAIN-05 (A1) now derives Mia's self-description from `offline_wake_word_status`, so registering the routes cannot make Mia claim a wake word.
 
 Protocol v1 (WebSocket): server sends `ready` (`pcm_s16le`, 16000 Hz, 1280-sample frames). Client sends text
 `{"type":"start","owner_opt_in":true}` (strictly `true`) -> `status`; then binary PCM chunks (any size up to

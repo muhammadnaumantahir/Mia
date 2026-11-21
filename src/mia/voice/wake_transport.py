@@ -23,6 +23,7 @@ Wire protocol v1 is documented in docs/voice/WAKE_WORD_PLAN.md.
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import ipaddress
 import json
 from collections.abc import Callable
@@ -59,6 +60,22 @@ CLOSE_UNSUPPORTED = 1003
 CLOSE_POLICY = 1008
 CLOSE_TOO_BIG = 1009
 CLOSE_TRY_LATER = 1013
+
+
+def websocket_runtime_available() -> bool:
+    """True when the ASGI server can actually upgrade WebSocket connections.
+
+    Bare ``uvicorn`` ships no WebSocket implementation; without ``websockets`` or
+    ``wsproto`` the stream route would exist but every upgrade would fail. Capability
+    reports must be based on this, not on the route being registered.
+    """
+    for module in ("websockets", "wsproto"):
+        try:
+            if importlib.util.find_spec(module) is not None:
+                return True
+        except (ImportError, ValueError):
+            continue
+    return False
 
 
 def is_loopback_address(host: str | None) -> bool:
@@ -297,7 +314,7 @@ class WakeTransport:
     def status_payload(self) -> dict[str, Any]:
         return {
             "session": self.session.status(),
-            "capability": offline_wake_word_status(transport_available=True),
+            "capability": offline_wake_word_status(transport_available=websocket_runtime_available()),
             "protocol": PROTOCOL_VERSION,
         }
 
@@ -308,7 +325,7 @@ def register_wake_routes(
     *,
     record_event: Callable[..., Any] | None = None,
 ) -> WakeTransport:
-    """Attach the wake-word routes. NOT yet called by ``create_app`` (see MIA-BRAIN-04)."""
+    """Attach the wake-word routes (called by ``create_app``; arming still needs owner opt-in)."""
     transport = transport or WakeTransport(record_event=record_event)
 
     @app.websocket("/api/voice/wake/stream")
