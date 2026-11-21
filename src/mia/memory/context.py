@@ -251,32 +251,49 @@ def _dedupe_key(text: str) -> str:
 def _add_linked_records(
     store: MemoryStore, scored: list[tuple[float, str, dict[str, Any]]]
 ) -> None:
-    """Follow non-private links from the best records to related, retrievable ones."""
+    """Follow up to two hops of non-private links from the best retrieved records.
+
+    Expansion is deliberately bounded: only the three strongest retrieved records
+    seed traversal, at most four additional records are added, and each hop loses
+    relevance. RelationshipStore.neighbours filters private links and non-retrievable
+    endpoints before any linked record can enter the prompt.
+    """
     anchors = {
-        record["record_id"]: score
+        str(record["record_id"]): score
         for score, kind, record in scored
         if kind == "structured"
     }
     if not anchors:
         return
-    top = sorted(anchors, key=lambda rid: anchors[rid], reverse=True)[:3]
+    initial = sorted(anchors, key=lambda rid: anchors[rid], reverse=True)[:3]
+    visited = set(anchors)
+    frontier = {record_id: anchors[record_id] for record_id in initial}
+    added = 0
     try:
-        links = store.relationships.neighbours(top, limit=LINKED_LIMIT * 2)
+        for depth in (1, 2):
+            if not frontier or added >= LINKED_LIMIT:
+                break
+            links = store.relationships.neighbours(
+                list(frontier), limit=LINKED_LIMIT * 3
+            )
+            next_frontier: dict[str, float] = {}
+            for link in links:
+                anchor = link["from_id"] if link["from_id"] in frontier else link["to_id"]
+                other = link["to_id"] if anchor == link["from_id"] else link["from_id"]
+                if other in visited or added >= LINKED_LIMIT:
+                    continue
+                record = store.structured.get(other)
+                if not record or record["status"] not in {"active", "completed"}:
+                    continue
+                score = frontier[anchor] - (0.05 * depth)
+                record["_linked_via"] = link["relation"]
+                scored.append((score, "structured", record))
+                visited.add(other)
+                next_frontier[other] = score
+                added += 1
+            frontier = next_frontier
     except Exception:  # links are an enhancement; never block retrieval
         return
-    added = 0
-    for link in links:
-        anchor = link["from_id"] if link["from_id"] in top else link["to_id"]
-        other = link["to_id"] if anchor == link["from_id"] else link["from_id"]
-        if other in anchors or added >= LINKED_LIMIT:
-            continue
-        record = store.structured.get(other)
-        if not record or record["status"] not in {"active", "completed"}:
-            continue
-        record["_linked_via"] = link["relation"]
-        scored.append((anchors[anchor] - 0.05, "structured", record))
-        anchors[other] = anchors[anchor] - 0.05
-        added += 1
     if added:
         scored.sort(key=lambda entry: entry[0], reverse=True)
 
