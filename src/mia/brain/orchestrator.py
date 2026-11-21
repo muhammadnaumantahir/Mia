@@ -25,6 +25,7 @@ from mia.gateway.contracts import (
     RoutePolicy,
     TransientProviderError,
 )
+from mia.gateway.escalation import EscalationPolicy, decide_escalation, escalation_policy_from_env
 from mia.gateway.service import CompletionResult, ModelGateway, StreamEvent
 from mia.memory.store import MemoryStore
 
@@ -117,6 +118,7 @@ class Brain:
         capture: Callable[[str, str, str], dict[str, Any] | None | Awaitable[dict[str, Any] | None]] | None = None,
         on_reply: Callable[[str, str, list[dict[str, Any]]], None] | None = None,
         approval_status: Callable[[str], str | None] | None = None,
+        escalation_policy: Callable[[], EscalationPolicy] = escalation_policy_from_env,
     ) -> None:
         self.gateway, self.memory, self.tools, self.identity = gateway, memory, tools, identity
         self.observatory = observatory
@@ -135,6 +137,7 @@ class Brain:
         self.capture = capture
         self.on_reply = on_reply
         self.approval_status = approval_status
+        self.escalation_policy = escalation_policy
 
     # ------------------------------------------------------------------ events
     def _event(self, **kwargs: Any) -> None:
@@ -345,6 +348,8 @@ class Brain:
         if not text.strip() and pending:
             text = ("I prepared the requested action(s). Review the approval cards below "
                     "before anything is changed or launched.")
+        text, provider, model, attempted = await self._maybe_escalate(
+            p, text, provider, model, attempted, ledger, bool(pending or plan is not None))
         final, report = self._finish_text(p, text, ledger)
         self._store_reply(p, final)
         p.trace.execution = {**p.trace.execution, "provider_model": f"{provider}/{model}",
@@ -353,6 +358,55 @@ class Brain:
         self.diagnostics.add(p.trace)
         self._complete_event(p, provider, model, attempted, False, len(pending))
         return self._result(p, provider, model, final, attempted, pending, report, plan)
+
+    # ------------------------------------------------------------------ escalation
+    async def _maybe_escalate(self, p: Prepared, text: str, provider: str, model: str,
+                              attempted: list[str], ledger: OperationLedger,
+                              side_effects: bool) -> tuple[str, str, str, list[str]]:
+        """One bounded, opt-in retry on a stronger model when the verifier judged the reply weak.
+
+        The original reply is kept unless the retry is verifiably better. Never runs after
+        tool use or pending approvals, never for streamed turns, and every limit lives in
+        ``mia.gateway.escalation`` (disabled by default).
+        """
+        keep = (text, provider, model, attempted)
+        try:
+            policy = self.escalation_policy()
+        except Exception:
+            return keep
+        if not policy.enabled or p.built is None:
+            return keep
+        refs = len(p.built.references)
+        before = evaluate_response(text, analysis=p.analysis, ledger=ledger, memory_reference_count=refs)
+        request = self._model_request(p, tools=())
+        request = replace(request, required_capabilities=request.required_capabilities - {"tools"})
+        decision = decide_escalation(
+            policy=policy, confidence=before.confidence, issue_codes=before.codes(),
+            request=request, candidates=list(p.built.candidates), route_policy=p.policy,
+            used=self._candidate(p.decision, provider, model) if p.decision else None,
+            tried=attempted, had_side_effects=side_effects or bool(ledger.operations))
+        if not decision.escalate or decision.target is None or decision.request is None:
+            if before.confidence == "low":
+                p.trace.event("escalation_skipped", reason=decision.reason)
+            return keep
+        target_key = f"{decision.target.provider_id}/{decision.target.model_id}"
+        try:
+            res: CompletionResult = await self.gateway.complete(decision.request, [decision.target], p.policy)
+        except Exception as exc:  # the original reply stands; escalation must never fail the turn
+            p.trace.event("escalation_failed", target=target_key, error=type(exc).__name__)
+            return keep
+        self._usage(res, p.analysis.category, decision.request.estimated_input_tokens,
+                    decision.request.max_output_tokens)
+        after = evaluate_response(res.content or "", analysis=p.analysis, ledger=ledger,
+                                  memory_reference_count=refs)
+        rank = {"low": 0, "medium": 1, "high": 2}
+        better = (not res.tool_calls and bool((res.content or "").strip()) and after.ok
+                  and rank[after.confidence] > rank[before.confidence])
+        p.trace.event("escalation", target=target_key, accepted=better,
+                      before=before.confidence, after=after.confidence, trigger=decision.reason)
+        if not better:
+            return keep
+        return res.content, res.provider_id, res.model_id, [*attempted, *res.attempted_candidates]
 
     # ------------------------------------------------------------------ tool loop
     async def _tool_loop(self, p: Prepared, ledger: OperationLedger,

@@ -114,3 +114,18 @@ status (`ok`, `unreachable`, `auth_failed`, `invalid_response`, `unknown_provide
 `error`) with model count and latency; it never returns URLs, headers or bodies.
 Model discovery skips a provider whose credentials are rejected instead of failing.
 The local `/api/gateway/providers/{provider_id}/test` endpoint returns a sanitized connection result. The app remains localhost-only; no authenticated remote owner-admin surface exists.
+
+## Quality escalation (opt-in, bounded)
+
+Provider failures already fall back across candidates. `src/mia/gateway/escalation.py` adds a separate, **disabled-by-default** policy for the case where a provider answered but the deterministic verifier (`mia.brain.verify`) rated the reply `low` confidence. `decide_escalation` is pure (no I/O) and fails closed:
+
+- Only after a `low` verdict carrying an eligible issue (`empty_response`, `invalid_structured_output`, `low_confidence`); never after tool calls, plan mode or pending approvals (a retry could repeat an action); never for streamed turns.
+- At most one extra attempt (hard ceiling 2), tools disabled, output tokens and advertised latency capped.
+- Privacy: a sensitive request only escalates to a local model.
+- Cost: paid targets need both `MIA_ESCALATION_ALLOW_PAID=true` and the normal paid route policy, known prices, and an estimated cost within both caps; unknown price is refused. Free/local targets are always preferred. The gateway's atomic budget reservation still applies.
+- The target must differ from every model already tried and be demonstrably stronger (larger parameter hint, else a clearly higher reliability score).
+- The Brain keeps the original reply unless the retry is non-empty and verifiably better; every decision is recorded as an `escalation` / `escalation_skipped` / `escalation_failed` trace event.
+
+Settings (all optional): `MIA_ESCALATION_ENABLED`, `MIA_ESCALATION_MAX_ATTEMPTS`, `MIA_ESCALATION_MAX_LATENCY_MS`, `MIA_ESCALATION_MAX_OUTPUT_TOKENS`, `MIA_ESCALATION_ALLOW_PAID`, `MIA_ESCALATION_MAX_COST_USD`.
+
+Evidence limits: tests use fake providers and prove policy behaviour only, not live model quality. The gateway already hard-fails empty provider replies, so `empty_response` is effectively unreachable on the non-streaming path today; in practice the trigger is `low_confidence` combined with another verifier issue. Streaming escalation and judge-model orchestration are not implemented (A3's parallel-judge work builds on this contract).

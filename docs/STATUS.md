@@ -227,3 +227,10 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - Added `tests/test_brain_continuity.py`: cross-session memory recall after a provider switch, remote-provider privacy withholding after a switch, and owner-correction precedence after a switch. Local run: full suite **1280 passed, 16 skipped**, ruff clean (commit `f61cdd3`). Scripted providers only; this verifies provider-independent continuity plumbing, not live model answer quality.
 - Project-scoped conversation continuity does not exist and is deferred (MIA-BRAIN-03) pending an owner decision.
 
+## 2026-11-21 — MIA-GW-01 (A2): bounded quality escalation
+
+- **Finding (source-traced):** verifier confidence was only recorded in the turn trace/API result; no code used it to route or retry, so quality-based escalation was *not* wired. Gateway fallback was failure-based only.
+- **Implemented:** `src/mia/gateway/escalation.py` (pure policy, disabled by default, fail-closed on privacy/cost/latency/tokens/side effects) and a small non-streaming hook in `Brain` (`_maybe_escalate`). Details in `docs/architecture/AI_GATEWAY.md`.
+- **Verified here:** `tests/test_gateway_escalation.py` (fake providers) passes; full suite run locally: 1405 passed, 1 skipped, 1 failed (`tests/test_browser_automation.py::test_browser_api_end_to_end`, failing before this change and untouched by it). No live-provider quality claim is made.
+- **Not done:** streaming-turn escalation, judge-model orchestration, owner-facing settings UI.
+
