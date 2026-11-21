@@ -243,3 +243,95 @@ def test_same_file_calls_resolve_after_single_walk_optimisation(tmp_path):
     calls = [(labels[e["source"]], labels[e["target"]]) for e in graph["edges"] if e["type"] == "CALLS"]
     assert ("caller", "helper") in calls
     assert all(e["confidence"] == "confirmed" for e in graph["edges"] if e["type"] == "CALLS")
+
+
+def _norm(graph):
+    graph = dict(graph)
+    graph.pop("generated_at")
+    return json.dumps(graph, sort_keys=True)
+
+
+def _write(repo, rel, text):
+    path = repo / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def test_incremental_build_equals_clean_rebuild_across_edit_sequences(tmp_path):
+    from mia.codegraph.indexer import FactCache, build_graph
+
+    repo = tmp_path / "repo"
+    _write(repo, "src/mia/base.py", "class Base:\n    pass\n\n\ndef helper():\n    return 1\n")
+    _write(repo, "src/mia/app.py",
+           "from mia.base import Base\nfrom fastapi import FastAPI\napp = FastAPI()\n\n\n"
+           "class Child(Base):\n    pass\n\n\ndef local():\n    return 2\n\n\n"
+           "@app.get('/ping')\ndef ping():\n    return local()\n")
+    _write(repo, "tests/test_app.py", "def test_local():\n    pass\n")
+    _write(repo, "config/settings.toml", "a = 1\n")
+    cache = FactCache()
+
+    def check(step):
+        incremental = build_graph(repo, cache=cache)
+        clean = build_graph(repo)  # fresh cache every time
+        assert _norm(incremental) == _norm(clean), step
+        return incremental
+
+    check("initial")
+    assert cache.extracted == 3 and cache.reused == 0
+    check("no change")
+    assert cache.extracted == 0 and cache.reused == 3
+
+    _write(repo, "src/mia/base.py", "class Base:\n    pass\n\n\nclass Other:\n    pass\n")  # modify
+    check("modify")
+    assert cache.extracted == 1 and cache.reused == 2
+
+    _write(repo, "src/mia/extra.py", "from mia.app import Child\nX = open('config/settings.toml')\n")
+    graph = check("add")  # new module creates cross-file IMPORTS and READS_FROM edges
+    assert any(e["type"] == "IMPORTS" for e in graph["edges"] if "extra" in str(e["evidence"]))
+
+    (repo / "src/mia/base.py").rename(repo / "src/mia/core.py")  # rename breaks app's import
+    check("rename")  # the contract is equality with a clean rebuild, including the broken import
+
+    (repo / "src/mia/extra.py").unlink()
+    check("remove")
+    assert "src/mia/extra.py" not in cache.entries  # stale entries are pruned
+
+    _write(repo, "src/mia/broken.py", "def (:\n")
+    graph = check("syntax error")
+    assert any(e["path"] == "src/mia/broken.py" for e in graph["index_errors"])
+    _write(repo, "src/mia/broken.py", "def fixed():\n    return 1\n")
+    graph = check("syntax error fixed")
+    assert not graph["index_errors"]
+
+
+def test_fact_cache_persists_and_is_invalidated_by_salt(tmp_path):
+    from mia.codegraph import indexer
+    from mia.codegraph.indexer import FactCache, build_graph
+
+    repo = tmp_path / "repo"
+    _write(repo, "m.py", "def f():\n    return 1\n")
+    cache = FactCache()
+    build_graph(repo, cache=cache)
+    stored = tmp_path / "cache" / "facts.json"
+    cache.save(stored)
+    assert not list(stored.parent.glob(".facts-*.tmp"))
+
+    loaded = FactCache()
+    loaded.load(stored)
+    build_graph(repo, cache=loaded)
+    assert loaded.reused == 1 and loaded.extracted == 0
+
+    original = indexer._FACTS_SALT
+    try:
+        indexer._FACTS_SALT = "different-extractor"
+        stale = FactCache()
+        stale.load(stored)
+        assert stale.entries == {}
+    finally:
+        indexer._FACTS_SALT = original
+    corrupt = tmp_path / "bad.json"
+    corrupt.write_text("{not json", encoding="utf-8")
+    fresh = FactCache()
+    fresh.load(corrupt)
+    assert fresh.entries == {}

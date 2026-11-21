@@ -75,7 +75,8 @@ def test_watcher_history_records_changed_paths_and_rebuild_mode(tmp_path):
     assert watcher.last_rebuild_seconds is not None
     history_path = tmp_path / "data" / "code-graph" / "history.jsonl"
     last = json.loads(history_path.read_text(encoding="utf-8").splitlines()[-1])
-    assert last["rebuild"] == "full"
+    assert last["rebuild"] in {"full", "incremental"}
+    assert last["files_reparsed"] >= 1
     assert last["changes"]["modified"] == ["src/mia/app.py"]
     # History stores paths only, never file contents.
     assert "return 2" not in history_path.read_text(encoding="utf-8")

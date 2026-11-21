@@ -7,7 +7,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .indexer import build_graph, diff_snapshots, source_snapshot
+from .indexer import FactCache, build_graph, diff_snapshots, source_snapshot
 
 
 class CodeGraphWatcher:
@@ -28,6 +28,9 @@ class CodeGraphWatcher:
         self.last_error: str | None = None
         self.last_commit: str | None = None
         self.last_changes: dict[str, object] = {}
+        self.cache = FactCache()
+        self.cache_path = self.root / "data" / "code-graph" / "facts-cache.json"
+        self.cache.load(self.cache_path)
         self.last_rebuild_seconds: float | None = None
 
     @property
@@ -73,9 +76,13 @@ class CodeGraphWatcher:
                     previous = {}
             changes = diff_snapshots(self._snapshot, snapshot) if self._snapshot else {}
             started = time.perf_counter()
-            graph = build_graph(self.root, output=self.output)
+            graph = build_graph(self.root, output=self.output, cache=self.cache)
             self.last_rebuild_seconds = round(time.perf_counter() - started, 3)
             self.last_changes = changes
+            try:
+                self.cache.save(self.cache_path)
+            except OSError:
+                pass  # the cache is an optimisation; a failed save never blocks the graph
             if (
                 previous.get("source_digest") != graph["source_digest"]
                 or previous.get("commit") != graph["commit"]
@@ -108,7 +115,9 @@ class CodeGraphWatcher:
                 "edges": summary.get("edges", 0),
                 "parse_errors": summary.get("parse_errors", 0),
             },
-            "rebuild": "full",
+            "rebuild": "incremental" if self.cache.reused else "full",
+            "files_reused": self.cache.reused,
+            "files_reparsed": self.cache.extracted,
             "rebuild_seconds": self.last_rebuild_seconds,
         }
         if changes:

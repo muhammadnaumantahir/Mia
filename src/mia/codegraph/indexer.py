@@ -129,7 +129,152 @@ def diff_snapshots(
     }
 
 
-def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[str, Any]:
+_ROUTE_METHODS = {"get", "post", "put", "patch", "delete"}
+_FACTS_SALT = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:16]
+
+
+def _module_name(rel: str) -> str:
+    parts = list(Path(rel).with_suffix("").parts)
+    if parts and parts[-1] == "__init__":
+        parts.pop()
+    return ".".join(parts)
+
+
+def _extract_facts(rel: str, tree: ast.Module) -> dict[str, Any]:
+    """Per-file, JSON-serialisable facts. Depends only on the file's own content and path."""
+    decls: list[dict[str, Any]] = []
+    keymap: dict[ast.AST, str] = {}
+
+    def visit_scope(body: list[ast.stmt], parent_key: str) -> None:
+        for item in body:
+            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                is_class = isinstance(item, ast.ClassDef)
+                key = f"{rel}:{parent_key + '.' if parent_key else ''}{item.name}"
+                decls.append({
+                    "kind": "class" if is_class else "function", "key": key, "name": item.name,
+                    "qualified_name": parent_key + "." + item.name if parent_key else item.name,
+                    "line": item.lineno, "end_line": getattr(item, "end_lineno", item.lineno),
+                    "bases": [b.id for b in item.bases if isinstance(b, ast.Name)] if is_class else [],
+                })
+                keymap[item] = key
+                visit_scope(item.body, key.split(":", 1)[1])
+            elif isinstance(item, (ast.If, ast.For, ast.AsyncFor, ast.While, ast.With,
+                                    ast.AsyncWith, ast.Try)):
+                for field in ("body", "orelse", "finalbody"):
+                    child = getattr(item, field, None)
+                    if isinstance(child, list):
+                        visit_scope(child, parent_key)
+
+    visit_scope(tree.body, "")
+    imports: list[dict[str, Any]] = []
+    routes: list[dict[str, Any]] = []
+    accesses: list[dict[str, Any]] = []
+    calls: list[dict[str, Any]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            else:
+                module = node.module or ""
+                names = [f"{module}.{alias.name}".strip(".") for alias in node.names]
+                if node.level:
+                    package = _module_name(rel).split(".")[:-node.level]
+                    module = ".".join(package + ([module] if module else []))
+                    names = [f"{module}.{alias.name}".strip(".") for alias in node.names]
+            imports.append({"line": node.lineno, "names": names})
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for decorator in node.decorator_list:
+                if (isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Attribute)
+                        and decorator.func.attr in _ROUTE_METHODS):
+                    route = next((a.value for a in decorator.args
+                                  if isinstance(a, ast.Constant) and isinstance(a.value, str)), None)
+                    if route:
+                        routes.append({"method": decorator.func.attr.upper(), "route": route,
+                                       "line": decorator.lineno, "function": keymap.get(node)})
+            collected: list[ast.Call] = []
+
+            class CallVisitor(ast.NodeVisitor):
+                def visit_FunctionDef(self, inner: ast.FunctionDef) -> None:
+                    if inner is node:
+                        self.generic_visit(inner)
+
+                def visit_AsyncFunctionDef(self, inner: ast.AsyncFunctionDef) -> None:
+                    if inner is node:
+                        self.generic_visit(inner)
+
+                def visit_Call(self, call: ast.Call) -> None:
+                    collected.append(call)
+                    self.generic_visit(call)
+
+            CallVisitor().visit(node)
+            calls.append({"line": node.lineno,
+                          "calls": [[c.func.id, c.lineno] for c in collected
+                                    if isinstance(c.func, ast.Name)]})
+        raw_path: str | None = None
+        relation: str | None = None
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id == "Path" and node.args and isinstance(node.args[0], ast.Constant):
+                if isinstance(node.args[0].value, str):
+                    raw_path = node.args[0].value
+                    relation = "USES"
+            elif node.func.id == "open" and node.args and isinstance(node.args[0], ast.Constant):
+                if isinstance(node.args[0].value, str):
+                    raw_path = node.args[0].value
+                    mode = node.args[1].value if len(node.args) > 1 and isinstance(node.args[1], ast.Constant) else "r"
+                    relation = "WRITES_TO" if isinstance(mode, str) and any(f in mode for f in ("w", "a", "x", "+")) else "READS_FROM"
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            if node.func.attr in {"read_text", "read_bytes", "write_text", "write_bytes"}:
+                receiver = node.func.value
+                if (isinstance(receiver, ast.Call) and isinstance(receiver.func, ast.Name)
+                        and receiver.func.id == "Path" and receiver.args
+                        and isinstance(receiver.args[0], ast.Constant)
+                        and isinstance(receiver.args[0].value, str)):
+                    raw_path = receiver.args[0].value
+                    relation = "WRITES_TO" if node.func.attr.startswith("write") else "READS_FROM"
+        if raw_path and relation:
+            accesses.append({"raw": raw_path, "relation": relation, "line": node.lineno})
+    return {"decls": decls, "imports": imports, "routes": routes,
+            "accesses": accesses, "calls": calls}
+
+
+class FactCache:
+    """Per-file extraction cache keyed by content digest (optionally persisted as JSON).
+
+    Entries hold only facts derived from a single file. All cross-file relationships are
+    recomputed by the global resolution pass on every build, so a stale cache entry can
+    never leave a stale cross-file edge. The cache is salted with a hash of this module's
+    source, so changing the extractor invalidates every entry.
+    """
+
+    def __init__(self) -> None:
+        self.entries: dict[str, tuple[str, dict[str, Any]]] = {}
+        self.reused = 0
+        self.extracted = 0
+
+    def load(self, path: str | Path) -> None:
+        try:
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+            if data.get("salt") == _FACTS_SALT:
+                self.entries = {k: (v[0], v[1]) for k, v in data["entries"].items()}
+        except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError):
+            self.entries = {}
+
+    def save(self, path: str | Path) -> None:
+        destination = Path(path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps({"salt": _FACTS_SALT, "entries": self.entries}, sort_keys=True)
+        fd, temporary = tempfile.mkstemp(prefix=".facts-", suffix=".tmp", dir=destination.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as stream:
+                stream.write(payload)
+            os.replace(temporary, destination)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+
+
+def build_graph(root: str | Path, *, output: str | Path | None = None,
+                cache: FactCache | None = None) -> dict[str, Any]:
     """Build a deterministic graph from repository source and documentation."""
     root = Path(root).resolve()
     files = _python_files(root)
@@ -137,10 +282,7 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
     edges: dict[tuple[str, str, str, str], dict[str, Any]] = {}
     modules = {_module_path(path, root): path for path in files if path.suffix == ".py"}
     symbol_index: dict[str, list[str]] = {}
-    parsed: dict[Path, ast.Module] = {}
-    walked: dict[Path, list[ast.AST]] = {}
     function_nodes_by_location: dict[tuple[str, int], list[str]] = {}
-    definition_ids: dict[ast.AST, str] = {}
     errors: list[dict[str, str]] = []
 
     def add_node(kind: str, key: str, **attrs: Any) -> str:
@@ -177,128 +319,90 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
             lid = add_node("sps_layer", layer[0], label=f"{layer[0]} · {layer[1]}")
             add_edge(fid, lid, "BELONGS_TO_LAYER", "inferred", f"path heuristic: {rel}")
 
+    cache = cache if cache is not None else FactCache()
+    cache.reused = cache.extracted = 0
+    digests: dict[Path, str] = {}
+    facts_by_path: dict[Path, dict[str, Any]] = {}
     for path in files:
-        if path.suffix != ".py":
-            continue
         rel = path.relative_to(root).as_posix()
-        fid = file_ids[path]
         try:
-            source = path.read_text(encoding="utf-8")
-            tree = ast.parse(source, filename=rel)
-            parsed[path] = tree
-            walked[path] = list(ast.walk(tree))
-        except (OSError, UnicodeError, SyntaxError) as exc:
+            data = path.read_bytes()
+        except OSError as exc:
             errors.append({"path": rel, "error": f"{type(exc).__name__}: {str(exc)[:180]}"})
             continue
+        digest = hashlib.sha256(data).hexdigest()
+        digests[path] = digest
+        if path.suffix != ".py":
+            continue
+        cached = cache.entries.get(rel)
+        if cached is not None and cached[0] == digest:
+            facts = cached[1]
+            cache.reused += 1
+        else:
+            try:
+                facts = _extract_facts(rel, ast.parse(data.decode("utf-8"), filename=rel))
+            except (UnicodeError, SyntaxError) as exc:
+                facts = {"error": f"{type(exc).__name__}: {str(exc)[:180]}"}
+            cache.entries[rel] = (digest, facts)
+            cache.extracted += 1
+        if "error" in facts:
+            errors.append({"path": rel, "error": facts["error"]})
+            continue
+        facts_by_path[path] = facts
+    live = {p.relative_to(root).as_posix() for p in files}
+    for stale in [k for k in cache.entries if k not in live]:
+        del cache.entries[stale]
 
-        def visit_scope(body: list[ast.stmt], parent_key: str) -> None:
-            for item in body:
-                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                    kind = "class" if isinstance(item, ast.ClassDef) else "function"
-                    key = f"{rel}:{parent_key + '.' if parent_key else ''}{item.name}"
-                    sid = add_node(kind, key, label=item.name, path=rel,
-                                   qualified_name=parent_key + "." + item.name if parent_key else item.name,
-                                   line=item.lineno, end_line=getattr(item, "end_lineno", item.lineno))
-                    symbol_index.setdefault(item.name, []).append(sid)
-                    definition_ids[item] = sid
-                    add_edge(fid, sid, "DECLARES", "confirmed", f"ast:{rel}:{item.lineno}", item.lineno)
-                    if isinstance(item, ast.ClassDef):
-                        for base in item.bases:
-                            if isinstance(base, ast.Name):
-                                for candidate in symbol_index.get(base.id, []):
-                                    add_edge(sid, candidate, "EXTENDS", "inferred",
-                                             f"base expression {base.id}", item.lineno)
-                        visit_scope(item.body, key.split(":", 1)[1])
-                    else:
-                        visit_scope(item.body, key.split(":", 1)[1])
-                elif isinstance(item, (ast.If, ast.For, ast.AsyncFor, ast.While, ast.With,
-                                        ast.AsyncWith, ast.Try)):
-                    for field in ("body", "orelse", "finalbody"):
-                        child = getattr(item, field, None)
-                        if isinstance(child, list):
-                            visit_scope(child, parent_key)
+    def resolve_import(imported: str) -> Path | None:
+        prefix = imported
+        while prefix:
+            target_path = modules.get(prefix)
+            if target_path is not None:
+                return target_path
+            if "." in prefix and (prefix.startswith("mia.") or prefix.startswith("src.mia.")):
+                suffix_matches = [c for m, c in modules.items() if m.endswith("." + prefix)]
+                if len(suffix_matches) == 1:
+                    return suffix_matches[0]
+            if "." not in prefix:
+                break
+            prefix = prefix.rsplit(".", 1)[0]
+        return None
 
-        visit_scope(tree.body, "")
-        for node in walked[path]:
-            if isinstance(node, ast.Import):
-                names = [(alias.name, alias.asname or alias.name.split(".")[0]) for alias in node.names]
-            elif isinstance(node, ast.ImportFrom):
-                module = node.module or ""
-                names = [(f"{module}.{alias.name}".strip("."), alias.asname or alias.name) for alias in node.names]
-                if node.level:
-                    package = _module_path(path, root).split(".")[:-node.level]
-                    module = ".".join(package + ([module] if module else []))
-                    names = [(f"{module}.{alias.name}".strip("."), alias.asname or alias.name) for alias in node.names]
-            else:
-                continue
-            for imported, alias in names:
-                prefix = imported
-                target_path = None
-                while prefix:
-                    target_path = modules.get(prefix)
-                    if target_path is not None:
-                        break
-                    if "." in prefix and (
-                        prefix.startswith("mia.") or prefix.startswith("src.mia.")
-                    ):
-                        suffix_matches = [
-                            candidate for module, candidate in modules.items()
-                            if module.endswith("." + prefix)
-                        ]
-                        if len(suffix_matches) == 1:
-                            target_path = suffix_matches[0]
-                            break
-                    if "." not in prefix:
-                        break
-                    prefix = prefix.rsplit(".", 1)[0]
+    key_to_id: dict[str, str] = {}
+    for path, facts in facts_by_path.items():
+        rel = path.relative_to(root).as_posix()
+        fid = file_ids[path]
+        for decl in facts["decls"]:
+            sid = add_node(decl["kind"], decl["key"], label=decl["name"], path=rel,
+                           qualified_name=decl["qualified_name"],
+                           line=decl["line"], end_line=decl["end_line"])
+            symbol_index.setdefault(decl["name"], []).append(sid)
+            key_to_id[decl["key"]] = sid
+            add_edge(fid, sid, "DECLARES", "confirmed", f"ast:{rel}:{decl['line']}", decl["line"])
+            for base in decl["bases"]:
+                for candidate in symbol_index.get(base, []):
+                    add_edge(sid, candidate, "EXTENDS", "inferred",
+                             f"base expression {base}", decl["line"])
+        for entry in facts["imports"]:
+            for imported in entry["names"]:
+                target_path = resolve_import(imported)
                 if target_path is not None:
                     add_edge(fid, file_ids[target_path], "IMPORTS", "confirmed",
-                             f"ast-import:{rel}:{node.lineno}", node.lineno)
-
-        for node in walked[path]:
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                for decorator in node.decorator_list:
-                    if isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Attribute):
-                        if decorator.func.attr in {"get", "post", "put", "patch", "delete"}:
-                            route = next((arg.value for arg in decorator.args
-                                          if isinstance(arg, ast.Constant) and isinstance(arg.value, str)), None)
-                            if route:
-                                route_id = add_node("api_endpoint", f"{decorator.func.attr.upper()} {route}",
-                                                     label=f"{decorator.func.attr.upper()} {route}",
-                                                     path=rel, line=decorator.lineno)
-                                function_id = definition_ids.get(node)
-                                if function_id is None:
-                                    continue
-                                add_edge(function_id, route_id, "EXPOSES_API", "confirmed",
-                                         f"fastapi-decorator:{rel}:{decorator.lineno}", decorator.lineno)
+                             f"ast-import:{rel}:{entry['line']}", entry["line"])
+        for route in facts["routes"]:
+            label = f"{route['method']} {route['route']}"
+            route_id = add_node("api_endpoint", label, label=label, path=rel, line=route["line"])
+            function_id = key_to_id.get(route["function"]) if route["function"] else None
+            if function_id is None:
+                continue
+            add_edge(function_id, route_id, "EXPOSES_API", "confirmed",
+                     f"fastapi-decorator:{rel}:{route['line']}", route["line"])
 
     # Resolve literal configuration/data-file access without guessing dynamic paths.
-    for path in parsed:
+    for path, facts in facts_by_path.items():
         rel = path.relative_to(root).as_posix()
-        for node in walked[path]:
-            raw_path: str | None = None
-            relation: str | None = None
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-                if node.func.id == "Path" and node.args and isinstance(node.args[0], ast.Constant):
-                    if isinstance(node.args[0].value, str):
-                        raw_path = node.args[0].value
-                        relation = "USES"
-                elif node.func.id == "open" and node.args and isinstance(node.args[0], ast.Constant):
-                    if isinstance(node.args[0].value, str):
-                        raw_path = node.args[0].value
-                        mode = node.args[1].value if len(node.args) > 1 and isinstance(node.args[1], ast.Constant) else "r"
-                        relation = "WRITES_TO" if isinstance(mode, str) and any(flag in mode for flag in ("w", "a", "x", "+")) else "READS_FROM"
-            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-                if node.func.attr in {"read_text", "read_bytes", "write_text", "write_bytes"}:
-                    receiver = node.func.value
-                    if (isinstance(receiver, ast.Call) and isinstance(receiver.func, ast.Name)
-                            and receiver.func.id == "Path" and receiver.args
-                            and isinstance(receiver.args[0], ast.Constant)
-                            and isinstance(receiver.args[0].value, str)):
-                        raw_path = receiver.args[0].value
-                        relation = "WRITES_TO" if node.func.attr.startswith("write") else "READS_FROM"
-            if not raw_path or not relation:
-                continue
+        for access in facts["accesses"]:
+            raw_path = access["raw"]
             normalized = raw_path.replace("\\", "/")
             if normalized.startswith("/") or ":" in normalized:
                 continue
@@ -310,45 +414,27 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
             target_path = root / target_rel
             if target_path not in file_ids or target_path == path:
                 continue
-            add_edge(file_ids[path], file_ids[target_path], relation, "confirmed",
-                     f"ast-file-access:{rel}:{node.lineno}:{raw_path}", node.lineno)
+            add_edge(file_ids[path], file_ids[target_path], access["relation"], "confirmed",
+                     f"ast-file-access:{rel}:{access['line']}:{raw_path}", access["line"])
 
     # Resolve direct calls only when the target is unique in the same file.
     # Cross-file calls via DI, aliases and dynamic imports are intentionally unresolved.
     for node in nodes.values():
         if node["kind"] == "function":
             function_nodes_by_location.setdefault((node["path"], node.get("line")), []).append(node["id"])
-    for path in parsed:
+    for path, facts in facts_by_path.items():
         rel = path.relative_to(root).as_posix()
-        for function in (n for n in walked[path]
-                         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))):
-            matches = function_nodes_by_location.get((rel, function.lineno), [])
+        for function in facts["calls"]:
+            matches = function_nodes_by_location.get((rel, function["line"]), [])
             if len(matches) != 1:
                 continue
             caller_id = matches[0]
-            class CallVisitor(ast.NodeVisitor):
-                def __init__(self, root_function: ast.AST) -> None:
-                    self.root_function = root_function
-                    self.calls: list[ast.Call] = []
-                def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-                    if node is self.root_function:
-                        self.generic_visit(node)
-                def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-                    if node is self.root_function:
-                        self.generic_visit(node)
-                def visit_Call(self, node: ast.Call) -> None:
-                    self.calls.append(node)
-                    self.generic_visit(node)
-            visitor = CallVisitor(function)
-            visitor.visit(function)
-            for call in visitor.calls:
-                if not isinstance(call.func, ast.Name):
-                    continue
-                targets = [sid for sid in symbol_index.get(call.func.id, [])
+            for name, lineno in function["calls"]:
+                targets = [sid for sid in symbol_index.get(name, [])
                            if nodes.get(sid, {}).get("path") == rel and sid != caller_id]
                 if len(targets) == 1:
                     add_edge(caller_id, targets[0], "CALLS", "confirmed",
-                             f"ast-call:{rel}:{call.lineno}", call.lineno)
+                             f"ast-call:{rel}:{lineno}", lineno)
 
     # Tests are linked only by a conservative exact-name convention and marked inferred.
     declared = {n["id"]: n for n in nodes.values() if n["kind"] == "function"}
@@ -420,13 +506,9 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
 
     fingerprint = hashlib.sha256()
     for path in files:
-        rel = path.relative_to(root).as_posix()
-        try:
-            data = path.read_bytes()
-        except OSError as exc:
-            errors.append({"path": rel, "error": f"{type(exc).__name__}: {str(exc)[:180]}"})
-            continue
-        fingerprint.update(rel.encode("utf-8") + b"\0" + hashlib.sha256(data).digest())
+        if path in digests:
+            rel = path.relative_to(root).as_posix()
+            fingerprint.update(rel.encode("utf-8") + b"\0" + bytes.fromhex(digests[path]))
     commit = _git(root, "rev-parse", "HEAD")
     result = {
         "schema_version": "1.0.0",

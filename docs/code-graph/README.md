@@ -93,16 +93,23 @@ looks functions up by `(path, line)`. Old and new indexers were compared on the 
 produced identical graphs (excluding `generated_at`); one run measured about 3.1 s before and
 2.2 s after. This is a constant-factor improvement, not true incremental indexing.
 
-**Safe implementation plan for true incremental indexing (not started):**
-1. Split `build_graph` into a per-file extraction pass (declarations, imports as written, call
-   sites, literal file accesses, routes) that returns plain serialisable facts keyed by the
-   file's content digest, and a global resolution pass (module map, symbol index, `IMPORTS`,
-   `EXTENDS`, `CALLS`, `TESTED_BY`, diagnostics, cycles).
-2. Cache per-file facts under the ignored `data/code-graph/` directory; re-extract only files
-   whose digest changed, then always re-run the (cheap) global pass.
-3. Require a regression test asserting that the incremental graph equals a clean full rebuild
-   after add / modify / remove / rename sequences; never ship the cache path without it.
-4. Keep inferred edges labelled `inferred`; the cache must not introduce new edge sources.
+**Incremental indexing (MIA-BASE-02, implemented):** `build_graph` is now a per-file extraction
+pass plus a global resolution pass.
+- `_extract_facts` produces JSON-serialisable facts from one file only (declarations, imports as
+  written, routes, literal file accesses, per-function call sites). `FactCache` stores them keyed
+  by the file's SHA-256 and is salted with a hash of `indexer.py`, so any extractor change
+  invalidates it. It can be persisted at `data/code-graph/facts-cache.json` (git-ignored).
+- The global pass (module map, symbol index, `IMPORTS`, `EXTENDS`, `CALLS`, `TESTED_BY`,
+  diagnostics, cycles) always re-runs over all facts, so a cross-file edge can never go stale.
+  Savings come from skipping read-decode-parse-walk for unchanged Python files, not from
+  skipping the global pass.
+- Tests assert that cached incremental output equals a clean full rebuild after add, modify,
+  rename, remove, syntax-error and syntax-fix sequences; the new indexer was also compared with
+  the previous one on this repository (identical graphs). On this repo, one sandbox run: previous
+  indexer about 2.5 s, cold cache about 1.7 s, warm cache about 0.5 s.
+- Watcher history now records `rebuild` (`full` or `incremental`), `files_reused` and
+  `files_reparsed`. Known difference: if a file cannot be read at all, the old indexer could list
+  two index errors for it; the new one lists one.
 
 Non-Python files are still indexed only as file nodes; no language-specific symbol parsing exists
 for them.

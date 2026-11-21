@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from mia.codegraph.indexer import build_graph, write_graph  # noqa: E402
+from mia.codegraph.indexer import FactCache, build_graph, write_graph  # noqa: E402
 
 OUTPUT = ROOT / "docs" / "code-graph" / "graph.json"
 HISTORY = ROOT / "docs" / "code-graph" / "CHANGELOG.md"
@@ -19,7 +19,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="fail if the stored graph is stale")
     args = parser.parse_args()
-    graph = build_graph(ROOT)
+    cache = FactCache()
+    cache_path = ROOT / "data" / "code-graph" / "facts-cache.json"
+    cache.load(cache_path)
+    graph = build_graph(ROOT, cache=cache)
+    try:
+        cache.save(cache_path)
+    except OSError:
+        pass
     previous = None
     if OUTPUT.is_file():
         try:
