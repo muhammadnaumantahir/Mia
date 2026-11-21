@@ -160,3 +160,10 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - The local Code Graph snapshot/history was not regenerated because this environment has GitHub file editing but no repository checkout/runtime. After pulling main, run `python scripts/update_code_graph.py` locally; then run `python scripts/update_code_graph.py --check` to confirm it matches the checkout.
 - Next conversation-first work: add evaluation coverage for memory correction/supersession and cross-session/provider continuity, then strengthen reasoning-quality evaluation and bounded model escalation. Do not begin 3D or computer-control expansion ahead of this milestone.
 
+## 2026-11-21 follow-up — semantic retrieval documentation reconciled
+
+- Rewrote `docs/memory/SEMANTIC_RETRIEVAL.md` to match the current main implementation: full retained non-temporary conversation history, batched embedding-cache operations, batches of up to 64 uncached messages, opt-in loopback-only Ollama embeddings, and bounded two-hop relationship expansion.
+- Removed obsolete statements that described the semantic implementation as a development-branch change or limited conversation candidates to 12 messages.
+- Strengthened the relationship-expansion cap test to construct a branching graph and assert exactly four related records can be added when the context record budget allows it.
+- Verification remains unchanged: tests are authored but not run; CI is intentionally skipped. Code Graph regeneration requires a local checkout.
+
