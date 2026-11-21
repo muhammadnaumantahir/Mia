@@ -20,26 +20,39 @@ _GREETING = re.compile(
 )
 _CONTINUE = re.compile(
     r"\b(continue|carry on|resume|pick up)\b.*\b(where|from)\b.*\b(stopped|left off|were|we)\b"
-    r"|\bcontinue (with )?(that|this|it)\b|\bwhere we (stopped|left off)\b",
+    r"|\bcontinue (with )?(that|this|it)\b|\bwhere we (stopped|left off)\b"
+    r"|\b(jahan|wahin)\b.*\b(chora|chhoda|chori|ruke|rukay)\b.*\b(tha|the|se)\b"
+    r"|\b(jahan|wahin)\b.*\b(baat|kaam)\b.*\b(chora|chhoda|ruka)\b"
+    r"|جہاں.*چھوڑا.*(وہیں|وہاں).*|جہاں.*رکے.*وہیں.*",
     re.I,
 )
 _PAST_ISSUE = re.compile(
     r"\b(same|that|the) (issue|problem|bug|error)\b.*\b(we|you|i)\b.*\b(discussed|talked|mentioned|saw)"
-    r"|\b(discussed|talked about|mentioned) (yesterday|earlier|before|last)\b",
+    r"|\b(discussed|talked about|mentioned) (yesterday|earlier|before|last)\b"
+    r"|\b(kal|pichlay|pichle|pehle)\b.*\b(issue|masla|problem)\b"
+    r"|\b(issue|masla|problem)\b.*\b(hum ne|main ne|maine)\b.*\b(discuss|bat ki|zikr kiya)\b"
+    r"|کل.*(مسئلہ|مسلا|ایشو).*|پچھلے.*(مسئلہ|مسلا|ایشو).*",
     re.I,
 )
 _PAST_DECISION = re.compile(
     r"\b(previous|earlier|last|prior) (decision|choice|plan|approach|conclusion)\b"
-    r"|\bcompare .* (with|to) .*\b(previous|earlier|our)\b",
+    r"|\bcompare .* (with|to) .*\b(previous|earlier|our)\b"
+    r"|\b(pichla|pichli|pehle wala|pehli wali)\b.*\b(faisla|plan|approach)\b"
+    r"|\b(hum ne|main ne|maine)\b.*\b(kya|kia)\b.*\b(decide|faisla|tay)\b"
+    r"|پچھلا.*(فیصلہ|پلان).*|ہم نے کیا فیصلہ.*",
     re.I,
 )
 _RECALL = re.compile(
     r"\b(did|do|have) (we|i|you) (choose|chose|decide|decided|pick|picked|agree|agreed|say|said|use|used|"
-    r"discuss|discussed|talk|talked|settle|settled)\b|\bwhat (did|was) (we|i|you|our)\b.*\b(decid|choos|agre|pick)",
+    r"discuss|discussed|talk|talked|settle|settled)\b|\bwhat (did|was) (we|i|you|our)\b.*\b(decid|choos|agre|pick)"
+    r"|\b(hum ne|main ne|maine)\b.*\b(kya|kia)\b.*\b(decide|faisla|choose|chuna)\b"
+    r"|ہم نے کیا (طے|فیصلہ|چنا).*|ہم نے کس.*(چنا|طے).*",
     re.I,
 )
 _PREFERENCE = re.compile(
-    r"\bmy (usual|normal|preferred|standard|default)\b|\bas i (usually|always) (like|do|prefer)\b", re.I
+    r"\bmy (usual|normal|preferred|standard|default)\b|\bas i (usually|always) (like|do|prefer)\b"
+    r"|\bmeri (usual|normal|pasandeeda|preferred)\b|\bmain aam tor par\b.*\bpasand\b"
+    r"|میری (عام|پسندیدہ) ترجیح", re.I
 )
 _DECOMPOSE = re.compile(
     r"\bbreak (this|that|it|the task)? ?(down )?(into|up)\b|\bsmaller steps\b|\bstep[- ]by[- ]step plan\b", re.I
