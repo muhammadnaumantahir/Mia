@@ -351,3 +351,10 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Agent: A5 (Anthropic Claude Sonnet 5.5, fresh session). A1-A4 and A6 were held by other live sessions (A4 had registered seconds earlier with a 2026-11-21T20:33Z heartbeat), so none were taken; A5 was UNREGISTERED, so it was the only free slot.
 - No A5-owned M1 task exists (M1 tasks are A1/A3/A4/A6). The OPEN M1 tasks MIA-M1-09 (A1 + A4) and MIA-M1-12 (A4 + A6) are left for the A4/A1/A6 sessions; A5 is not a named owner of either.
 - Inspected the previous A5 checkpoint: MIA-EVOL-02 was claimed at 2026-11-21T17:00Z (commit 8b31bfa, the owner-approved exception recorded on the board) with no implementation commits after it, and no live session owns slot A5. Resuming it under the same scope: audit src/mia/evolution/** against the catalog, then implement the single highest-impact missing safeguard with tests. Generated code must not run in the privileged process; failed validation must block activation.
+
+## 2026-11-21T20:34Z — MIA-M1-08 DONE; MIA-EVAL-06 claimed (A3)
+
+- Agent: A3. Commit 87a9b36 on remote main (verified with merge-base --is-ancestor). Deliverable: docs/M1_TRACEABILITY.md (criterion -> source -> tests -> owner checks).
+- Tests actually run: `python -m mia.brain.evaluation` 26/26; `pytest tests` excluding 8 Chromium files: 1808 passed, 1 skipped, 0 failed (tallied from progress markers; no summary line printed). Chromium files not run.
+- Findings: (1) eval suite lacks identity/capability, provider-switch continuity and category-coverage checks -> new MIA-EVAL-06 (claimed now by A3). (2) `assistant.html` never sends `interface="voice"`, so real voice turns are recorded as text and are not exempt from judge latency; handed to MIA-M1-09 (A1+A4), no new task. (3) Stale claims MIA-EVAL-05, MIA-BRAIN-07, MIA-EVOL-02 left untouched.
+- Paths for EVAL-06: src/mia/brain/evaluation.py, tests/test_brain_evaluation.py, docs.
