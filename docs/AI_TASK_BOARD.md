@@ -94,7 +94,7 @@ The detailed task definitions, dependencies, scope and acceptance criteria are i
 | MIA-LIFE-09 | P3 | A2 + A6 | OPEN | Notification center with quiet hours, deduplication, expiry, snooze and timezone tests. |
 | MIA-LIFE-10 | P3 | A1 + A5 | OPEN | Personal knowledge graph with typed, source-backed links, confidence, correction and deletion. |
 | MIA-LIFE-11 | P3 | A2 + A5 | OPEN | Encrypted backup/restore, integrity check, restore preview and recovery tests. |
-| MIA-LIFE-12 | P3 | A2 + A6 | OPEN | Real usage, spend, latency, CPU/RAM/storage dashboard; unknown values remain unknown. |
+| MIA-LIFE-12 | P3 | A2 + A6 | IN_PROGRESS (A2, claimed 2026-11-21T21:03Z; OWNER-APPROVED EXCEPTION to the M2->M3 gate: owner replied "Approve an M3 exception" in chat to A2's offer naming MIA-LIFE-12) | Real usage, spend, latency, CPU/RAM/storage dashboard; unknown values remain unknown. A2 takes backend aggregation + the read-only panel on the existing gateway console; A6 may refine UI later. Paths: new `src/mia/observatory/usage_dashboard.py`, one route in `observatory/api.py`, `src/mia/gateway/dashboard.html` (panel only), tests, docs. |
 | MIA-LIFE-13 | P3 | A2 + A5 | OPEN | Authenticated device sync/remote access, revocation and conflict tests; no public unauthenticated service. |
 | MIA-LIFE-14 | P3 | A1 + A3 | OPEN | Bounded proactive suggestions with evidence, relevance/novelty, quiet hours, caps and opt-out. |
 

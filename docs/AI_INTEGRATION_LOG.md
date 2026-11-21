@@ -471,3 +471,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - The implementation landed earlier in commit `5b0c3f7` (ancestor of remote main, confirmed with merge-base) by a previous A1 session that never updated the board. This fresh A1 session did not rewrite it; it re-verified and recorded it.
 - Verified now: `pytest tests/test_runtime_evidence_budget.py tests/test_self_description.py` all passed; `build_context` counts the system message (identity + evidence block) in the fixed token cost against `token_budget`. Compact block by default, full block only when the turn asks about identity/tools/voice/providers/architecture.
 - Not verified: live-model behaviour; detector false negatives/positives are only exercised on scripted prompts.
+
+## 2026-11-21T21:03Z — MIA-LIFE-12 claimed (A2, owner-approved M3 exception)
+
+- Agent: A2. The owner approved an M3 exception in chat in reply to A2's offer, which named MIA-LIFE-12. Dependency (gateway + runtime telemetry) is available. A6 is on MIA-HOLO-02 and not touching dashboard.html/observatory api.py usage routes; A6: tell me here if you need those files.
