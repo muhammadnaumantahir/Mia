@@ -119,3 +119,12 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Verifier defect fixed: honest "failed/failure/cannot" (and Roman Urdu/Urdu) wording was flagged failure_not_reported. A tool-failure scenario initially false-passed because the tool was refused at stage `offered`; scenarios now assert real tool status.
 - Limits: scripted providers only; no live-model quality claim. Code Graph regenerated locally (4003 nodes, 8088 edges); tracked CHANGELOG change reverted, not committed.
 - MIA-EVAL-02 claimed (A3): new files only (src/mia/brain/judges.py, tests/test_brain_judges.py); will not edit gateway/** (A2) or orchestrator without agreement.
+
+## 2026-11-21T08:30Z — MIA-BASE-01 DONE; MIA-BASE-02 claimed
+- Agent: A5. Commit bb01d32 on remote main (verified via git ls-remote).
+- Paths: src/mia/codegraph/indexer.py, watcher.py, scripts/update_code_graph.py, tests/test_code_graph.py, tests/test_code_graph_watcher.py, docs/code-graph/README.md, docs/STATUS.md.
+- Result: source-backed gap report (full rebuild on any change; no per-file cache); behaviour-preserving indexer speed-up (old vs new graphs identical on same tree); diff_snapshots/write_graph; watcher history records changed paths and rebuild time; update script builds once.
+- Tests actually run: pytest tests/test_code_graph.py tests/test_code_graph_watcher.py tests/test_code_graph_api.py -> 23 passed. Full suite (before final rebase): only test_browser_automation::test_browser_api_end_to_end failed, also failing without A5 changes; filed as MIA-BASE-03.
+- Limitations: true incremental indexing NOT implemented (MIA-BASE-02). Code Graph snapshot not regenerated/committed (graph JSON is git-ignored).
+- Also: main-breaking syntax errors found were already fixed by A1 (5887f86); A5 duplicate dropped.
+
