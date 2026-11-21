@@ -23,6 +23,7 @@ textarea{width:100%;resize:vertical;min-height:65px;max-height:180px;border:0;ou
 .composerfoot{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:5px 4px 0}.hint{font-size:11px;color:#748c84}.actions{display:flex;align-items:center;gap:8px}
 select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9px;padding:8px;font-size:11px}
 .send{border:0;border-radius:11px;padding:10px 16px;background:linear-gradient(135deg,#47daa1,#15845f);color:#06291e;font-weight:750;font-size:12px;cursor:pointer}.send:disabled{opacity:.5;cursor:wait}
+.send.stop{background:#3a2323;color:#ffc9c9;border:1px solid #7a4040}.send.stop[hidden]{display:none}
 .bottomnote{text-align:center;font-size:10px;color:#627a72;line-height:1.5;margin:14px 0 0}
 .approval-card{border:1px solid #8b7440;background:#211f17;border-radius:14px;padding:13px 15px;margin:8px 0 4px;color:#e9e0c8}
 .approval-card strong{display:block;font-size:13px;color:#f1dfa9}
@@ -163,7 +164,7 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
  <div class="voice-preview" id="voicePreview" aria-live="polite"></div>
  <p class="voice-privacy">Browser engine: recognition uses your browser's speech service and may require internet; the browser may process microphone audio outside Mia. Local engine: audio is transcribed on this computer by Faster-Whisper (optional voice extra) and is not stored. The microphone starts only after you press Start voice, Enable Hey Mia, or hold the talk button in push-to-talk, and is released when the session ends. Hey Mia is an explicit opt-in browser wake phrase; browser recognition stays active while armed, the Mic on indicator remains visible, and Stop voice or Mute mic stops listening. The Microphone choice applies to the local engine and Local record; the browser engine uses the browser's default microphone. Esc or Interrupt stops Mia speaking.</p>
  <textarea id="prompt" rows="2" placeholder="Message Mia… (English or Roman Urdu)" aria-label="Message Mia"></textarea>
-<div class="composerfoot"><div class="hint" id="hint">Enter to send · Shift + Enter for a new line</div><div class="actions"><button class="send" id="mic" type="button" title="Record one clip and transcribe locally with Faster-Whisper" style="background:#1c3930;color:#a9ebcb;border:1px solid #356451">Local record</button><select id="taskType" aria-label="Task type"><option value="chat">General</option><option value="reasoning">Reasoning</option><option value="coding">Coding</option><option value="research">Research</option></select><label style="font-size:11px;color:#94aaa2;display:flex;align-items:center;gap:5px"><input id="useTools" type="checkbox" checked> Tools</label><label style="font-size:11px;color:#94aaa2;display:flex;align-items:center;gap:5px"><input id="speakReplies" type="checkbox"> Speak</label><select id="voiceChoice" aria-label="Speech voice" title="Installed browser voices" style="max-width:110px"><option value="">Default voice</option></select><button class="send" id="send" type="submit">Send ↗</button></div></div>
+<div class="composerfoot"><div class="hint" id="hint" role="status" aria-live="polite">Enter to send · Shift + Enter for a new line</div><div class="actions"><button class="send" id="mic" type="button" title="Record one clip and transcribe locally with Faster-Whisper" style="background:#1c3930;color:#a9ebcb;border:1px solid #356451">Local record</button><select id="taskType" aria-label="Task type"><option value="chat">General</option><option value="reasoning">Reasoning</option><option value="coding">Coding</option><option value="research">Research</option></select><label style="font-size:11px;color:#94aaa2;display:flex;align-items:center;gap:5px"><input id="useTools" type="checkbox" checked> Tools</label><label style="font-size:11px;color:#94aaa2;display:flex;align-items:center;gap:5px"><input id="speakReplies" type="checkbox"> Speak</label><select id="voiceChoice" aria-label="Speech voice" title="Installed browser voices" style="max-width:110px"><option value="">Default voice</option></select><button class="send" id="send" type="submit">Send ↗</button><button class="send stop" id="stopReply" type="button" hidden aria-label="Stop generating this reply (Esc)" title="Stop generating (Esc)">Stop ■</button></div></div>
 </form>
 <div class="bottomnote">Voice input can be hands-free or push-to-talk, using the browser speech service or local Faster-Whisper (optional voice extra). Speech output can use offline system voices with the optional TTS extra, or browser voices as fallback.<br>Push-to-talk and model-requested tools are optional per message. File and knowledge contents stay local by default; writes, launches and browser clicks always require an approval card. Hey Mia wake phrase mode is opt-in and uses the browser speech service (not offline local wake-word detection). Optional background dispatch is off by default and limited to owner-approved read-only system checks. Do not send secrets to cloud models.</div>
 </section></main></div>
@@ -462,8 +463,11 @@ function usageMeta(d){
  if(typeof d.cost_usd==='number')m+=d.cost_usd===0?' · free':' · $'+d.cost_usd.toFixed(6);
  return m;
 }
-async function streamReply(body,bubble){
- const response=await fetch('/api/gateway/chat/stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+async function streamReply(body,bubble,signal){
+ const isAbort=error=>Boolean(error&&error.name==='AbortError');
+ let response;
+ try{response=await fetch('/api/gateway/chat/stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal});}
+ catch(error){if(isAbort(error))return {text:'',done:null,aborted:true};throw error;}
  if(!response.ok){let detail='The model request failed.';try{detail=(await response.json()).detail||detail;}catch(e){}throw new Error(detail);}
  const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='',text='',done=null,failure=null;
  const handle=block=>{
@@ -475,12 +479,18 @@ async function streamReply(body,bubble){
   else if(name==='done')done=payload;
   else if(name==='error')failure=payload;
  };
- for(;;){
-  const {value,done:finished}=await reader.read();
-  if(finished)break;
-  buffer+=decoder.decode(value,{stream:true});
-  let index;
-  while((index=buffer.indexOf('\n\n'))>=0){handle(buffer.slice(0,index));buffer=buffer.slice(index+2);}
+ try{
+  for(;;){
+   const {value,done:finished}=await reader.read();
+   if(finished)break;
+   buffer+=decoder.decode(value,{stream:true});
+   let index;
+   while((index=buffer.indexOf('\n\n'))>=0){handle(buffer.slice(0,index));buffer=buffer.slice(index+2);}
+  }
+ }catch(error){
+  // The owner pressed Stop: keep what already arrived and say it is partial.
+  if(isAbort(error))return {text,done:null,aborted:true};
+  throw error;
  }
  if(failure){
   const note=document.createElement('small');note.style.cssText='display:block;color:#e0a0a0;font-size:11px;margin-top:8px';
@@ -839,9 +849,12 @@ async function refreshProviders(){
 }
 
 let chatBusy=false;
+let chatAbort=null;
 async function submitPrompt(prompt,{voiceReply=false}={}){
  if(!prompt||chatBusy)return;
  chatBusy=true;
+ chatAbort=new AbortController();const chatSignal=chatAbort.signal;
+ $('stopReply').hidden=false;
  const taskType=$('taskType').value;
  addMessage('user',prompt);
  $('prompt').value='';
@@ -851,7 +864,7 @@ async function submitPrompt(prompt,{voiceReply=false}={}){
  try{
   const useTools=$('useTools').checked;let result;
   if(useTools){
-   const response=await fetch('/api/gateway/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,task_type:taskType,max_output_tokens:1024,conversation_id:conversationId,use_tools:true})});
+   const response=await fetch('/api/gateway/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,task_type:taskType,max_output_tokens:1024,conversation_id:conversationId,use_tools:true}),signal:chatSignal});
    result=await response.json();if(!response.ok)throw new Error(result.detail||'The model request failed.');
    conversationId=result.conversation_id;
    const assistantBubble=addMessage('assistant',result.content,result.provider_id+' · '+result.model_id);
@@ -859,7 +872,16 @@ async function submitPrompt(prompt,{voiceReply=false}={}){
    renderApprovalCards(result.pending_actions||[]);
   }else{
    const bubble=addMessage('assistant','…');
-   const streamed=await streamReply({prompt,task_type:taskType,max_output_tokens:1024,conversation_id:conversationId},bubble);
+   const streamed=await streamReply({prompt,task_type:taskType,max_output_tokens:1024,conversation_id:conversationId},bubble,chatSignal);
+   if(streamed.aborted){
+    // Never speak, cite or record a partial reply as if it were complete.
+    if(!streamed.text)bubble.textContent='(Stopped before any text arrived.)';
+    const stopped=document.createElement('small');stopped.style.cssText='display:block;color:#e0c48a;font-size:11px;margin-top:8px';
+    stopped.textContent='Stopped by you. This is a partial reply and may be incomplete.';bubble.appendChild(stopped);
+    $('hint').textContent='Stopped. Nothing more will be shown for that reply.';
+    loadConversationList();
+    return;
+   }
    if(streamed.done){
     conversationId=streamed.done.conversation_id;
     const small=document.createElement('small');small.style.cssText='display:block;color:#78b69a;font-size:10px;margin-top:8px';small.textContent=usageMeta(streamed.done);bubble.appendChild(small);
@@ -872,17 +894,24 @@ async function submitPrompt(prompt,{voiceReply=false}={}){
   if(!voiceReply||voiceMode)await speakReply(result.content,{force:voiceReply});
   $('hint').textContent='Response received';
  }catch(error){
+  if(error&&error.name==='AbortError'){
+   addMessage('assistant','You stopped this request before a reply arrived. The server may already have processed it, so check the conversation history or Task Desk before repeating it.');
+   $('hint').textContent='Stopped.';
+   return;
+  }
   addMessage('assistant','I could not complete that request. '+error.message);
   $('hint').textContent='Check that Ollama or an enabled provider is running.';
   if(voiceReply)setVoiceStatus('Mia could not reply. Check your AI provider, then voice mode will retry listening.',true);
  }finally{
-  chatBusy=false;
+  chatBusy=false;chatAbort=null;
+  $('stopReply').hidden=true;
   $('send').disabled=false;
   $('send').textContent='Send ↗';
   if(!voiceMode)$('prompt').focus();
   refreshProviders();
  }
 }
+$('stopReply').addEventListener('click',()=>{if(chatAbort)chatAbort.abort();});
 $('composer').addEventListener('submit',async event=>{
  event.preventDefault();
  const prompt=$('prompt').value.trim();
@@ -1499,6 +1528,7 @@ $('voicePtt').addEventListener('pointerdown',event=>{event.preventDefault();try{
 ['pointerup','pointercancel','lostpointercapture'].forEach(name=>$('voicePtt').addEventListener(name,pttUp));
 document.addEventListener('keydown',event=>{
  if(event.key==='Escape'&&voiceSpeaking){event.preventDefault();interruptSpeech();return;}
+ if(event.key==='Escape'&&chatBusy&&chatAbort){event.preventDefault();chatAbort.abort();return;}
  if(event.code==='Space'&&voiceMode&&voicePushToTalk&&!/^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)){
   event.preventDefault();
   if(!event.repeat)pttDown();

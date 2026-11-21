@@ -43,6 +43,13 @@ The Code Graph is a required cross-cutting developer capability, initialized dur
 - **Follow-ups on the board:** MIA-VOICE-02 (loopback transport), MIA-BRAIN-04 (self-description must not infer a wake word from route names), MIA-UX-02 (UI), MIA-VOICE-03 (Urdu / Roman Urdu stop commands; today English-only).
 - Code Graph: refreshed locally with `python scripts/update_code_graph.py` (3,936 nodes, 7,924 edges, 0 parse errors; includes `voice/wake.py`); the tracked `docs/code-graph/CHANGELOG.md` entry was deliberately not committed to avoid cross-agent conflicts and wrong-commit attribution.
 
+## A6 / MIA-UX-01 — Stop generating (2026-11-21)
+
+- The Assistant page now has a **Stop ■** control (and Esc, after speech interruption takes priority) that cancels an in-flight text reply through an `AbortController`. A streamed reply keeps the text that had already arrived and is labelled "Stopped by you … partial reply"; a partial reply is never spoken aloud. If the tool-enabled (buffered) request is stopped, Mia says the server may already have processed it. The status line (`#hint`) is now an `aria-live` region.
+- Evidence: `tests/test_assistant_stop_reply.py` (contract checks + a Node harness that runs the real `streamReply` against a fake streaming `fetch`; the five new tests fail against the previous page). Full local run on this change: 1340 tests, 1338 passed, 1 skipped, 1 failed — the failure is `tests/test_browser_automation.py::test_browser_api_end_to_end`, which now hits the owner-grant requirement for `browser.fill`; it is unrelated to this change and filed as MIA-FIX-01. `ruff check src tests` clean.
+- Not verified: no real-browser, screen-reader or touch-device run (OWNER_VERIFICATION_REQUIRED); the server-side effect of a client disconnect (whether a partial reply is persisted, and ledger settlement) was not traced or tested here.
+- Further UX gaps found in source, filed as MIA-UX-03: the failure hint always says "Check that Ollama or an enabled provider is running" whatever the error was; no retry action after a failed reply; `#messages` is `aria-live="polite"` and so may announce every streamed token to a screen reader (unverified with assistive technology); the tool-enabled path is buffered with no progress indication.
+
 ## Status inventory (component status, not execution order)
 
 The following table records prior workstream status. It is an implementation inventory, not the development sequence; docs/ROADMAP.md is authoritative for execution order.
