@@ -26,6 +26,7 @@ The Code Graph is a required cross-cutting developer capability, initialized dur
 
 - Fixed a cross-session intent-analysis privacy gap: temporary conversations no longer count as prior persistent context when the Brain decides whether a vague continuation request can be resolved. The existing recall path already excluded temporary sessions; this aligns intent detection with that rule.
 - Added regression coverage for temporary-only history (must still clarify) and persistent prior history (may resolve continuation).
+- Extended Brain reference-intent detection for common Urdu-script and Roman Urdu continuation, past-issue, past-decision and preference phrases, with parameterized tests alongside the existing English cases. This is targeted phrase coverage, not a claim of complete multilingual understanding.
 - Changes committed directly to `main`. Tests are authored but have not been executed in this environment; no CI run was requested or used as a gate.
 - Code Graph snapshot refresh remains a local development step and is not claimed as complete by this remote source edit.
 
