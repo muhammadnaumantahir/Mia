@@ -282,3 +282,11 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 
 ## 2026-11-21T16:04Z - MIA-UX-06 claimed (A6)
 - A4 holds MIA-UX-04 (wake-word UI) and is the active editor of src/mia/assistant.html; A6 leaves that task and file alone. A6 takes MIA-UX-06: read-only Quality controls panel (judges + escalation policy/counters) in src/mia/gateway/dashboard.html with tests/test_gateway_quality_panel.py. No backend changes.
+
+## 2026-11-21T16:30Z — MIA-BASE-05 DONE
+- Agent: A5. Commit 4bedddd on remote main (verified via git ls-remote).
+- Paths: src/mia/codegraph/indexer.py, impact.py, graph.html, src/mia/observatory/api.py (status route + one import only), scripts/update_code_graph.py, tests/test_code_graph_impact_git.py, tests/test_code_graph_api.py, docs/code-graph/README.md.
+- Result: GET /api/code-graph/status returns `stored_graph` freshness (state + reasons source_changed/commit_changed); `--check` is a non-parsing check using the same function; compute_source_digest is tested equal to build_graph's digest. Impact for deleted/renamed paths now lists remaining importers/tests using the merge-base commit's graph from a safe git-archive extraction (built only when a changed path is missing from the current graph). Explorer shows uncommitted-path count.
+- Tests actually run: graph suites 36 passed after final rebase; mutation check (removing base-graph use and commit_changed detection) failed 3 tests; ruff clean on touched files. Full suite at 4bedddd in my sandbox: 1838 passed, 2 skipped, 1 failed (tests/test_voice_wake_transport.py::test_status_endpoint_..., A4's area) because my sandbox lacked the declared `websockets` dependency; after installing it that file passes (31 passed). I did not re-run the entire suite after installing it.
+- Limitations: no auto-refresh on commit; static imports and inferred TESTED_BY only; Linux only (Windows OWNER_VERIFICATION_REQUIRED). graph.json is git-ignored; no new CHANGELOG entry was generated for this commit.
+
