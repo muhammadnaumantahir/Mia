@@ -280,3 +280,9 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 ## 2026-11-21 — MIA-EVAL-03a (A2): gateway-backed judge call
 
 - Added `mia.gateway.judge_call.make_judge_call` (pinned candidate, text-only, normal budget/route policy). Not yet wired into the turn pipeline (MIA-EVAL-03). 6 fake-provider tests pass; no live-model judge quality is claimed.
+
+## 2026-11-21 — MIA-GW-03 (A2): gateway audit + language-aware routing
+
+- Audit (source-traced): fallback, circuit breakers, paid-budget reservations (kept on cancel), stream partial-text preservation and routing audit are in place. Gap fixed: routing had no language awareness, so Urdu/Roman Urdu turns were steered to the smallest model.
+- Implemented `mia.gateway.language.detect_language` + `BrainRouter` scoring (ordering only; preferences win). Not done: a non-streaming provider hang has no gateway-level timeout (real adapters use httpx timeouts; `stream_idle_timeout` is opt-in) - noted for follow-up.
+- Verified locally: full suite 1718 passed, 1 skipped, 0 failed. Fake candidates only; no live-model Urdu quality is claimed.

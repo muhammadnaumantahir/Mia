@@ -13,9 +13,13 @@ from typing import Any
 
 from mia.gateway.contracts import ModelCandidate, ModelRequest, RoutePolicy
 from mia.gateway.health import CandidateHealthTracker, candidate_key
+from mia.gateway.language import detect_language
 from mia.gateway.routing import estimate_cost_usd, rank_candidates
 
 from .capabilities import CapabilityRegistry, TaskProfile, profile_for, size_hint_billions
+
+# Free-form conversational categories where language fluency matters more than speed.
+_LANGUAGE_SENSITIVE = frozenset({"conversation", "simple", "summarization"})
 
 
 class NoSuitableModel(RuntimeError):
@@ -87,6 +91,19 @@ class BrainRouter:
             notes.append("matches user preference")
         score += max(0.0, min(1.0, c.reliability_score)) * 2.0
         size = size_hint_billions(c.model_id)
+        language = detect_language(request.prompt)
+        preferred = c.provider_id in prefs.preferred_providers or c.model_id in prefs.preferred_models
+        # An explicit owner preference always beats this heuristic.
+        if (language != "en" and not preferred and size is not None
+                and profile.category in _LANGUAGE_SENSITIVE):
+            # Small models are usually weak in Urdu/Roman Urdu: do not reward them for being
+            # small, and mildly prefer larger ones. Ordering only; nothing is excluded.
+            if size < 4:
+                score -= 3.5
+                notes.append(f"small model deprioritised for {language.replace('_', ' ')} input")
+            elif size >= 7:
+                score += 0.5
+                notes.append(f"larger model preferred for {language.replace('_', ' ')} input")
         if profile.weight == "light":
             score += max(0.0, 2.0 - c.latency_ms / 5000.0)
             if size is not None and size <= 8:
