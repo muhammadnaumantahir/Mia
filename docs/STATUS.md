@@ -50,6 +50,12 @@ The Code Graph is a required cross-cutting developer capability, initialized dur
 - Not verified: no real-browser, screen-reader or touch-device run (OWNER_VERIFICATION_REQUIRED); the server-side effect of a client disconnect (whether a partial reply is persisted, and ledger settlement) was not traced or tested here.
 - Further UX gaps found in source, filed as MIA-UX-03: the failure hint always says "Check that Ollama or an enabled provider is running" whatever the error was; no retry action after a failed reply; `#messages` is `aria-live="polite"` and so may announce every streamed token to a screen reader (unverified with assistive technology); the tool-enabled path is buffered with no progress indication.
 
+## A6 / MIA-UX-03 — Error recovery in the Assistant (2026-11-21)
+
+- Failure hints are now specific: network failure, permission/approval block, spending or rate limit, and provider unavailability each get their own guidance (HTTP status and message are read from the existing API; no contract change). The old unconditional "Check that Ollama…" hint is gone, so a permission or budget error no longer sends the owner to restart a provider. A failed reply offers **Retry**, labelled as sending the message again (it adds a new message; it does not undo anything). `#messages` is `aria-busy` while a reply is in flight.
+- Evidence: `tests/test_assistant_error_recovery.py` (5 tests, all failing against the previous page; includes a Node harness running the real `chatErrorHint`). Full local run: 1401 tests, 1399 passed, 1 skipped, 1 failed (`test_browser_api_end_to_end`, MIA-FIX-01, pre-existing). `ruff check src tests` clean.
+- Not verified: real browser, screen reader (the `aria-busy` change follows the standard pattern but was not tried with assistive technology), and the error classes against live providers — classification is by status code and message text only.
+
 ## Status inventory (component status, not execution order)
 
 The following table records prior workstream status. It is an implementation inventory, not the development sequence; docs/ROADMAP.md is authoritative for execution order.

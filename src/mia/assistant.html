@@ -468,7 +468,7 @@ async function streamReply(body,bubble,signal){
  let response;
  try{response=await fetch('/api/gateway/chat/stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal});}
  catch(error){if(isAbort(error))return {text:'',done:null,aborted:true};throw error;}
- if(!response.ok){let detail='The model request failed.';try{detail=(await response.json()).detail||detail;}catch(e){}throw new Error(detail);}
+ if(!response.ok){let detail='The model request failed.';try{detail=(await response.json()).detail||detail;}catch(e){}const httpFailure=new Error(detail);httpFailure.status=response.status;throw httpFailure;}
  const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='',text='',done=null,failure=null;
  const handle=block=>{
   let name='',data='';
@@ -848,13 +848,27 @@ async function refreshProviders(){
  }catch(e){}
 }
 
+function chatErrorHint(error){
+ const status=Number(error&&error.status)||0,text=String((error&&error.message)||'');
+ if(error&&error.name==='TypeError')return "Could not reach Mia's local server. Check that Mia is still running, then retry.";
+ if(status===403||/permission|grant|approval/i.test(text))return 'Blocked by a permission or approval rule. Review your grants or the Task Desk; Mia did not bypass it.';
+ if(status===402||status===429||/budget|spend|quota|rate.?limit/i.test(text))return 'A spending limit or provider rate limit was reached. Check gateway usage before retrying.';
+ if(status===502||status===503||status===504||/unavailable|no (healthy|enabled|eligible)|not running/i.test(text))return 'No model provider was available. Check that Ollama or an enabled provider is running, then retry.';
+ return 'The request failed. You can retry or rephrase; the message above has the details.';
+}
+function addRetryAction(bubble,prompt,options){
+ const button=document.createElement('button');button.type='button';button.className='task-button secondary';
+ button.textContent='Retry (sends this message again)';
+ button.addEventListener('click',()=>{if(chatBusy)return;button.remove();submitPrompt(prompt,options);});
+ const wrap=document.createElement('div');wrap.style.marginTop='8px';wrap.append(button);bubble.appendChild(wrap);
+}
 let chatBusy=false;
 let chatAbort=null;
 async function submitPrompt(prompt,{voiceReply=false}={}){
  if(!prompt||chatBusy)return;
  chatBusy=true;
  chatAbort=new AbortController();const chatSignal=chatAbort.signal;
- $('stopReply').hidden=false;
+ $('stopReply').hidden=false;$('messages').setAttribute('aria-busy','true');
  const taskType=$('taskType').value;
  addMessage('user',prompt);
  $('prompt').value='';
@@ -865,7 +879,7 @@ async function submitPrompt(prompt,{voiceReply=false}={}){
   const useTools=$('useTools').checked;let result;
   if(useTools){
    const response=await fetch('/api/gateway/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,task_type:taskType,max_output_tokens:1024,conversation_id:conversationId,use_tools:true}),signal:chatSignal});
-   result=await response.json();if(!response.ok)throw new Error(result.detail||'The model request failed.');
+   result=await response.json();if(!response.ok){const httpFailure=new Error(result.detail||'The model request failed.');httpFailure.status=response.status;throw httpFailure;}
    conversationId=result.conversation_id;
    const assistantBubble=addMessage('assistant',result.content,result.provider_id+' · '+result.model_id);
    renderMemoryReferences(assistantBubble,result.context_references||[]);
@@ -899,12 +913,13 @@ async function submitPrompt(prompt,{voiceReply=false}={}){
    $('hint').textContent='Stopped.';
    return;
   }
-  addMessage('assistant','I could not complete that request. '+error.message);
-  $('hint').textContent='Check that Ollama or an enabled provider is running.';
+  const failedBubble=addMessage('assistant','I could not complete that request. '+error.message);
+  addRetryAction(failedBubble,prompt,{voiceReply});
+  $('hint').textContent=chatErrorHint(error);
   if(voiceReply)setVoiceStatus('Mia could not reply. Check your AI provider, then voice mode will retry listening.',true);
  }finally{
   chatBusy=false;chatAbort=null;
-  $('stopReply').hidden=true;
+  $('stopReply').hidden=true;$('messages').setAttribute('aria-busy','false');
   $('send').disabled=false;
   $('send').textContent='Send ↗';
   if(!voiceMode)$('prompt').focus();
