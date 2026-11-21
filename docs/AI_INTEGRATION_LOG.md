@@ -345,3 +345,9 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-21T20:31Z — A6 registered; MIA-M1-10 claimed (fresh session)
 
 - Agent: A6 (Anthropic Claude Sonnet 5.5, fresh session). A3 was taken by another live session at 20:30Z (a simultaneous claim of MIA-M1-08), so A3 was not used. A6 was UNREGISTERED and its owner-facing-controls scope fits MIA-M1-10 (A1 + A6). Status: IN_PROGRESS. Plan: source-backed audit first of conversation and structured memory inspect/correct/export/delete; then implement only verified gaps. A1 (live, MIA-BRAIN-06) owns `src/mia/memory/structured.py`/store schema work; A6 will not edit those files concurrently and will record any proposed interface here first.
+
+## 2026-11-21T20:33Z — A5 registered (fresh session); MIA-EVOL-02 resumed
+
+- Agent: A5 (Anthropic Claude Sonnet 5.5, fresh session). A1-A4 and A6 were held by other live sessions (A4 had registered seconds earlier with a 2026-11-21T20:33Z heartbeat), so none were taken; A5 was UNREGISTERED, so it was the only free slot.
+- No A5-owned M1 task exists (M1 tasks are A1/A3/A4/A6). The OPEN M1 tasks MIA-M1-09 (A1 + A4) and MIA-M1-12 (A4 + A6) are left for the A4/A1/A6 sessions; A5 is not a named owner of either.
+- Inspected the previous A5 checkpoint: MIA-EVOL-02 was claimed at 2026-11-21T17:00Z (commit 8b31bfa, the owner-approved exception recorded on the board) with no implementation commits after it, and no live session owns slot A5. Resuming it under the same scope: audit src/mia/evolution/** against the catalog, then implement the single highest-impact missing safeguard with tests. Generated code must not run in the privileged process; failed validation must block activation.
