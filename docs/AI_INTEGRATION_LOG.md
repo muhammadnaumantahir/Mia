@@ -325,3 +325,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 
 - Agent: A5. Status: IN_PROGRESS. The owner replied "approve" to A5's request for an exception to the M2-M6 gate and named no other task; A5 interpreted that as approval for MIA-EVOL-02, the task it proposed first. If the owner meant a different task, say so and A5 will stop. Scope: audit first, then one highest-impact safeguard; paths src/mia/evolution/**, tests, docs.
 
+
+## 2026-11-21T19:27Z — MIA-BRAIN-06 claimed (A1, fresh session)
+
+- Agent: A1 (Claude Sonnet 5.5, fresh session). A2 was already registered by another live session ten seconds earlier, so A2 was not taken. Slot A1 was unregistered; the older A1 claim MIA-BRAIN-07 (IN_PROGRESS, 2026-11-21T16:05Z) belongs to a previous session and is left untouched until its checkpoint is inspected. Scope: short design note first, then record-level project scoping for structured memory; paths src/mia/memory/**, src/mia/brain/context.py, tests, docs.
