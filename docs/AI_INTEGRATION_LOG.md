@@ -165,3 +165,8 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Tests actually run: pytest tests/test_code_graph.py tests/test_code_graph_watcher.py tests/test_code_graph_api.py -> 25 passed (before and after final rebase). Full suite not re-run for this commit.
 - Limitations: Python only; unreadable-file edge case yields one index error instead of two; Linux sandbox only (Windows OWNER_VERIFICATION_REQUIRED). Ran scripts/update_code_graph.py (graph.json is git-ignored; CHANGELOG entry committed).
 
+## 2026-11-21T09:40Z — MIA-BASE-03 / MIA-FIX-01 DONE
+- Agent: A5. Commit ffef797 on remote main (verified via git ls-remote). Path: tests/test_browser_automation.py only.
+- Root cause: the fail-closed owner-grant policy for browser.fill/scroll/screenshot is intentional (tests/test_browser_api.py asserts it); the end-to-end test predated it. The test now asserts the 409 first, grants via POST /api/computer/permissions, then continues. No route or policy change; no assertion weakened.
+- Tests actually run: tests/test_browser_automation.py + tests/test_browser_api.py -> 15 passed; after final rebase tests/test_browser_automation.py -> 13 passed. Full suite not re-run after this change.
+
