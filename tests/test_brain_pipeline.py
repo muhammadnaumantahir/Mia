@@ -21,10 +21,11 @@ from mia.observatory.store import ObservatoryStore
 class Scripted:
     """Configurable provider: scripted replies, optional failure/tool-calls/streaming."""
 
-    def __init__(self, pid="p", model="m", *, reply=None, fail=False, ctx=16384, local=True,
+    def __init__(self, pid="p", model="m", *, reply=None, fail=False, enabled=True, ctx=16384, local=True,
                  caps=("chat",), tool_calls=None, stream_parts=None, stream_fail_after=None):
         self.provider_id = pid
-        self.model, self.reply, self.fail, self.ctx, self.local = model, reply, fail, ctx, local
+        self.model, self.reply, self.fail, self.enabled, self.ctx, self.local = (
+            model, reply, fail, enabled, ctx, local)
         self.caps, self.tool_calls = frozenset(caps), tool_calls
         self.stream_parts, self.stream_fail_after = stream_parts, stream_fail_after
         self.calls, self.seen = 0, []
@@ -33,7 +34,7 @@ class Scripted:
         return True
 
     async def list_models(self):
-        return [ModelCandidate(self.provider_id, self.model, self.caps, self.ctx, True, True, True,
+        return [ModelCandidate(self.provider_id, self.model, self.caps, self.ctx, True, True, self.enabled,
                                data_local=self.local)]
 
     async def complete(self, candidate, request):
@@ -113,6 +114,30 @@ def test_provider_switch_and_fallback_preserve_conversation_and_trace(tmp_path, 
     r2 = chat(client, "Thanks, and TLS?", conversation_id="conv-fallback-1")
     assert r2.status_code == 200
     assert len(memory.get_messages("conv-fallback-1", limit=10)) == 4
+
+
+def test_provider_switch_keeps_prior_turn_context(tmp_path, monkeypatch):
+    first = Scripted("first", reply="We chose SQLite for Mia's memory store.")
+    second = Scripted("second", reply="We chose SQLite.")
+    client, memory, _ = client_for(tmp_path, monkeypatch, first, second)
+
+    initial = chat(client, "We decided to use SQLite for Mia's memory database.",
+                   conversation_id="conv-provider-switch-1")
+    assert initial.status_code == 200 and initial.json()["provider_id"] == "first"
+
+    # Simulate a provider becoming unavailable between turns. The conversation
+    # store, not the provider, owns continuity.
+    first.enabled = False
+    second.enabled = True
+    follow_up = chat(client, "What did we decide for Mia's memory database?",
+                     conversation_id="conv-provider-switch-1")
+    assert follow_up.status_code == 200 and follow_up.json()["provider_id"] == "second"
+    assert any(
+        m.get("role") == "user"
+        and "We decided to use SQLite" in str(m.get("content"))
+        for m in second.seen[-1].messages
+    )
+    assert len(memory.get_messages("conv-provider-switch-1", limit=10)) == 4
 
 
 def test_total_provider_failure_keeps_user_message_and_returns_503(tmp_path, monkeypatch):
