@@ -90,6 +90,8 @@ class Provider:
     def __init__(self):
         self.reply = "Noted."
         self.delay = 0.0
+        self.parts: list[str] | None = None  # multi-delta streaming; part 2 waits for `hold`
+        self.hold = None
         self.requests: list[ModelRequest] = []
 
     async def health(self):
@@ -117,7 +119,13 @@ class Provider:
     async def stream(self, candidate, request: ModelRequest):
         self.requests.append(request)
         await asyncio.sleep(self.delay)
-        yield StreamChunk(delta=self.reply)
+        if self.parts:
+            for index, part in enumerate(self.parts):
+                while index == 1 and self.hold is not None and not self.hold.is_set():
+                    await asyncio.sleep(0.02)
+                yield StreamChunk(delta=part)
+        else:
+            yield StreamChunk(delta=self.reply)
         yield StreamChunk(finish_reason="stop", usage=TokenUsage(5, 2))
 
     def user_prompts(self):
@@ -233,6 +241,7 @@ def ctx(server, browser):
     provider.requests.clear()
     provider.reply = "Noted."
     provider.delay = 0.0
+    provider.parts, provider.hold = None, None
     context = browser.new_context()
     context.add_init_script(FAKES)
     page = context.new_page()
@@ -901,3 +910,66 @@ def test_typed_turn_without_voice_mode_declares_text_interface(ctx):
     while time.time() < deadline and not bodies:
         time.sleep(0.05)
     assert bodies and bodies[-1]["interface"] == "text"
+
+
+def _spoken(ctx):
+    return ctx.js("window.__tts.spoken.map(u => u.text)")
+
+
+def test_voice_reply_starts_speaking_before_the_stream_has_finished(ctx):
+    """MIA-VOICE-05: a completed sentence is spoken while later text is still being generated."""
+    import threading
+
+    ctx.provider.parts = ["First sentence is done. Second is", " still coming. Third."]
+    ctx.provider.hold = threading.Event()
+    ctx.js("document.getElementById('useTools').checked=false")  # tools-off turns stream
+    ctx.start()
+    ctx.listening()
+    ctx.say("Tell me a three sentence story")
+    ctx.wait("window.__tts.spoken.length>=1")
+    assert _spoken(ctx) == ["First sentence is done."]  # not the unfinished second sentence
+    assert not ctx.provider.hold.is_set()
+    assert ctx.js("document.getElementById('voiceOrb').dataset.state") == "speaking"
+    ctx.provider.hold.set()
+    ctx.wait("window.__tts.spoken.length>=3")
+    assert _spoken(ctx) == ["First sentence is done.", "Second is still coming.", "Third."]
+    ctx.wait("window.__rec.live().length===1")
+    ctx.listening()  # listening resumes only after the whole reply was spoken
+
+
+def test_interrupting_a_streaming_reply_stops_speech_but_keeps_the_text(ctx):
+    import threading
+
+    ctx.provider.parts = ["Alpha is first. Beta is", " second. Gamma last."]
+    ctx.provider.hold = threading.Event()
+    ctx.js("window.__tts.duration=10000")
+    ctx.js("document.getElementById('useTools').checked=false")  # tools-off turns stream
+    ctx.start()
+    ctx.listening()
+    ctx.say("Say the alphabet story")
+    ctx.wait("window.__tts.spoken.length>=1")
+    ctx.page.click("#voiceInterrupt")
+    ctx.wait("window.__tts.cancelled>=1")
+    ctx.provider.hold.set()
+    ctx.wait("document.getElementById('messages').textContent.includes('Gamma last.')")
+    ctx.sleep(0.5)
+    assert _spoken(ctx) == ["Alpha is first."], "nothing is spoken after an interrupt"
+    assert ctx.js("window.__tts.overlap") == 0
+    ctx.listening()
+
+
+def test_code_block_is_not_spoken_half_way_through_a_stream(ctx):
+    import threading
+
+    ctx.provider.parts = ["Here it is. ```py\nprint(1). ", "``` Done. "]
+    ctx.provider.hold = threading.Event()
+    ctx.js("document.getElementById('useTools').checked=false")  # tools-off turns stream
+    ctx.start()
+    ctx.listening()
+    ctx.say("Show me code")
+    ctx.wait("window.__tts.spoken.length>=1")
+    ctx.sleep(0.3)
+    assert _spoken(ctx) == ["Here it is."]  # the open code fence is held back
+    ctx.provider.hold.set()
+    ctx.wait("window.__tts.spoken.length>=2")
+    assert not any("print" in text for text in _spoken(ctx))

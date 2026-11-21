@@ -477,7 +477,7 @@ function usageMeta(d){
  if(typeof d.cost_usd==='number')m+=d.cost_usd===0?' · free':' · $'+d.cost_usd.toFixed(6);
  return m;
 }
-async function streamReply(body,bubble,signal){
+async function streamReply(body,bubble,signal,onDelta){
  const isAbort=error=>Boolean(error&&error.name==='AbortError');
  let response;
  try{response=await fetch('/api/gateway/chat/stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal});}
@@ -489,7 +489,7 @@ async function streamReply(body,bubble,signal){
   block.split('\n').forEach(line=>{if(line.startsWith('event: '))name=line.slice(7);else if(line.startsWith('data: '))data+=line.slice(6);});
   if(!name||!data)return;
   const payload=JSON.parse(data);
-  if(name==='delta'){text+=payload.text;bubble.textContent=text;bubble.scrollIntoView({block:'nearest'});}
+  if(name==='delta'){text+=payload.text;bubble.textContent=text;bubble.scrollIntoView({block:'nearest'});if(onDelta)onDelta(text);}
   else if(name==='done')done=payload;
   else if(name==='error')failure=payload;
  };
@@ -790,7 +790,7 @@ function speakBrowserChunk(text,generation,selected,rate,volume){
   window.speechSynthesis.speak(utterance);
  });
 }
-async function speakReply(text,{force=false}={}){
+async function speakReply(text,{force=false,append=false}={}){
  if(!force&&!$('speakReplies').checked)return;
  let chunks=splitSpeechChunks(text);
  if(!chunks.length)return;
@@ -798,16 +798,18 @@ async function speakReply(text,{force=false}={}){
  for(const chunk of chunks){if(total+chunk.length>MAX_SPOKEN_CHARS)break;kept.push(chunk);total+=chunk.length;}
  const truncated=kept.length<chunks.length;
  chunks=kept;
- cancelSpeech();
- voicePlaybackCancelled=false;
+ // append: a streaming speaker already owns this reply's speech generation and voice state.
+ if(!append){cancelSpeech();voicePlaybackCancelled=false;}
  const generation=speechGeneration;
  const selected=$('voiceChoice').value;
  let useLocal=selected.startsWith('local:');
  const rate=Number($('voiceRate').value)||1;
  const volume=Math.max(0,Math.min(1,Number($('voiceVolume').value)));
- voiceSpeaking=true;
- setVoiceState('speaking');
- if(force)setVoiceStatus('Mia is speaking… press Interrupt or Esc to stop.');
+ if(!append){
+  voiceSpeaking=true;
+  setVoiceState('speaking');
+  if(force)setVoiceStatus('Mia is speaking… press Interrupt or Esc to stop.');
+ }
  try{
   let pending=useLocal?fetchLocalSpeech(chunks[0],selected.slice(6),rate):null;
   for(let index=0;index<chunks.length;index++){
@@ -833,7 +835,7 @@ async function speakReply(text,{force=false}={}){
   }
   if(truncated&&generation===speechGeneration)$('hint').textContent='Long reply: Mia spoke the first part; the full answer is on screen.';
  }finally{
-  if(generation===speechGeneration){
+  if(generation===speechGeneration&&!append){
    voiceSpeaking=false;
    if(!voiceMode)setVoiceState('idle');
   }
@@ -921,6 +923,52 @@ function addRetryAction(bubble,prompt,options){
 }
 let chatBusy=false;
 let chatAbort=null;
+// MIA-VOICE-05: speak completed sentences while a streamed reply is still arriving.
+function createStreamingSpeaker({force}){
+ let spoken=0,total=0,chain=Promise.resolve(),generation=null,stopped=false,truncated=false;
+ const enabled=()=>force||$('speakReplies').checked;
+ const nextSegment=(text,final)=>{
+  let rest=text.slice(spoken);
+  if(final)return rest;
+  if((rest.match(/```/g)||[]).length%2===1)rest=rest.slice(0,rest.indexOf('```'));// never speak half a code block
+  let end=-1;const re=/[.!?۔؟](?=\s)/g;let m;
+  while((m=re.exec(rest)))end=m.index+1;
+  return end>0?rest.slice(0,end):'';
+ };
+ const emit=segment=>{
+  if(!segment.trim()){return;}
+  if(generation===null){
+   cancelSpeech();voicePlaybackCancelled=false;generation=speechGeneration;
+   voiceSpeaking=true;setVoiceState('speaking');
+   if(force)setVoiceStatus('Mia is speaking… press Interrupt or Esc to stop.');
+  }
+  if(total+segment.length>MAX_SPOKEN_CHARS){truncated=true;stopped=true;return;}
+  total+=segment.length;
+  chain=chain.then(()=>generation===speechGeneration?speakReply(segment,{force,append:true}):null).catch(()=>{});
+ };
+ return {
+  update(text){
+   if(stopped||!enabled())return;
+   if(generation!==null&&generation!==speechGeneration){stopped=true;return;}// interrupted: keep showing text, stop speaking
+   const segment=nextSegment(text,false);
+   if(segment){spoken+=segment.length;emit(segment);}
+  },
+  async finish(text){
+   if(!stopped&&enabled()&&(generation===null||generation===speechGeneration)){
+    const segment=nextSegment(text,true);
+    spoken+=segment.length;emit(segment);
+   }
+   await chain;
+   if(generation!==null&&generation===speechGeneration){
+    voiceSpeaking=false;
+    if(!voiceMode)setVoiceState('idle');
+    if(truncated)$('hint').textContent='Long reply: Mia spoke the first part; the full answer is on screen.';
+   }
+  },
+  get started(){return generation!==null;},
+  cancel(){stopped=true;if(generation!==null&&generation===speechGeneration)cancelSpeech();},
+ };
+}
 async function submitPrompt(prompt,{voiceReply=false}={}){
  if(!prompt||chatBusy)return;
  chatBusy=true;
@@ -932,6 +980,7 @@ async function submitPrompt(prompt,{voiceReply=false}={}){
  $('send').disabled=true;
  $('send').textContent='Thinking…';
  $('hint').textContent=$('useTools').checked?'Mia is selecting an available model…':'Streaming reply…';
+ let speaker=null;
  try{
   const useTools=$('useTools').checked;let result;
   if(useTools){
@@ -943,9 +992,11 @@ async function submitPrompt(prompt,{voiceReply=false}={}){
    renderApprovalCards(result.pending_actions||[]);
   }else{
    const bubble=addMessage('assistant','…');
-   const streamed=await streamReply({prompt,task_type:taskType,max_output_tokens:1024,conversation_id:conversationId,interface:voiceReply?'voice':'text'},bubble,chatSignal);
+   if(!voiceReply||voiceMode)speaker=createStreamingSpeaker({force:voiceReply});
+   const streamed=await streamReply({prompt,task_type:taskType,max_output_tokens:1024,conversation_id:conversationId,interface:voiceReply?'voice':'text'},bubble,chatSignal,speaker?speaker.update:null);
    if(streamed.aborted){
     // Never speak, cite or record a partial reply as if it were complete.
+    if(speaker)speaker.cancel();
     if(!streamed.text)bubble.textContent='(Stopped before any text arrived.)';
     const stopped=document.createElement('small');stopped.style.cssText='display:block;color:#e0c48a;font-size:11px;margin-top:8px';
     stopped.textContent='Stopped by you. This is a partial reply and may be incomplete.';bubble.appendChild(stopped);
@@ -962,9 +1013,11 @@ async function submitPrompt(prompt,{voiceReply=false}={}){
   }
   if(conversationId)window.history.replaceState({},'', '/assistant?conversation_id='+encodeURIComponent(conversationId));
   loadConversationList();refreshProjectControl();
-  if(!voiceReply||voiceMode)await speakReply(result.content,{force:voiceReply});
+  if(speaker)await speaker.finish(result.content);
+  else if(!voiceReply||voiceMode)await speakReply(result.content,{force:voiceReply});
   $('hint').textContent='Response received';
  }catch(error){
+  if(speaker)speaker.cancel();
   if(error&&error.name==='AbortError'){
    addMessage('assistant','You stopped this request before a reply arrived. The server may already have processed it, so check the conversation history or Task Desk before repeating it.');
    $('hint').textContent='Stopped.';

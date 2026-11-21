@@ -46,7 +46,7 @@ def test_submit_flow_wires_abort_signal_to_both_request_paths_and_cleans_up():
     flow = page[start:end]
     assert "chatAbort=new AbortController()" in flow
     assert "signal:chatSignal" in flow  # buffered/tool path
-    assert "bubble,chatSignal)" in flow  # streaming path
+    assert "bubble,chatSignal" in flow  # streaming path (an optional onDelta argument may follow)
     assert "$('stopReply').hidden=false;" in flow
     final = flow[flow.index("}finally{"):]
     assert "chatAbort=null" in final and "$('stopReply').hidden=true;" in final

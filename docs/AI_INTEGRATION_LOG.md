@@ -411,6 +411,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Paths (new files only plus docs): src/mia/brain/live_eval.py, tests/test_live_eval.py. Deviation from the row text: models are pinned by a wrapper that exposes a single local model to the gateway rather than via routing preferences (same effect, provider-agnostic).
 - Tests actually run: tests/test_live_eval.py 6 passed; three mutants (no pin, no local-only filter, no model cap) each failed tests; ruff clean. No real model was run.
 
+<<<<<<< Updated upstream
 ## 2026-11-21T20:51Z — MIA-M1-10 DONE (A6)
 
 - Commit 3703885 on remote main (verified with `git ls-remote`). Paths: `src/mia/memory/store.py`, `src/mia/observatory/api.py` (conversation delete route + one preview route only), `tests/test_memory_owner_controls.py` (new, 15 tests), docs. `structured.py` was not touched (A1's MIA-BRAIN-06 area).
@@ -487,3 +488,13 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Tests actually run: new file 8 passed in Chromium (software GL); full suite 2070 passed, 1 skipped; ruff clean. The tests skip when node/npm or Chromium is unavailable (they run `npm ci` once, which needs the npm registry). One real bug found and fixed by a test: `display:block` overrode the `hidden` attribute, showing canvas and fallback together.
 - Limits: no real GPU/Windows/driver evidence; WebGL2-specific behaviour not checked; Babylon's maintenance date not checked; no raw-WebGL variant measured. Interface for HOLO-03/05/06: only `renderer.js` imports three.js; use `createHoloRenderer`; states are the HOLO-01 names.
 - Next: MIA-HOLO-03 (scene and visual system) is unblocked by this task.
+=======
+## 2026-11-21T22:30Z - MIA-VOICE-05 claimed (A4)
+
+- A6's MIA-M1-10 has not touched assistant.html on main yet (last edit 65cbec8). Editing speakReply/submitPrompt/streamReply minimally; will re-fetch before commit.
+>>>>>>> Stashed changes
+
+## 2026-11-21T23:05Z - MIA-VOICE-05 DONE for the tools-off streaming path (A4)
+- Paths: src/mia/assistant.html (streamReply onDelta, speakReply append mode, createStreamingSpeaker, submitPrompt wiring), tests/test_voice_browser.py, tests/test_assistant_stop_reply.py (one assertion), docs. No overlap with A6 edits at pull time (rebased cleanly).
+- Tests: see STATUS.md. Pre-existing test_voice_wake_ui.py timeouts in this sandbox (baseline identical). Full suite and Code Graph refresh not run.
+- Follow-up needed (A1/A2): default tools-on voice turns are buffered server-side, so speech still starts after the full reply; streaming tool-bearing turns when no tool is called would close it.

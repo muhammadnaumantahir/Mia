@@ -33,6 +33,14 @@ The Code Graph is a required cross-cutting developer capability, initialized dur
 - Code Graph snapshot refresh remains a local development step and is not claimed as complete by these remote source edits.
 - PR #20 is merged; older notes below that say it is awaiting CI are historical and superseded by this current status.
 
+## Voice update - MIA-VOICE-05 speak while streaming (agent A4, 2026-11-21)
+
+- **Implemented (`src/mia/assistant.html`):** on the streaming path (tools-off turns) Mia now speaks each completed sentence while later text is still arriving, instead of after the whole reply. One speech generation per reply (`createStreamingSpeaker`, `speakReply(..., {append:true})`); a partial sentence and an unclosed code fence are never spoken; Interrupt/Esc/Stop-reply cancel speech, and after an interrupt the text keeps streaming on screen but nothing more is spoken; `MAX_SPOKEN_CHARS` still applies; listening resumes only after the last sentence.
+- **Important limit found:** the tools checkbox is ON by default, and with tools offered the server runs the buffered tool/plan pipeline (`Brain.stream_turn`, `buffered = bool(p.offered)`), which returns one delta. So in the default configuration speech still starts after the full reply. Streaming tool-bearing turns is a Brain/Gateway change (A1/A2) and is not done; recorded as a follow-up, not claimed.
+- **Tests actually run:** 3 new Chromium tests (speak first sentence before the stream ends; interrupt mid-stream; open code fence held back) fail without the change and pass with it. `test_voice_browser.py`: 64 passed, 0 failed. `test_assistant_stop_reply.py` (one source-contract assertion loosened to allow the new optional `onDelta` argument) and `test_voice_ui_contract.py` passed. `ruff` clean.
+- **Pre-existing failures, not caused by this change:** `tests/test_voice_wake_ui.py` times out in this Linux sandbox identically with and without this change; not investigated.
+- **Not verified:** real TTS timing/gaps between sentences, real voices, real microphone echo; `OWNER_VERIFICATION_REQUIRED`.
+
 ## Voice update - MIA-M1-09 text/voice parity (agent A4, 2026-11-21)
 
 - **Gap (from A3's `docs/M1_TRACEABILITY.md` row 4, re-verified in source):** `assistant.html` never sent `interface` on `/api/gateway/chat` or `/chat/stream`, so every spoken turn was recorded server-side as `text` and the voice-turn policy (no judge latency on spoken replies, `orchestrator.py`) never applied to real UI voice turns. Server tests passed only because they set the field by hand.
