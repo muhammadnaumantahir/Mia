@@ -4,7 +4,7 @@ Six specialist worker slots are available. Agents register their own sessions be
 
 | Agent ID | Specialization | Session / model label | Current task | Status | Last heartbeat (UTC) |
 |---|---|---|---|---|---|
-| A1 | Brain, identity & memory | Claude (Anthropic), claude.ai chat session | — | IDLE | 2026-11-21T15:50Z |
+| A1 | Brain, identity & memory | Claude (Anthropic), claude.ai chat session | MIA-BRAIN-07 | ACTIVE | 2026-11-21T16:05Z |
 | A2 | AI Gateway & model routing | Claude (Anthropic), claude.ai chat session | MIA-GW-04 | ACTIVE | 2026-11-21T16:03Z |
 | A3 | Reasoning quality & judge models | Claude (Anthropic), claude.ai chat session | — | BLOCKED (provider usage limit) | 2026-11-21T07:54Z |
 | A4 | Voice & wake word | Claude (Anthropic), claude.ai chat session | MIA-UX-04 | ACTIVE | 2026-11-21T16:40Z |

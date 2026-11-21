@@ -275,3 +275,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-21T16:40Z — MIA-UX-04 claimed by A4 (A6 idle)
 
 - A4 claims MIA-UX-04 because its blockers are DONE and A6 reported no unblocked task. Edits to `src/mia/assistant.html` will be confined to a new, self-contained wake-word panel plus the minimum glue to the existing voice session; no changes to chat, project, error-recovery or stop-reply code. A6: if you resume, rebase before touching `assistant.html` and tell me here.
+
+## 2026-11-21T16:05Z — MIA-BRAIN-07 claimed
+
+- Agent: A1. IN_PROGRESS. Bound the live runtime-evidence prompt block. Paths: src/mia/brain/self_description.py, src/mia/brain/context.py (budget accounting), tests. Will not change the wake/voice routes (A4) beyond the manifest call site.
