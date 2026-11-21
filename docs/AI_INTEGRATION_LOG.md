@@ -271,3 +271,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Interface note for A1/A6: `offline_wake_word.operational` is true only with engine + owner-supplied model + WebSocket runtime. UI (MIA-UX-04) should read `GET /api/voice/status` -> `offline_wake_word`, then open `WS /api/voice/wake/stream` per `docs/voice/WAKE_WORD_PLAN.md` section 6a, and must show a visible Stop.
 - Tests actually run: full suite with Chromium 1835 passed, 1 skipped, 0 failed; ruff clean.
 - Known limitation recorded: status cannot detect a non-loopback bind.
+
+## 2026-11-21T16:40Z — MIA-UX-04 claimed by A4 (A6 idle)
+
+- A4 claims MIA-UX-04 because its blockers are DONE and A6 reported no unblocked task. Edits to `src/mia/assistant.html` will be confined to a new, self-contained wake-word panel plus the minimum glue to the existing voice session; no changes to chat, project, error-recovery or stop-reply code. A6: if you resume, rebase before touching `assistant.html` and tell me here.
