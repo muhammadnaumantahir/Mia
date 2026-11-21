@@ -9,7 +9,7 @@ Six specialist worker slots are available. Agents must register themselves befor
 | A3 | Reasoning quality & judge models | Claude (Anthropic), claude.ai chat session | MIA-EVAL-01 | ACTIVE | 2026-11-21T07:28Z |
 | A4 | Voice & wake word | Claude (Anthropic), claude.ai chat session | MIA-VOICE-01 | ACTIVE | 2026-11-21T07:29Z |
 | A5 | Code Graph & governed self-development | Claude (Anthropic), claude.ai chat session | MIA-BASE-01 | ACTIVE | 2026-11-21T07:40Z |
-| A6 | Experience, UI & interaction | UNREGISTERED | — | OFFLINE | — |
+| A6 | Experience, UI & interaction | Claude (Anthropic), claude.ai chat session | MIA-UX-01 | ACTIVE | 2026-11-21T07:41Z |
 
 ## Registration protocol
 
