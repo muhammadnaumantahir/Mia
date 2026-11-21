@@ -42,7 +42,11 @@ from mia.brain.capabilities import CapabilityRegistry
 from mia.brain.judges import policy_snapshot as judge_policy_snapshot
 from mia.brain.orchestrator import Brain, TurnRequest
 from mia.brain.plan import PlanStore
-from mia.brain.self_description import build_runtime_manifest, render_runtime_manifest
+from mia.brain.self_description import (
+    build_runtime_manifest,
+    render_runtime_manifest,
+    wants_runtime_detail,
+)
 from mia.codegraph.impact import analyze_impact
 from mia.codegraph.indexer import build_graph, graph_freshness
 from mia.codegraph.watcher import CodeGraphWatcher
@@ -801,7 +805,7 @@ def create_app(
 
     runtime_evidence_failure_reported: list[bool] = []
 
-    def current_identity() -> tuple[str, int | None]:
+    def current_identity(prompt: str | None = None) -> tuple[str, int | None]:
         """Combine the owner-editable profile with factual live runtime evidence."""
         try:
             record = memory_store.identity.active()
@@ -845,7 +849,13 @@ def create_app(
                     transport_available=websocket_runtime_available()
                 ),
             )
-            return identity_text + "\n\n" + render_runtime_manifest(manifest), identity_version
+            # Ordinary turns get the compact block; turns about Mia itself get the full one.
+            # Without a prompt (other callers) keep the full block.
+            detailed = True if prompt is None else wants_runtime_detail(prompt)
+            return (
+                identity_text + "\n\n" + render_runtime_manifest(manifest, detailed=detailed),
+                identity_version,
+            )
         except Exception as exc:
             # Runtime evidence is supplemental; registry inspection must never break chat.
             # But a silent failure here means Mia answers without live self-knowledge, so

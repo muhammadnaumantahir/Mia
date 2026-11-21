@@ -120,8 +120,29 @@ def build_runtime_manifest(
     }
 
 
-def render_runtime_manifest(manifest: dict[str, Any]) -> str:
-    """Render concise trusted facts for the Brain system prompt."""
+_SELF_DESCRIPTION_RULE = (
+    "SELF-DESCRIPTION RULE: When asked what Mia is or can do, explain the SPS framework and "
+    "these runtime facts; clearly separate registered capabilities from unavailable or "
+    "planned features."
+)
+_EVIDENCE_LIMITS = (
+    "EVIDENCE LIMITS: Registration does not prove provider health, model availability, device "
+    "access, permission approval, or owner verification. Check the live operation result before "
+    "claiming an action succeeded. Never invent capabilities or expose credentials, tokens, "
+    "environment values, private paths, or raw configuration."
+)
+
+
+def render_runtime_manifest(manifest: dict[str, Any], *, detailed: bool = True) -> str:
+    """Render trusted facts for the Brain system prompt.
+
+    ``detailed=False`` is the compact block attached to ordinary turns: statuses, counts
+    and the two honesty rules, without enumerating tools or SPS layer responsibilities
+    (tool schemas reach the model separately). ``detailed=True`` is the full block, used
+    when the turn asks about Mia itself (see :func:`wants_runtime_detail`).
+    """
+    if not detailed:
+        return _render_compact(manifest)
     tools = ", ".join(manifest.get("tools", [])) or "none registered"
     providers = ", ".join(manifest.get("providers", [])) or "none registered"
     computer = ", ".join(manifest.get("computer_tools", [])) or "none registered"
@@ -152,6 +173,76 @@ def render_runtime_manifest(manifest: dict[str, Any]) -> str:
         f"- SPS layer responsibilities: {layer_responsibilities}",
         f"- SPS implementation status: {sps.get('implementation_status', 'unknown')}",
         "- Runtime services (API, scheduler, UI, gateway, adapters, memory and observatory) support the SPS layers; they are not extra SPS layers.",
-        "SELF-DESCRIPTION RULE: When asked what Mia is or can do, explain the SPS framework and these runtime facts; clearly separate registered capabilities from unavailable or planned features.",
-        "EVIDENCE LIMITS: Registration does not prove provider health, model availability, device access, permission approval, or owner verification. Check the live operation result before claiming an action succeeded. Never invent capabilities or expose credentials, tokens, environment values, private paths, or raw configuration.",
+        _SELF_DESCRIPTION_RULE,
+        _EVIDENCE_LIMITS,
     ])
+
+
+def _render_compact(manifest: dict[str, Any]) -> str:
+    providers = ", ".join(manifest.get("providers", [])) or "none registered"
+    sps = manifest.get("sps_framework", {})
+    return "\n".join([
+        "LIVE RUNTIME EVIDENCE (compact; from Mia's current application registries):",
+        f"- Registered tools ({manifest.get('tool_count', 0)}), of which computer/browser/"
+        f"filesystem: {len(manifest.get('computer_tools', []))}; schemas are supplied separately.",
+        f"- Configured provider adapters ({manifest.get('provider_count', 0)}): {providers}",
+        f"- Persistent memory store: {manifest.get('memory_store', 'unknown')}; "
+        f"local semantic memory reranking: {manifest.get('semantic_memory', 'unknown')}",
+        f"- Owner permission broker: {manifest.get('permission_broker', 'unknown')}; "
+        f"capability registry: {manifest.get('capability_registry', 'unknown')}",
+        f"- Voice API routes: {manifest.get('voice_routes', 'unknown')}; "
+        f"Code Graph API: {manifest.get('code_graph', 'unknown')}",
+        f"- Browser wake phrase: {manifest.get('browser_wake_phrase', 'unknown')}",
+        f"- Offline wake-word detection: {manifest.get('offline_wake_word', 'unknown')}",
+        f"- Architecture: {sps.get('name', 'unknown')} with {sps.get('layer_count', 0)} "
+        f"canonical layers; {sps.get('implementation_status', 'implementation status unknown')}",
+        "- Runtime services (API, scheduler, UI, gateway, adapters, memory, observatory) "
+        "support the SPS layers; they are not extra SPS layers.",
+        "- Names and per-layer detail are supplied when asked about Mia's capabilities, "
+        "tools, voice, providers or architecture.",
+        _SELF_DESCRIPTION_RULE,
+        _EVIDENCE_LIMITS,
+    ])
+
+
+# Phrases that mean "this turn is about Mia itself". Deliberately specific: a false
+# negative still leaves the compact block, which states every capability status truthfully;
+# a false positive only costs prompt size on that turn.
+_DETAIL_PATTERNS = tuple(re.compile(pattern, re.IGNORECASE) for pattern in (
+    r"\bwho\s+(are|r)\s+(you|u)\b",
+    r"\bwhat\s+(are|r)\s+(you|u)\b",
+    r"\bwhat\s+(can|could|do)\s+(you|u)\b",
+    r"\bwhat\s+(can'?t|cannot)\s+(you|u)\b",
+    r"\b(tell|explain|describe)\b.{0,25}\b(yourself|about\s+you|your\s+(self|architecture|design))\b",
+    r"\bhow\s+(do|does)\s+(you|u|mia)\s+(work|function)\b",
+    r"\byour\s+(capabilit|abilit|limit|tools?\b|features?\b|architecture|layers|providers?\b|models?\b)",
+    r"\b(capabilit|limitation)",
+    r"\bwhich\s+(tools?|providers?|models?)\b.{0,40}\b(you|available|use|using|have)\b",
+    r"\bwhat\s+(tools?|providers?|models?)\b.{0,40}\b(you|available|use|using|have)\b",
+    r"\b(wake\s*-?\s*word|wake\s+phrase|always[-\s]listening|microphone|hands[-\s]free)\b",
+    r"\bcan\s+(you|u)\s+(hear|listen|speak|talk|see|access|control|use|open)\b",
+    r"\bdo\s+(you|u)\s+have\s+(a\s+)?(voice|microphone|tools?|memory|access)\b",
+    r"\b(SPS|self[-\s]programming)\b",
+    r"\b(sps\s+)?layers?\b.{0,20}\b(sps|architecture|mia)\b",
+    # Roman Urdu
+    r"\b(tum|aap|ap|tm)\s+kaun\b",
+    r"\b(tum|aap|ap|tm)\s+kya\s+(kar|kr)\s+(sakt|skt)",
+    r"\b(tum|aap|ap|tum?hari|aapki|apki)\b.{0,25}\b(capabilit|salahiyat|abilit)",
+    r"\bkya\s+(kar|kr)\s+(sakt|skt)[iey]*\s+(ho|hain|hein|hai)\b",
+    # Urdu script
+    r"(آپ|تم|تُم)\s+کون",
+    r"(آپ|تم)\s+.{0,15}کیا\s+کر\s+سکت",
+    r"(آپ|تم|تمہاری|آپ\s+کی).{0,15}(صلاحیت|خصوصیات)",
+))
+
+
+def wants_runtime_detail(prompt: Any) -> bool:
+    """Whether the turn asks about Mia's identity, capabilities, tools or architecture.
+
+    Deterministic and side-effect free. Anything that is not a string is ordinary.
+    """
+    if not isinstance(prompt, str) or not prompt.strip():
+        return False
+    text = prompt[:2000]
+    return any(pattern.search(text) for pattern in _DETAIL_PATTERNS)
+

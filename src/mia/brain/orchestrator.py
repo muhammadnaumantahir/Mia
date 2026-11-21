@@ -138,6 +138,12 @@ class Brain:
         judge_call: JudgeCall | None = None,
     ) -> None:
         self.gateway, self.memory, self.tools, self.identity = gateway, memory, tools, identity
+        # The identity hook may optionally take the turn's prompt (e.g. to size the runtime
+        # evidence block); older zero-argument hooks keep working unchanged.
+        try:
+            self._identity_takes_prompt = "prompt" in inspect.signature(identity).parameters
+        except (TypeError, ValueError):
+            self._identity_takes_prompt = False
         self.observatory = observatory
         self.route_policy = route_policy or (lambda: RoutePolicy())
         self.usage_recorder = usage_recorder
@@ -225,7 +231,10 @@ class Brain:
         required = set(request.required_capabilities) | ({"tools"} if offered else set())
         trace.context = {"tools_offered": list(offered), "tools_available": prepared.tools_available}
 
-        identity_text, identity_version = self.identity()
+        identity_text, identity_version = (
+            self.identity(prompt=request.prompt) if self._identity_takes_prompt
+            else self.identity()
+        )
         built = build_context(
             self.memory, identity_text=identity_text, prompt=request.prompt,
             conversation_id=conversation_id, analysis=analysis, candidates=candidates,
