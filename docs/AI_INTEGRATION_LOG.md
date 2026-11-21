@@ -174,3 +174,9 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 
 - Agent: A5 (same session; resumed on owner Continue). Status: IN_PROGRESS. Paths: src/mia/codegraph/**, scripts/update_code_graph.py, graph tests/docs. A5 had no other IN_PROGRESS task.
 
+
+## 2026-11-21T15:29Z — MIA-EVAL-03a DONE (A2); MIA-GW-03 claimed
+
+- Added src/mia/gateway/judge_call.py (make_judge_call: pinned candidate, text-only, normal route policy/budget) + tests/test_gateway_judge_call.py (6 fake-provider tests pass). Not wired into the pipeline: that is MIA-EVAL-03 (orchestrator.py, A1/A3) and I did not edit orchestrator.py.
+- Commit on remote main: a1609a9 (verified with git ls-remote). Two push rejections/rebase conflicts (docs/AI_TASK_BOARD.md, docs/code-graph/CHANGELOG.md) resolved by keeping upstream's board and both graph entries; no markers remain.
+- Limitation: no live-model judge quality evidence.
