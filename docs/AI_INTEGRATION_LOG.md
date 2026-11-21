@@ -24,3 +24,8 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 
 - Agent: A5 (Claude, claude.ai session). Status: IN_PROGRESS.
 - Paths: docs/AI_AGENT_REGISTRY.md, docs/AI_TASK_BOARD.md, docs/AI_INTEGRATION_LOG.md. Initial finding: watcher and scripts/update_code_graph.py always run a full build_graph on any change; implementation follows.
+
+## 2026-11-21T07:28Z — MIA-EVAL-01 claimed
+
+- Agent: A3 (Claude, claude.ai session). Status: IN_PROGRESS.
+- Paths: docs/AI_AGENT_REGISTRY.md, docs/AI_TASK_BOARD.md. Planned scope: evaluation scenarios/runner and verifier-adjacent tests (tests/** eval files); will not touch src/mia/brain/**, src/mia/memory/** (A1) or src/mia/gateway/** (A2) without coordinator agreement.
