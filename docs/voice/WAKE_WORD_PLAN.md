@@ -13,7 +13,7 @@ Mia does **not** have an operational offline wake word. The browser "Hey Mia" ph
 | Detector contract, opt-in/stop/time-bounded session, false-activation guards | **Implemented** | `src/mia/voice/wake.py`, `tests/test_voice_wake.py` |
 | openWakeWord adapter (lazy import, owner-supplied model, never downloads) | **Implemented** | same files; also run once against the real engine (section 5) |
 | Capability report in `GET /api/voice/status` -> `offline_wake_word` | **Implemented** | `tests/test_voice_api.py` |
-| Audio transport (microphone -> detector) and UI | **Not implemented** | planned as MIA-VOICE-02 (section 6) |
+| Audio transport (microphone -> detector) and UI | **Implemented** (MIA-VOICE-02/04, MIA-UX-04) | `wake_transport.py`, `assistant.html`, `tests/test_voice_wake_transport.py`, `tests/test_voice_wake_wiring.py`, `tests/test_voice_wake_ui.py` |
 | Real positive detection of a spoken phrase | **Not verified** | no TTS/mic in the audit sandbox; `OWNER_VERIFICATION_REQUIRED` |
 
 ## 2. Upstream audit: openWakeWord
@@ -114,6 +114,14 @@ Guards: loopback client address, no proxy-forwarding headers, Origin absent or s
 (blocks cross-site and DNS-rebinding), one connection at a time, REST endpoints loopback-only, arming possible
 only through the WebSocket opt-in message. The `voice-wake` extra now also installs `websockets` (bare
 `uvicorn` cannot serve WebSockets).
+
+## 6b. UI implemented (MIA-UX-04)
+
+The panel in `assistant.html` follows section 4: nothing is requested or opened until the owner presses
+**Listen for wake word**; the page then opens the loopback WebSocket, sends the opt-in message and only after the
+server confirms `listening` asks for the microphone (so an unavailable engine never opens it). Audio is captured with
+an AudioWorklet, box-averaged to 16 kHz mono int16 and sent in 1280-sample frames (bounded by a send-buffer limit).
+Tests: `tests/test_voice_wake_ui.py`.
 
 ## 7. Owner verification (cannot be automated here)
 

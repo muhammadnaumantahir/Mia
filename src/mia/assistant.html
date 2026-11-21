@@ -104,6 +104,11 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 .voice-small:disabled{opacity:.4;cursor:not-allowed}
 .voice-small.danger{background:#3b2420;border-color:#87594d;color:#ffd3c5}
 .voice-privacy{font-size:9px;color:#71887e;line-height:1.4;margin:0 4px 8px}
+.offline-wake{margin:0 4px 10px;padding:8px 10px;border:1px solid #2c4a3d;border-radius:12px;background:#0f1d18;font-size:11px;color:#b9d9c8}
+.offline-wake h3{margin:0 0 6px;font-size:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.offline-wake .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}
+.offline-wake p{margin:4px 0;line-height:1.4}
+.offline-wake .offline-wake-privacy{font-size:9px;color:#71887e}
 @media(max-width:620px){.voice-console{align-items:flex-start;flex-direction:column}.voice-actions{width:100%;justify-content:space-between}.voice-actions select{flex:1;max-width:none}.voice-toggle{flex:1}}
 
 </style></head>
@@ -165,6 +170,12 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
   <label class="voice-check"><input id="voiceBargeIn" type="checkbox"> Interrupt by voice (use headphones)</label>
  </div>
  <div class="voice-preview" id="voicePreview" aria-live="polite"></div>
+ <section class="offline-wake" id="offlineWake" aria-labelledby="offlineWakeTitle">
+  <h3 id="offlineWakeTitle">Offline wake word <span class="voice-badge" id="offlineWakeBadge" data-on="false" role="status">Not listening</span></h3>
+  <div class="row"><button class="voice-small" id="offlineWakeStart" type="button" disabled>Listen for wake word</button><button class="voice-small danger" id="offlineWakeStop" type="button" hidden>Stop listening</button></div>
+  <p id="offlineWakeNote" role="status" aria-live="polite">Checking the offline wake word…</p>
+  <p class="offline-wake-privacy" id="offlineWakePrivacy">A detector on this computer listens for the wake phrase. Nothing listens until you press Listen for wake word. Microphone audio goes only to Mia on this computer, is not stored, and the Mic indicator above stays visible. Press Stop listening at any time.</p>
+ </section>
  <p class="voice-privacy">Browser engine: recognition uses your browser's speech service and may require internet; the browser may process microphone audio outside Mia. Local engine: audio is transcribed on this computer by Faster-Whisper (optional voice extra) and is not stored. The microphone starts only after you press Start voice, Enable Hey Mia, or hold the talk button in push-to-talk, and is released when the session ends. Hey Mia is an explicit opt-in browser wake phrase; browser recognition stays active while armed, the Mic on indicator remains visible, and Stop voice or Mute mic stops listening. The Microphone choice applies to the local engine and Local record; the browser engine uses the browser's default microphone. Esc or Interrupt stops Mia speaking.</p>
  <textarea id="prompt" rows="2" placeholder="Message Mia… (English or Roman Urdu)" aria-label="Message Mia"></textarea>
 <div class="composerfoot"><div class="hint" id="hint" role="status" aria-live="polite">Enter to send · Shift + Enter for a new line</div><div class="actions"><button class="send" id="mic" type="button" aria-pressed="false" title="Record one clip and transcribe locally with Faster-Whisper" style="background:#1c3930;color:#a9ebcb;border:1px solid #356451">Local record</button><select id="taskType" aria-label="Task type"><option value="chat">General</option><option value="reasoning">Reasoning</option><option value="coding">Coding</option><option value="research">Research</option></select><label style="font-size:11px;color:#94aaa2;display:flex;align-items:center;gap:5px"><input id="useTools" type="checkbox" checked> Tools</label><label style="font-size:11px;color:#94aaa2;display:flex;align-items:center;gap:5px"><input id="speakReplies" type="checkbox"> Speak</label><select id="voiceChoice" aria-label="Speech voice" title="Installed browser voices" style="max-width:110px"><option value="">Default voice</option></select><button class="send" id="send" type="submit">Send ↗</button><button class="send stop" id="stopReply" type="button" hidden aria-label="Stop generating this reply (Esc)" title="Stop generating (Esc)">Stop ■</button></div></div>
@@ -874,6 +885,7 @@ async function startRecording(){
 }
 $('mic').addEventListener('click',()=>{
  if(recording){mediaRecorder?.stop();return;}
+ stopOfflineWake('Offline wake word stopped because Local record started.');
  startRecording();
 });
 async function refreshProviders(){
@@ -1496,6 +1508,7 @@ async function startVoiceConversation({wakeWord=false}={}){
   return;
  }
  if(voiceMode||chatBusy)return;
+ stopOfflineWake('Offline wake word stopped because a voice conversation started.');
  voiceEngineName=wantLocal?'local':'browser';
  voiceMode=true;
  voiceWakeMode=wakeWord;
@@ -1582,6 +1595,173 @@ $('voiceMode').addEventListener('click',()=>{
   startVoiceConversation();
  }
 });
+
+// ---- Offline wake word (MIA-UX-04): detector runs in Mia on this computer; audio goes over loopback only ----
+const OFFLINE_WAKE_STOP_REASONS={
+ owner:'Stopped listening for the wake word.',
+ transport_closed:'The wake-word connection closed, so listening stopped.',
+ max_armed_duration:'Listening stopped automatically because the time limit was reached.',
+ audio_stalled:'Listening stopped because no microphone audio was arriving.',
+ too_many_activations:'Listening stopped because it kept triggering (background speech or music?). Start it again when ready.',
+ detector_error:'Listening stopped because the wake-word detector failed.',
+ bad_audio:'Listening stopped because the audio stream was invalid.'
+};
+const OFFLINE_WAKE_UNAVAILABLE={
+ engine_not_installed:'Not installed. Run: pip install -e ".[voice-wake]"',
+ model_not_configured:'No wake-word model is configured. Set MIA_WAKE_MODEL_PATH to a model you are licensed to use (the common pre-trained models are non-commercial).',
+ audio_transport_not_available:'Needs a WebSocket server runtime. Run: pip install -e ".[voice-wake]"'
+};
+const OFFLINE_WAKE_FRAME=1280;
+let offlineWake=null;
+let offlineWakeLabel='Hey Mia';
+function createWakeResampler(inputRate,outputRate=16000){
+ // Box-averaging downsampler to 16 kHz mono int16 (carries state across 128-sample blocks).
+ const ratio=inputRate/outputRate;
+ let tail=new Float32Array(0),t=0;
+ return block=>{
+  const buf=new Float32Array(tail.length+block.length);buf.set(tail);buf.set(block,tail.length);
+  const out=[];
+  while(Math.ceil(t+ratio)<=buf.length){
+   const a=Math.floor(t),b=Math.max(a+1,Math.floor(t+ratio));let sum=0;
+   for(let i=a;i<b;i++)sum+=buf[i];
+   out.push(sum/(b-a));t+=ratio;
+  }
+  const keep=Math.min(Math.floor(t),buf.length);
+  tail=buf.slice(keep);t-=keep;
+  return Int16Array.from(out,v=>Math.max(-32768,Math.min(32767,Math.round(v*32767))));
+ };
+}
+function setOfflineWakeUi(state,note){
+ const badge=$('offlineWakeBadge'),start=$('offlineWakeStart'),stop=$('offlineWakeStop');
+ const active=state==='connecting'||state==='listening';
+ badge.dataset.on=state==='listening'?'true':'false';
+ badge.textContent=state==='listening'?('Listening for “'+offlineWakeLabel+'” · offline · this computer')
+  :state==='connecting'?'Starting…':'Not listening';
+ stop.hidden=!active;
+ start.hidden=active;
+ if(note!==undefined)$('offlineWakeNote').textContent=note;
+}
+async function refreshOfflineWake(note){
+ if(offlineWake)return;
+ let info;
+ try{
+  const response=await fetch('/api/voice/wake/status');
+  if(response.status===403){setOfflineWakeUnavailable('Offline wake word works only when Mia is opened on this computer (localhost).');return;}
+  if(!response.ok)throw new Error('status '+response.status);
+  info=await response.json();
+ }catch(error){setOfflineWakeUnavailable('The offline wake-word status could not be read.');return;}
+ offlineWakeLabel=info.session?.label||offlineWakeLabel;
+ const capability=info.capability||{};
+ const hours=Math.round((info.session?.max_armed_seconds||0)/360)/10;
+ $('offlineWakePrivacy').textContent='A detector on this computer listens for “'+offlineWakeLabel+'”. Nothing listens until you press Listen for wake word. Microphone audio goes only to Mia on this computer, is not stored, and the badge stays visible while it listens. It stops by itself after '+hours+' h or if it keeps triggering by mistake; press Stop listening at any time.';
+ if(capability.operational===true){
+  $('offlineWakeStart').disabled=false;
+  setOfflineWakeUi('off',note||'Ready. It starts only when you press the button.');
+ }else{
+  setOfflineWakeUnavailable(OFFLINE_WAKE_UNAVAILABLE[capability.reason]||'Offline wake word is not available.');
+ }
+}
+function setOfflineWakeUnavailable(note){
+ $('offlineWakeStart').disabled=true;
+ setOfflineWakeUi('off',note);
+}
+function endOfflineWake(session,message,{sendStop=true,refresh=true}={}){
+ if(!session||session.done)return;
+ session.done=true;
+ if(offlineWake===session)offlineWake=null;
+ try{if(sendStop&&session.ws&&session.ws.readyState===1)session.ws.send(JSON.stringify({type:'stop'}));}catch(error){}
+ try{session.ws?.close();}catch(error){}
+ session.stream?.getTracks().forEach(track=>track.stop());
+ try{session.node?.disconnect();session.source?.disconnect();session.mute?.disconnect();}catch(error){}
+ try{session.audioContext?.close();}catch(error){}
+ setOfflineWakeUi('off',message);
+ if(refresh)refreshOfflineWake(message);
+}
+function stopOfflineWake(message='Offline wake word stopped.'){
+ if(offlineWake)endOfflineWake(offlineWake,message);
+}
+async function beginOfflineCapture(session){
+ const stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true}});
+ if(session.done){stream.getTracks().forEach(track=>track.stop());return;}
+ session.stream=stream;
+ const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+ const audioContext=new AudioContextClass();
+ session.audioContext=audioContext;
+ const workletSource='class MiaWakeCapture extends AudioWorkletProcessor{process(inputs){const c=inputs[0]&&inputs[0][0];if(c&&c.length)this.port.postMessage(c.slice(0));return true;}}registerProcessor("mia-wake-capture",MiaWakeCapture);';
+ const moduleUrl=URL.createObjectURL(new Blob([workletSource],{type:'application/javascript'}));
+ try{await audioContext.audioWorklet.addModule(moduleUrl);}finally{URL.revokeObjectURL(moduleUrl);}
+ if(session.done)return;
+ const source=audioContext.createMediaStreamSource(stream);
+ const node=new AudioWorkletNode(audioContext,'mia-wake-capture',{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[1]});
+ const mute=audioContext.createGain();mute.gain.value=0;
+ const resample=createWakeResampler(audioContext.sampleRate);
+ let pending=new Int16Array(0);
+ session.sentFrames=0;
+ node.port.onmessage=event=>{
+  if(session.done||!session.ws||session.ws.readyState!==1)return;
+  const samples=resample(event.data);
+  const merged=new Int16Array(pending.length+samples.length);merged.set(pending);merged.set(samples,pending.length);
+  let offset=0;
+  while(merged.length-offset>=OFFLINE_WAKE_FRAME){
+   if(session.ws.bufferedAmount<262144){session.ws.send(merged.slice(offset,offset+OFFLINE_WAKE_FRAME).buffer);session.sentFrames++;}
+   offset+=OFFLINE_WAKE_FRAME;
+  }
+  pending=merged.slice(offset);
+ };
+ source.connect(node);node.connect(mute);mute.connect(audioContext.destination);
+ session.source=source;session.node=node;session.mute=mute;
+ if(audioContext.state==='suspended')await audioContext.resume();
+}
+function onOfflineWakeMessage(session,message){
+ if(session.done)return;
+ if(message.type==='ready'){
+  // Pressing the button is the explicit owner opt-in; nothing was sent before this.
+  session.ws.send(JSON.stringify({type:'start',owner_opt_in:true}));
+ }else if(message.type==='status'&&message.listening&&!session.capturing){
+  session.capturing=true;
+  offlineWakeLabel=message.label||offlineWakeLabel;
+  setOfflineWakeUi('listening','Listening on this computer. Say “'+offlineWakeLabel+'”. Press Stop listening to turn it off.');
+  beginOfflineCapture(session).catch(error=>{
+   endOfflineWake(session,'Could not use the microphone: '+(error&&error.message?error.message:error));
+  });
+ }else if(message.type==='wake'){
+  endOfflineWake(session,'Heard “'+(message.label||offlineWakeLabel)+'”. Starting the voice conversation…',{refresh:false});
+  if(!voiceMode&&!chatBusy&&!recording)startVoiceConversation();
+  else setVoiceStatus('Heard the wake word, but a voice session, recording or reply is already active.',true);
+ }else if(message.type==='stopped'){
+  endOfflineWake(session,OFFLINE_WAKE_STOP_REASONS[message.stop_reason]||'Offline wake word stopped.',{sendStop:false});
+ }else if(message.type==='error'){
+  endOfflineWake(session,message.message||('Offline wake word error: '+message.code),{sendStop:false});
+ }
+}
+function startOfflineWake(){
+ if(offlineWake)return;
+ if(voiceMode){setOfflineWakeUi('off','End the current voice session before listening for the wake word.');return;}
+ if(recording){setOfflineWakeUi('off','Stop the local recording before listening for the wake word.');return;}
+ if(!navigator.mediaDevices?.getUserMedia||!window.AudioWorkletNode||!(window.AudioContext||window.webkitAudioContext)){
+  setOfflineWakeUi('off','This browser cannot capture microphone audio for the offline wake word.');return;
+ }
+ const session={ws:null,stream:null,audioContext:null,source:null,node:null,mute:null,done:false,capturing:false};
+ offlineWake=session;
+ setOfflineWakeUi('connecting','Connecting to the detector on this computer…');
+ try{
+  const ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/api/voice/wake/stream');
+  ws.binaryType='arraybuffer';
+  session.ws=ws;
+  ws.onmessage=event=>{
+   if(typeof event.data!=='string')return;
+   let message;try{message=JSON.parse(event.data);}catch(error){return;}
+   onOfflineWakeMessage(session,message);
+  };
+  ws.onerror=()=>{};
+  ws.onclose=()=>endOfflineWake(session,'The wake-word connection closed, so listening stopped.',{sendStop:false});
+ }catch(error){
+  endOfflineWake(session,'Could not reach the offline wake-word detector.',{sendStop:false});
+ }
+}
+$('offlineWakeStart').addEventListener('click',startOfflineWake);
+$('offlineWakeStop').addEventListener('click',()=>stopOfflineWake('Stopped listening for the wake word.'));
+refreshOfflineWake();
 $('wakeWordMode').addEventListener('click',()=>{
  if(voiceWakeMode){stopVoiceConversation('Hey Mia wake phrase listening stopped.');return;}
  if(voiceMode){setVoiceStatus('End the current voice session before enabling Hey Mia.',true);return;}
@@ -1655,6 +1835,7 @@ $('purgeConfirm').addEventListener('click',async()=>{
  }catch(e){$('purgeResult').textContent=e.message;}
 });
 window.addEventListener('pagehide',()=>{
+ if(offlineWake)endOfflineWake(offlineWake,'',{refresh:false});
  if(voiceMode)stopVoiceConversation('Voice session ended.');
  if(recording&&mediaRecorder){recording=false;try{mediaRecorder.onstop=null;mediaRecorder.stop();}catch(error){}releaseRecordingStream();setMicBadge(false);}
  cancelSpeech();

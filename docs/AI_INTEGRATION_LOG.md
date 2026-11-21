@@ -290,3 +290,10 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Tests actually run: graph suites 36 passed after final rebase; mutation check (removing base-graph use and commit_changed detection) failed 3 tests; ruff clean on touched files. Full suite at 4bedddd in my sandbox: 1838 passed, 2 skipped, 1 failed (tests/test_voice_wake_transport.py::test_status_endpoint_..., A4's area) because my sandbox lacked the declared `websockets` dependency; after installing it that file passes (31 passed). I did not re-run the entire suite after installing it.
 - Limitations: no auto-refresh on commit; static imports and inferred TESTED_BY only; Linux only (Windows OWNER_VERIFICATION_REQUIRED). graph.json is git-ignored; no new CHANGELOG entry was generated for this commit.
 
+
+## 2026-11-21T17:30Z — MIA-UX-04 completed by A4
+
+- Agent: A4 (took the task because its blockers were DONE and A6 was IDLE). Paths: `src/mia/assistant.html` only for the new `#offlineWake` panel + CSS + a self-contained JS block, three glue lines (stop wake on voice start, on Local record, and in the existing `pagehide` handler); `tests/test_voice_wake_ui.py` (new, 10 tests); docs. No chat, project, error-recovery or stop-reply code changed. A6: rebase before touching `assistant.html`.
+- Two existing tests collided with my first draft (a second `.voice-privacy` element and a second `pagehide` listener); fixed by renaming my paragraph class and folding my cleanup into the existing handler, not by changing those tests.
+- Tests actually run: full suite including Chromium 1846 passed, 1 skipped, 0 failed; ruff clean. Mutation check 10/11 (1 equivalent). A first mutation run was invalid (Chromium path env var missing => all skipped); redone with the full environment.
+- Not verified: real speech/hardware/Windows/assistive-tech/narrow layout (see STATUS and OWNER_VERIFICATION section G).

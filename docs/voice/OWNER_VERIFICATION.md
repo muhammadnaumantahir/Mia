@@ -56,13 +56,12 @@ your sentence as the next turn. Without headphones expect self-interruption; lea
 
 ## G. Offline wake-word engine (OWNER_VERIFICATION_REQUIRED - not usable from the UI yet)
 
-The detector core exists but no audio transport/UI is wired, so these checks are **prerequisites for MIA-VOICE-02**
-and cannot yet be done end to end. Do them when convenient; none blocks development.
+The detector, transport and UI are all wired (MIA-VOICE-01/02/04, MIA-UX-04). Only real speech and real hardware are unverified. Do these when convenient; none blocks development.
 
 1. On Windows: `python -m pip install -e ".[voice-wake]"`. Record whether it installs on your Python version.
 2. Decide the model: the upstream pre-trained models are CC BY-NC-SA 4.0 (non-commercial). For personal use you may
    point `MIA_WAKE_MODEL_PATH` at one; for anything else train your own "Hey Mia" model (see WAKE_WORD_PLAN).
 3. Run `GET http://127.0.0.1:8765/api/voice/status`: `offline_wake_word.engine_installed` and `model_configured`
    should become true. `operational` must still be false until the transport task lands.
-4. Once the transport exists: confirm the Listening badge, the Stop control, the automatic stop after the configured
-   time, that unrelated speech/TV does not activate, and note false accepts per hour and missed wakes.
+4. Open Mia on this computer (localhost), install `.[voice-wake]`, set `MIA_WAKE_MODEL_PATH`, then use **Offline wake word -> Listen for wake word**. Confirm the badge, that Stop listening stops it at once and the browser's microphone indicator goes off, that the wake phrase starts the voice conversation (browser engine may need a click if the browser blocks hands-free start), the automatic stop after the configured time, that unrelated speech/TV does not activate, and note false accepts per hour and missed wakes.
+5. Check keyboard-only use and a screen reader on the new panel, and the layout on a narrow window.
