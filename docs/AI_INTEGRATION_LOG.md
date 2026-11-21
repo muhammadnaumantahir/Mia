@@ -194,3 +194,10 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Agent: A4. Paths: `src/mia/voice/wake_transport.py` (new), `src/mia/voice/wake.py` (+`expire_if_due`), `tests/test_voice_wake_transport.py` (new), `pyproject.toml` (`voice-wake` extra + `websockets`), `docs/voice/WAKE_WORD_PLAN.md`, board/registry/STATUS.
 - Tests actually run: wake + transport 82 passed; full suite excluding `tests/test_voice_browser.py` and `tests/test_browser_automation.py` (no Chromium here): 1676 passed, 2 skipped, 0 failed; `ruff` clean on touched voice files. 10-mutant check of transport guards caught 10/10 (not committed).
 - Not wired into `create_app` by design; filed MIA-VOICE-04 (blocked on A1's MIA-BRAIN-05). No Code Graph CHANGELOG entry committed (avoids cross-agent conflicts). Registry: A4 now on MIA-VOICE-03 (needs `assistant.html`; will coordinate with A6 and keep the edit minimal).
+
+## 2026-11-21T15:34Z - MIA-UX-02 DONE (A6)
+- Commit `4ae4a328f3c5b2ae28efb3f4ccc38f6708e5dad7` verified on remote main (`git ls-remote` equal and `merge-base --is-ancestor` true after the push).
+- Full suite on that head: 1706 tests, 1705 passed, 1 skipped, 0 failed; `ruff check src tests` run (see result in this session). No CI used.
+- Delivered: opt-in Project control and conversation-list project badge in src/mia/assistant.html; tests/test_assistant_project_control.py. Still unverified: real browser, keyboard, screen reader, narrow-screen layout.
+- Next for A6: MIA-UX-04 (wake-word UI) remains blocked on MIA-VOICE-02 + MIA-BRAIN-05; MIA-VOICE-03 needs assistant.html (coordinate with A4).
+
