@@ -98,6 +98,7 @@ def _aggregate_failure(attempted: list[str], last_error: Exception) -> Transient
 
 DEFAULT_ATTEMPT_TIMEOUT_S = 180.0  # backstop above the adapters' own 90s HTTP timeouts
 DEFAULT_STREAM_IDLE_TIMEOUT_S = 120.0  # tolerates slow cold-loading local models
+DEFAULT_TURN_DEADLINE_S = 300.0  # total wait for a first answer across all fallback candidates
 _USE_DEFAULT: Any = object()
 
 
@@ -134,6 +135,7 @@ class ModelGateway:
         stream_idle_timeout: float | None = _USE_DEFAULT,
         tool_call_policy: str = "annotate",
         attempt_timeout: float | None = _USE_DEFAULT,
+        turn_deadline: float | None = _USE_DEFAULT,
     ) -> None:
         if tool_call_policy not in ("annotate", "filter"):
             raise ValueError("tool_call_policy must be 'annotate' or 'filter'")
@@ -148,9 +150,14 @@ class ModelGateway:
             attempt_timeout = _seconds_from_env(
                 "MIA_GATEWAY_ATTEMPT_TIMEOUT_S", DEFAULT_ATTEMPT_TIMEOUT_S
             )
+        if turn_deadline is _USE_DEFAULT:
+            turn_deadline = _seconds_from_env(
+                "MIA_GATEWAY_TURN_DEADLINE_S", DEFAULT_TURN_DEADLINE_S
+            )
         for label, value in (
             ("stream_idle_timeout", stream_idle_timeout),
             ("attempt_timeout", attempt_timeout),
+            ("turn_deadline", turn_deadline),
         ):
             if value is not None and not (
                 isinstance(value, (int, float)) and math.isfinite(value) and 0 < value <= 3600
@@ -158,6 +165,7 @@ class ModelGateway:
                 raise ValueError(f"{label} must be a number of seconds from 0 to 3600")
         self.stream_idle_timeout = stream_idle_timeout
         self.attempt_timeout = attempt_timeout
+        self.turn_deadline = turn_deadline
         self.providers = providers
         self.health = health or CandidateHealthTracker()
         self.model_registry = model_registry
@@ -170,21 +178,41 @@ class ModelGateway:
         self.usage_ledger: Any | None = None
         self.require_budget_reservations = False
 
-    async def _bounded(self, awaitable: Awaitable[Any]) -> Any:
+    def _new_deadline(self) -> float | None:
+        """Monotonic instant by which this turn must have a first answer, or None (disabled)."""
+        if self.turn_deadline is None:
+            return None
+        return time.monotonic() + self.turn_deadline
+
+    async def _bounded(self, awaitable: Awaitable[Any], deadline: float | None = None) -> Any:
         """Await one provider attempt, converting a gateway-level timeout into ``ProviderTimeout``.
 
+        The wait is the per-attempt timeout, clamped to what is left of the turn deadline.
         Consumer cancellation still propagates as ``CancelledError`` (it is not a timeout).
         """
-        if self.attempt_timeout is None:
+        limits = [self.attempt_timeout] if self.attempt_timeout is not None else []
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                close = getattr(awaitable, "close", None)
+                if close is not None:
+                    close()  # never-started coroutine: avoid a "never awaited" warning
+                raise ProviderTimeout("turn time budget spent")
+            limits.append(remaining)
+        if not limits:
             return await awaitable
+        timeout = min(limits)
         try:
-            return await asyncio.wait_for(awaitable, self.attempt_timeout)
+            return await asyncio.wait_for(awaitable, timeout)
         except TimeoutError:
-            raise ProviderTimeout(
-                f"provider did not answer within {self.attempt_timeout:g}s"
-            ) from None
+            raise ProviderTimeout(f"provider did not answer within {timeout:g}s") from None
 
-    async def _call_with_retry(self, candidate_name: str, call: Callable[[], Awaitable[Any]]) -> Any:
+    async def _call_with_retry(
+        self,
+        candidate_name: str,
+        call: Callable[[], Awaitable[Any]],
+        deadline: float | None = None,
+    ) -> Any:
         """Run one provider call, retrying transient failures per the retry policy.
 
         Rate limits and authentication/permanent errors are never retried here. The
@@ -195,7 +223,7 @@ class ModelGateway:
         attempts = self.retry_policy.max_attempts
         for attempt in range(attempts):
             try:
-                return await self._bounded(call())
+                return await self._bounded(call(), deadline)
             except ProviderTimeout:
                 raise  # a hung provider is skipped, not retried: the owner is already waiting
             except TransientProviderError as exc:
@@ -208,26 +236,36 @@ class ModelGateway:
                 await self._sleep(delay)
         raise AssertionError("unreachable")  # pragma: no cover
 
-    async def _guard_idle(self, source: AsyncIterator[StreamChunk]) -> AsyncIterator[StreamChunk]:
+    async def _guard_idle(
+        self, source: AsyncIterator[StreamChunk], deadline: float | None = None
+    ) -> AsyncIterator[StreamChunk]:
         """Pass chunks through, failing transiently if the provider goes silent too long.
 
         Always closes the provider's stream, so the HTTP connection is released on
         timeout, error, cancellation or early close.
         """
         iterator = source.__aiter__()
+        started_output = False
         try:
             while True:
+                limits = [] if self.stream_idle_timeout is None else [self.stream_idle_timeout]
+                if deadline is not None and not started_output:
+                    # The turn deadline bounds the wait for a first answer only; a stream
+                    # that is already producing is never cut off by it.
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise ProviderTimeout("turn time budget spent")
+                    limits.append(remaining)
                 try:
-                    if self.stream_idle_timeout is None:
+                    if not limits:
                         chunk = await iterator.__anext__()
                     else:
-                        chunk = await asyncio.wait_for(
-                            iterator.__anext__(), self.stream_idle_timeout
-                        )
+                        chunk = await asyncio.wait_for(iterator.__anext__(), min(limits))
                 except StopAsyncIteration:
                     return
                 except TimeoutError:
                     raise ProviderTimeout("stream idle timeout") from None
+                started_output = True
                 yield chunk
         finally:
             aclose = getattr(iterator, "aclose", None)
@@ -439,10 +477,16 @@ class ModelGateway:
         budget_blocked: list[str] = []
         invalid: list[str] = []
         unavailable: list[str] = []
+        deadline = self._new_deadline()
 
         for candidate in ranked:
             provider_id = candidate.provider_id
             candidate_name = f"{provider_id}/{candidate.model_id}"
+            if deadline is not None and time.monotonic() >= deadline:
+                self.events.add("deadline", candidate_name, "turn time budget spent; not tried")
+                if last_error is None:
+                    last_error = ProviderTimeout("turn time budget spent")
+                break
             if not self.breaker.allow(provider_id):
                 if provider_id not in skipped:
                     skipped.append(provider_id)
@@ -463,7 +507,7 @@ class ModelGateway:
             try:
                 started = time.perf_counter()
                 response = await self._call_with_retry(
-                    candidate_name, lambda: provider.complete(candidate, request)
+                    candidate_name, lambda: provider.complete(candidate, request), deadline
                 )
                 latency_ms = (time.perf_counter() - started) * 1000.0
                 if isinstance(response, str):
@@ -580,10 +624,16 @@ class ModelGateway:
         skipped: list[str] = []
         budget_blocked: list[str] = []
         unavailable: list[str] = []
+        deadline = self._new_deadline()
 
         for candidate in ranked:
             provider_id = candidate.provider_id
             candidate_name = f"{provider_id}/{candidate.model_id}"
+            if deadline is not None and time.monotonic() >= deadline:
+                self.events.add("deadline", candidate_name, "turn time budget spent; not tried")
+                if last_error is None:
+                    last_error = ProviderTimeout("turn time budget spent")
+                break
             if not self.breaker.allow(provider_id):
                 if provider_id not in skipped:
                     skipped.append(provider_id)
@@ -617,7 +667,7 @@ class ModelGateway:
                     bool(request.tools) and not getattr(provider, "streams_tools", False)
                 )
                 if buffered:
-                    response = await self._bounded(provider.complete(candidate, request))
+                    response = await self._bounded(provider.complete(candidate, request), deadline)
                     last_chunk_at = first_token_at = time.perf_counter()
                     if isinstance(response, str):
                         response = ProviderResponse(content=response)
@@ -643,7 +693,7 @@ class ModelGateway:
                 else:
                     final = StreamChunk()
                     text_parts: list[str] = []
-                    chunk_iter = self._guard_idle(streamer(candidate, request))
+                    chunk_iter = self._guard_idle(streamer(candidate, request), deadline)
                     async for chunk in chunk_iter:
                         # Timestamps are taken on receipt, before yielding to the
                         # consumer, so a slow consumer does not inflate latency.
