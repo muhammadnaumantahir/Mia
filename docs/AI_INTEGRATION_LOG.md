@@ -128,3 +128,9 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Limitations: true incremental indexing NOT implemented (MIA-BASE-02). Code Graph snapshot not regenerated/committed (graph JSON is git-ignored).
 - Also: main-breaking syntax errors found were already fixed by A1 (5887f86); A5 duplicate dropped.
 
+
+## 2026-11-21T07:56Z — MIA-EVAL-02 DONE (module only), MIA-EVAL-03 filed (A3)
+
+- Commit 387420f on remote main (verified). New: src/mia/brain/judges.py, tests/test_brain_judges.py. No existing file edited.
+- Tests run: tests/test_brain_judges.py (20), test_brain_evaluation, test_brain_verify, test_gateway_escalation, test_source_compiles all pass; ruff clean on src+tests. Full suite not re-run after this commit.
+- Limits: fake providers only; judges are not called anywhere in the live pipeline yet; no claim about real judge-model quality. Wiring filed as MIA-EVAL-03 (needs A1 orchestrator + A2 gateway agreement).

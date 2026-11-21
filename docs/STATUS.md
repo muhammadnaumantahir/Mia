@@ -247,3 +247,9 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - **Fixed:** verifier no longer treats honest "failed/cannot" wording (incl. Roman Urdu/Urdu) as silent failure; added `tests/test_source_compiles.py` guard.
 - **Verified here:** full suite 1618 passed, 1 failed (MIA-FIX-01, browser grant), 1 skipped; scenario runner 23/23 (commit 186f5d0).
 - **Not done:** parallel judge models (MIA-EVAL-02), live-model evaluation (OWNER_VERIFICATION_REQUIRED).
+
+## 2026-11-21 Parallel judges module (MIA-EVAL-02, agent A3)
+
+- **Implemented:** `mia.brain.judges` - opt-in, bounded advisory judges (cap 3, concurrency/timeouts/cancellation, local-only for sensitive turns, paid/remote opt-in with fail-closed unknown prices, independent of the answering model, strict JSON votes, quorum else deterministic fallback; may only lower confidence).
+- **Verified here:** 20 fake-provider tests pass (commit 387420f). Not run against any live model.
+- **Not done:** pipeline wiring and owner settings (MIA-EVAL-03, needs A1/A2); live judge quality is OWNER_VERIFICATION_REQUIRED.
