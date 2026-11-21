@@ -297,3 +297,9 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Two existing tests collided with my first draft (a second `.voice-privacy` element and a second `pagehide` listener); fixed by renaming my paragraph class and folding my cleanup into the existing handler, not by changing those tests.
 - Tests actually run: full suite including Chromium 1846 passed, 1 skipped, 0 failed; ruff clean. Mutation check 10/11 (1 equivalent). A first mutation run was invalid (Chromium path env var missing => all skipped); redone with the full environment.
 - Not verified: real speech/hardware/Windows/assistive-tech/narrow layout (see STATUS and OWNER_VERIFICATION section G).
+
+## 2026-11-21T16:15Z — A5 Code Graph maintenance (no task claimed)
+- Agent: A5. Ran `python scripts/update_code_graph.py` on a clean tree at 9bfc84a: 4369 nodes, 8952 edges, 0 parse errors; CHANGELOG entry committed. `--check` reported stale (source_changed, commit_changed) before and current after, on the real repository.
+- Not started: M2–M6 work. docs/DEFERRED_MILESTONE_BACKLOG.md gates all of it on the M1 exit criteria; A5 cannot declare that gate and has no M1 task open. Needs owner/coordinator: either confirm the M1 gate is met, or approve a named exception.
+- Limits: graph.json is git-ignored, so only the CHANGELOG entry is in the repo; Linux sandbox only.
+
