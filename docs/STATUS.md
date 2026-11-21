@@ -197,3 +197,11 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - All six registry slots are currently UNREGISTERED/OFFLINE. No external agents have been connected or started by this repository setup.
 - Work remains on main only. Parallel analysis/disjoint implementation is allowed, but task claims, shared-file updates and pushes must be serialized and based on the latest remote state.
 - This setup commit does not implement or verify the six feature workstreams and does not imply that tests were run.
+
+## 2026-11-21 A1 baseline repair and continuity fix (MIA-BRAIN-01)
+
+- **First executed test run of the recent direct-to-main work.** Earlier sections above say tests were "authored but not executed". On 2026-11-21 the full suite was run locally for the first time: it could not import because of two syntax errors on main (`brain/verify.py`, `observatory/api.py`). After repair (commit `5887f86`): `pytest` = **1277 passed, 16 skipped**, `ruff check src tests` clean. This supersedes the "not run" notes for the code covered by the suite; live-provider, device and browser behaviour remains unverified.
+- Fixed Roman Urdu/Urdu hedge detection (short-reply rule now word-based) and a continuity defect where >=4 recent temporary chats hid an older persistent conversation from the prior-session check (commit `e9b15b7`, regression-tested).
+- Remaining Priority 1 continuity gap: conversations have no project association; tracked as MIA-BRAIN-02.
+- CI was not used. Code Graph snapshot was not regenerated in this session.
+
