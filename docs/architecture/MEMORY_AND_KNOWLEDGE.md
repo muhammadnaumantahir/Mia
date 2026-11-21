@@ -182,3 +182,26 @@ migration 5; `NULL` = unscoped, the default, so existing records and behaviour a
 - **Limits.** Scope is a recall filter applied after retrieval, so a pool dominated by
   another project's records can return fewer candidates. Project names match
   case-insensitively and are not a permission boundary or a security control. No UI yet.
+
+## Personal data model and privacy contract (MIA-LIFE-01)
+
+Owner-scoped tasks, reminders and notes live in `personal_items` (migration 6) in the same
+SQLite file as the rest of memory. Code: `src/mia/memory/personal.py`; API: `/api/personal/items`.
+
+- **Scope.** Single local owner. Kinds: `task`, `reminder`, `note`; status `open`/`done`/`cancelled`.
+  A reminder requires a timezone-aware `due_at` (stored as UTC); recurrence, timezone display
+  and duplicate handling belong to MIA-LIFE-02.
+- **Provenance.** `owner_provided`, `imported`, or `conversation_captured` (must cite the source
+  conversation and message). Nothing creates items automatically yet.
+- **Not in model context.** Items are not indexed for retrieval and are never injected into
+  prompts or sent to a provider. A future task must opt in explicitly; `private` items must
+  never be included. Tests assert items do not appear in assembled memory context.
+- **Project.** Optional, same normalised name as conversations and records; an owner-view
+  filter, not a security boundary.
+- **Secrets.** Credential-like title/details are refused.
+- **Delete / retention.** Delete is a hard delete; the audit log keeps ids, kind and field
+  names only. Retention is owner-triggered: `POST /api/personal/items/retention` previews by
+  default and only ever removes done/cancelled items older than the period passed.
+- **Export.** `GET /api/memory/export` now includes `personal_items`, unfiltered.
+- **Encryption boundary.** Not encrypted at rest here (plain SQLite, like other memory); encrypted
+  backup/restore is MIA-LIFE-11. No remote/device sync (MIA-LIFE-13).

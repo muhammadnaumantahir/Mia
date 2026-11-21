@@ -17,6 +17,7 @@ from typing import Any
 
 from mia.memory import schema
 from mia.memory.identity import IdentityStore
+from mia.memory.personal import PersonalData
 from mia.memory.relationships import RelationshipStore
 from mia.memory.schema import AuditLog
 from mia.memory.settings import SettingsStore
@@ -115,6 +116,7 @@ class MemoryStore:
         self.settings = SettingsStore(self._connection)
         self.relationships = RelationshipStore(self._connection)
         self.usage = UsageLog(self._connection)
+        self.personal = PersonalData(self._connection)
         self._initialize()
 
     @contextmanager
@@ -478,6 +480,7 @@ class MemoryStore:
             ],
             "memory_items": [self._decode_item(row) for row in items],
             "structured_memory": self.structured.export(),
+            "personal_items": self.personal.export(),
         }
         canonical = json.dumps(
             payload,

@@ -108,6 +108,7 @@ from mia.memory.identity import (
     render_identity_prompt,
 )
 from mia.memory.maintenance import MaintenanceService
+from mia.memory.personal import PersonalItemNotFoundError
 from mia.memory.relationships import RelationshipNotFoundError
 from mia.memory.semantic import LocalOllamaEmbeddingReranker
 from mia.memory.store import MemoryStore
@@ -325,6 +326,37 @@ class MemoryRecordInput(BaseModel):
     temporary: bool = False
     expires_at: str | None = Field(default=None, max_length=40)
     project: str | None = Field(default=None, max_length=64)
+
+
+class PersonalItemInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str = Field(min_length=1, max_length=12)
+    title: str = Field(min_length=1, max_length=200)
+    details: str = Field(default="", max_length=5_000)
+    due_at: str | None = Field(default=None, max_length=40)
+    project: str | None = Field(default=None, max_length=64)
+    private: bool = False
+
+
+class PersonalItemPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    details: str | None = Field(default=None, max_length=5_000)
+    status: str | None = Field(default=None, max_length=12)
+    due_at: str | None = Field(default=None, max_length=40)
+    clear_due: bool = False
+    project: str | None = Field(default=None, max_length=64)
+    clear_project: bool = False
+    private: bool | None = None
+
+
+class PersonalRetentionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    older_than_days: int
+    dry_run: bool = True
 
 
 class MemoryRecordProject(BaseModel):
@@ -4706,6 +4738,63 @@ def create_app(
             {"record_id": new_id, "supersedes_id": record_id, "conflicts_with": conflicts},
         )
         return {"record_id": new_id, "supersedes_id": record_id, "conflicts_with": conflicts}
+
+    @app.post("/api/personal/items", status_code=201)
+    def add_personal_item(item: PersonalItemInput) -> dict[str, Any]:
+        try:
+            item_id = memory_store.personal.add(**item.model_dump())
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"item_id": item_id, "item": memory_store.personal.get(item_id)}
+
+    @app.get("/api/personal/items")
+    def list_personal_items(
+        kind: str | None = None,
+        status: str | None = None,
+        project: str | None = None,
+        unscoped: bool = False,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        try:
+            items = memory_store.personal.list(
+                kind=kind, status=status, project=project, unscoped=unscoped, limit=limit
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"items": items, "counts": memory_store.personal.counts()}
+
+    @app.get("/api/personal/items/{item_id}")
+    def get_personal_item(item_id: str) -> dict[str, Any]:
+        item = memory_store.personal.get(item_id)
+        if item is None:
+            raise HTTPException(status_code=404, detail="Item not found")
+        return item
+
+    @app.patch("/api/personal/items/{item_id}")
+    def patch_personal_item(item_id: str, item: PersonalItemPatch) -> dict[str, Any]:
+        try:
+            changed = memory_store.personal.update(item_id, **item.model_dump(exclude_unset=True))
+        except PersonalItemNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Item not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"item": memory_store.personal.get(item_id), "changed": changed}
+
+    @app.delete("/api/personal/items/{item_id}")
+    def delete_personal_item(item_id: str) -> dict[str, Any]:
+        if not memory_store.personal.delete(item_id):
+            raise HTTPException(status_code=404, detail="Item not found")
+        return {"deleted": item_id}
+
+    @app.post("/api/personal/items/retention")
+    def personal_retention(item: PersonalRetentionInput) -> dict[str, Any]:
+        """Preview (default) or apply retention to done/cancelled personal items only."""
+        try:
+            return memory_store.personal.purge_finished(
+                item.older_than_days, dry_run=item.dry_run
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/memory/records/{record_id}/project")
     def set_memory_record_project(

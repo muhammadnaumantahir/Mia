@@ -135,12 +135,20 @@ def _migration_5_record_project(db: sqlite3.Connection) -> None:
     _add_column(db, "structured_memory", "project", "TEXT")
 
 
+def _migration_6_personal_items(db: sqlite3.Connection) -> None:
+    """Owner-scoped tasks, reminders and notes (MIA-LIFE-01)."""
+    from mia.memory.personal import PersonalData
+
+    PersonalData.initialize(db)
+
+
 # (version, description, function). Append new migrations; never edit applied ones.
 MIGRATIONS: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (2, "identity versions and memory audit log", _migration_2_identity_and_audit),
     (3, "memory lifecycle, history, relationships, settings and usage", _migration_3_memory_lifecycle),
     (4, "optional conversation project assignment", _migration_4_conversation_project),
     (5, "optional structured record project scope", _migration_5_record_project),
+    (6, "owner-scoped personal items", _migration_6_personal_items),
 ]
 
 LATEST_VERSION = max([BASELINE_VERSION, *[version for version, _, _ in MIGRATIONS]])
