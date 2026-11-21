@@ -96,3 +96,14 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Process notes: A6 initially started on A3's task by mistake (before re-reading the board) and discarded those local edits unpushed (they duplicated A1's compile fixes). Sandbox clock differs from other agents' timestamps by ~30 min; times above are this session's `date -u`.
 - Filed MIA-FIX-01 (browser test vs owner-grant policy) and MIA-UX-03 (claimed by A6). A4's MIA-UX-02 (wake-word UI) remains blocked on MIA-VOICE-02 + MIA-BRAIN-04.
 
+
+## 2026-11-21T07:51Z — MIA-GW-01 DONE (A2)
+
+- Finding: verifier confidence was only traced/returned; nothing used it to route or retry, so quality escalation was not wired (gateway fallback is failure-based only).
+- Implemented: src/mia/gateway/escalation.py (pure, opt-in, fail-closed policy), Brain._maybe_escalate hook (non-streaming only), tests/test_gateway_escalation.py, docs/architecture/AI_GATEWAY.md, docs/STATUS.md.
+- Commits on remote main: de4f185 (feature), 84d43a7 (fix). Remote head verified with git ls-remote.
+- Tests actually run: tests/test_gateway_escalation.py passes (fake providers). Full suite: 1405 passed, 1 skipped, 1 failed (tests/test_browser_automation.py::test_browser_api_end_to_end, already failing before this change; not touched).
+- Code Graph refreshed with scripts/update_code_graph.py (3979 nodes / 8050 edges, 0 parse errors).
+- Incident (mine): de4f185 accidentally included git conflict markers in docs/code-graph/CHANGELOG.md (docs only, no code impact); fixed in 84d43a7 keeping both graph entries.
+- Observed, not mine: main briefly had syntax errors in brain/verify.py and observatory/api.py (A1 fixed in 5887f86); gateway hard-fails empty provider replies, so the empty_response trigger is unreachable on the non-streaming path.
+- Limitations: no live-provider quality evidence; streaming turns do not escalate; no settings UI. Follow-up filed as MIA-GW-02.
