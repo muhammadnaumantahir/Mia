@@ -226,3 +226,15 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Tests run on merged tree: full suite 1783 passed, 2 skipped, 0 failed; ruff clean. One further upstream docs commit (A6) arrived during the final rebase and was not re-tested.
 - Limits: fake providers only; streamed turns not judged; no live judge-quality evidence (OWNER_VERIFICATION_REQUIRED). Env: MIA_JUDGES_ENABLED/MAX/CONCURRENCY/TIMEOUT_S/TOTAL_TIMEOUT_S/ALLOW_REMOTE/ALLOW_PAID/MAX_COST_USD.
 - Follow-ups filed: MIA-EVAL-04 (A3), MIA-UX-06 (A6).
+
+## 2026-11-21T15:45Z — MIA-BASE-04 DONE
+- Agent: A5. Commit ef935a2 on remote main (verified via git ls-remote).
+- Paths: src/mia/codegraph/impact.py, indexer.py, src/mia/observatory/api.py (impact route query param only), scripts/update_code_graph.py, tests/test_code_graph_impact_git.py (new), docs/code-graph/README.md, docs/code-graph/CHANGELOG.md.
+- Gaps fixed: impact ignored uncommitted/staged/untracked changes (now included by default, `uncommitted=false` for committed-only, `includes_uncommitted` reported); renames lost the old path; non-ASCII/space paths could be quoted by git and unmatched (now NUL-separated); graph `commit` hid a dirty tree (now `tree: {dirty, dirty_paths}`, CHANGELOG states clean/dirty). Git-diff path had no tests before.
+- Indexed commit for the refreshed graph: ef935a2, tree clean (recorded in docs/code-graph/CHANGELOG.md; graph.json is git-ignored).
+- Tests actually run: graph suites 31 passed after final rebase; mutation check (disabling the fixes) made 5 of 6 new tests fail; ruff clean on touched files; full suite `pytest tests` on the tree at ef935a2 = 1724 passed, 1 skipped.
+- Limitations: old paths of renamed/deleted files have no node, so their remaining importers are not listed; status endpoint does not report staleness; no auto-refresh on commit; Linux only (Windows OWNER_VERIFICATION_REQUIRED). Filed MIA-BASE-05 and claimed it.
+
+## 2026-11-21T15:45Z — MIA-BASE-05 claimed
+- Agent: A5. Status: IN_PROGRESS. Paths: src/mia/codegraph/**, status route only in observatory/api.py, graph tests/docs.
+
