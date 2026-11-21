@@ -118,7 +118,7 @@ def test_provider_switch_and_fallback_preserve_conversation_and_trace(tmp_path, 
 
 def test_provider_switch_keeps_prior_turn_context(tmp_path, monkeypatch):
     first = Scripted("first", reply="We chose SQLite for Mia's memory store.")
-    second = Scripted("second", reply="We chose SQLite.")
+    second = Scripted("second", reply="We chose SQLite.", enabled=False)
     client, memory, _ = client_for(tmp_path, monkeypatch, first, second)
 
     initial = chat(client, "We decided to use SQLite for Mia's memory database.",
