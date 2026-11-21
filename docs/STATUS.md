@@ -292,3 +292,9 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - Audit (source-traced): fallback, circuit breakers, paid-budget reservations (kept on cancel), stream partial-text preservation and routing audit are in place. Gap fixed: routing had no language awareness, so Urdu/Roman Urdu turns were steered to the smallest model.
 - Implemented `mia.gateway.language.detect_language` + `BrainRouter` scoring (ordering only; preferences win). Not done: a non-streaming provider hang has no gateway-level timeout (real adapters use httpx timeouts; `stream_idle_timeout` is opt-in) - noted for follow-up.
 - Verified locally: full suite 1718 passed, 1 skipped, 0 failed. Fake candidates only; no live-model Urdu quality is claimed.
+
+## 2026-11-21 Judges in the turn pipeline (MIA-EVAL-03, agent A3)
+
+- **Implemented:** advisory judges now run after verification when the owner opts in (`MIA_JUDGES_ENABLED=true`; off by default). Judges can only lower confidence, never change the reply, permissions or approvals; sensitive/memory-using or local-only turns use local judges only; remote and paid judges need separate opt-ins and the gateway route policy; failures fall back to the deterministic verifier. Trace event `judges`, `verification.judges`, and read-only `GET /api/brain/judges`.
+- **Verified here:** 28 new fake-provider tests; full suite 1783 passed, 2 skipped (commit 9c29972).
+- **Not done:** streamed turns, owner UI panel (MIA-UX-06), live judge-model quality (OWNER_VERIFICATION_REQUIRED).

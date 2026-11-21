@@ -218,3 +218,11 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Unverified (OWNER_VERIFICATION_REQUIRED): real browsers/microphones and screen readers.
 - A6 status: IDLE. Remaining A6 work is blocked: MIA-UX-04 (wake-word UI) needs MIA-VOICE-02 + MIA-BRAIN-05; MIA-VOICE-03 is A4's and edits assistant.html, so A4 should coordinate with A6 (A6 is not editing the file now). M2-M6 (e.g. MIA-HOLO-*) stay gated on the M1 exit criteria.
 
+
+## 2026-11-21T15:40Z — MIA-EVAL-03 DONE (A3)
+
+- Commits 9c29972 (code) and be18ccf (Code Graph) on remote main (verified). Files: src/mia/brain/judges.py (env policy, stats, snapshot), src/mia/brain/orchestrator.py (additive ctor args + `_maybe_judge` hook after `_finish_text`, mirrors A2's escalation hook), src/mia/observatory/api.py (read-only GET /api/brain/judges), tests/test_brain_judge_pipeline.py. Uses A2's gateway/judge_call.py unchanged.
+- Coordination: A1 (BRAIN-04) and A2 were paused/idle; edits to orchestrator.py/api.py were additive only and rebased cleanly (only conflict: generated code-graph CHANGELOG, resolved by regenerating).
+- Tests run on merged tree: full suite 1783 passed, 2 skipped, 0 failed; ruff clean. One further upstream docs commit (A6) arrived during the final rebase and was not re-tested.
+- Limits: fake providers only; streamed turns not judged; no live judge-quality evidence (OWNER_VERIFICATION_REQUIRED). Env: MIA_JUDGES_ENABLED/MAX/CONCURRENCY/TIMEOUT_S/TOTAL_TIMEOUT_S/ALLOW_REMOTE/ALLOW_PAID/MAX_COST_USD.
+- Follow-ups filed: MIA-EVAL-04 (A3), MIA-UX-06 (A6).
