@@ -167,3 +167,11 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - Strengthened the relationship-expansion cap test to construct a branching graph and assert exactly four related records can be added when the context record budget allows it.
 - Verification remains unchanged: tests are authored but not run; CI is intentionally skipped. Code Graph regeneration requires a local checkout.
 
+## 2026-11-21 continuity safety fix — temporary-chat isolation and context budgeting
+
+- Source review found that cross-session "continue where we stopped" recall selected the newest other conversation without checking its `temporary` flag. That could have surfaced temporary-chat content in a normal conversation.
+- Fixed `_prior_conversation_tail` to skip temporary conversations and search up to 50 recent conversation entries for the newest eligible persisted conversation.
+- Fixed prior-conversation tail assembly to add only the newest contiguous messages that fit the remaining token budget. The previous implementation could append two oversized messages and exceed the requested context budget.
+- Added regression tests for temporary-chat isolation and strict context-budget adherence.
+- Tests are authored but not executed in this environment. CI is intentionally skipped. This fix is directly in the conversation-first memory/continuity path.
+
