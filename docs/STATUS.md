@@ -429,3 +429,7 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - **Implemented (commit 1176c8e):** isolated three.js spike with WebGL detection, text fallback, reduced motion, hidden-page pause, fps cap, context-loss handling and disposal; decision doc with measured bundle sizes and licences. Not wired into the app.
 - **Verified here:** 8 Chromium tests on software GL; full suite 2070 passed, 1 skipped.
 - **Not verified:** real-GPU performance, Windows hardware, accessibility with assistive tech.
+
+## 2026-11-21T21:11Z A1 personal data model (MIA-LIFE-01)
+
+- Owner-scoped tasks/reminders/notes (`personal_items`, migration 6) with provenance, project filter, hard delete, owner-triggered retention, export and REST API. Not in model context, not encrypted at rest, no UI. Commit `5c5f14f`; tested with unit/API tests only.
