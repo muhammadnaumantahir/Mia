@@ -1,6 +1,6 @@
 import pytest
 
-from mia.brain.context import build_context, estimate_tokens
+from mia.brain.context import build_context, estimate_tokens, has_persistent_prior_conversation
 from mia.brain.intent import analyze_intent
 from mia.gateway.contracts import ModelCandidate
 from mia.memory.store import MemoryStore
@@ -226,3 +226,27 @@ def test_previous_conversation_tail_respects_context_token_budget(store):
     assert "old-turn-5" in content
     assert "old-turn-0" not in content
 
+
+
+def test_temporary_only_history_does_not_count_as_prior_context(store):
+    temporary = store.ensure_conversation("temporary-only")
+    store.set_conversation_temporary(temporary, True)
+    store.append_message(temporary, "user", "This session is temporary.")
+
+    current = store.ensure_conversation("current-no-history")
+    assert not has_persistent_prior_conversation(store, current)
+    assert analyze_intent("Continue where we stopped.",
+                          has_prior_context=has_persistent_prior_conversation(store, current)
+                          ).needs_clarification
+
+
+def test_persistent_history_counts_as_prior_context(store):
+    previous = store.ensure_conversation("persistent-history")
+    store.append_message(previous, "user", "We were discussing the Cedar project.")
+    current = store.ensure_conversation("current-with-history")
+
+    assert has_persistent_prior_conversation(store, current)
+    assert not analyze_intent(
+        "Continue where we stopped.",
+        has_prior_context=has_persistent_prior_conversation(store, current),
+    ).needs_clarification
