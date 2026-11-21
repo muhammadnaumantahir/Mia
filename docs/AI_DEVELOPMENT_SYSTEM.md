@@ -70,7 +70,7 @@ The canonical execution order in `docs/ROADMAP.md` always wins:
 6. Priority 5 governed self-programming and model evolution.
 7. Priority 6 evolution measurement.
 
-A6 may improve the existing conversation experience during Priority 1, but must not start the full 3D interface before Priority 1 passes its development gate. Likewise, A5 maintains the Code Graph throughout all phases, but must not jump to lower-priority autonomous self-modification features.
+Use the task-board milestone handoff rule: a later milestone can begin parallel implementation when every implementation task in the preceding milestone is DONE or already IN_PROGRESS under another agent. Any earlier OPEN task must be claimed first; an agent must not abandon its own earlier task. Explicit dependencies remain mandatory, and milestone completion still requires its full exit criteria. A6 may start dependency-ready M2 tasks under this rule. A5 maintains the Code Graph throughout all phases and must keep governed self-development behind its explicit dependencies and safety gates.
 
 ## Conflict and escalation rules
 
