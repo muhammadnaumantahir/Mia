@@ -7,6 +7,7 @@ import json
 import math
 import re
 import sqlite3
+import unicodedata
 import uuid
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
@@ -21,6 +22,35 @@ from mia.memory.schema import AuditLog
 from mia.memory.settings import SettingsStore
 from mia.memory.structured import StructuredMemory
 from mia.memory.usage import UsageLog
+
+MAX_PROJECT_NAME_CHARS = 64
+
+
+def normalise_project_name(project: str | None) -> str | None:
+    """Return a clean project name, or None for "no project".
+
+    Whitespace is collapsed. Control characters are rejected; other Unicode (including
+    Urdu script and its joiners) is allowed. Raises ValueError for an unusable name.
+    """
+    if project is None:
+        return None
+    name = " ".join(str(project).split())
+    if not name:
+        raise ValueError("project name must not be empty")
+    if len(name) > MAX_PROJECT_NAME_CHARS:
+        raise ValueError(f"project name must be at most {MAX_PROJECT_NAME_CHARS} characters")
+    if any(unicodedata.category(ch) == "Cc" for ch in name):
+        raise ValueError("project name must not contain control characters")
+    return name
+
+
+def project_key(project: str | None) -> str | None:
+    """Comparison key: names match regardless of case and spacing."""
+    try:
+        name = normalise_project_name(project)
+    except ValueError:
+        return None
+    return name.casefold() if name else None
 
 
 def _now() -> str:
@@ -384,7 +414,7 @@ class MemoryStore:
             rows = db.execute(
                 """
                 SELECT c.conversation_id, c.title, c.created_at, c.updated_at, c.temporary,
-                       COUNT(m.message_id) AS message_count
+                       c.project, COUNT(m.message_id) AS message_count
                 FROM conversations c
                 LEFT JOIN conversation_messages m
                   ON m.conversation_id = c.conversation_id
@@ -459,7 +489,7 @@ class MemoryStore:
         with self._connection() as db:
             row = db.execute(
                 """
-                SELECT conversation_id, title, created_at, updated_at, temporary
+                SELECT conversation_id, title, created_at, updated_at, temporary, project
                 FROM conversations
                 WHERE conversation_id = ?
                 """,
@@ -531,6 +561,30 @@ class MemoryStore:
                     target_type="conversation",
                     target_id=conversation_id,
                     detail={"temporary": bool(temporary)},
+                )
+        return cursor.rowcount > 0
+
+    def set_conversation_project(self, conversation_id: str, project: str | None) -> bool:
+        """Assign (or, with ``None``, clear) the owner's project for a conversation.
+
+        Opt-in: conversations have no project unless the owner sets one. Recall for a
+        conversation in a project prefers that project's history. Returns False when the
+        conversation does not exist; raises ValueError for an invalid project name.
+        """
+        name = normalise_project_name(project)
+        with self._connection() as db:
+            cursor = db.execute(
+                "UPDATE conversations SET project = ? WHERE conversation_id = ?",
+                (name, conversation_id),
+            )
+            if cursor.rowcount:
+                AuditLog.write(
+                    db,
+                    actor="owner",
+                    action="conversation_project_set",
+                    target_type="conversation",
+                    target_id=conversation_id,
+                    detail={"project": name},
                 )
         return cursor.rowcount > 0
 

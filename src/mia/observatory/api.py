@@ -392,6 +392,12 @@ class ConversationTemporaryInput(BaseModel):
     temporary: bool
 
 
+class ConversationProjectInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project: str | None = None
+
+
 class MemoryRecordCorrection(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     body: str | None = Field(default=None, min_length=1, max_length=20_000)
@@ -4763,6 +4769,22 @@ def create_app(
         if not memory_store.set_conversation_temporary(conversation_id, item.temporary):
             raise HTTPException(status_code=404, detail="Conversation not found")
         return {"conversation_id": conversation_id, "temporary": item.temporary}
+
+    @app.post("/api/conversations/{conversation_id}/project")
+    def set_conversation_project(
+        conversation_id: str, item: ConversationProjectInput
+    ) -> dict[str, Any]:
+        """Owner-controlled, opt-in project assignment; ``null`` clears it."""
+        try:
+            found = memory_store.set_conversation_project(conversation_id, item.project)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not found:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        return {
+            "conversation_id": conversation_id,
+            "project": memory_store.get_conversation(conversation_id)["project"],
+        }
 
     @app.get("/api/memory/replies/{reply_id}/usage")
     def reply_memory_usage(reply_id: str) -> dict[str, Any]:

@@ -125,10 +125,16 @@ def _migration_3_memory_lifecycle(db: sqlite3.Connection) -> None:
     db.execute("CREATE INDEX IF NOT EXISTS idx_usage_ref ON memory_usage(ref_type, ref_id)")
 
 
+def _migration_4_conversation_project(db: sqlite3.Connection) -> None:
+    """Optional project assignment for a conversation (NULL = no project, the default)."""
+    _add_column(db, "conversations", "project", "TEXT")
+
+
 # (version, description, function). Append new migrations; never edit applied ones.
 MIGRATIONS: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (2, "identity versions and memory audit log", _migration_2_identity_and_audit),
     (3, "memory lifecycle, history, relationships, settings and usage", _migration_3_memory_lifecycle),
+    (4, "optional conversation project assignment", _migration_4_conversation_project),
 ]
 
 LATEST_VERSION = max([BASELINE_VERSION, *[version for version, _, _ in MIGRATIONS]])

@@ -15,7 +15,7 @@ from typing import Any
 from mia.gateway.contracts import ModelCandidate
 from mia.memory.context import ContextBudget, assemble_memory_context
 from mia.memory.semantic import LocalOllamaEmbeddingReranker
-from mia.memory.store import MemoryStore
+from mia.memory.store import MemoryStore, project_key
 
 from .intent import IntentAnalysis
 
@@ -56,17 +56,42 @@ _PRIOR_CONVERSATION_SCAN = 50
 
 
 def _prior_persistent_conversation_ids(store: MemoryStore, conversation_id: str):
-    """Yield ids of other, non-temporary conversations that have messages, newest first.
+    """Yield ids of other, non-temporary conversations that have messages, best first.
 
     Temporary chats are deliberately excluded from all cross-session recall, and the
     current conversation is never its own predecessor.
+
+    Project scoping (owner opt-in): when the current conversation belongs to a project,
+    that project's conversations come first (newest first), then unassigned ones. A
+    different project's conversations are never recalled into it. A conversation with
+    no project keeps the original behaviour (newest eligible, any project).
     """
-    for convo in store.list_conversations(limit=_PRIOR_CONVERSATION_SCAN):
+    rows = store.list_conversations(limit=_PRIOR_CONVERSATION_SCAN)
+    current = next(
+        (c for c in rows if (c.get("id") or c.get("conversation_id")) == conversation_id), None
+    )
+    if current is None:  # current chat fell outside the scan window; look it up directly
+        current = store.get_conversation(conversation_id) or {}
+    wanted = project_key(current.get("project"))
+
+    same: list[str] = []
+    unassigned: list[str] = []
+    for convo in rows:
         if convo.get("temporary") or not convo.get("message_count", 0):
             continue
         cid = convo.get("id") or convo.get("conversation_id")
-        if cid and cid != conversation_id:
-            yield cid
+        if not cid or cid == conversation_id:
+            continue
+        key = project_key(convo.get("project"))
+        if wanted is None:
+            same.append(cid)  # original behaviour: any eligible conversation
+        elif key == wanted:
+            same.append(cid)
+        elif key is None:
+            unassigned.append(cid)
+        # else: another project's conversation, never recalled here
+    yield from same
+    yield from unassigned
 
 
 def _prior_conversation_tail(
