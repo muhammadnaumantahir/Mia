@@ -71,7 +71,7 @@ The detailed task definitions, dependencies, scope and acceptance criteria are i
 
 | Task | Priority | Suggested owner | Status | Scope / acceptance |
 |---|---:|---|---|---|
-| MIA-HOLO-01 | P2 | A6 + A1 | OPEN | Typed runtime-state/event contract tied to real backend evidence; tests for stale/unknown states. |
+| MIA-HOLO-01 | P2 | A6 + A1 | IN_PROGRESS (A6, claimed 2026-11-21T20:52Z; owner instructed start in chat while MIA-VOICE-05 was still OPEN) | Typed runtime-state/event contract tied to real backend evidence; tests for stale/unknown states. |
 | MIA-HOLO-02 | P2 | A6 | OPEN | 3D renderer spike and evidence-based architecture choice; include licensing, bundle, WebGL and low-power fallback. |
 | MIA-HOLO-03 | P2 | A6 | OPEN | Responsive holographic scene and visual states, isolated from Brain/business logic; deterministic tests. |
 | MIA-HOLO-04 | P2 | A6 + A4 + A1 | OPEN | Bind actual conversation/voice/task/tool/approval events; test reconnect, cancellation and offline states. |
