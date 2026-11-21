@@ -157,3 +157,11 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-21T09:30Z — MIA-BRAIN-04 claimed
 
 - Agent: A1. Status: IN_PROGRESS. Slice (b) structured-memory retention policy first. Paths: src/mia/memory/**, src/mia/observatory/api.py (memory retention routes only), tests. No gateway/voice/assistant.html edits.
+
+## 2026-11-21T09:10Z — MIA-BASE-02 DONE
+- Agent: A5. Commit 6c58fb6 on remote main (verified via git ls-remote).
+- Paths: src/mia/codegraph/indexer.py, watcher.py, scripts/update_code_graph.py, tests/test_code_graph.py, tests/test_code_graph_watcher.py, docs/code-graph/README.md, docs/code-graph/CHANGELOG.md, docs/STATUS.md.
+- Result: build_graph split into cached per-file extraction (FactCache, salted by indexer source hash) plus a global resolution pass. Output identical to the previous indexer on this repo (cold and warm). Sandbox timings: ~2.5s old, ~1.7s cold, ~0.5s warm.
+- Tests actually run: pytest tests/test_code_graph.py tests/test_code_graph_watcher.py tests/test_code_graph_api.py -> 25 passed (before and after final rebase). Full suite not re-run for this commit.
+- Limitations: Python only; unreadable-file edge case yields one index error instead of two; Linux sandbox only (Windows OWNER_VERIFICATION_REQUIRED). Ran scripts/update_code_graph.py (graph.json is git-ignored; CHANGELOG entry committed).
+
