@@ -8,6 +8,28 @@ from pathlib import Path
 from threading import Lock
 from typing import Protocol
 
+# Whisper has no Roman Urdu language code. "ur" yields Urdu script and "en" yields
+# English text, so Roman Urdu speech is only approximated by either choice. Anything
+# else is rejected rather than forwarded to the engine unvalidated.
+SUPPORTED_STT_LANGUAGES = frozenset({"en", "ur"})
+
+
+def normalize_stt_language(language: str | None) -> str | None:
+    """Return ``"en"``, ``"ur"`` or ``None`` (engine auto-detect).
+
+    Accepts BCP-47 style tags such as ``en-US`` / ``ur-PK``. Raises ``ValueError``
+    for unsupported or malformed codes so callers can answer 400 with a clear reason.
+    """
+    if language is None:
+        return None
+    value = language.strip().lower().replace("_", "-")
+    if value in {"", "auto"}:
+        return None
+    primary = value.split("-", 1)[0]
+    if not primary.isalpha() or len(primary) > 3 or primary not in SUPPORTED_STT_LANGUAGES:
+        raise ValueError("Unsupported speech language; use en, ur or auto")
+    return primary
+
 
 class SpeechToTextProvider(Protocol):
     def transcribe(

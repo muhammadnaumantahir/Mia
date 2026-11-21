@@ -13,6 +13,7 @@ import ipaddress
 import json
 import math
 import os
+import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import asdict
@@ -112,7 +113,7 @@ from mia.memory.semantic import LocalOllamaEmbeddingReranker
 from mia.memory.store import MemoryStore
 from mia.memory.structured import RECORD_TYPES, RecordNotFoundError, RecordStateError
 from mia.observatory.activity import ExperimentActivityCollector
-from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider
+from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider, normalize_stt_language
 from mia.voice.tts import Pyttsx3SpeechSynthesizer, SpeechSynthesisError, SpeechSynthesizer
 from mia.voice.wake import offline_wake_word_status
 from mia.voice.wake_transport import register_wake_routes, websocket_runtime_available
@@ -3162,6 +3163,7 @@ def create_app(
 
     @app.post("/api/voice/speak")
     async def synthesize_voice(item: SpeechSynthesisInput) -> Response:
+        started = time.perf_counter()
         try:
             audio = await run_in_threadpool(
                 speech_synthesizer.synthesize,
@@ -3173,6 +3175,7 @@ def create_app(
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        latency_ms = round((time.perf_counter() - started) * 1000, 1)
 
         observatory.record_event(
             category="voice",
@@ -3184,13 +3187,14 @@ def create_app(
                 "text_characters": len(item.text),
                 "voice_id": item.voice_id,
                 "rate": item.rate,
+                "latency_ms": latency_ms,
                 "audio_retained": False,
             },
         )
         return Response(
             content=audio,
             media_type="audio/wav",
-            headers={"Cache-Control": "no-store"},
+            headers={"Cache-Control": "no-store", "X-Mia-Latency-Ms": str(latency_ms)},
         )
 
     # Loopback-only offline wake-word transport. Registering routes does not start any
@@ -3218,7 +3222,11 @@ def create_app(
             raise HTTPException(status_code=400, detail="Audio clip is empty")
 
         filename = request.query_params.get("filename", "recording.webm")
-        language = request.query_params.get("language") or None
+        try:
+            language = normalize_stt_language(request.query_params.get("language"))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        started = time.perf_counter()
         try:
             result = await run_in_threadpool(
                 speech_to_text.transcribe,
@@ -3230,6 +3238,7 @@ def create_app(
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        latency_ms = round((time.perf_counter() - started) * 1000, 1)
 
         text = str(result.get("text") or "").strip()
         observatory.record_event(
@@ -3240,7 +3249,9 @@ def create_app(
             payload={
                 "language": result.get("language"),
                 "language_probability": result.get("language_probability"),
+                "requested_language": language,
                 "audio_bytes": total_bytes,
+                "latency_ms": latency_ms,
                 "audio_retained": False,
             },
         )
@@ -3248,6 +3259,8 @@ def create_app(
             "text": text,
             "language": result.get("language"),
             "language_probability": result.get("language_probability"),
+            "requested_language": language,
+            "latency_ms": latency_ms,
             "audio_retained": False,
         }
 

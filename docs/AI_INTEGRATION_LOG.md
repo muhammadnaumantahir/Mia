@@ -358,3 +358,8 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Tests actually run: `python -m mia.brain.evaluation` 26/26; `pytest tests` excluding 8 Chromium files: 1808 passed, 1 skipped, 0 failed (tallied from progress markers; no summary line printed). Chromium files not run.
 - Findings: (1) eval suite lacks identity/capability, provider-switch continuity and category-coverage checks -> new MIA-EVAL-06 (claimed now by A3). (2) `assistant.html` never sends `interface="voice"`, so real voice turns are recorded as text and are not exempt from judge latency; handed to MIA-M1-09 (A1+A4), no new task. (3) Stale claims MIA-EVAL-05, MIA-BRAIN-07, MIA-EVOL-02 left untouched.
 - Paths for EVAL-06: src/mia/brain/evaluation.py, tests/test_brain_evaluation.py, docs.
+
+## 2026-11-21T20:50Z — MIA-M1-11 DONE (A4)
+- Paths: src/mia/voice/stt.py, src/mia/observatory/api.py (voice routes only), tests/test_voice_language_latency.py, docs/STATUS.md. Details in STATUS.md "MIA-M1-11".
+- Tests run: 83 passed, 0 failed across voice/STT/TTS/language-routing/voice-UI-contract suites; ruff clean; new tests fail without the source change. Full suite not completed here (sandbox time limit). Code Graph refresh not run.
+- Limits: no real-speech or real-latency evidence; Roman Urdu has no Whisper code; streaming STT/TTS still absent. Follow-up gap for the M1 matrix (A3, MIA-M1-08): streaming speech I/O.

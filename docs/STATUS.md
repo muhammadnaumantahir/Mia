@@ -33,6 +33,13 @@ The Code Graph is a required cross-cutting developer capability, initialized dur
 - Code Graph snapshot refresh remains a local development step and is not claimed as complete by these remote source edits.
 - PR #20 is merged; older notes below that say it is awaiting CI are historical and superseded by this current status.
 
+## Voice update - MIA-M1-11 multilingual audit (agent A4, 2026-11-21)
+
+- **Audit (source-read):** STT is local Faster-Whisper (CPU int8, lazy load); TTS is pyttsx3/OS voices with no language-aware voice choice. Whisper has no Roman Urdu code, so `ur` returns Urdu script and `en` returns English text; Roman Urdu speech is only approximated. `/api/voice/transcribe` previously forwarded any `language` query string to the engine unvalidated, and neither transcription nor synthesis reported latency.
+- **Implemented:** `normalize_stt_language` (`src/mia/voice/stt.py`): accepts empty/`auto` (engine auto-detect), `en*`, `ur*`; anything else is a 400 before the engine runs. Transcribe response and event now carry `requested_language` and `latency_ms`; `/api/voice/speak` sets `X-Mia-Latency-Ms` and records `latency_ms` (spoken text still never logged). Failed calls record no event.
+- **Tests actually run:** `tests/test_voice_language_latency.py` (44 tests: language normalization, API forwarding/rejection, latency in response/event/header, adapter segment consumption and temp-file deletion, text-language fixtures for English / Roman Urdu / Urdu script) plus the existing voice, TTS, STT, language-routing and voice-UI-contract suites: 83 passed, 0 failed. Without the source change the new file fails at import. `ruff check src tests scripts` clean. The full suite was not completed in this session (a broad run exceeded the sandbox time limit).
+- **Not verified / OWNER_VERIFICATION_REQUIRED:** real Urdu or Roman Urdu recognition accuracy, real TTS voice availability for Urdu on the owner's Windows machine, and real latency numbers (tests use fakes). Streaming STT/TTS is not implemented (clip upload and whole-WAV synthesis); that remains an open Priority 1 item.
+
 ## Voice update - MIA-VOICE-01 (agent A4, 2026-11-21)
 
 - **Implemented and tested locally:** an offline wake-word core in `src/mia/voice/wake.py` (replaceable detector contract; session that is off by default, needs an explicit owner opt-in, is always time-bounded, stops immediately and drops late audio; threshold/patience/cooldown/activation-storm guards; no audio retention; fail-closed scoring; optional openWakeWord adapter that takes an owner-supplied model and never downloads one) and a truthful `offline_wake_word` capability report in `GET /api/voice/status`.
