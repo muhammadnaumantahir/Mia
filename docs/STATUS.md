@@ -324,3 +324,8 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - **Implemented:** streamed text turns are judged after the reply is stored; voice turns are never judged; 3 judge scenarios in the scenario runner (26 total, 26/26 pass).
 - **Verified here:** full suite 1791 passed, 2 skipped (before final rebase); targeted suites re-run after it (commit bd50db0).
 - **Not done:** owner UI panel (MIA-UX-06, A6); live judge-model quality (OWNER_VERIFICATION_REQUIRED).
+
+## 2026-11-21 — MIA-GW-04 (A2): gateway-level provider timeouts
+
+- Non-streaming and buffered-stream provider attempts now have a gateway timeout (default 180s; idle stream default 120s; env overridable). Timeouts feed fallback + circuit breaker, are not retried on the same provider, cancel the hung call, and keep a paid reservation until expiry.
+- Verified locally: 9 new hung-fake-provider tests pass (one mutation-checked: disabling the reservation rule makes it fail). Full suite: 1843 passed, 2 skipped, 1 failed (`tests/test_voice_wake_transport.py::test_status_endpoint_reports_session_and_capability_but_no_arming_route_exists`, fails identically on clean main without this change; A4's area, likely environment-dependent). No live-provider claim.

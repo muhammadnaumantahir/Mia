@@ -141,3 +141,15 @@ Evidence limits: tests use fake providers and prove policy behaviour only, not l
 ### Language-aware routing hint (MIA-GW-03)
 
 Audit finding: nothing in `src` detected language, and short Urdu/Roman Urdu turns are classified `simple`, where the router *rewarded* the smallest, fastest model, the worst fit for the owner's languages. `src/mia/gateway/language.py` adds a deterministic hint (`en` / `roman_urdu` / `urdu_script`, neutral when unsure), and `BrainRouter` uses it for `conversation`, `simple` and `summarization` turns: models with a known size under 4B lose their light-task advantage, and models of 7B+ get a small bonus. It only reorders eligible models: nothing is excluded, unknown sizes are untouched, local-only and single-model setups keep working, structured categories are unaffected, and an explicit owner model/provider preference always wins. The choice is recorded in the routing audit reasons. This is a size heuristic, not a measured per-model Urdu evaluation; MIA-EVAL work can replace it with measured capability data.
+
+### Provider timeouts (MIA-GW-04)
+
+Before this change a hung provider could block a conversation turn indefinitely: real HTTP adapters have their own 90s timeouts, but a custom/hung adapter had none and the streaming idle timeout was off. Now `ModelGateway` bounds every attempt:
+
+- `attempt_timeout` (default **180s**, a backstop above the adapters' own timeouts) wraps each non-streaming attempt and the buffered streaming path; `stream_idle_timeout` (default **120s**, tolerant of slow cold-loading local models) now defaults on.
+- A timeout raises `ProviderTimeout` (a `TransientProviderError`): it counts toward provider health and the circuit breaker, so a repeatedly hung provider is skipped quickly, and the next candidate is tried. A timeout is **never retried on the same provider**, so you do not wait several times over.
+- The hung call is cancelled, not leaked. Consumer cancellation is still a cancellation, not a timeout.
+- A **paid** attempt that times out keeps its budget reservation until it expires instead of being refunded (it may have been billed before we gave up), matching existing cancellation handling.
+- Owner overrides: `MIA_GATEWAY_ATTEMPT_TIMEOUT_S`, `MIA_GATEWAY_STREAM_IDLE_TIMEOUT_S` (seconds in (0, 3600]; `0`/`off` disables; invalid values fall back to the safe default).
+
+Not covered: timeouts do not bound total multi-candidate fallback time (worst case is attempts x timeout); a smaller per-turn deadline is a possible future task.

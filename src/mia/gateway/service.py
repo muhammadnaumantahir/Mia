@@ -95,6 +95,29 @@ def _aggregate_failure(attempted: list[str], last_error: Exception) -> Transient
     )
 
 
+DEFAULT_ATTEMPT_TIMEOUT_S = 180.0  # backstop above the adapters' own 90s HTTP timeouts
+DEFAULT_STREAM_IDLE_TIMEOUT_S = 120.0  # tolerates slow cold-loading local models
+_USE_DEFAULT: Any = object()
+
+
+class ProviderTimeout(TransientProviderError):
+    """The gateway gave up waiting for one provider attempt. Never retried on the same provider."""
+
+
+def _seconds_from_env(name: str, default: float | None) -> float | None:
+    """Owner override: a number of seconds in (0, 3600]; ``0``/``off`` disables; junk -> default."""
+    raw = os.getenv(name, "").strip().lower()
+    if not raw:
+        return default
+    if raw in {"0", "off", "none", "false"}:
+        return None
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value if math.isfinite(value) and 0 < value <= 3600 else default
+
+
 class ModelGateway:
     def __init__(
         self,
@@ -107,19 +130,33 @@ class ModelGateway:
         breaker: CircuitBreaker | None = None,
         events: ResilienceLog | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
-        stream_idle_timeout: float | None = None,
+        stream_idle_timeout: float | None = _USE_DEFAULT,
         tool_call_policy: str = "annotate",
+        attempt_timeout: float | None = _USE_DEFAULT,
     ) -> None:
         if tool_call_policy not in ("annotate", "filter"):
             raise ValueError("tool_call_policy must be 'annotate' or 'filter'")
         # annotate: report issues, pass calls through (the caller's broker decides);
         # filter: drop calls that fail screening against the offered tools.
         self.tool_call_policy = tool_call_policy
-        if stream_idle_timeout is not None and not (
-            math.isfinite(stream_idle_timeout) and 0 < stream_idle_timeout <= 3600
+        if stream_idle_timeout is _USE_DEFAULT:
+            stream_idle_timeout = _seconds_from_env(
+                "MIA_GATEWAY_STREAM_IDLE_TIMEOUT_S", DEFAULT_STREAM_IDLE_TIMEOUT_S
+            )
+        if attempt_timeout is _USE_DEFAULT:
+            attempt_timeout = _seconds_from_env(
+                "MIA_GATEWAY_ATTEMPT_TIMEOUT_S", DEFAULT_ATTEMPT_TIMEOUT_S
+            )
+        for label, value in (
+            ("stream_idle_timeout", stream_idle_timeout),
+            ("attempt_timeout", attempt_timeout),
         ):
-            raise ValueError("stream_idle_timeout must be a number of seconds from 0 to 3600")
+            if value is not None and not (
+                isinstance(value, (int, float)) and math.isfinite(value) and 0 < value <= 3600
+            ):
+                raise ValueError(f"{label} must be a number of seconds from 0 to 3600")
         self.stream_idle_timeout = stream_idle_timeout
+        self.attempt_timeout = attempt_timeout
         self.providers = providers
         self.health = health or CandidateHealthTracker()
         self.model_registry = model_registry
@@ -132,6 +169,20 @@ class ModelGateway:
         self.usage_ledger: Any | None = None
         self.require_budget_reservations = False
 
+    async def _bounded(self, awaitable: Awaitable[Any]) -> Any:
+        """Await one provider attempt, converting a gateway-level timeout into ``ProviderTimeout``.
+
+        Consumer cancellation still propagates as ``CancelledError`` (it is not a timeout).
+        """
+        if self.attempt_timeout is None:
+            return await awaitable
+        try:
+            return await asyncio.wait_for(awaitable, self.attempt_timeout)
+        except TimeoutError:
+            raise ProviderTimeout(
+                f"provider did not answer within {self.attempt_timeout:g}s"
+            ) from None
+
     async def _call_with_retry(self, candidate_name: str, call: Callable[[], Awaitable[Any]]) -> Any:
         """Run one provider call, retrying transient failures per the retry policy.
 
@@ -143,7 +194,9 @@ class ModelGateway:
         attempts = self.retry_policy.max_attempts
         for attempt in range(attempts):
             try:
-                return await call()
+                return await self._bounded(call())
+            except ProviderTimeout:
+                raise  # a hung provider is skipped, not retried: the owner is already waiting
             except TransientProviderError as exc:
                 if exc.rate_limited or attempt + 1 >= attempts:
                     raise
@@ -173,7 +226,7 @@ class ModelGateway:
                 except StopAsyncIteration:
                     return
                 except TimeoutError:
-                    raise TransientProviderError("stream idle timeout") from None
+                    raise ProviderTimeout("stream idle timeout") from None
                 yield chunk
         finally:
             aclose = getattr(iterator, "aclose", None)
@@ -456,6 +509,10 @@ class ModelGateway:
                 self.breaker.record_failure(provider_id, rate_limited=exc.rate_limited)
                 self.events.add("failure", candidate_name, _brief(exc))
                 settled = True
+                if isinstance(exc, ProviderTimeout) and reservation_id is not None:
+                    # The cancelled paid request may already have incurred charges; hold the
+                    # reservation until it expires instead of refunding (same as cancellation).
+                    keep_reservation = True
                 last_error = exc
                 continue
             except PermanentProviderError:
@@ -540,7 +597,7 @@ class ModelGateway:
                     bool(request.tools) and not getattr(provider, "streams_tools", False)
                 )
                 if buffered:
-                    response = await provider.complete(candidate, request)
+                    response = await self._bounded(provider.complete(candidate, request))
                     last_chunk_at = first_token_at = time.perf_counter()
                     if isinstance(response, str):
                         response = ProviderResponse(content=response)
@@ -629,6 +686,8 @@ class ModelGateway:
                 self.breaker.record_failure(provider_id, rate_limited=exc.rate_limited)
                 self.events.add("failure", candidate_name, _brief(exc))
                 settled = True
+                if isinstance(exc, ProviderTimeout) and reservation_id is not None:
+                    keep_reservation = True  # possibly billed before we gave up; hold until expiry
                 if emitted:
                     # Keep the partial text with the error so callers can preserve it.
                     raise StreamInterruptedError(
