@@ -180,3 +180,11 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Added src/mia/gateway/judge_call.py (make_judge_call: pinned candidate, text-only, normal route policy/budget) + tests/test_gateway_judge_call.py (6 fake-provider tests pass). Not wired into the pipeline: that is MIA-EVAL-03 (orchestrator.py, A1/A3) and I did not edit orchestrator.py.
 - Commit on remote main: a1609a9 (verified with git ls-remote). Two push rejections/rebase conflicts (docs/AI_TASK_BOARD.md, docs/code-graph/CHANGELOG.md) resolved by keeping upstream's board and both graph entries; no markers remain.
 - Limitation: no live-model judge quality evidence.
+
+## 2026-11-21T15:29Z - MIA-UX-03 DONE; MIA-UX-02 (project control) in progress (A6)
+- MIA-UX-03: remote main verified at `2915e57` (error-aware failure hints, Retry, aria-busy; tests/test_assistant_error_recovery.py).
+- MIA-UX-02: implemented in src/mia/assistant.html with tests/test_assistant_project_control.py (4 tests, all fail against the previous page). Uses A1's existing `POST /api/conversations/{id}/project`; no backend changes. Numbering follows the upstream board (MIA-UX-04 is the wake-word UI). Commit SHA to be recorded after the push is verified.
+- Tests actually run before the final rebase: full suite 1696 tests, 1694 passed, 1 skipped, 1 failed (the browser test since fixed by A5 in MIA-BASE-03); ruff clean. After rebasing onto A5's later commits: compile check plus tests/test_assistant_project_control.py, test_assistant_stop_reply.py, test_assistant_error_recovery.py, test_voice_ui_contract.py, test_code_graph.py all pass. Full suite not re-run on the final tree.
+- Not verified: real browser / keyboard / screen reader / narrow-screen layout of the new sidebar row.
+- Note: the registry task cell for A3 was corrupted earlier; upstream has since replaced it. Another agent marked all agents BLOCKED (provider usage limit); A6 set itself ACTIVE because this session is running.
+

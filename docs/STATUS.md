@@ -56,6 +56,12 @@ The Code Graph is a required cross-cutting developer capability, initialized dur
 - Evidence: `tests/test_assistant_error_recovery.py` (5 tests, all failing against the previous page; includes a Node harness running the real `chatErrorHint`). Full local run: 1401 tests, 1399 passed, 1 skipped, 1 failed (`test_browser_api_end_to_end`, MIA-FIX-01, pre-existing). `ruff check src tests` clean.
 - Not verified: real browser, screen reader (the `aria-busy` change follows the standard pattern but was not tried with assistive technology), and the error classes against live providers — classification is by status code and message text only.
 
+## A6 / MIA-UX-02 — Project control in the Assistant (2026-11-21)
+
+- The sidebar has an opt-in **Project (optional)** control: it shows the current conversation's project, sets or clears it through `POST /api/conversations/{id}/project` (server validation errors are shown), is disabled until the conversation exists, and the conversation list shows each chat's project. Its help text states only what A1's recall does: with a project, that project's other conversations are recalled first and other projects' conversations are never recalled into it; without one, the newest other saved conversation is recalled. Structured memory records are **not** project-scoped (MIA-BRAIN-04a), and the UI does not claim otherwise.
+- Evidence: `tests/test_assistant_project_control.py` (4 tests, all failing against the previous page; includes a Node harness running the real control functions against a fake DOM/fetch). Full local run: 1696 tests, 1694 passed, 1 skipped, 1 failed. `ruff check` clean on the new test file.
+- Not verified: real browser rendering, keyboard/screen-reader behaviour, narrow-screen layout of the new sidebar row.
+
 ## Status inventory (component status, not execution order)
 
 The following table records prior workstream status. It is an implementation inventory, not the development sequence; docs/ROADMAP.md is authoritative for execution order.

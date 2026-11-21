@@ -116,6 +116,9 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
  <div class="memory-panel-head"><b>Long-term memory</b><button id="refreshMemory" class="memory-refresh" type="button">↻ Refresh</button></div>
  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 8px"><a href="/memory" id="manageMemory" style="font-size:12px">Manage memory →</a><label style="font-size:11px;display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" id="tempConversation"> Temporary chat</label></div>
  <div id="tempNote" class="sub" style="font-size:11px" hidden>Temporary: Mia saves nothing from this chat.</div>
+ <div class="projectbox" style="margin:0 0 8px"><label for="projectName" style="font-size:11px;display:block;margin-bottom:4px">Project (optional)</label>
+  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><input id="projectName" type="text" maxlength="64" autocomplete="off" placeholder="e.g. Atlas migration" aria-describedby="projectNote" style="flex:1;min-width:110px" disabled><button id="projectSave" type="button" class="memory-refresh" disabled>Set</button><button id="projectClear" type="button" class="memory-refresh" disabled>Clear</button></div>
+  <div id="projectNote" class="sub" role="status" aria-live="polite" style="font-size:11px;margin-top:4px">Send a first message, then you can assign this chat to a project.</div></div>
  <div class="memory-count" id="memoryCount">Loading saved memories…</div>
  <div class="memory-list" id="memoryRecords"><div class="memory-empty">Loading records…</div></div>
 </div>
@@ -556,7 +559,8 @@ async function loadConversationList(){
    const link=document.createElement('a');
    link.href='/assistant?conversation_id='+encodeURIComponent(item.conversation_id);
    link.textContent=item.title||'Conversation';
-   link.title=item.title||'Conversation';
+   link.title=(item.title||'Conversation')+(item.project?' · project: '+item.project:'');
+   if(item.project){const tag=document.createElement('small');tag.textContent=' · '+item.project;link.append(tag);}
    if(item.conversation_id===conversationId)link.classList.add('current');
    box.append(link);
   });
@@ -626,6 +630,40 @@ function setupTemporaryToggle(){
   }catch(e){box.checked=!box.checked;}
  });
  sync();
+}
+const PROJECT_NONE="No project. Mia recalls your newest other saved conversation, from any project.";
+function projectSetText(name){return "Project: "+name+". Mia recalls this project's other conversations first and never recalls other projects' conversations here.";}
+function projectNote(text,isError){const note=$('projectNote');note.textContent=text;note.style.color=isError?'#e0a0a0':'';}
+async function refreshProjectControl(){
+ const input=$('projectName'),save=$('projectSave'),clear=$('projectClear');if(!input)return;
+ const enabled=Boolean(conversationId);
+ input.disabled=!enabled;save.disabled=!enabled;clear.disabled=true;
+ if(!enabled){input.value='';projectNote('Send a first message, then you can assign this chat to a project.');return;}
+ try{
+  const response=await fetch('/api/conversations/'+encodeURIComponent(conversationId));
+  if(!response.ok)throw new Error('unavailable');
+  const data=await response.json();
+  input.value=data.project||'';clear.disabled=!data.project;
+  projectNote(data.project?projectSetText(data.project):PROJECT_NONE);
+ }catch(error){projectNote("Could not read this chat's project.",true);}
+}
+async function saveProject(name){
+ if(!conversationId)return;
+ try{
+  const response=await fetch('/api/conversations/'+encodeURIComponent(conversationId)+'/project',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project:name})});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error(data.detail||'Could not save the project.');
+  $('projectName').value=data.project||'';$('projectClear').disabled=!data.project;
+  projectNote(data.project?projectSetText(data.project):PROJECT_NONE);
+  loadConversationList();
+ }catch(error){projectNote(error.message,true);}
+}
+function setupProjectControl(){
+ if(!$('projectName'))return;
+ $('projectSave').addEventListener('click',()=>{const name=$('projectName').value.trim();if(!name){projectNote('Enter a project name, or use Clear to remove the project.',true);return;}saveProject(name);});
+ $('projectClear').addEventListener('click',()=>saveProject(null));
+ $('projectName').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();$('projectSave').click();}});
+ refreshProjectControl();
 }
 async function loadCurrentConversation(){
  if(!conversationId)return;
@@ -904,7 +942,7 @@ async function submitPrompt(prompt,{voiceReply=false}={}){
    result={content:streamed.text};
   }
   if(conversationId)window.history.replaceState({},'', '/assistant?conversation_id='+encodeURIComponent(conversationId));
-  loadConversationList();
+  loadConversationList();refreshProjectControl();
   if(!voiceReply||voiceMode)await speakReply(result.content,{force:voiceReply});
   $('hint').textContent='Response received';
  }catch(error){
@@ -1609,7 +1647,7 @@ refreshMicDevices();
 if(navigator.mediaDevices?.addEventListener)navigator.mediaDevices.addEventListener('devicechange',refreshMicDevices);
 if('speechSynthesis' in window)window.speechSynthesis.onvoiceschanged=refreshVoices;
 refreshProviders();
-loadCurrentConversation().then(setupTemporaryToggle);
+loadCurrentConversation().then(()=>{setupTemporaryToggle();setupProjectControl();});
 loadConversationList();
 loadMemoryRecords();
 loadLifeInbox();
