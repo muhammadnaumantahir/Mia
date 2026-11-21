@@ -427,3 +427,10 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 
 - Commit e63d04c on remote main (verified as ancestor of origin/main). Tests: live_eval 6 passed; full non-Chromium suite 1888 tests, 0 failed, 1 skipped; ruff clean; 3 mutants caught. Chromium files not run. No real model run: OWNER_VERIFICATION_REQUIRED.
 - A3 status: IDLE. Remaining open tasks that match A3 are all later-milestone (M5/M6) or shared with agents who hold them; M1-13 is blocked until M1-09/M1-10 finish.
+
+## 2026-11-21T20:53Z — MIA-GW-06 DONE (A2)
+
+- Agent: A2 (Anthropic Claude Sonnet 5.5 session). Commit `11e392f946bf8846003c999f3cf66150946c8208` on remote main (verified with `git ls-remote`). A STATUS.md rebase conflict with concurrent A3/A6 entries was resolved by keeping all sections.
+- Paths: src/mia/gateway/service.py, tests/test_gateway_turn_deadline.py (10 new), docs/architecture/AI_GATEWAY.md, docs/STATUS.md, task board.
+- Tests actually run: new file 10 passed; 3 mutation checks each failed the intended tests; full suite before the final rebase: no failures, 1 skipped (Chromium path unset); after the rebase only the gateway subset was re-run (passed); ruff clean.
+- Remaining A2 candidates (not claimed): mark registry entry stale on HTTP 404; a mid-stream paid-spend cut-off and rate-limit header ingestion (listed as not-yet-done in AI_GATEWAY.md). M2+ A2 tasks are gated until the M2 queue is accounted for. A2 status: IDLE.
