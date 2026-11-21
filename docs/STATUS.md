@@ -265,3 +265,7 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - Local evidence: full suite **1633 passed, 16 skipped**, ruff clean, on the tree rebased over current main. Isolation tests were mutation-checked. Scripted/store-level tests only; no live model run.
 - Not done: no Assistant UI control yet (MIA-UX-02), so the project is currently visible and settable through the API only; structured memory records and retrieval are not project-scoped (MIA-BRAIN-04).
 
+
+## 2026-11-21 — MIA-EVAL-03a (A2): gateway-backed judge call
+
+- Added `mia.gateway.judge_call.make_judge_call` (pinned candidate, text-only, normal budget/route policy). Not yet wired into the turn pipeline (MIA-EVAL-03). 6 fake-provider tests pass; no live-model judge quality is claimed.

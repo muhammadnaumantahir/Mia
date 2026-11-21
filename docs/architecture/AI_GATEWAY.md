@@ -133,3 +133,7 @@ Evidence limits: tests use fake providers and prove policy behaviour only, not l
 ### Escalation visibility (read-only)
 
 `GET /api/gateway/escalation` (also under `escalation` in `/api/gateway/overview`) returns the effective policy (including whether paid escalation is actually effective, which also requires the normal paid route policy) and process-local counters: attempted, accepted, rejected-not-better, failed, skipped plus skip reasons. There is no write endpoint; settings stay in environment variables. Counters reset on restart and are not a billing record: spend from escalation attempts is recorded by the normal usage ledger. Streaming turns do not escalate (`streaming: "not_supported"`) by design: text has already reached the owner, so a silent swap is not possible.
+
+### Judge-model calls
+
+`src/mia/gateway/judge_call.py` provides `make_judge_call(gateway, route_policy, on_result=None)`, the callable that `mia.brain.judges.run_judges` expects. Each call pins exactly one candidate through the normal gateway (health, credentials and atomic paid-budget reservations all apply), strips tools and JSON schemas, never falls back to a different model than the one the judge policy selected, and rejects replies that contain tool calls or no text. Wiring it into the turn pipeline is MIA-EVAL-03 (Brain hook, trace, settings), which requires coordinated edits to `orchestrator.py`.
