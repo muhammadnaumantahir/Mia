@@ -34,7 +34,8 @@ _READ_CLAIM = re.compile(
     re.I)
 _HEDGES = re.compile(
     r"\b(i think|i believe|probably|might be|not sure|i'm unsure|i am unsure|possibly|may be|"
-    r"i can't verify|cannot verify|as far as i know)\b", re.I)
+    r"i can't verify|cannot verify|as far as i know|shayad|mumkin hai|mujhe yaqeen nahi|"
+    r"شاید|ممکن ہے|مجھے یقین نہیں)\b", re.I)
 _MUTATING_CLAIM_UR = re.compile(
     r"(?:\b(?:maine|main ne)\b[^.\n]{0,70}\b(?:delete|deleted|bana|banaya|bana\s+diya|"
     r"bhej|bhej\s+di|save|saved|update|updated|install|installed|change|changed)\b|"
