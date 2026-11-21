@@ -5313,11 +5313,11 @@ def create_app(
             ) from exc
 
     @app.get("/api/code-graph/impact")
-    def code_graph_impact(request: Request, base: str = "HEAD~1") -> dict[str, Any]:
+    def code_graph_impact(request: Request, base: str = "HEAD~1", uncommitted: bool = True) -> dict[str, Any]:
         _authorize_code_graph_request(request)
         root = Path(__file__).resolve().parents[3]
         try:
-            return analyze_impact(root, base)
+            return analyze_impact(root, base, include_working_tree=uncommitted)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:

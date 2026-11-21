@@ -114,3 +114,32 @@ pass plus a global resolution pass.
 Non-Python files are still indexed only as file nodes; no language-specific symbol parsing exists
 for them.
 
+## Freshness, provenance and impact audit (MIA-BASE-04)
+
+Audited on current `main` by reading `impact.py`, `indexer.py`, `watcher.py`,
+`scripts/update_code_graph.py` and the `/api/code-graph*` routes.
+
+**Fixed (tests: `tests/test_code_graph_impact_git.py`, real temporary git repositories):**
+- Impact analysis only diffed `base...HEAD`, so uncommitted edits, staged files and untracked
+  files were invisible even though the graph is built from the working tree. `analyze_impact`
+  and `GET /api/code-graph/impact` now include them by default (`uncommitted=false` restores
+  committed-only) and report `includes_uncommitted`. Ignored files are excluded.
+- Renames previously reported only the new path; rename detection is now off so the old path
+  appears too. Paths are read NUL-separated, so names with spaces or non-ASCII characters are
+  no longer quoted by git and silently unmatched.
+- The graph's `commit` is `HEAD`, which is misleading when the tree is dirty. Each graph now
+  carries `tree: {dirty, dirty_paths}` (`null` when git is unavailable) and each CHANGELOG entry
+  states whether the graph matched its commit. `dirty` is informational only and is not part of
+  staleness comparison, so refreshing the CHANGELOG cannot make the graph look stale.
+- The git-diff half of impact analysis had no tests before this task.
+
+**Known limitations (not fixed here):**
+- A renamed or deleted file's old path has no node in the current graph, so files that still
+  import it are not listed as dependents (they appear as unresolved imports only).
+- `TESTED_BY` is a conservative name convention marked `inferred`; it is not coverage.
+- `GET /api/code-graph/status` reports `last_commit` but not whether the stored graph is stale;
+  staleness is only checked by `scripts/update_code_graph.py --check` (source digest + HEAD).
+- Refresh is local and manual (script, watcher or `POST /api/code-graph/refresh`); nothing
+  refreshes the graph on commit. `graph.json` is git-ignored, so a checkout has no graph until
+  one is generated. Verified on Linux only; Windows is OWNER_VERIFICATION_REQUIRED.
+

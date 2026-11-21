@@ -53,6 +53,20 @@ def _git(root: Path, *args: str) -> str:
         return "unknown"
 
 
+def _tree_state(root: Path) -> dict[str, Any]:
+    """Report whether the indexed working tree matches HEAD (untracked, non-ignored files count)."""
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain=v1", "-z", "--untracked-files=all"], cwd=root,
+            capture_output=True, timeout=10, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return {"dirty": None, "dirty_paths": None}
+    if result.returncode != 0:
+        return {"dirty": None, "dirty_paths": None}
+    entries = [e for e in result.stdout.split(b"\0") if e]
+    return {"dirty": bool(entries), "dirty_paths": len(entries)}
+
+
 def _node_id(kind: str, key: str) -> str:
     return f"{kind}:" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:20]
 
@@ -515,6 +529,9 @@ def build_graph(root: str | Path, *, output: str | Path | None = None,
         "generated_at": __import__("datetime").datetime.now(__import__("datetime").UTC).isoformat(),
         "repository": root.name,
         "commit": commit,
+        # `commit` is HEAD; when the tree is dirty the graph indexes uncommitted content
+        # that HEAD does not contain, so consumers must read `tree` before trusting it.
+        "tree": _tree_state(root),
         "source_digest": fingerprint.hexdigest(),
         "summary": {"nodes": len(nodes), "edges": len(edges), "files": len(files),
                     "python_files": sum(1 for p in files if p.suffix == ".py"),

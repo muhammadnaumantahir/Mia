@@ -15,6 +15,16 @@ OUTPUT = ROOT / "docs" / "code-graph" / "graph.json"
 HISTORY = ROOT / "docs" / "code-graph" / "CHANGELOG.md"
 
 
+def _tree_line(graph: dict) -> str:
+    tree = graph.get("tree") or {}
+    if tree.get("dirty") is None:
+        return "unknown (git state unavailable)"
+    if tree["dirty"]:
+        return (f"dirty ({tree['dirty_paths']} uncommitted paths); the commit above is the parent "
+                "of content that is not committed yet")
+    return "clean (graph matches the commit above)"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="fail if the stored graph is stale")
@@ -48,6 +58,7 @@ def main() -> int:
     write_graph(graph, OUTPUT)
     stamp = datetime.now(UTC).isoformat()
     entry = (f"\n## {stamp}\n\n- Commit: `{graph['commit']}`\n"
+             f"- Working tree: {_tree_line(graph)}\n"
              f"- Source digest: `{current_digest}`\n"
              f"- Nodes: {graph['summary']['nodes']}\n"
              f"- Edges: {graph['summary']['edges']}\n"

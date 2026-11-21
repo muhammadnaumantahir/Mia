@@ -8,8 +8,30 @@ from pathlib import Path
 from typing import Any
 
 
-def changed_paths_since(root: str | Path, base_ref: str) -> list[str]:
-    """Return changed repository-relative paths between a base ref and HEAD."""
+def _git_paths(root: Path, args: list[str], failure: str) -> list[str]:
+    """Run a git command that prints NUL-separated paths; fail closed on any error."""
+    result = subprocess.run(
+        ["git", *args], cwd=root, capture_output=True, timeout=20, check=False)
+    if result.returncode != 0:
+        raise ValueError(failure)
+    paths = []
+    for raw in result.stdout.decode("utf-8", errors="replace").split("\0"):
+        candidate = raw.replace("\\", "/").strip()
+        if not candidate or candidate.startswith("/") or ".." in Path(candidate).parts:
+            continue
+        paths.append(candidate)
+    return paths
+
+
+def changed_paths_since(
+    root: str | Path, base_ref: str, *, include_working_tree: bool = False
+) -> list[str]:
+    """Return changed repository-relative paths between a base ref and HEAD.
+
+    With ``include_working_tree`` the result also contains staged and unstaged edits to
+    tracked files and untracked, non-ignored files, so impact can be checked before a
+    commit. Rename detection is off, so a renamed file reports both its old and new path.
+    """
     root = Path(root).resolve()
     ref = base_ref.strip()
     if (
@@ -29,22 +51,18 @@ def changed_paths_since(root: str | Path, base_ref: str) -> list[str]:
     )
     if verified.returncode != 0:
         raise ValueError("base Git reference was not found")
-    diff = subprocess.run(
-        ["git", "diff", "--name-only", "--diff-filter=ACMRD", f"{ref}...HEAD", "--"],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        timeout=20,
-        check=False,
-    )
-    if diff.returncode != 0:
-        raise ValueError("could not calculate Git changes from the requested base")
-    paths = set()
-    for line in diff.stdout.splitlines():
-        candidate = line.replace("\\", "/").strip()
-        if not candidate or candidate.startswith("/") or ".." in Path(candidate).parts:
-            continue
-        paths.add(candidate)
+    paths = set(_git_paths(
+        root,
+        ["diff", "-z", "--name-only", "--no-renames", "--diff-filter=ACMRD", f"{ref}...HEAD", "--"],
+        "could not calculate Git changes from the requested base",
+    ))
+    if include_working_tree:
+        paths.update(_git_paths(
+            root, ["diff", "-z", "--name-only", "--no-renames", "HEAD", "--"],
+            "could not calculate uncommitted Git changes"))
+        paths.update(_git_paths(
+            root, ["ls-files", "-z", "--others", "--exclude-standard"],
+            "could not list untracked files"))
     return sorted(paths)
 
 
@@ -143,13 +161,22 @@ def analyze_graph_impact(graph: dict[str, Any], changed_paths: list[str]) -> dic
 
 
 def analyze_impact(
-    root: str | Path, base_ref: str = "HEAD~1", *, graph: dict[str, Any] | None = None
+    root: str | Path,
+    base_ref: str = "HEAD~1",
+    *,
+    graph: dict[str, Any] | None = None,
+    include_working_tree: bool = True,
 ) -> dict[str, Any]:
-    """Calculate changed files and their graph impact relative to a Git base ref."""
+    """Calculate changed files and their graph impact relative to a Git base ref.
+
+    Uncommitted changes are included by default because the graph is built from the working
+    tree; pass ``include_working_tree=False`` for committed changes only.
+    """
     from .indexer import build_graph
 
     root = Path(root).resolve()
-    changed = changed_paths_since(root, base_ref)
+    changed = changed_paths_since(root, base_ref, include_working_tree=include_working_tree)
     result = analyze_graph_impact(graph or build_graph(root), changed)
     result["base_ref"] = base_ref
+    result["includes_uncommitted"] = include_working_tree
     return result
