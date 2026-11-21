@@ -12,7 +12,7 @@ This is the shared queue. Always refresh it from `main` before claiming or chang
 | Task | Priority | Suggested owner | Status | Scope / acceptance |
 |---|---:|---|---|---|
 | MIA-BASE-01 | P0 | A5 | OPEN | Inspect Code Graph freshness workflow and identify exact gap between watcher/full rebuild and incremental indexing. Deliver a source-backed gap report and safe implementation plan; do not invent graph edges. |
-| MIA-BRAIN-01 | P1 | A1 | OPEN | Audit cross-session/project/provider continuity end-to-end. Identify concrete missing behavior from code/tests and implement the next bounded regression-backed improvement. |
+| MIA-BRAIN-01 | P1 | A1 | IN_PROGRESS (A1, claimed 2026-11-21T07:27Z) | Audit cross-session/project/provider continuity end-to-end. Identify concrete missing behavior from code/tests and implement the next bounded regression-backed improvement. |
 | MIA-GW-01 | P1 | A2 | IN_PROGRESS (A2, claimed 2026-11-21T07:26Z) | Trace verifier confidence and gateway routing; determine whether quality-based escalation is actually wired. Implement a bounded policy only if a real gap exists, with fake-provider tests and spend/privacy/latency limits. |
 | MIA-EVAL-01 | P1 | A3 | OPEN | Expand repeatable reasoning-quality scenarios for memory conflicts, failed tools/providers, multilingual follow-ups and calibrated uncertainty. Ensure metrics are evidence-based and do not claim live model quality from mocks. |
 | MIA-VOICE-01 | P1 | A4 | OPEN | Audit offline wake-word options and current voice session lifecycle. Produce a tested, privacy-first integration plan or implement a small prerequisite with tests; never enable background microphone capture by default. |

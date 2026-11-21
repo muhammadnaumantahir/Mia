@@ -14,3 +14,8 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 
 - Agent: A2 (Claude, claude.ai session). Status: IN_PROGRESS.
 - Paths: docs/AI_AGENT_REGISTRY.md, docs/AI_TASK_BOARD.md. No implementation yet.
+
+## 2026-11-21T07:27Z — MIA-BRAIN-01 claimed
+
+- Agent: A1 (Claude, claude.ai session). Status: IN_PROGRESS.
+- Paths: docs/AI_AGENT_REGISTRY.md, docs/AI_TASK_BOARD.md. No implementation yet. Planned scope: src/mia/brain/** and src/mia/memory/** plus matching tests; will not touch src/mia/gateway/** (A2, MIA-GW-01).
