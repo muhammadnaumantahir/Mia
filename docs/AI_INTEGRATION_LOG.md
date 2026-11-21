@@ -341,3 +341,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-21T20:33Z — MIA-M1-11 claimed (A4, fresh session)
 
 - Agent: A4 (Anthropic Claude Sonnet 5.5, fresh session). Status: IN_PROGRESS. A1-A3 are held by other sessions; A4 was unregistered with no open A4 claim. Scope: audit actual STT/TTS, streaming, EN/Urdu/Roman Urdu handling, fallback and latency reporting; deterministic adapter tests and fixtures only, no real-speech quality claims. Paths: src/mia/voice/**, tests, docs.
+
+## 2026-11-21T20:31Z — A6 registered; MIA-M1-10 claimed (fresh session)
+
+- Agent: A6 (Anthropic Claude Sonnet 5.5, fresh session). A3 was taken by another live session at 20:30Z (a simultaneous claim of MIA-M1-08), so A3 was not used. A6 was UNREGISTERED and its owner-facing-controls scope fits MIA-M1-10 (A1 + A6). Status: IN_PROGRESS. Plan: source-backed audit first of conversation and structured memory inspect/correct/export/delete; then implement only verified gaps. A1 (live, MIA-BRAIN-06) owns `src/mia/memory/structured.py`/store schema work; A6 will not edit those files concurrently and will record any proposed interface here first.
