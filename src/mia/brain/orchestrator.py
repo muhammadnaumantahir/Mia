@@ -442,13 +442,16 @@ class Brain:
         """Advisory second opinion (MIA-EVAL-03). Opt-in, bounded, never fails the turn.
 
         Judges may only keep or lower the verifier's confidence. They never change the reply
-        text, permissions or approvals. Streamed turns are not judged yet.
+        text, permissions or approvals. Voice turns are never judged (latency).
         """
         try:
             policy = self.judge_policy()
         except Exception:
             return report
         if not policy.enabled or p.built is None or not answer.strip():
+            return report
+        if p.request.interface == "voice":  # never add judge latency to a spoken conversation
+            self.judge_stats.record("skipped", "voice turn: latency")
             return report
         codes = [str(i.get("code")) for i in report.get("issues", [])]
         go, why = should_judge(policy, category=p.analysis.category,
@@ -693,6 +696,7 @@ class Brain:
             return
         assert p.built is not None and p.decision is not None
         parts: list[str] = []
+        stored = False
         ledger = OperationLedger()
         request_obj = self._model_request(p, tools=())
         try:
@@ -709,8 +713,10 @@ class Brain:
                     parts.append(extra)
                     yield ("delta", {"text": extra})
                 self._store_reply(p, final)
+                stored = True  # a disconnect while judging must not store a second partial copy
                 self._usage(event, p.analysis.category, request_obj.estimated_input_tokens,
                             max(1, len(text) // 4), streamed=True, text=text)
+                report = await self._maybe_judge(p, final, event.provider_id, event.model_id, report)
                 attempted = list(event.attempted_candidates)
                 p.trace.execution = {"provider_model": f"{event.provider_id}/{event.model_id}",
                                      "attempted": attempted, "first_token_ms": event.first_token_ms,
@@ -734,7 +740,7 @@ class Brain:
                              "retry_after_seconds": retry_after if getattr(exc, "rate_limited", False) else None})
         except (asyncio.CancelledError, GeneratorExit):
             # Speech interrupted / client left: keep the partial reply, never corrupt state.
-            if parts:
+            if parts and not stored:
                 self.memory.append_message(p.conversation_id, "assistant",
                                            "".join(parts) + "\n[response interrupted]")
             p.trace.finish("interrupted")

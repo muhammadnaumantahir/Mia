@@ -2,11 +2,15 @@
 
 These prove wiring and authority limits. They say nothing about live judge-model quality.
 """
+import asyncio
 import json
 
 from fastapi.testclient import TestClient
 
-from mia.gateway.contracts import ModelCandidate, ProviderResponse
+from mia.agent.tools import ToolRegistry
+from mia.brain.judges import JudgePolicy
+from mia.brain.orchestrator import Brain, TurnRequest
+from mia.gateway.contracts import ModelCandidate, ProviderResponse, StreamChunk
 from mia.gateway.registry import ProviderRegistry
 from mia.gateway.service import ModelGateway
 from mia.memory.store import MemoryStore
@@ -19,8 +23,9 @@ ASK = ("Compare the trade-offs of SQLite and PostgreSQL for a small billing serv
 
 
 class Fake:
-    def __init__(self, pid, *, reply=MEDIUM, verdict="supported", fail=False, local=True):
+    def __init__(self, pid, *, reply=MEDIUM, verdict="supported", fail=False, local=True, hang=False):
         self.provider_id, self.reply, self.verdict, self.fail, self.local = pid, reply, verdict, fail, local
+        self.hang = hang
         self.calls = self.judge_calls = 0
 
     async def health(self):
@@ -33,11 +38,18 @@ class Fake:
     async def complete(self, candidate, request):
         if request.task_type == "judge":
             self.judge_calls += 1
+            if self.hang:
+                await asyncio.sleep(30)
             if self.fail:
                 raise RuntimeError("judge down")
             return ProviderResponse(content=json.dumps({"verdict": self.verdict, "reason": "r"}))
         self.calls += 1
         return ProviderResponse(content=self.reply)
+
+    async def stream(self, candidate, request):
+        self.calls += 1
+        yield StreamChunk(delta=self.reply)
+        yield StreamChunk(finish_reason="stop")
 
 
 def client_for(tmp_path, monkeypatch, *providers, enable=True, **env):
@@ -154,3 +166,50 @@ def test_judges_endpoint_is_read_only_and_reflects_policy(tmp_path, monkeypatch)
     assert client.post("/api/brain/judges", json={}).status_code == 405
     on = client_for(tmp_path, monkeypatch, *trio(), MIA_JUDGES_MAX="9").get("/api/brain/judges").json()
     assert on["policy"]["enabled"] is True and on["policy"]["max_judges"] == 3
+
+
+def brain_for(tmp_path, *providers):
+    registry = ProviderRegistry()
+    for p in providers:
+        registry.register(p)
+    memory = MemoryStore(tmp_path / "m.sqlite3")
+    brain = Brain(gateway=ModelGateway(registry), memory=memory, tools=ToolRegistry(),
+                  identity=lambda: ("You are Mia.", 1), judge_policy=lambda: JudgePolicy(enabled=True))
+    return brain, memory
+
+
+async def test_streamed_text_turn_is_judged_after_the_reply_is_stored(tmp_path):
+    brain, memory = brain_for(tmp_path, *trio(verdict="unsupported"))
+    events = [e async for e in brain.stream_turn(
+        TurnRequest(ASK, conversation_id="conv-j-stream-1", use_tools=False))]
+    done = next(payload for name, payload in events if name == "done")
+    assert done["verification"]["judges"]["consensus"] == "unsupported"
+    assert done["verification"]["confidence"] == "low"
+    replies = [m for m in memory.get_messages("conv-j-stream-1", limit=10) if m["role"] == "assistant"]
+    assert [m["content"] for m in replies] == [MEDIUM]
+
+
+async def test_disconnect_while_judging_keeps_the_stored_reply_without_a_duplicate(tmp_path):
+    brain, memory = brain_for(tmp_path, *[Fake(x, hang=True) for x in "abc"])
+    gen = brain.stream_turn(TurnRequest(ASK, conversation_id="conv-j-cancel-1", use_tools=False))
+    assert (await gen.__anext__())[0] == "delta"
+    waiting = asyncio.ensure_future(gen.__anext__())  # now inside the judge wait
+    await asyncio.sleep(0.2)
+    waiting.cancel()
+    try:
+        await waiting
+    except asyncio.CancelledError:
+        pass
+    replies = [m["content"] for m in memory.get_messages("conv-j-cancel-1", limit=10)
+               if m["role"] == "assistant"]
+    assert replies == [MEDIUM]  # stored once, never "[response interrupted]"
+
+
+def test_voice_turns_are_never_judged(tmp_path, monkeypatch):
+    fakes = trio(verdict="unsupported")
+    client = client_for(tmp_path, monkeypatch, *fakes)
+    r = client.post("/api/gateway/chat", json={"prompt": ASK, "use_tools": False,
+                                               "conversation_id": "conv-j-voice-1", "interface": "voice"})
+    assert r.status_code == 200
+    assert sum(f.judge_calls for f in fakes) == 0 and "judges" not in r.json()["verification"]
+    assert "voice turn: latency" in client.get("/api/brain/judges").json()["stats"]["top_skip_reasons"]

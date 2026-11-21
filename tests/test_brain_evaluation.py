@@ -33,7 +33,7 @@ async def test_reasoning_quality_scenarios_cover_uncertainty_corrections_and_mem
 async def test_scenario_set_covers_required_reasoning_quality_areas_and_languages():
     categories = {s.category for s in BUILTIN_SCENARIOS}
     assert {"memory-conflict", "tool-failure", "continuity", "uncertainty", "corrections",
-            "provider-failure", "unsupported-claims"} <= categories
+            "provider-failure", "unsupported-claims", "judges"} <= categories
     assert {"en", "roman-urdu", "ur"} <= {s.language for s in BUILTIN_SCENARIOS}
     assert len({s.name for s in BUILTIN_SCENARIOS}) == len(BUILTIN_SCENARIOS)
 
@@ -82,3 +82,15 @@ async def test_results_are_deterministic_across_runs():
     first = [(r.name, r.passed, r.detail) for r in await run_all()]
     second = [(r.name, r.passed, r.detail) for r in await run_all()]
     assert first == second
+
+
+async def test_judge_scenario_negative_control_and_lowering_is_real():
+    scenario = next(s for s in BUILTIN_SCENARIOS if s.name == "judges-unsupported-lowers-confidence")
+    ok = await run_scenario(scenario)
+    assert ok.passed, ok.failures
+    assert ok.detail["judge_consensus"] == "unsupported" and ok.detail["confidence"] == "low"
+    wrong = await run_scenario(Scenario(
+        "nc-judge", scenario.prompt, scenario.reply, judge_reply=scenario.judge_reply,
+        expect_judge_consensus="supported", expect_confidence="high"))
+    assert not wrong.passed
+    assert any("judge consensus" in f for f in wrong.failures)

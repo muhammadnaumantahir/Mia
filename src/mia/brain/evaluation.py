@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from mia.agent.tools import ToolRegistry
+from mia.brain.judges import JudgePolicy
 from mia.gateway.contracts import ModelCandidate, ProviderResponse, TransientProviderError
 from mia.gateway.registry import ProviderRegistry
 from mia.gateway.service import ModelGateway
@@ -57,6 +58,10 @@ class Scenario:
     expect_context: tuple[str, ...] = ()
     forbid_context: tuple[str, ...] = ()
     expect_context_refs_min: int = 0
+    # Advisory judges: when set, two extra scripted models join the pool and EVERY model answers
+    # judge requests with this raw reply (so the outcome does not depend on who answered).
+    judge_reply: str | None = None
+    expect_judge_consensus: str | None = None
 
 
 @dataclass(slots=True)
@@ -70,9 +75,8 @@ class ScenarioResult:
 
 
 class _Provider:
-    provider_id = "eval"
-
-    def __init__(self, scenario: Scenario) -> None:
+    def __init__(self, scenario: Scenario, provider_id: str = "eval") -> None:
+        self.provider_id = provider_id
         self.s = scenario
         # Scripted replies: earlier turns first, then the evaluated reply (which repeats).
         self._queue = [reply for _prompt, reply in scenario.prior_turns]
@@ -82,10 +86,12 @@ class _Provider:
         return True
 
     async def list_models(self) -> list[ModelCandidate]:
-        return [ModelCandidate("eval", "scripted", frozenset({"chat", "tools"}), 32768, True, True,
+        return [ModelCandidate(self.provider_id, "scripted", frozenset({"chat", "tools"}), 32768, True, True,
                                True, data_local=True)]
 
     async def complete(self, candidate: ModelCandidate, request: Any) -> ProviderResponse:
+        if request.task_type == "judge":
+            return ProviderResponse(content=self.s.judge_reply or "")
         self.requests.append([dict(m) for m in request.messages])
         if self.s.provider_fails:
             raise TransientProviderError("scripted outage")
@@ -158,6 +164,9 @@ _CORE_CATEGORIES = {
 
 _DB = ("decision", "Billing database", "We decided to use PostgreSQL for the billing service.")
 _ASK_DB = "What did we decide about the billing database?"
+_MODERATE = ("Compare the trade-offs of SQLite and PostgreSQL for a small billing service "
+             "and explain your reasoning step by step.")
+_HEDGED = "I think it is probably the cache, possibly, but I am not sure at all."
 
 _EXTENDED_SCENARIOS: tuple[Scenario, ...] = (
     # ---- memory conflicts and citations (real MemoryStore + supersede) ---------------
@@ -218,6 +227,16 @@ _EXTENDED_SCENARIOS: tuple[Scenario, ...] = (
              "sakti. Agar aap notes share karein to main un ka jaiza le sakti hoon.",
              category="uncertainty", language="roman-urdu",
              forbid_codes=("low_confidence", "unverified_completion_claim", "unverified_inspection_claim")),
+    # ---- advisory judges (scripted; every pool model returns the same judge verdict) -----
+    Scenario("judges-unsupported-lowers-confidence", _MODERATE, _HEDGED,
+             category="judges", judge_reply='{"verdict": "unsupported", "reason": "x"}',
+             expect_judge_consensus="unsupported", expect_confidence="low"),
+    Scenario("judges-supported-never-raise-confidence", _MODERATE, _HEDGED,
+             category="judges", judge_reply='{"verdict": "supported", "reason": "x"}',
+             expect_judge_consensus="supported", expect_confidence="medium"),
+    Scenario("judges-unusable-output-falls-back-to-verifier", _MODERATE, _HEDGED,
+             category="judges", judge_reply="Looks fine to me!",
+             expect_judge_consensus="insufficient", expect_confidence="medium"),
     Scenario("stacked-hedges-are-flagged-low-confidence", "Is the cache the cause?",
              "I think it is probably the cache, possibly, but I am not sure at all.",
              category="uncertainty", expect_codes=("low_confidence",), expect_confidence="medium"),
@@ -233,9 +252,13 @@ async def run_scenario(scenario: Scenario) -> ScenarioResult:
         provider = _Provider(scenario)
         registry = ProviderRegistry()
         registry.register(provider)
+        if scenario.judge_reply is not None:
+            for extra in ("judge-a", "judge-b"):
+                registry.register(_Provider(scenario, extra))
         memory = MemoryStore(Path(tmp) / "m.sqlite3")
         brain = Brain(gateway=ModelGateway(registry), memory=memory,
-                      tools=_eval_tools(scenario.tools), identity=lambda: ("You are Mia.", 1))
+                      tools=_eval_tools(scenario.tools), identity=lambda: ("You are Mia.", 1),
+                      judge_policy=lambda: JudgePolicy(enabled=scenario.judge_reply is not None))
         failures: list[str] = []
         detail: dict[str, Any] = {}
         result: dict[str, Any] | None = None
@@ -279,6 +302,11 @@ async def run_scenario(scenario: Scenario) -> ScenarioResult:
             content = result["content"]
             detail.update(codes=codes, provider=result["provider_id"], confidence=result["verification"].get("confidence"),
                           context_refs=len(result.get("context_references") or ()))
+            consensus = (result["verification"].get("judges") or {}).get("consensus")
+            detail["judge_consensus"] = consensus
+            if scenario.expect_judge_consensus and consensus != scenario.expect_judge_consensus:
+                failures.append(f"judge consensus {consensus!r}, expected "
+                                f"{scenario.expect_judge_consensus!r}")
             if detail["context_refs"] < scenario.expect_context_refs_min:
                 failures.append(f"only {detail['context_refs']} memory reference(s), "
                                 f"expected at least {scenario.expect_context_refs_min}")
