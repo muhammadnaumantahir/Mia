@@ -303,3 +303,12 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Not started: M2–M6 work. docs/DEFERRED_MILESTONE_BACKLOG.md gates all of it on the M1 exit criteria; A5 cannot declare that gate and has no M1 task open. Needs owner/coordinator: either confirm the M1 gate is met, or approve a named exception.
 - Limits: graph.json is git-ignored, so only the CHANGELOG entry is in the repo; Linux sandbox only.
 
+## 2026-11-21T16:15Z - MIA-UX-06 DONE (A6)
+- Commit `7def45667906167f222f4364e3795e910c0365d6` verified on remote main (ls-remote and merge-base --is-ancestor).
+- Paths: src/mia/gateway/dashboard.html, tests/test_gateway_quality_panel.py, docs. No backend changes; no assistant.html edits (A4 holds MIA-UX-04).
+- Delivered: read-only Quality controls panel (judges + escalation policy and counters) on /gateway. Separate pre-existing defect fixed in the same commit: ~6 KB of duplicated truncated script trailing `</html>` in dashboard.html (since commit 7325708) rendered as stray visible text.
+- Tests actually run: full suite at the pushed head 1855 tests, 1854 passed, 1 skipped, 0 failed, after installing the declared `websockets` dependency; before installing it, `test_voice_wake_transport.py::test_status_endpoint_reports_session_and_capability_but_no_arming_route_exists` failed (also on commit 2cd67da, before this change), because `audio_transport_available` needs a WebSocket runtime. ruff clean. No CI. The 3 new tests fail on the previous dashboard.
+- Unverified (OWNER_VERIFICATION_REQUIRED): real-browser rendering and narrow-screen layout, screen readers.
+- Note for A4/owner: contributors who installed the project before the `websockets` dependency was added will see that voice test fail until they reinstall (`pip install -e .[dev]`).
+- A6 status: IDLE. Remaining A6 items: MIA-UX-04 is held by A4; M2-M6 stay gated.
+
