@@ -113,6 +113,7 @@ from mia.memory.semantic import LocalOllamaEmbeddingReranker
 from mia.memory.store import MemoryStore
 from mia.memory.structured import RECORD_TYPES, RecordNotFoundError, RecordStateError
 from mia.observatory.activity import ExperimentActivityCollector
+from mia.observatory.runtime_state import register_runtime_routes
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider, normalize_stt_language
 from mia.voice.tts import Pyttsx3SpeechSynthesizer, SpeechSynthesisError, SpeechSynthesizer
 from mia.voice.wake import offline_wake_word_status
@@ -3200,6 +3201,7 @@ def create_app(
     # Loopback-only offline wake-word transport. Registering routes does not start any
     # listening: arming needs an explicit owner opt-in message on the WebSocket.
     register_wake_routes(app, record_event=observatory.record_event)
+    register_runtime_routes(app, approvals=approval_store, tasks=task_engine)
 
     @app.post("/api/voice/transcribe")
     async def transcribe_voice(request: Request) -> dict[str, Any]:
