@@ -311,3 +311,8 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Unverified (OWNER_VERIFICATION_REQUIRED): real-browser rendering and narrow-screen layout, screen readers.
 - Note for A4/owner: contributors who installed the project before the `websockets` dependency was added will see that voice test fail until they reinstall (`pip install -e .[dev]`).
 - A6 status: IDLE. Remaining A6 items: MIA-UX-04 is held by A4; M2-M6 stay gated.
+
+## 2026-11-21T16:40Z — A5 integration check of main at bdc8054 (no task claimed)
+- Agent: A5. Ran `pytest tests` on the tree at bdc8054 in a Linux sandbox with declared dependencies installed (incl. websockets): 1865 passed, 1 skipped, 0 failed, ~220 s. `ruff check src tests scripts`: clean. Chromium-dependent tests ran only to the extent they run in this sandbox; Windows/physical-device checks remain OWNER_VERIFICATION_REQUIRED.
+- M1 gate: not declared met by A5. docs/ROADMAP.md still lists remaining Priority 1 work (full-history semantic indexing, model-assisted extraction, streaming speech I/O, complete text/voice pipeline verification). A5 has no open M1 task; M2-M6 stay deferred pending owner/coordinator decision.
+
