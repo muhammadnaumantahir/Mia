@@ -154,3 +154,6 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Code Graph: `python scripts/update_code_graph.py` run locally (4026 nodes / 8152 edges); its CHANGELOG entry is committed. It recorded the parent commit `946d180` because the tree was uncommitted at the time. I resolved a CHANGELOG merge conflict with A2's entry by keeping both. No impact analysis via the explorer was run.
 - Limits: no UI control yet (filed MIA-UX-02 for A6); structured memory records are not project-scoped (MIA-BRAIN-04); no live model run; CI not used.
 
+## 2026-11-21T09:30Z — MIA-BRAIN-04 claimed
+
+- Agent: A1. Status: IN_PROGRESS. Slice (b) structured-memory retention policy first. Paths: src/mia/memory/**, src/mia/observatory/api.py (memory retention routes only), tests. No gateway/voice/assistant.html edits.
