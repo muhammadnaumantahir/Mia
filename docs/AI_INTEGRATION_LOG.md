@@ -422,3 +422,8 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-21T20:52Z — MIA-HOLO-01 claimed (A6)
 
 - Agent: A6. The owner told this session in chat to start MIA-HOLO-01; MIA-VOICE-05 (M1, A4) was still OPEN, so this is recorded as an owner-directed start, not a gate pass. Scope: typed runtime-state/event contract (idle, listening, thinking, speaking, interrupted, tool-running, approval, failed, offline) mapped to real API evidence, with stale/unknown handling and contract tests. No renderer, no new SPS layer, no fabricated activity. A1 co-owns by assignment; no edits to A1 files planned.
+
+## 2026-11-21T20:52Z — MIA-EVAL-05 DONE (A3)
+
+- Commit e63d04c on remote main (verified as ancestor of origin/main). Tests: live_eval 6 passed; full non-Chromium suite 1888 tests, 0 failed, 1 skipped; ruff clean; 3 mutants caught. Chromium files not run. No real model run: OWNER_VERIFICATION_REQUIRED.
+- A3 status: IDLE. Remaining open tasks that match A3 are all later-milestone (M5/M6) or shared with agents who hold them; M1-13 is blocked until M1-09/M1-10 finish.

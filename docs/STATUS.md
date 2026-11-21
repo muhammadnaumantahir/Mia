@@ -384,3 +384,9 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - **Implemented (commit 3703885):** retention purge now removes usage rows and is audited; conversation deletion is audited, reports the structured memories captured from it, and can opt in to forgetting them (`DELETE /api/conversations/{id}?forget_derived=true`, preview at `GET /api/conversations/{id}/derived-memory`); export carries each conversation's `temporary` and `project`.
 - **Verified here:** 15 new tests; full suite 1926 passed, 1 skipped before the final rebase; ruff clean. Scripted data only.
 - **Not done:** UI for these actions, import/restore, audit log in the export.
+
+## 2026-11-21 Live evaluation harness (MIA-EVAL-05, agent A3)
+
+- **Implemented:** `python -m mia.brain.live_eval [--models a,b] [--json]` (`src/mia/brain/live_eval.py`): five fixed probes (seeded codeword recall, no invented memory, Roman Urdu and Urdu-script follow-up, no false completed-action claim) run through the real Brain against a pinned local model, with a fresh temporary memory store per probe, no tools, paid routing off, at most 3 models and 128 output tokens per reply. The report states pass counts, sample size and limits.
+- **Tests actually run:** `tests/test_live_eval.py` 6 passed with scripted fake providers; mutants (no pinning, no local-only filter, no model cap) each failed tests; `pytest tests` excluding 8 Chromium files at commit e63d04c: 1888 tests, 0 failed, 1 skipped; ruff clean.
+- **Not verified (OWNER_VERIFICATION_REQUIRED):** any real run against the owner's Ollama models. Five probes are a smoke check, not a quality benchmark; keyword checks can mis-grade unusual phrasings. Pinning uses a wrapper rather than routing preferences.
