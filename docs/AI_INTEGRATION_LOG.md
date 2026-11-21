@@ -479,3 +479,11 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-21T21:04Z — MIA-LIFE-01 claimed (A1, owner-approved exception)
 
 - Owner instruction in chat: "get the other milestones tasks and do them"; treated as approval to start M2-M6 work ahead of the milestone gate (same precedent as A5/A2). Explicit task dependencies still apply: chain LIFE-01 -> LIFE-02 -> LIFE-04 -> LIFE-05. Scope: audit existing memory/projects/life settings first, then the owner-scoped personal-data model, provenance, retention, export/delete tests. Paths: src/mia/memory/**, tests, docs.
+
+## 2026-11-21T21:07Z — MIA-HOLO-02 DONE (A6)
+
+- Commit 1176c8e on remote main (verified with `git ls-remote`). New paths only: `spikes/holo-renderer/**` (isolated; nothing in `src/mia` imports it; generated `spike.html` and `node_modules` are git-ignored), `tests/test_holo_renderer_spike.py`, `docs/architecture/HOLO_RENDERER_DECISION.md`, `.gitignore` (3 lines).
+- Evidence: minimal-scene bundles built and gzipped here: OGL 14,041 B, three.js 133,157 B, Babylon core 302,092 B; licences from package.json (Unlicense, MIT, Apache-2.0). Decision: three.js, with OGL as the documented fallback; reversal criteria in the decision doc.
+- Tests actually run: new file 8 passed in Chromium (software GL); full suite 2070 passed, 1 skipped; ruff clean. The tests skip when node/npm or Chromium is unavailable (they run `npm ci` once, which needs the npm registry). One real bug found and fixed by a test: `display:block` overrode the `hidden` attribute, showing canvas and fallback together.
+- Limits: no real GPU/Windows/driver evidence; WebGL2-specific behaviour not checked; Babylon's maintenance date not checked; no raw-WebGL variant measured. Interface for HOLO-03/05/06: only `renderer.js` imports three.js; use `createHoloRenderer`; states are the HOLO-01 names.
+- Next: MIA-HOLO-03 (scene and visual system) is unblocked by this task.

@@ -73,7 +73,7 @@ The detailed task definitions, dependencies, scope and acceptance criteria are i
 | Task | Priority | Suggested owner | Status | Scope / acceptance |
 |---|---:|---|---|---|
 | MIA-HOLO-01 | P2 | A6 + A1 | DONE (A6, commit 1691e42 on main, 2026-11-21T20:59Z) | `src/mia/observatory/runtime_state.py`: 10 states, 16 evidence kinds each tied to a real API/event, TTLs, priorities, supersession, unknown/stale/rejected handling; read-only `GET /api/runtime/contract`, `GET /api/runtime/state`, `POST /api/runtime/resolve`. 41 tests in tests/test_runtime_state.py. No renderer; the UI does not use it yet (HOLO-04). |
-| MIA-HOLO-02 | P2 | A6 | IN_PROGRESS (A6, claimed 2026-11-21T20:59Z) | 3D renderer spike and evidence-based architecture choice; include licensing, bundle, WebGL and low-power fallback. |
+| MIA-HOLO-02 | P2 | A6 | DONE (A6, commit 1176c8e on main, 2026-11-21T21:07Z) | Measured OGL/three.js/Babylon minimal-scene bundles and licences; decision: three.js behind `spikes/holo-renderer/src/renderer.js` (docs/architecture/HOLO_RENDERER_DECISION.md). 8 Chromium tests (WebGL, no-WebGL fallback, 10 states, reduced motion, hidden pause, fps cap, context loss, dispose). Real-GPU performance NOT verified (HOLO-06 / owner). |
 | MIA-HOLO-03 | P2 | A6 | OPEN | Responsive holographic scene and visual states, isolated from Brain/business logic; deterministic tests. |
 | MIA-HOLO-04 | P2 | A6 + A4 + A1 | OPEN | Bind actual conversation/voice/task/tool/approval events; test reconnect, cancellation and offline states. |
 | MIA-HOLO-05 | P2 | A6 | OPEN | Accessible non-3D fallback, reduced motion, keyboard/screen-reader labels, contrast and narrow-screen tests. |

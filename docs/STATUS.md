@@ -415,3 +415,9 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 ## 2026-11-21T21:01Z A1 record-level project scoping (MIA-BRAIN-06)
 
 - Structured memory records can be scoped to a project (opt-in, default unscoped). Project conversations never recall another project's records, including via links; capture in a project conversation tags records and never confirms/supersedes another project's. Commit `44f45e6`. Verified with fake-provider/unit tests only; no UI and no live-model evidence.
+
+## 2026-11-21 — MIA-HOLO-02 (A6): renderer spike and decision
+
+- **Implemented (commit 1176c8e):** isolated three.js spike with WebGL detection, text fallback, reduced motion, hidden-page pause, fps cap, context-loss handling and disposal; decision doc with measured bundle sizes and licences. Not wired into the app.
+- **Verified here:** 8 Chromium tests on software GL; full suite 2070 passed, 1 skipped.
+- **Not verified:** real-GPU performance, Windows hardware, accessibility with assistive tech.
