@@ -203,3 +203,43 @@ def test_impact_analysis_finds_import_dependents_and_related_tests(tmp_path):
     unknown = next(item for item in impact["items"] if item["path"] == "docs/notes.md")
     assert unknown["indexed"] is False
     assert impact["dependent_files"] == ["src/mia/service.py"]
+
+
+def test_diff_snapshots_reports_added_modified_removed_and_head_change():
+    from mia.codegraph.indexer import diff_snapshots
+
+    before = (("a.py", "1"), ("b.py", "2"), ("c.py", "3"), ("__git_head__:aaa", ""))
+    after = (("a.py", "1"), ("b.py", "changed"), ("d.py", "4"), ("__git_head__:bbb", ""))
+    result = diff_snapshots(before, after)
+    assert result == {
+        "added": ["d.py"], "removed": ["c.py"], "modified": ["b.py"], "head_changed": True,
+    }
+    assert diff_snapshots(before, before)["head_changed"] is False
+
+
+def test_write_graph_is_atomic_and_keeps_existing_file_when_unchanged(tmp_path):
+    from mia.codegraph.indexer import build_graph, write_graph
+
+    repo = tmp_path / "repo"
+    (repo / "pkg").mkdir(parents=True)
+    (repo / "pkg" / "m.py").write_text("def f():\n    return 1\n", encoding="utf-8")
+    output = tmp_path / "out" / "graph.json"  # outside the indexed tree
+    graph = build_graph(repo)
+    assert write_graph(graph, output)["source_digest"] == graph["source_digest"]
+    first_mtime = output.stat().st_mtime_ns
+    again = build_graph(repo)
+    assert write_graph(again, output)["generated_at"] == graph["generated_at"]
+    assert output.stat().st_mtime_ns == first_mtime
+    assert not list(output.parent.glob(".graph-*.tmp"))
+
+
+def test_same_file_calls_resolve_after_single_walk_optimisation(tmp_path):
+    from mia.codegraph.indexer import build_graph
+
+    (tmp_path / "svc.py").write_text(
+        "def helper():\n    return 1\n\n\ndef caller():\n    return helper()\n", encoding="utf-8")
+    graph = build_graph(tmp_path)
+    labels = {n["id"]: n["label"] for n in graph["nodes"]}
+    calls = [(labels[e["source"]], labels[e["target"]]) for e in graph["edges"] if e["type"] == "CALLS"]
+    assert ("caller", "helper") in calls
+    assert all(e["confidence"] == "confirmed" for e in graph["edges"] if e["type"] == "CALLS")

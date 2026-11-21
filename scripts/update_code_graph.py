@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from mia.codegraph.indexer import build_graph  # noqa: E402
+from mia.codegraph.indexer import build_graph, write_graph  # noqa: E402
 
 OUTPUT = ROOT / "docs" / "code-graph" / "graph.json"
 HISTORY = ROOT / "docs" / "code-graph" / "CHANGELOG.md"
@@ -38,7 +38,7 @@ def main() -> int:
             and previous.get("commit") == graph["commit"]):
         print(f"Code Graph unchanged at {graph['commit']}")
         return 0
-    build_graph(ROOT, output=OUTPUT)
+    write_graph(graph, OUTPUT)
     stamp = datetime.now(UTC).isoformat()
     entry = (f"\n## {stamp}\n\n- Commit: `{graph['commit']}`\n"
              f"- Source digest: `{current_digest}`\n"

@@ -54,3 +54,28 @@ def test_watcher_detects_content_change_when_size_and_timestamp_are_unchanged(tm
     assert watcher.check_once() is True
     second_graph = json.loads(output.read_text(encoding="utf-8"))
     assert second_graph["source_digest"] != first_graph["source_digest"]
+
+
+def test_watcher_history_records_changed_paths_and_rebuild_mode(tmp_path):
+    source = tmp_path / "src" / "mia" / "app.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("def one():\n    return 1\n", encoding="utf-8")
+    output = tmp_path / "docs" / "code-graph" / "graph.json"
+    watcher = CodeGraphWatcher(tmp_path, output, interval_seconds=1.0)
+    watcher.start()
+    watcher.stop()
+    watcher._snapshot = __import__("mia.codegraph.indexer", fromlist=["x"]).source_snapshot(tmp_path)
+
+    source.write_text("def two():\n    return 2\n", encoding="utf-8")
+    (source.parent / "extra.py").write_text("X = 1\n", encoding="utf-8")
+    assert watcher.check_once() is True
+
+    assert watcher.last_changes["modified"] == ["src/mia/app.py"]
+    assert watcher.last_changes["added"] == ["src/mia/extra.py"]
+    assert watcher.last_rebuild_seconds is not None
+    history_path = tmp_path / "data" / "code-graph" / "history.jsonl"
+    last = json.loads(history_path.read_text(encoding="utf-8").splitlines()[-1])
+    assert last["rebuild"] == "full"
+    assert last["changes"]["modified"] == ["src/mia/app.py"]
+    # History stores paths only, never file contents.
+    assert "return 2" not in history_path.read_text(encoding="utf-8")

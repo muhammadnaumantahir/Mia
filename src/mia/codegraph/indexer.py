@@ -107,6 +107,28 @@ def source_snapshot(root: str | Path) -> tuple[tuple[str, str], ...]:
     return tuple(snapshot)
 
 
+def diff_snapshots(
+    previous: tuple[tuple[str, str], ...], current: tuple[tuple[str, str], ...]
+) -> dict[str, Any]:
+    """Compare two ``source_snapshot`` results by content digest.
+
+    This is change *detection* only: it names the files whose content differs so
+    tooling and history can report exactly what triggered a rebuild. It does not
+    prove which graph edges are affected (cross-file edges need the full pass).
+    """
+    sentinel = "__git_head__:"
+    before = {path: digest for path, digest in previous if not path.startswith(sentinel)}
+    after = {path: digest for path, digest in current if not path.startswith(sentinel)}
+    head_before = next((p for p, _ in previous if p.startswith(sentinel)), None)
+    head_after = next((p for p, _ in current if p.startswith(sentinel)), None)
+    return {
+        "added": sorted(set(after) - set(before)),
+        "removed": sorted(set(before) - set(after)),
+        "modified": sorted(p for p in set(before) & set(after) if before[p] != after[p]),
+        "head_changed": head_before != head_after,
+    }
+
+
 def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[str, Any]:
     """Build a deterministic graph from repository source and documentation."""
     root = Path(root).resolve()
@@ -116,6 +138,8 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
     modules = {_module_path(path, root): path for path in files if path.suffix == ".py"}
     symbol_index: dict[str, list[str]] = {}
     parsed: dict[Path, ast.Module] = {}
+    walked: dict[Path, list[ast.AST]] = {}
+    function_nodes_by_location: dict[tuple[str, int], list[str]] = {}
     definition_ids: dict[ast.AST, str] = {}
     errors: list[dict[str, str]] = []
 
@@ -162,6 +186,7 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
             source = path.read_text(encoding="utf-8")
             tree = ast.parse(source, filename=rel)
             parsed[path] = tree
+            walked[path] = list(ast.walk(tree))
         except (OSError, UnicodeError, SyntaxError) as exc:
             errors.append({"path": rel, "error": f"{type(exc).__name__}: {str(exc)[:180]}"})
             continue
@@ -194,7 +219,7 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
                             visit_scope(child, parent_key)
 
         visit_scope(tree.body, "")
-        for node in ast.walk(tree):
+        for node in walked[path]:
             if isinstance(node, ast.Import):
                 names = [(alias.name, alias.asname or alias.name.split(".")[0]) for alias in node.names]
             elif isinstance(node, ast.ImportFrom):
@@ -230,7 +255,7 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
                     add_edge(fid, file_ids[target_path], "IMPORTS", "confirmed",
                              f"ast-import:{rel}:{node.lineno}", node.lineno)
 
-        for node in ast.walk(tree):
+        for node in walked[path]:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 for decorator in node.decorator_list:
                     if isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Attribute):
@@ -248,9 +273,9 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
                                          f"fastapi-decorator:{rel}:{decorator.lineno}", decorator.lineno)
 
     # Resolve literal configuration/data-file access without guessing dynamic paths.
-    for path, tree in parsed.items():
+    for path in parsed:
         rel = path.relative_to(root).as_posix()
-        for node in ast.walk(tree):
+        for node in walked[path]:
             raw_path: str | None = None
             relation: str | None = None
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
@@ -290,15 +315,17 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
 
     # Resolve direct calls only when the target is unique in the same file.
     # Cross-file calls via DI, aliases and dynamic imports are intentionally unresolved.
-    for path, tree in parsed.items():
+    for node in nodes.values():
+        if node["kind"] == "function":
+            function_nodes_by_location.setdefault((node["path"], node.get("line")), []).append(node["id"])
+    for path in parsed:
         rel = path.relative_to(root).as_posix()
-        for function in (n for n in ast.walk(tree)
+        for function in (n for n in walked[path]
                          if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))):
-            matches = [n for n in nodes.values() if n["kind"] == "function"
-                       and n["path"] == rel and n.get("line") == function.lineno]
+            matches = function_nodes_by_location.get((rel, function.lineno), [])
             if len(matches) != 1:
                 continue
-            caller_id = matches[0]["id"]
+            caller_id = matches[0]
             class CallVisitor(ast.NodeVisitor):
                 def __init__(self, root_function: ast.AST) -> None:
                     self.root_function = root_function
@@ -424,25 +451,35 @@ def build_graph(root: str | Path, *, output: str | Path | None = None) -> dict[s
                         "Non-Python files are indexed as files; language-specific symbol parsing is not yet enabled."],
     }
     if output is not None:
-        destination = Path(output)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        if destination.is_file():
-            try:
-                previous = json.loads(destination.read_text(encoding="utf-8"))
-                if (previous.get("source_digest") == result["source_digest"]
-                        and previous.get("commit") == result["commit"]):
-                    return previous
-            except (OSError, ValueError, AttributeError):
-                pass
-        payload = json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
-        fd, temporary = tempfile.mkstemp(prefix=".graph-", suffix=".tmp", dir=destination.parent)
+        return write_graph(result, output)
+    return result
+
+
+def write_graph(result: dict[str, Any], output: str | Path) -> dict[str, Any]:
+    """Atomically persist a built graph; keep the existing file when nothing changed.
+
+    Returns the graph that is now on disk (the previous one when the source digest
+    and commit are unchanged), so callers never need to rebuild just to write.
+    """
+    destination = Path(output)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.is_file():
         try:
-            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as stream:
-                stream.write(payload)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, destination)
-        finally:
-            if os.path.exists(temporary):
-                os.unlink(temporary)
+            previous = json.loads(destination.read_text(encoding="utf-8"))
+            if (previous.get("source_digest") == result["source_digest"]
+                    and previous.get("commit") == result["commit"]):
+                return previous
+        except (OSError, ValueError, AttributeError):
+            pass
+    payload = json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    fd, temporary = tempfile.mkstemp(prefix=".graph-", suffix=".tmp", dir=destination.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, destination)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
     return result

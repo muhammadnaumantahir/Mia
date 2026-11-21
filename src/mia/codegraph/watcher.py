@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .indexer import build_graph, source_snapshot
+from .indexer import build_graph, diff_snapshots, source_snapshot
 
 
 class CodeGraphWatcher:
@@ -26,6 +27,8 @@ class CodeGraphWatcher:
         self._lock = threading.Lock()
         self.last_error: str | None = None
         self.last_commit: str | None = None
+        self.last_changes: dict[str, object] = {}
+        self.last_rebuild_seconds: float | None = None
 
     @property
     def running(self) -> bool:
@@ -68,12 +71,16 @@ class CodeGraphWatcher:
                         previous = loaded
                 except (OSError, ValueError):
                     previous = {}
+            changes = diff_snapshots(self._snapshot, snapshot) if self._snapshot else {}
+            started = time.perf_counter()
             graph = build_graph(self.root, output=self.output)
+            self.last_rebuild_seconds = round(time.perf_counter() - started, 3)
+            self.last_changes = changes
             if (
                 previous.get("source_digest") != graph["source_digest"]
                 or previous.get("commit") != graph["commit"]
             ):
-                self._append_history(graph)
+                self._append_history(graph, changes)
             self._snapshot = snapshot
             self.last_commit = graph["commit"]
             self.last_error = None
@@ -83,7 +90,9 @@ class CodeGraphWatcher:
             self.last_error = type(exc).__name__
             return False
 
-    def _append_history(self, graph: dict[str, object]) -> None:
+    def _append_history(
+        self, graph: dict[str, object], changes: dict[str, object] | None = None
+    ) -> None:
         # Generated history belongs in ignored runtime data, never tracked docs.
         history = self.root / "data" / "code-graph" / "history.jsonl"
         history.parent.mkdir(parents=True, exist_ok=True)
@@ -99,7 +108,18 @@ class CodeGraphWatcher:
                 "edges": summary.get("edges", 0),
                 "parse_errors": summary.get("parse_errors", 0),
             },
+            "rebuild": "full",
+            "rebuild_seconds": self.last_rebuild_seconds,
         }
+        if changes:
+            # Bounded, path-only change record (no file contents) for audit/debugging.
+            entry["changes"] = {
+                key: (value[:200] if isinstance(value, list) else value)
+                for key, value in changes.items()
+            }
+            entry["changes_truncated"] = any(
+                isinstance(value, list) and len(value) > 200 for value in changes.values()
+            )
         with history.open("a", encoding="utf-8", newline="\n") as stream:
             stream.write(json.dumps(entry, sort_keys=True) + "\n")
 
