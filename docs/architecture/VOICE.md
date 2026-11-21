@@ -104,6 +104,8 @@ An opt-in **Hey Mia** browser wake-phrase mode is implemented on the Assistant p
 
 This is a browser-page wake phrase, not offline wake-word detection and not an OS-level background listener. It requires the Assistant page to remain open and the browser speech service to be available. Local Faster-Whisper remains the offline transcription engine after an explicit voice session starts; it does not provide local wake-phrase detection. A true offline always-on detector remains future work and must be separately opt-in, visibly indicated, and immediately muteable.
 
+**Offline wake-word core (partial, 2026-11-21).** `mia.voice.wake` provides the detector contract, an opt-in, time-bounded, immediately stoppable session with false-activation guards, a lazy openWakeWord adapter and a truthful capability report (`offline_wake_word` in `GET /api/voice/status`). There is **no audio transport and no UI yet**, so the report says `operational: false` and Mia must not claim an offline wake word. Audit, license finding (pre-trained models are non-commercial), architecture decision and the ordered remaining work are in [docs/voice/WAKE_WORD_PLAN.md](../voice/WAKE_WORD_PLAN.md).
+
 ## Privacy and control
 
 - The microphone opens only after an explicit user action and the badge shows when it is open.

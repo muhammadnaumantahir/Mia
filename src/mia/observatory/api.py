@@ -108,6 +108,7 @@ from mia.memory.structured import RECORD_TYPES, RecordNotFoundError, RecordState
 from mia.observatory.activity import ExperimentActivityCollector
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider
 from mia.voice.tts import Pyttsx3SpeechSynthesizer, SpeechSynthesisError, SpeechSynthesizer
+from mia.voice.wake import offline_wake_word_status
 
 from .baseline import BaselineCaptureError, capture_baseline_manifest
 from .snapshot_capture import ExperimentSnapshotCapturer, SnapshotCaptureError
@@ -3093,6 +3094,9 @@ def create_app(
                 if local_tts_ready else "browser_speech_synthesis"
             ),
             "always_listening": False,
+            # Capability evidence, not registration: operational only when the engine,
+            # an owner-supplied model and an audio transport all exist.
+            "offline_wake_word": offline_wake_word_status(),
         }
 
     @app.get("/api/voice/tts/voices")

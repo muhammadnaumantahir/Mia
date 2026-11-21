@@ -204,3 +204,46 @@ def test_voice_status_distinguishes_missing_system_voices(tmp_path):
     assert response.status_code == 200
     assert response.json()["local_text_to_speech"] == "no_system_voices"
     assert response.json()["text_to_speech"] == "browser_speech_synthesis"
+
+
+def test_voice_status_reports_offline_wake_word_truthfully(tmp_path, monkeypatch):
+    # Even with the engine present and a model configured, there is no audio
+    # transport yet, so Mia must not report an operational offline wake word.
+    model = tmp_path / "hey_mia.onnx"
+    model.write_bytes(b"placeholder")
+    monkeypatch.setenv("MIA_WAKE_MODEL_PATH", str(model))
+    monkeypatch.setattr(
+        "mia.voice.wake.importlib.util.find_spec",
+        lambda name, *a, **k: object() if name in {"openwakeword", "onnxruntime"} else None,
+    )
+    client = TestClient(
+        create_app(
+            store=ObservatoryStore(tmp_path / "wake-status.sqlite3"),
+            transcriber=FakeTranscriber(),
+        )
+    )
+    payload = client.get("/api/voice/status").json()
+
+    wake = payload["offline_wake_word"]
+    assert wake["engine_installed"] is True
+    assert wake["model_configured"] is True
+    assert wake["operational"] is False
+    assert wake["reason"] == "audio_transport_not_available"
+    assert wake["opt_in_required"] is True
+    assert payload["always_listening"] is False
+    assert "MIA_WAKE_MODEL_PATH" not in str(payload)  # no configuration paths leaked
+    assert str(model) not in str(payload)
+
+
+def test_voice_status_wake_word_reports_missing_engine(tmp_path, monkeypatch):
+    monkeypatch.delenv("MIA_WAKE_MODEL_PATH", raising=False)
+    monkeypatch.setattr("mia.voice.wake.importlib.util.find_spec", lambda *a, **k: None)
+    client = TestClient(
+        create_app(
+            store=ObservatoryStore(tmp_path / "wake-missing.sqlite3"),
+            transcriber=FakeTranscriber(),
+        )
+    )
+    wake = client.get("/api/voice/status").json()["offline_wake_word"]
+    assert wake["operational"] is False
+    assert wake["reason"] == "engine_not_installed"

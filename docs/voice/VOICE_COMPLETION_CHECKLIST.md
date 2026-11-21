@@ -42,3 +42,13 @@ implemented and covered by a test that was actually run.
 
 - [ ] Hey Mia wake phrase: code and Playwright regression test added; tests have not been run. Complete section F in `OWNER_VERIFICATION.md` before calling it verified.
 - [ ] English, Urdu and Roman Urdu memory-recall evaluation fixture added in `tests/fixtures/conversation_eval.json`; deterministic test runner added, not yet run. This validates context assembly, not live model translation quality.
+
+## MIA-VOICE-01 update (2026-11-21, agent A4)
+
+- [x] Offline wake-word core: detector contract, opt-in/time-bounded/immediately-stoppable session, false-activation guards, no audio retention, fail-closed scoring (`src/mia/voice/wake.py`; 51 tests in `tests/test_voice_wake.py`, run locally, plus a 9-mutant check that all were caught)
+- [x] openWakeWord adapter, owner-supplied model only, no implicit download; exercised once against the real engine in a scratch environment (not committed, not a false-accept measurement)
+- [x] Truthful `offline_wake_word` capability report in `/api/voice/status` (`operational` stays false until a transport exists)
+- [x] License/platform audit recorded in `docs/voice/WAKE_WORD_PLAN.md` (models are CC BY-NC-SA 4.0; Linux + Python 3.13 install needs `--no-deps`)
+- [ ] Audio transport + UI for offline wake word (MIA-VOICE-02)
+- [ ] Urdu / Roman Urdu stop and end commands (today `END_PHRASES` / `STOP_SPEAKING_PHRASES` in `assistant.html` are English-only) (MIA-VOICE-03)
+- [ ] OWNER_VERIFICATION_REQUIRED: real-microphone detection, false-accept/miss rates, Windows install (section G)
