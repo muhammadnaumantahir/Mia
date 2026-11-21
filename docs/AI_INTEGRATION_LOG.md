@@ -134,3 +134,11 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Commit 387420f on remote main (verified). New: src/mia/brain/judges.py, tests/test_brain_judges.py. No existing file edited.
 - Tests run: tests/test_brain_judges.py (20), test_brain_evaluation, test_brain_verify, test_gateway_escalation, test_source_compiles all pass; ruff clean on src+tests. Full suite not re-run after this commit.
 - Limits: fake providers only; judges are not called anywhere in the live pipeline yet; no claim about real judge-model quality. Wiring filed as MIA-EVAL-03 (needs A1 orchestrator + A2 gateway agreement).
+
+## 2026-11-21T07:57Z — MIA-GW-02 DONE (A2)
+
+- Implemented read-only GET /api/gateway/escalation + escalation block in /api/gateway/overview; process-local EscalationStats; streaming escalation documented as unsupported by design.
+- Paths: src/mia/gateway/escalation.py, src/mia/brain/orchestrator.py, src/mia/observatory/api.py, tests/test_gateway_escalation.py, docs/architecture/AI_GATEWAY.md, docs/STATUS.md, docs/code-graph/CHANGELOG.md.
+- Commit on remote main: 24e591e (verified with git ls-remote). Rebase conflict in docs/STATUS.md resolved by keeping both agents' sections; no markers remain.
+- Tests run: full suite 1644 passed, 1 skipped, 1 failed (tests/test_browser_automation.py::test_browser_api_end_to_end, pre-existing). Code Graph refreshed (4012 nodes / 8102 edges).
+- Limitations: counters not persisted; no dashboard UI; fake providers only.
