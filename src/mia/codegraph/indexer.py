@@ -121,6 +121,60 @@ def source_snapshot(root: str | Path) -> tuple[tuple[str, str], ...]:
     return tuple(snapshot)
 
 
+def _fingerprint(pairs: Any) -> Any:
+    """Digest over (relative path, content sha256) pairs in indexing order."""
+    fingerprint = hashlib.sha256()
+    for rel, digest in pairs:
+        fingerprint.update(rel.encode("utf-8") + b"\0" + bytes.fromhex(digest))
+    return fingerprint
+
+
+def compute_source_digest(root: str | Path) -> str:
+    """The ``source_digest`` a fresh ``build_graph`` would produce, without parsing anything."""
+    root = Path(root).resolve()
+    pairs = []
+    for path in _python_files(root):
+        try:
+            pairs.append((path.relative_to(root).as_posix(), hashlib.sha256(path.read_bytes()).hexdigest()))
+        except OSError:
+            continue
+    return _fingerprint(pairs).hexdigest()
+
+
+def graph_freshness(root: str | Path, graph_path: str | Path) -> dict[str, Any]:
+    """Compare a stored graph file with the checkout it claims to describe.
+
+    ``state`` is ``missing``, ``unreadable``, ``current`` or ``stale``; ``reasons`` lists
+    ``source_changed`` (indexed file content differs) and/or ``commit_changed`` (HEAD moved).
+    """
+    root = Path(root).resolve()
+    graph_path = Path(graph_path)
+    head = _git(root, "rev-parse", "HEAD")
+    if not graph_path.is_file():
+        return {"state": "missing", "reasons": ["no_stored_graph"], "head": head}
+    try:
+        stored = json.loads(graph_path.read_text(encoding="utf-8"))
+        stored_digest = stored["source_digest"]
+        stored_commit = stored.get("commit")
+        if not isinstance(stored_digest, str) or not isinstance(stored, dict):
+            raise ValueError("invalid graph file")
+    except (OSError, ValueError, KeyError, TypeError):
+        return {"state": "unreadable", "reasons": ["stored_graph_unreadable"], "head": head}
+    reasons = []
+    if stored_digest != compute_source_digest(root):
+        reasons.append("source_changed")
+    if stored_commit != head:
+        reasons.append("commit_changed")
+    return {
+        "state": "stale" if reasons else "current",
+        "reasons": reasons,
+        "head": head,
+        "stored_commit": stored_commit,
+        "stored_tree": stored.get("tree"),
+        "stored_generated_at": stored.get("generated_at"),
+    }
+
+
 def diff_snapshots(
     previous: tuple[tuple[str, str], ...], current: tuple[tuple[str, str], ...]
 ) -> dict[str, Any]:
@@ -518,11 +572,8 @@ def build_graph(root: str | Path, *, output: str | Path | None = None,
         if node_id not in indices:
             visit_import(node_id)
 
-    fingerprint = hashlib.sha256()
-    for path in files:
-        if path in digests:
-            rel = path.relative_to(root).as_posix()
-            fingerprint.update(rel.encode("utf-8") + b"\0" + bytes.fromhex(digests[path]))
+    fingerprint = _fingerprint(
+        (path.relative_to(root).as_posix(), digests[path]) for path in files if path in digests)
     commit = _git(root, "rev-parse", "HEAD")
     result = {
         "schema_version": "1.0.0",

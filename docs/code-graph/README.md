@@ -133,13 +133,24 @@ Audited on current `main` by reading `impact.py`, `indexer.py`, `watcher.py`,
   staleness comparison, so refreshing the CHANGELOG cannot make the graph look stale.
 - The git-diff half of impact analysis had no tests before this task.
 
+**Closed by MIA-BASE-05:**
+- `GET /api/code-graph/status` now returns `stored_graph`: `state` (`missing`, `unreadable`,
+  `current`, `stale`), `reasons` (`source_changed`, `commit_changed`), the HEAD commit, and the
+  stored graph's commit, tree state and timestamp. It hashes indexed files but never parses them.
+  `scripts/update_code_graph.py --check` uses the same check and prints the reasons.
+  `compute_source_digest` is tested to equal `build_graph`'s `source_digest`, so the two cannot
+  drift unnoticed. The explorer shows when the indexed tree has uncommitted paths.
+- A deleted or renamed file no longer hides its importers: when a changed path is missing from
+  the current graph, impact builds the graph of the merge-base commit from a temporary
+  `git archive` extraction (tar `data` filter, 200 MB cap, 60 s timeout) and reports the
+  importers and tests that still exist, marked `removed: true` with `base_graph_commit`. This
+  costs one extra graph build only in that case. If the base graph cannot be built, the result
+  says so in `limitations`.
+
 **Known limitations (not fixed here):**
-- A renamed or deleted file's old path has no node in the current graph, so files that still
-  import it are not listed as dependents (they appear as unresolved imports only).
+- Removed-path impact only covers confirmed static imports and inferred `TESTED_BY` links, like
+  the rest of impact analysis; imports that were already unresolved are not reported.
 - `TESTED_BY` is a conservative name convention marked `inferred`; it is not coverage.
-- `GET /api/code-graph/status` reports `last_commit` but not whether the stored graph is stale;
-  staleness is only checked by `scripts/update_code_graph.py --check` (source digest + HEAD).
 - Refresh is local and manual (script, watcher or `POST /api/code-graph/refresh`); nothing
   refreshes the graph on commit. `graph.json` is git-ignored, so a checkout has no graph until
   one is generated. Verified on Linux only; Windows is OWNER_VERIFICATION_REQUIRED.
-

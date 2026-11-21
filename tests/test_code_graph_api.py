@@ -7,7 +7,11 @@ def test_code_graph_status_is_available_to_loopback_client():
     client = TestClient(create_app())
     response = client.get("/api/code-graph/status")
     assert response.status_code == 200
-    assert response.json()["watcher_enabled"] is False
+    body = response.json()
+    assert body["watcher_enabled"] is False
+    stored = body["stored_graph"]  # freshness of docs/code-graph/graph.json vs this checkout
+    assert stored["state"] in {"missing", "current", "stale", "unreadable"}
+    assert isinstance(stored["reasons"], list) and "head" in stored
 
 
 def test_code_graph_status_denies_remote_client_by_default():

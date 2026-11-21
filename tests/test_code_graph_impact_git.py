@@ -109,3 +109,71 @@ def test_graph_records_whether_the_tree_matches_its_commit(repo, tmp_path):
     outside.mkdir()
     write(outside, "m.py", "A = 1\n")
     assert build_graph(outside)["tree"] == {"dirty": None, "dirty_paths": None}
+
+
+def test_deleted_file_still_reports_remaining_importers_and_tests(repo):
+    git(repo, "rm", "-q", "src/mia/core.py")  # staged deletion; user.py still imports it
+    impact = analyze_impact(repo, "HEAD")
+    item = next(i for i in impact["items"] if i["path"] == "src/mia/core.py")
+    assert item["indexed"] is False and item["removed"] is True
+    assert item["direct_dependents"] == ["src/mia/user.py"]
+    assert item["related_tests"] == ["tests/test_core.py"]
+    assert impact["dependent_files"] == ["src/mia/user.py"]
+    assert impact["base_graph_commit"] == git(repo, "rev-parse", "HEAD")
+
+
+def test_renamed_file_reports_importers_of_the_old_path(repo):
+    git(repo, "mv", "src/mia/core.py", "src/mia/engine.py")
+    commit_all(repo, "rename")
+    impact = analyze_impact(repo, "HEAD~1")
+    old = next(i for i in impact["items"] if i["path"] == "src/mia/core.py")
+    new = next(i for i in impact["items"] if i["path"] == "src/mia/engine.py")
+    assert old["removed"] is True and old["direct_dependents"] == ["src/mia/user.py"]
+    assert new["indexed"] is True and "removed" not in new
+
+
+def test_removed_path_not_in_base_graph_stays_unindexed_and_unflagged(repo):
+    write(repo, "notes/todo.md", "x\n")
+    commit_all(repo, "add doc")
+    git(repo, "rm", "-q", "notes/todo.md")
+    item = next(i for i in analyze_impact(repo, "HEAD~1")["items"] if i["path"] == "notes/todo.md")
+    assert item["indexed"] is False and item["direct_dependents"] == []
+
+
+def test_base_graph_is_not_built_when_every_changed_path_is_indexed(repo, monkeypatch):
+    from mia.codegraph import impact as impact_module
+
+    def boom(*args, **kwargs):
+        raise AssertionError("base graph must not be built")
+
+    monkeypatch.setattr(impact_module, "_graph_at_commit", boom)
+    write(repo, "src/mia/core.py", "def compute():\n    return 5\n")
+    assert analyze_impact(repo, "HEAD")["changed_files"] == 1
+
+
+def test_compute_source_digest_matches_build_graph_and_freshness_reasons(repo, tmp_path):
+    import json
+
+    from mia.codegraph.indexer import compute_source_digest, graph_freshness, write_graph
+
+    graph = build_graph(repo)
+    assert compute_source_digest(repo) == graph["source_digest"]  # guards against drift
+    stored = tmp_path / "graph.json"
+    assert graph_freshness(repo, stored)["state"] == "missing"
+    write_graph(graph, stored)
+    assert graph_freshness(repo, stored)["state"] == "current"
+
+    write(repo, "src/mia/core.py", "def compute():\n    return 7\n")
+    stale = graph_freshness(repo, stored)
+    assert stale["state"] == "stale" and stale["reasons"] == ["source_changed"]
+
+    git(repo, "checkout", "-q", "--", "src/mia/core.py")
+    git(repo, "commit", "-q", "--allow-empty", "-m", "empty")
+    moved = graph_freshness(repo, stored)
+    assert moved["reasons"] == ["commit_changed"] and moved["stored_tree"] == {
+        "dirty": False, "dirty_paths": 0}
+
+    stored.write_text("{broken", encoding="utf-8")
+    assert graph_freshness(repo, stored)["state"] == "unreadable"
+    stored.write_text(json.dumps({"commit": "x"}), encoding="utf-8")
+    assert graph_freshness(repo, stored)["state"] == "unreadable"

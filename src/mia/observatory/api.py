@@ -44,7 +44,7 @@ from mia.brain.orchestrator import Brain, TurnRequest
 from mia.brain.plan import PlanStore
 from mia.brain.self_description import build_runtime_manifest, render_runtime_manifest
 from mia.codegraph.impact import analyze_impact
-from mia.codegraph.indexer import build_graph
+from mia.codegraph.indexer import build_graph, graph_freshness
 from mia.codegraph.watcher import CodeGraphWatcher
 from mia.computer.app_discovery import ApplicationDiscovery
 from mia.computer.applications import ApplicationLauncher, ApplicationLaunchError
@@ -5368,11 +5368,17 @@ def create_app(
     def code_graph_status(request: Request) -> dict[str, Any]:
         _authorize_code_graph_request(request)
         watcher = app.state.code_graph_watcher
+        root = Path(__file__).resolve().parents[3]
+        try:
+            stored = graph_freshness(root, root / "docs" / "code-graph" / "graph.json")
+        except Exception as exc:  # status must stay available even if freshness cannot be computed
+            stored = {"state": "unknown", "reasons": [f"freshness_failed:{type(exc).__name__}"]}
         return {
             "watcher_enabled": watcher is not None,
             "watcher_running": bool(watcher and watcher.running),
             "last_error": watcher.last_error if watcher else None,
             "last_commit": watcher.last_commit if watcher else None,
+            "stored_graph": stored,
         }
 
     @app.get("/code-graph")

@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from mia.codegraph.indexer import FactCache, build_graph, write_graph  # noqa: E402
+from mia.codegraph.indexer import FactCache, build_graph, graph_freshness, write_graph  # noqa: E402
 
 OUTPUT = ROOT / "docs" / "code-graph" / "graph.json"
 HISTORY = ROOT / "docs" / "code-graph" / "CHANGELOG.md"
@@ -29,6 +29,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="fail if the stored graph is stale")
     args = parser.parse_args()
+    if args.check:
+        # Cheap path: hash files only, never parse. Reports why the stored graph is stale.
+        freshness = graph_freshness(ROOT, OUTPUT)
+        if freshness["state"] != "current":
+            print("Code Graph is missing or stale ("
+                  + ", ".join(freshness["reasons"]) + "); run python scripts/update_code_graph.py")
+            return 1
+        print(f"Code Graph current at {freshness['head']}")
+        return 0
     cache = FactCache()
     cache_path = ROOT / "data" / "code-graph" / "facts-cache.json"
     cache.load(cache_path)
@@ -44,13 +53,6 @@ def main() -> int:
         except (OSError, ValueError):
             previous = None
     current_digest = graph["source_digest"]
-    if args.check:
-        if (not previous or previous.get("source_digest") != current_digest
-                or previous.get("commit") != graph["commit"]):
-            print("Code Graph is missing or stale; run python scripts/update_code_graph.py")
-            return 1
-        print(f"Code Graph current: {graph['summary']['nodes']} nodes, {graph['summary']['edges']} edges")
-        return 0
     if (previous and previous.get("source_digest") == current_digest
             and previous.get("commit") == graph["commit"]):
         print(f"Code Graph unchanged at {graph['commit']}")
