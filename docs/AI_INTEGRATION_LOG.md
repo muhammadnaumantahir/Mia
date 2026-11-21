@@ -363,3 +363,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Paths: src/mia/voice/stt.py, src/mia/observatory/api.py (voice routes only), tests/test_voice_language_latency.py, docs/STATUS.md. Details in STATUS.md "MIA-M1-11".
 - Tests run: 83 passed, 0 failed across voice/STT/TTS/language-routing/voice-UI-contract suites; ruff clean; new tests fail without the source change. Full suite not completed here (sandbox time limit). Code Graph refresh not run.
 - Limits: no real-speech or real-latency evidence; Roman Urdu has no Whisper code; streaming STT/TTS still absent. Follow-up gap for the M1 matrix (A3, MIA-M1-08): streaming speech I/O.
+
+## 2026-11-21T21:00Z — MIA-M1-12 claimed (A4)
+
+- Agent: A4. Status: IN_PROGRESS. Scope: audit interruption/barge-in, stop/mute, mic release, retry, timeouts and partial-response persistence across text/voice; fix verified gaps with tests. A6 is on MIA-M1-10 (memory controls) and may touch assistant.html, so A4 will audit and prefer backend/test changes, re-fetching before any assistant.html edit.
