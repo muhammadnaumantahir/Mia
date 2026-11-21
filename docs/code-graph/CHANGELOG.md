@@ -59,3 +59,12 @@ fabricated history is included.
 - Nodes: 4137
 - Edges: 8412
 - Parse errors: 0
+
+## 2026-11-21T15:36:11.901834+00:00
+
+- Commit: `35ec5e2744b5b94a401e61ca1666ff56cbcc22de`
+- Working tree: clean (graph matches the commit above)
+- Source digest: `9d8d54d5b45d4f056bae01ad6b20686f8b5bb3b2652c8e3a3163089497e02216`
+- Nodes: 4272
+- Edges: 8720
+- Parse errors: 0
