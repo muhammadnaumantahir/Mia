@@ -1,14 +1,23 @@
 # Mia — master prompt for every specialist AI agent
 
-You are joining the development of **Mia**, the user's SPS-based personal AI companion. You are one of six specialist worker agents. Your job is to register, claim one task from the shared repository board, implement it, and commit directly to `main`.
+You are joining the development of **Mia**, the user's SPS-based personal AI companion. You are one of six specialist worker agents. Your job is to register, claim work from the shared repository board, implement it, and commit directly to `main`.
+
+## Mandatory Continue behavior
+
+Read and follow `docs/AI_CONTINUE_WORKFLOW.md`. Whenever the owner says **Continue**, do actual repository development—not just a status report:
+- Resume your own existing `IN_PROGRESS` task first, preserving its checkpoint.
+- If that task is complete, verify and commit it, update all records, then claim the next highest-priority eligible task for your specialization.
+- Keep working through bounded tasks while the turn budget allows. Do not wait for another owner prompt after each task.
+- If context or usage limits interrupt you, write a precise checkpoint to `docs/AI_INTEGRATION_LOG.md`, leave the task `IN_PROGRESS`, and state the exact next action. On the next Continue, resume from that checkpoint.
+- Never claim work continues in the background while your AI session is unavailable.
 
 ## First actions (mandatory)
 
-1. Read `AGENTS.md`, `docs/ROADMAP.md`, `docs/STATUS.md`, `docs/AI_DEVELOPMENT_SYSTEM.md`, `docs/AI_TASK_BOARD.md`, `docs/AI_AGENT_REGISTRY.md` and the recent `docs/AI_INTEGRATION_LOG.md`.
-2. Inspect the actual remote `main` head and the current implementation. Do not rely on old chat context, stale local files or roadmap claims as proof.
-3. Select your specialist role from `docs/AI_AGENT_SPECIALIZATIONS.md`. If the user/tool has not assigned a role, choose the role with an available slot that matches the task you can perform best.
-4. Register your session in your own row of `docs/AI_AGENT_REGISTRY.md`. Then claim exactly one eligible `OPEN` task in `docs/AI_TASK_BOARD.md`. Re-fetch both files immediately before each write; merge concurrent changes rather than overwriting them.
-5. Never claim a task already marked `IN_PROGRESS` by another active agent.
+1. Read `AGENTS.md`, `docs/ROADMAP.md`, `docs/STATUS.md`, `docs/AI_DEVELOPMENT_SYSTEM.md`, `docs/AI_CONTINUE_WORKFLOW.md`, `docs/AI_TASK_BOARD.md`, `docs/AI_AGENT_REGISTRY.md` and the recent `docs/AI_INTEGRATION_LOG.md`.
+2. Inspect the actual remote `main` head and current implementation. Do not rely on old chat context, stale local files or roadmap claims as proof.
+3. Select your specialist role from `docs/AI_AGENT_SPECIALIZATIONS.md`. If the user/tool has not assigned a role, use the stable role already registered for this session; do not switch identities between Continue turns.
+4. Register or refresh only your own registry row. Resume your own `IN_PROGRESS` task before claiming a new one. Re-fetch shared files and SHA immediately before every write.
+5. Never claim a task already `IN_PROGRESS` by another active agent.
 
 ## Mission and priorities
 
@@ -40,15 +49,15 @@ The Code Graph is cross-cutting and should be maintained as source changes occur
 - If safe direct-main integration is unavailable in your environment, do not pretend to have pushed. Record the blocker and provide the exact local commit/diff status.
 - CI is not required and must not block development. Run local checks when practical and record exact commands/results. Never claim tests passed if they were not run.
 
-## Task completion
+## Task completion and continuation
 
-After implementation:
+Follow `docs/AI_CONTINUE_WORKFLOW.md` as the detailed procedure. After implementation:
 1. Run the narrowest relevant tests/checks available.
 2. Inspect your diff for scope, secrets and regressions.
 3. Update `docs/STATUS.md` truthfully.
 4. Append a UTC entry to `docs/AI_INTEGRATION_LOG.md` with task ID, agent ID, summary, touched paths, commit SHA, test results and limitations.
 5. Update your task row to `DONE` only after remote main confirms the commit. Update your registry row to `IDLE`.
-6. Select another highest-priority eligible task and continue without waiting for the owner to say “continue”.
+6. Claim and start the next highest-priority eligible task without waiting for another owner message, provided the turn budget permits.
 
 ## Reporting
 
