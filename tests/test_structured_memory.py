@@ -471,3 +471,97 @@ def test_api_export_contains_structured_records(tmp_path, monkeypatch):
     }).json()["record_id"]
     exported = client.get("/api/memory/export").json()
     assert [r["record_id"] for r in exported["structured_memory"]] == [record_id]
+
+
+# ------------------------------------------------ relationship-aware retrieval
+
+
+def test_context_follows_two_public_relationship_hops(tmp_path):
+    store = make_store(tmp_path)
+    root, _ = store.structured.add(
+        record_type="project",
+        title="Zephyr migration architecture",
+        body="Plan the Zephyr migration architecture and rollout.",
+    )
+    middle, _ = store.structured.add(
+        record_type="decision",
+        title="Billing cutover choice",
+        body="Use a staged cutover window with a read-only verification period.",
+    )
+    leaf, _ = store.structured.add(
+        record_type="goal",
+        title="Rollback readiness target",
+        body="Keep a tested rollback owner and recovery checklist.",
+    )
+    store.relationships.add(root, middle, "part_of")
+    store.relationships.add(middle, leaf, "depends_on")
+
+    packet = assemble_memory_context(
+        store, "Zephyr migration architecture", conversation_for(store)
+    )
+
+    refs = {reference.ref_id: reference for reference in packet.references}
+    assert {root, middle, leaf} <= set(refs)
+    assert "linked (part_of)" in packet.message["content"]
+    assert "linked (depends_on)" in packet.message["content"]
+    assert refs[middle].kind == "decision"
+    assert refs[leaf].kind == "goal"
+
+
+def test_context_does_not_traverse_private_relationships(tmp_path):
+    store = make_store(tmp_path)
+    root, _ = store.structured.add(
+        record_type="project",
+        title="Orion deployment architecture",
+        body="Plan the Orion deployment architecture.",
+    )
+    private, _ = store.structured.add(
+        record_type="decision",
+        title="Private staffing decision",
+        body="Keep the staffing discussion restricted to the owner.",
+    )
+    downstream, _ = store.structured.add(
+        record_type="goal",
+        title="Restricted follow-up",
+        body="Review the restricted staffing arrangement.",
+    )
+    store.relationships.add(root, private, "related_to", visibility="private")
+    store.relationships.add(private, downstream, "follows")
+
+    packet = assemble_memory_context(
+        store, "Orion deployment architecture", conversation_for(store)
+    )
+
+    returned_ids = {reference.ref_id for reference in packet.references}
+    assert root in returned_ids
+    assert private not in returned_ids
+    assert downstream not in returned_ids
+
+
+def test_context_relationship_expansion_is_bounded(tmp_path):
+    store = make_store(tmp_path)
+    root, _ = store.structured.add(
+        record_type="project",
+        title="Atlas platform migration",
+        body="Plan the Atlas platform migration.",
+    )
+    linked_ids = []
+    previous = root
+    for index in range(7):
+        record_id, _ = store.structured.add(
+            record_type="episode",
+            title=f"Independent milestone {index}",
+            body=f"Complete operational milestone number {index}.",
+        )
+        store.relationships.add(previous, record_id, "follows")
+        linked_ids.append(record_id)
+        previous = record_id
+
+    packet = assemble_memory_context(
+        store, "Atlas platform migration", conversation_for(store)
+    )
+
+    returned_ids = {reference.ref_id for reference in packet.references}
+    assert root in returned_ids
+    assert len(returned_ids.intersection(linked_ids)) <= 4
+
