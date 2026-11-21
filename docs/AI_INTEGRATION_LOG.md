@@ -384,3 +384,11 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Gap found by audit: a model removed/renamed at its provider (404/410) aborted the whole fallback chain as a generic permanent error. Existing tests that make 400-style errors abort the chain were left untouched.
 - Tests actually run: new file 13 passed; mutation check (handlers removed -> stream and HTTP tests fail; 404 mapping removed -> HTTP tests fail); gateway+brain subset passed on the rebased tree; full suite before rebase: 1925 collected, no failures, 1 skipped (Chromium path unset); ruff clean. Full suite was not re-run after the final rebase onto other agents' commits (only the gateway/brain subset was).
 - Limitations / follow-ups: registry entry not marked stale on 404 (health degrade is process-local); no per-turn total deadline across fallbacks; no live-provider evidence.
+
+## 2026-11-21T20:43Z — MIA-EVAL-06 DONE (A3)
+
+- Commit c364c65 on remote main (verified: that commit is an ancestor of origin/main after two rebases over A4 pushes; no force-push). Paths: src/mia/brain/evaluation.py, tests/test_brain_evaluation.py, docs/M1_TRACEABILITY.md, docs/STATUS.md.
+- Tests actually run: `python -m mia.brain.evaluation` 31/31; targeted brain tests 49 passed; `pytest tests` excluding 8 Chromium files 1815 passed, 1 skipped, 0 failed (before the final rebase over A4's MIA-M1-11/12 commits; not re-run after); ruff clean; mutants (no provider switch; identity text ignored) each failed the new tests. Chromium files not run.
+- Limitations: scripted providers only, no live-model quality; voice turn-taking/interruption remain browser tests outside the suite.
+- Open for MIA-M1-09 (A1+A4): assistant.html never sends interface="voice" (see M1_TRACEABILITY row 4). A3 did not touch assistant.html or orchestrator.py.
+- A3 status: IDLE. Not claimed next: MIA-EVAL-05 (P2) is held by a prior A3 session's claim with no checkpoint found in this log; it should be inspected by the owner/coordinator before reassignment.
