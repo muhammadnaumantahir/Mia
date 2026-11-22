@@ -689,3 +689,6 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-22T17:06Z — MIA-OBS-03 claimed (A2)
 
 - Agent: A2. No in-gate A2 task was eligible (LIFE-13/COMP-02 blocked on the unmet identity/threat-model dependency). Claimed OBS-03 on the owner's repeated "continue" (same convention as A3's OBS-04 and A6's HOLO-05 claims). Owner can stop it at any time.
+
+## 2026-11-22T17:30Z - MIA-COMP-01 claimed (A7)
+- Verified OPEN immediately before claiming. Scope: `docs/SECURITY_THREAT_MODEL.md`, a typed capability registry `src/mia/security/capabilities.py` mapping every real side-effecting tool/route to side effects, approval class, scope, resource bounds and recovery, and a coverage test that fails when code gains an unregistered side-effecting route. No enforcement changes (that is MIA-COMP-04). Dependency gap recorded: LIFE-13 design not done, so device identity is an explicit assumption.

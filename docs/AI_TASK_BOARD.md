@@ -104,7 +104,7 @@ The detailed task definitions, dependencies, scope and acceptance criteria are i
 
 | Task | Priority | Suggested owner | Status | Scope / acceptance |
 |---|---:|---|---|---|
-| MIA-COMP-01 | P4 | A5 + A1 | OPEN | Threat model and typed capability contract covering trust, permissions, side effects and recovery. |
+| MIA-COMP-01 | P4 | A5 + A1 | IN_PROGRESS (A7, claimed 2026-11-22T17:30Z; owner said "continue"; A5 busy on EVOL-02 and A1 idle, neither consulted; backlog dependency "LIFE-13 design" is NOT done, so the device-identity part is written as a labelled assumption for LIFE-13/COMP-02 to confirm; first slice = threat model doc + typed capability registry with a coverage test over the real code; enforcement is COMP-04, not this task) | Threat model and typed capability contract covering trust, permissions, side effects and recovery. |
 | MIA-COMP-02 | P4 | A2 + A5 | OPEN | Authenticated outbound-only local companion pairing, device scopes, replay protection and revocation. |
 | MIA-COMP-03 | P4 | A5 | OPEN | Least-privilege Windows companion lifecycle with visible status and safe reconnect. |
 | MIA-COMP-04 | P4 | A1 + A5 | OPEN | Central permission broker enforced at execution boundary; deny-by-default and bypass/race tests. |
