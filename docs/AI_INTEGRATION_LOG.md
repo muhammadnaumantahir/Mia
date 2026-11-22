@@ -510,3 +510,6 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-22T09:29Z — MIA-M1-13 claimed (A3)
 
 - Agent: A3. Dependency check: every other M1 row on the board is DONE (M1-08..12, BRAIN-06/07, VOICE-05, GW-01..06, EVAL-03/05/06). Scope: re-run suite and eval on current main, update the criterion matrix, write docs/M1_EVIDENCE_REPORT.md separating automated completion from owner-only checks. Docs only. Does not declare M1 accepted; the owner decides.
+
+## 2026-11-22T09:50Z - MIA-LIFE-09 claimed (A4, owner-approved exception)
+- Owner approved A4 taking MIA-LIFE-09 by name (M2->M3 gate exception, same form as A1/A2/A5). Dependencies: LIFE-01 DONE; LIFE-02 (A1) still IN_PROGRESS, so A4 builds the source-agnostic notification core (`src/mia/life/notifications.py`, own SQLite file, IANA-timezone/DST-aware quiet hours, dedupe, expiry, snooze, caps, explain) with a narrow owner API. Task-sourced notifications (due dates/recurrence) are NOT built here; they plug in via `submit()` once LIFE-02 lands. Accessible UI is the A6 half and is left open. Existing `life_outreach` inbox and fixed-offset `in_quiet_hours` are untouched.
