@@ -169,6 +169,7 @@ class ExperimentSnapshotCapturer:
             "verification": manifest["baseline_results"],
             "fixed_benchmark_results": manifest["fixed_benchmark_results"],
             "resources": resources,
+            "dependencies": manifest.get("dependencies"),
             "verification_passed": True,
             "missing_day_indices": due["days_missed"],
             "activity": activity,

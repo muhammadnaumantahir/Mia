@@ -103,7 +103,7 @@ def test_rollback_days_and_confounders_come_from_recorded_evidence(tmp_path):
         {"day_index": 2, "rolled_back_transitions": 2}]
     text = " ".join(report["confounders"])
     assert "new commit" in text and "[2]" in text and "Capability status transitions" in text
-    assert "Days without a snapshot" in text and "Model/provider and dependency" in text
+    assert "Days without a snapshot" in text and "Not comparable in some windows" in text
 
 
 def test_quiet_experiment_has_no_rollbacks_or_change_confounders(tmp_path):

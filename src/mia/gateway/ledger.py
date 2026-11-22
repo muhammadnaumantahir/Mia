@@ -338,7 +338,17 @@ class UsageLedger:
                 """,
                 (since, until),
             ).fetchall()
+            models = db.execute(
+                """
+                SELECT provider_id, model_id, COUNT(*) AS requests FROM usage
+                WHERE recorded_at >= ? AND recorded_at < ?
+                GROUP BY provider_id, model_id ORDER BY provider_id, model_id
+                """,
+                (since, until),
+            ).fetchall()
         return {
+            "models": [{"provider_id": m["provider_id"], "model_id": m["model_id"],
+                        "requests": m["requests"]} for m in models],
             "requests": row["requests"],
             "input_tokens": row["input_tokens"],
             "output_tokens": row["output_tokens"],

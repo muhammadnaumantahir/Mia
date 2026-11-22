@@ -24,8 +24,8 @@ LIMITATIONS = (
     "Scripted benchmark results describe Mia's own pipeline, not the quality of any live model.",
     "Metric changes are correlated with recorded changes only; no causal claim is made.",
     "Capability registry counts are window counts, not linked to this experiment's ID.",
-    "Model/provider and dependency-version changes are not captured per snapshot, so they cannot "
-    "be ruled in or out as explanations.",
+    "Model/provider and dependency-version changes are compared only where both sides of a window "
+    "have that evidence; elsewhere they are unknown, not unchanged.",
     "One host, one owner; nothing here generalises to other machines or users.",
 )
 CLAIMS_NOT_ALLOWED = ("Mia improved because of any change", "any change caused a metric to move",
@@ -105,7 +105,9 @@ def _confounders(base: dict[str, Any], attribution: dict[str, Any]) -> list[str]
             ("daily_snapshot_auto_capture_failed", "Some automatic captures failed.")):
         if event_type in counts:
             found.append(text)
-    found.append("Model/provider and dependency versions were not recorded per snapshot.")
+    if attribution["not_attributable"]:
+        found.append("Not comparable in some windows (unknown, not unchanged): " + "; ".join(
+            f"{k}: {v}" for k, v in attribution["not_attributable"].items()))
     found.append("The mix of conversations and tasks each day was not controlled.")
     return found
 
@@ -184,8 +186,9 @@ def render_markdown(report: dict[str, Any]) -> str:
     rb = report["rollbacks"]["days_with_rollbacks"]
     lines += ["", "## Rollbacks", "", f"- {rb or 'none recorded'} ({report['rollbacks']['note']})",
               "", "## Confounders", ""] + [f"- {x}" for x in report["confounders"]]
-    lines += ["", "## Not attributable", ""] + [
-        f"- {k}: {v}" for k, v in report["attribution_limits"]["not_attributable"].items()]
+    lines += ["", "## Not attributable", ""] + (
+        [f"- {k}: {v}" for k, v in report["attribution_limits"]["not_attributable"].items()]
+        or ["- every factor had evidence on both sides of every window"])
     lines += ["", "## Limitations", ""] + [f"- {x}" for x in report["limitations"]]
     lines += ["", "## Claims this report does not make", ""] + [
         f"- {x}" for x in report["claims_not_allowed"]]

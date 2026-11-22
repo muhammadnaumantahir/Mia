@@ -69,3 +69,14 @@ def test_every_definition_is_self_consistent():
     for name, d in METRIC_DEFINITIONS.items():
         assert d.name == name and d.unit and d.description and d.sampling and d.source
         assert d.minimum is None or d.maximum is None or d.minimum <= d.maximum
+
+
+def test_daily_snapshot_stores_the_dependencies_it_captured(tmp_path):
+    store, experiment_id = create_due_experiment(tmp_path)
+    manifest = passing_manifest()
+    manifest["dependencies"] = {"available": True, "packages": {"fastapi": "9.9"}}
+    ExperimentSnapshotCapturer(observatory=store, baseline_capture=lambda root: manifest,
+                               resource_monitor=FakeResources(), repo_root=tmp_path).capture(experiment_id)
+    (row,) = [s for s in store.list_snapshots(experiment_id) if s["day_index"] > 0]
+    assert json.loads(row["snapshot_json"])["dependencies"] == {
+        "available": True, "packages": {"fastapi": "9.9"}}
