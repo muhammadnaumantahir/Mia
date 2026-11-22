@@ -98,6 +98,8 @@ from mia.gateway.selection import DecisionLog
 from mia.gateway.service import ModelGateway
 from mia.knowledge.document_ingestion import DocumentIngestionError, DocumentIngestor
 from mia.life.capture import capture_from_message as capture_curiosity_from_message
+from mia.life.notification_api import register_notification_routes
+from mia.life.notifications import NotificationCenter
 from mia.life.reflect import Reflector
 from mia.life.runner import LifeRunner, LifeScheduler
 from mia.life.store import ITEM_STATES, LifeStore
@@ -721,6 +723,7 @@ def create_app(
     app_discovery: ApplicationDiscovery | None = None,
     life: LifeStore | None = None,
     life_fetcher: Any | None = None,
+    notifications: NotificationCenter | None = None,
     enable_code_graph_watcher: bool = False,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
@@ -1660,6 +1663,8 @@ def create_app(
         )
 
     life_store = life or LifeStore(data_dir / "mia-life.sqlite3")
+    notification_center = notifications or NotificationCenter(data_dir / "mia-notifications.sqlite3")
+    register_notification_routes(app, notification_center)
     life_background_enabled = os.getenv("MIA_LIFE_ENABLED", "false").strip().lower() == "true"
 
     def record_life_cycle(result: dict[str, Any]) -> None:
