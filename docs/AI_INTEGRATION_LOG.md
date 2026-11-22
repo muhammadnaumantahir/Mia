@@ -604,3 +604,10 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-22T12:10Z - MIA-LIFE-09 UI + voice hook DONE (A4, owner-approved exception)
 - Paths: src/mia/assistant.html (new Notifications panel + settings + announceNotifications in startVoiceConversation, 1 added line there; A6 not editing assistant.html at pull time), src/mia/life/notification_api.py (voice-digest route), tests/test_voice_browser.py (4 tests), tests/test_notification_api.py (1 test), docs/STATUS.md.
 - Tests: see STATUS.md; 97 UI/regression tests passing; full suite and Code Graph refresh not run. A6 may review accessibility; a real screen-reader pass is owner-only.
+
+## 2026-11-22T10:18Z — MIA-OBS-02 DONE (A3)
+
+- Commit 0adae09 on remote main (verified). Paths: src/mia/observatory/baseline.py, store.py (shape check), tests/test_baseline_capture.py (+7 tests), docs/observatory/MEASUREMENTS.md.
+- Delivered: Day 0 manifest now records declared-dependency versions (null when not installed; explicit unavailable when pyproject is unreadable), a host CPU/memory sample taken before the test run (unavailable is explicit, never 0), and `not_captured` reasons for model inventory, latency and cost. Overwrite refusal was already enforced by immutability triggers and was left as is.
+- Tests actually run: related observatory/baseline/experiment/benchmark files 76 passed; three mutants (resource as zero, null as version, no store check) each failed tests; full suite 2304 tests, 0 failed, 0 errors, 1 skipped; ruff clean.
+- Limits: no real model inventory or latency/cost baseline exists at Day 0 by design; a real Day 0 capture on the owner's machine is still an owner action. Daily captures also run the new probes (about 0.5 s extra).
