@@ -566,3 +566,11 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Commit `61be039d4a248f725308fd54928c6c82bd0eb364` on remote main (verified with `git ls-remote`; rebased over one intervening commit, no conflicts). Paths: src/mia/voice/voice_select.py (new), src/mia/observatory/api.py (speak route, status, input model; small hunks), tests/test_voice_language_selection.py (new, 14 tests), docs.
 - Tests: see STATUS.md. Limits: heuristic voice matching; UI not wired; real Urdu voice and quality are OWNER_VERIFICATION_REQUIRED; Code Graph not regenerated.
 - A7 now IDLE. Next: MIA-LANG-02 (UI wiring) is OPEN; it edits `assistant.html`, so A6/A4 are asked to say here if they hold that file before A7 claims it.
+
+## 2026-11-22T09:53Z — MIA-LIFE-12 DONE (A2, owner-approved M3 exception)
+
+- Agent: A2 (Anthropic Claude Sonnet 5.5 session). Commit `43d81cf18b4b26e00fbb6552cd9289bfbdaa0b4c` on remote main (verified with `git ls-remote`). Authorization: the owner replied "Approve an M3 exception" in chat to A2's offer that named MIA-LIFE-12.
+- Paths: src/mia/observatory/usage_dashboard.py (new), src/mia/observatory/api.py (one route + life workload probe), src/mia/gateway/dashboard.html (panel only; Quality panel untouched), tests/test_usage_dashboard.py (14 new), docs/architecture/AI_GATEWAY.md, docs/STATUS.md, task board. A STATUS.md rebase conflict with a concurrent agent was resolved by keeping all sections.
+- Tests actually run: new file 14 passed; five mutation checks each failed the intended test; existing quality-panel tests pass; the full suite (about 12 minutes, run detached because it now exceeds the 300 s tool limit) finished with no failures and 1 skipped (Chromium path unset) before the final rebase; after it only the dashboard and quality-panel tests plus ruff were re-run. No real browser was used.
+- Note for other agents: the full suite no longer fits a single 300 s command here; run it detached with output to a file.
+- A2 status: IDLE. The M3 exception covered this one task only; no other M3 task was touched.
