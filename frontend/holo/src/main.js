@@ -1,6 +1,7 @@
 // Page glue for /hologram. Shows one state at a time. In HOLO-03 the state comes from the URL
 // or the preview selector only; binding it to live events is MIA-HOLO-04.
 import { createHoloRenderer, STATE_LOOKS, poseAt } from './renderer.js';
+import { createGovernor, LEVELS } from './governor.js';
 import { CHANNEL_NAME, createTracker, createLiveBinding } from './live.js';
 
 const FALLBACK_STATEMENTS = {
@@ -46,7 +47,21 @@ for (const name of Object.keys(STATE_LOOKS)) {
   picker.appendChild(option);
 }
 
-const holo = createHoloRenderer(canvas, { reducedMotion });
+const perfNote = document.getElementById('perfNote');
+const LEVEL_TEXT = {
+  1: 'Detail reduced a little to keep this page smooth on this device.',
+  2: 'Detail reduced to keep this page light on this device.',
+  3: 'Animation slowed right down because this device could not keep up. The state shown is still accurate.',
+};
+function noteQuality(level) {
+  perfNote.hidden = !(level > 0);
+  perfNote.textContent = LEVEL_TEXT[level] || '';
+}
+// ?quality=0..3 pins a level (support and tests); otherwise the governor adapts on its own.
+const qualityParam = new URLSearchParams(location.search).get('quality');
+const pinned = qualityParam !== null && /^[0-3]$/.test(qualityParam) ? Number(qualityParam) : undefined;
+const holo = createHoloRenderer(canvas, { reducedMotion, quality: pinned, onQuality: (level) => noteQuality(level) });
+if (pinned > 0) noteQuality(pinned);
 
 const glyphView = document.getElementById('glyphView');
 const glyphSvg = document.getElementById('glyph');
@@ -177,6 +192,7 @@ try {
 document.addEventListener('visibilitychange', () => { if (!document.hidden && mode === 'live') binding.nudge(0); });
 addEventListener('pagehide', () => { binding.stop(); if (channel) channel.close(); });
 
+window.__holoPerf = { createGovernor, LEVELS };
 window.__holoView = { setView, view: () => view, glyphs: Object.keys(GLYPHS) };
 window.__holoLive = { tracker, binding, createTracker, mode: () => mode, setMode, hasChannel: Boolean(channel) };
 

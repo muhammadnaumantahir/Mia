@@ -202,16 +202,18 @@ def resolve(evidence: Iterable[Evidence], now: datetime | None = None) -> Runtim
         else:
             valid.append(item)
 
-    # A newer event ends older evidence of the kinds it supersedes. On an exact tie it does so only
-    # when the pair is one-directional: if both kinds list each other, neither wins the tie and
-    # priority decides, so two simultaneous events can never cancel each other into "unknown".
+    # A newer event ends older evidence of the kinds it supersedes. On an exact tie a result (done,
+    # error, owner stop) ends the activity; for any other mutual pair neither wins and priority
+    # decides, so two simultaneous events can never cancel each other into "unknown".
     def replaces(other: Evidence, item: Evidence) -> bool:
         if other is item or item.kind not in EVIDENCE_KINDS[other.kind].supersedes:
             return False
         if other.observed_at > item.observed_at:
             return True
+        # Exact tie (ages are reported to ~0.1 s, so a last delta and "done" often tie). A result
+        # always beats the activity it ends; between other mutual pairs priority decides.
         return other.observed_at == item.observed_at and (
-            other.kind not in EVIDENCE_KINDS[item.kind].supersedes)
+            other.kind in _CHAT_RESULTS or other.kind not in EVIDENCE_KINDS[item.kind].supersedes)
 
     live: list[Evidence] = [
         item for item in valid if not any(replaces(other, item) for other in valid)

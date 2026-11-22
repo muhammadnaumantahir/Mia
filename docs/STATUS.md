@@ -531,3 +531,5 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - **Not done / not verified:** Brain/conversational task actions and "one source of truth" proof from the chat side (A1's half; LIFE-03 stays open for it). No screen reader (NVDA/Narrator) run, no automated contrast audit, no real touch-device check: `OWNER_VERIFICATION_REQUIRED`. Bulk actions are sent one item at a time (not atomic); failures are listed, successes are kept. Completing a recurring item creates its next occurrence (store behaviour), so "Reopen" does not undo that. Private items show their title on this owner-only page. The delete confirmation says it cannot be undone from this page; whether the audit history remains was not checked here.
 
 - **MIA-HOLO-05 (A6, 2026-11-22T18:05Z):** accessible text/shape view, contrast/target/reflow/keyboard/forced-colors/reduced-motion checks for `/hologram`. Not verified: real screen readers, other browsers. Next: HOLO-06.
+
+- **MIA-HOLO-06 (A6, 2026-11-22T20:10Z):** hologram budgets and graceful degradation; HOLO-01..06 complete. Not verified: real-GPU frame times, power, low-end phones.

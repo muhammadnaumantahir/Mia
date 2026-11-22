@@ -159,8 +159,12 @@ def test_simultaneous_mutually_superseding_events_do_not_cancel_each_other():
     # chat_turn_started and chat_error name each other; at the same instant priority decides.
     snap = resolve([ev("chat_turn_started", 3, "client"), ev("chat_error", 3, "client")], NOW)
     assert snap.state is RuntimeState.FAILED and snap.reason == "chat_error"
-    both = resolve([ev("chat_delta", 2, "client"), ev("chat_done", 2, "client")], NOW)
-    assert both.state is not RuntimeState.UNKNOWN
+    assert resolve([ev("chat_delta", 2, "client"), ev("chat_done", 2, "client")], NOW
+                   ).state is RuntimeState.IDLE  # the last delta and "done" in the same tick: done wins
+    assert resolve([ev("chat_delta", 2, "client"), ev("chat_stopped_by_owner", 2, "client")], NOW
+                   ).state is RuntimeState.INTERRUPTED
+    assert resolve([ev("chat_delta", 2, "client"), ev("chat_error", 2, "client")], NOW
+                   ).state is RuntimeState.FAILED
 
 
 def test_error_ends_thinking_and_reports_failed_with_partial_flag():

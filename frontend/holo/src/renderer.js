@@ -5,6 +5,7 @@ import {
   WebGLRenderer, Scene, PerspectiveCamera, Mesh, IcosahedronGeometry, TorusGeometry,
   OctahedronGeometry, MeshBasicMaterial, Color,
 } from 'three';
+import { createGovernor, LEVELS } from './governor.js';
 
 // One look per HOLO-01 state. Colour is never the only cue: each state also differs in
 // motion (spin, pulse rate/depth, ring tilt) and in core shape (failed/offline are angular).
@@ -32,7 +33,8 @@ export function poseAt(look, t) {
 }
 
 export function createHoloRenderer(canvas, options = {}) {
-  const { reducedMotion = false, maxFps = 30, onContextLost = () => {}, onContextRestored = () => {} } = options;
+  const { reducedMotion = false, maxFps, quality, onContextLost = () => {}, onContextRestored = () => {},
+    onQuality = () => {}, governor = createGovernor(Number.isInteger(quality) ? { pinLevel: quality } : {}) } = options;
 
   let renderer;
   try {
@@ -52,11 +54,21 @@ export function createHoloRenderer(canvas, options = {}) {
   ring.rotation.x = Math.PI / 2.4;
   scene.add(core, ring);
 
-  const stats = { frames: 0, state: 'unknown', running: false, contextLost: false, paused: false, t: 0 };
+  const stats = { frames: 0, state: 'unknown', running: false, contextLost: false, paused: false, t: 0, avgCostMs: 0 };
+  let size = { width: 0, height: 0, pixelRatio: 1 };
   let look = STATE_LOOKS.unknown;
   let handle = 0;
   let last = 0;
-  const minInterval = 1000 / Math.max(1, maxFps);
+  const fpsFor = () => Math.min(LEVELS[governor.level()].maxFps, maxFps || Infinity);
+  let minInterval = 1000 / Math.max(1, fpsFor());
+
+  // Apply the governor's level: frame rate and pixel ratio are the only knobs (the scene is already
+  // two draw calls). Called on every level change and after a resize.
+  function applyLevel() {
+    minInterval = 1000 / Math.max(1, fpsFor());
+    renderer.setPixelRatio(Math.min(size.pixelRatio, LEVELS[governor.level()].pixelRatio));
+    if (size.width) renderer.setSize(size.width, size.height, false);
+  }
 
   function apply() {
     material.color = new Color(look.color);
@@ -87,10 +99,16 @@ export function createHoloRenderer(canvas, options = {}) {
       return;
     }
     stats.paused = false;
-    if (now - last >= minInterval) {
+    // Browsers deliver rAF slightly early; allow 10% so a 30 fps cap is not halved to 15.
+    if (now - last >= minInterval * 0.9) {
       const dt = last ? (now - last) / 1000 : 0;
       last = now;
+      const began = performance.now();
       step(dt);
+      const cost = performance.now() - began;
+      stats.avgCostMs = stats.avgCostMs ? stats.avgCostMs * 0.9 + cost * 0.1 : cost;
+      const changed = governor.record(cost, dt * 1000);
+      if (changed !== null) { applyLevel(); onQuality(changed, governor.changes().at(-1)); }
     }
     handle = requestAnimationFrame(loop);
   }
@@ -116,8 +134,10 @@ export function createHoloRenderer(canvas, options = {}) {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) schedule(); });
 
   apply();
+  applyLevel();
   return {
     ok: true,
+    governor,
     setState(state) {
       stats.state = Object.hasOwn(STATE_LOOKS, state) ? state : 'unknown'; // unrecognised (incl. 'constructor') -> unknown, never idle
       look = STATE_LOOKS[stats.state];
@@ -125,8 +145,8 @@ export function createHoloRenderer(canvas, options = {}) {
       if ((reducedMotion || !stats.running) && !stats.contextLost) draw();
     },
     resize(width, height, pixelRatio = 1) {
-      renderer.setPixelRatio(Math.min(pixelRatio, 2));
-      renderer.setSize(width, height, false);
+      size = { width, height, pixelRatio };
+      applyLevel();
       camera.aspect = width / Math.max(1, height);
       camera.updateProjectionMatrix();
       if ((reducedMotion || !stats.running) && !stats.contextLost) draw();
@@ -137,6 +157,12 @@ export function createHoloRenderer(canvas, options = {}) {
     },
     stop() { stats.running = false; if (handle) cancelAnimationFrame(handle); handle = 0; },
     step,
+    // Pin a quality level (0 = full ... 3 = still), or pass null to hand control back to the governor.
+    setQuality(level) {
+      if (level === null) governor.auto(); else governor.pin(level);
+      applyLevel();
+      if ((reducedMotion || !stats.running) && !stats.contextLost) draw();
+    },
     dispose() {
       this.stop();
       Object.values(geometries).forEach((g) => g.dispose());
@@ -144,8 +170,10 @@ export function createHoloRenderer(canvas, options = {}) {
     },
     stats() {
       const info = renderer.info;
-      return { ...stats, shape: look.shape, drawCalls: info.render.calls, triangles: info.render.triangles,
-               scale: core.scale.x, coreY: core.rotation.y, ringZ: ring.rotation.z };
+      return { ...stats, shape: look.shape, drawCalls: info.render.calls, triangles: info.render.triangles, lines: info.render.lines,
+               level: governor.level(), levelName: LEVELS[governor.level()].name, targetFps: Math.round(1000 / minInterval),
+               pixelRatio: renderer.getPixelRatio(), geometries: renderer.info.memory.geometries,
+               textures: renderer.info.memory.textures, scale: core.scale.x, coreY: core.rotation.y, ringZ: ring.rotation.z };
     },
   };
 }

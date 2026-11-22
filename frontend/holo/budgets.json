@@ -1,0 +1,13 @@
+{
+  "_comment": "Single source for the /hologram performance budgets (MIA-HOLO-06). The governor reads frameMs; tests/test_holo_budget.py enforces the rest.",
+  "bundle": { "htmlBytes": 620000, "gzipBytes": 160000 },
+  "scene": { "drawCalls": 2, "triangles": 100, "lines": 6000, "geometries": 3, "textures": 0, "lights": 0 },
+  "frame": { "frameMs": 12, "lateRatio": 0.4, "window": 30, "upAfterFrames": 120, "settleFrames": 3 },
+  "levels": [
+    { "name": "full", "maxFps": 30, "pixelRatio": 2 },
+    { "name": "reduced", "maxFps": 20, "pixelRatio": 1.25 },
+    { "name": "light", "maxFps": 12, "pixelRatio": 1 },
+    { "name": "still", "maxFps": 4, "pixelRatio": 1 }
+  ],
+  "idle": { "framesWhileHiddenOrTextView": 0 }
+}

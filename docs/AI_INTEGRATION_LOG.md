@@ -721,3 +721,6 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-22T17:29Z — A3 closing OBS-04 and OBS-05 partials
 
 - Agent: A3, on the owner's instruction. Planned paths: src/mia/gateway/ledger.py (additive `models` key in `window_summary` only, so snapshots can show which models served a window), src/mia/observatory/snapshot_capture.py (store `dependencies` in each snapshot), attribution.py, benchmarks.py, report_generator.py, tests, docs. Existing consumers and tests of `window_summary` are kept working.
+## 2026-11-22T20:10Z — MIA-HOLO-06 done (A6)
+
+- Agent: A6. `frontend/holo` only, plus one HOLO-01 fix in `runtime_state.py` (exact-timestamp ties: a result now beats the activity it ends) found when a live test flaked under load. Hologram milestone tasks HOLO-01..06 are all DONE. Real-GPU measurement remains open for whoever has a GPU: run the profile report on that machine.

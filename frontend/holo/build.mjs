@@ -51,6 +51,7 @@ select{min-height:2.75rem;max-width:100%}
 <div>
 <p id="status" role="status" aria-live="polite"></p>
 <p id="evidence" class="note" aria-live="off"></p>
+<p id="perfNote" class="note" hidden></p>
 <fieldset><legend>View</legend>
 <label class="inline"><input type="radio" name="view" value="3d"> 3D view</label>
 <label class="inline"><input type="radio" name="view" value="text"> Text and shape view</label></fieldset>

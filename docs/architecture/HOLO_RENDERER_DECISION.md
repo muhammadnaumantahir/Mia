@@ -79,3 +79,25 @@ is served at `GET /hologram`. The decision above is unchanged. Added: per-state 
 colour is never the only cue, a pure `poseAt` and manual `step(dt)` for deterministic tests, a responsive
 layout, and a status line from `GET /api/runtime/contract`. The page is a labelled preview; binding to live
 events is MIA-HOLO-04.
+
+## HOLO-06 update: budgets and graceful degradation
+
+Budgets are one file, `frontend/holo/budgets.json`, read by both the page and `tests/test_holo_budget.py`.
+
+| Budget | Limit | Measured (software GL, 2026-11-22) |
+|---|---|---|
+| Built page | 620,000 B / 160,000 B gzip | 552,764 B / 140,904 B |
+| Draw calls | 2 | 2 |
+| Wireframe lines | 6,000 | 5,148 |
+| Textures, lights | 0 | 0 |
+| Geometries | 3 | 2 (3 after the angular state is shown) |
+| CPU cost of one draw | governor limit 12 ms (average over 30 frames) | 0.2 to 0.6 ms |
+
+Governor (`src/governor.js`, pure): four levels (full 30 fps and pixel ratio 2; reduced 20 fps, 1.25; light 12 fps, 1; still 4 fps, 1).
+It steps down one level when the 30-frame average cost exceeds 12 ms or more than 40% of frames are late (over 1.5 times the target
+interval), and steps up one level only after 120 consecutive cheap, on-time frames. A 3-frame settling period follows each change,
+gaps over 1 s (hidden or throttled tab) are ignored, and a pinned level (`?quality=0..3`) never moves. When detail is reduced the page
+says so; the state shown stays accurate. Nothing is drawn in the text view or while the tab is hidden.
+
+Not measured: real GPU frame times and power, low-end phones, other browsers. The software-GL numbers show the policy and the budgets
+hold, not that a given laptop reaches 30 fps. Repeat with `PYTHONPATH=. python tests/test_holo_budget.py`.
