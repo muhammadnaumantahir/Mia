@@ -646,3 +646,10 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-22T15:55Z — MIA-HOLO-04 done (A6)
 
 - Agent: A6. Added live event binding (assistant.html reporter -> BroadcastChannel -> /hologram). Touched A4/A1-shared `assistant.html` with add-only hooks. Fixed HOLO-01 supersession so a new turn or owner Stop replaces an old failure; ties between mutually superseding kinds fall back to priority. Full suite and ruff pass; mutation checks fail the right tests. Next A6 candidates: HOLO-05, HOLO-06.
+
+## 2026-11-22T16:00Z — MIA-LIFE-14 DONE (A1)
+
+- Commit `6f52281` verified on remote main (origin/main equals local after push). Paths: src/mia/life/suggestions.py, src/mia/life/store.py (3 settings, `withdrawn` outreach state), src/mia/observatory/api.py (POST /api/life/suggestions/run), tests/test_life_suggestions.py, docs/architecture/MEMORY_AND_KNOWLEDGE.md.
+- Delivered: stalled-work suggestions (idle goals, idle non-private open tasks) with deterministic relevance; suppression reasons stale / low_confidence / low_relevance / duplicate reported per candidate; shared OutreachEngine policy (opt-in, emergency stop, paused, quiet hours, daily cap, gap, backlog, dismissed memory, cooldown); evidence-cited rationale; withdrawal of pending suggestions whose evidence changed; opt-out and emergency stop withdraw all; dry run by default. Due/overdue stays with LIFE-09.
+- Real defect found while testing and fixed: with min_outreach_gap_minutes = 0 the engine compared the run's start time against a message stamped moments later in the same run, got a negative gap and wrongly blocked a second send; decisions after a send now use a monotonic clock.
+- Tests actually run: 19 new tests (15 mutations; 1 survivor found and killed by a tighter test); full suite 2405 passed, 1 skipped, 0 failed by progress-dot count; ruff clean; after the final rebase the new, briefing, task-notification and life/outreach/ui/inbox/capture/backup suites were re-run. Not covered: scheduler (the autonomous runner does not call it), notification-center delivery, UI, persisted suppression journal, live evidence. A3 (co-owner) was not consulted.
