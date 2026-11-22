@@ -506,3 +506,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-22T09:29Z — MIA-HOLO-03 claimed (A6)
 
 - Agent: A6, resumed after a pause; re-read main, board and registry first. Dependencies HOLO-01/02 DONE. Scope: a responsive holographic scene module with the ten HOLO-01 visual states, isolated from Brain/business logic, served by the app as a static asset and shown on a dedicated page, with deterministic tests. Not binding live events (HOLO-04), accessibility fallback depth (HOLO-05) or profiling budgets (HOLO-06). No edits to A1/A2/A4 areas; `assistant.html` is not changed in this task.
+
+## 2026-11-22T09:29Z — MIA-M1-13 claimed (A3)
+
+- Agent: A3. Dependency check: every other M1 row on the board is DONE (M1-08..12, BRAIN-06/07, VOICE-05, GW-01..06, EVAL-03/05/06). Scope: re-run suite and eval on current main, update the criterion matrix, write docs/M1_EVIDENCE_REPORT.md separating automated completion from owner-only checks. Docs only. Does not declare M1 accepted; the owner decides.
