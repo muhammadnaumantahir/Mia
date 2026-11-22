@@ -276,3 +276,34 @@ def test_voice_digest_is_opt_in_once_only_and_never_during_quiet_hours(center):
     night = datetime(2026, 6, 1, 23, 30, tzinfo=UTC)
     send(center, "d", now=night)
     assert center.voice_digest(now=night) == []  # held, so never spoken at night
+
+
+# ---- following the main owner timezone -------------------------------------------------------------
+def test_timezone_follows_the_owner_setting_until_the_owner_overrides_it(tmp_path):
+    owner = {"tz": "Asia/Karachi"}
+    center = NotificationCenter(tmp_path / "n.sqlite3", owner_timezone=lambda: owner["tz"])
+    assert center.get_settings().timezone == "Asia/Karachi" and center.get_settings().follow_owner_timezone
+    owner["tz"] = "America/New_York"  # changing the main setting moves quiet hours with it
+    center.update_settings({"quiet_hours_enabled": True})
+    assert center.get_settings().timezone == "America/New_York"
+    send(center, now=datetime(2026, 6, 2, 2, 30, tzinfo=UTC))  # 22:30 in New York: quiet
+    assert center.list(now=datetime(2026, 6, 2, 2, 30, tzinfo=UTC)) == []
+    center.update_settings({"timezone": "Europe/London"})  # an explicit choice stops following
+    assert center.get_settings().timezone == "Europe/London" and not center.get_settings().follow_owner_timezone
+    owner["tz"] = "Asia/Tokyo"
+    assert center.get_settings().timezone == "Europe/London"
+    center.update_settings({"follow_owner_timezone": True})
+    assert center.get_settings().timezone == "Asia/Tokyo"
+
+
+@pytest.mark.parametrize("bad", ["Not/AZone", "", None])
+def test_unusable_owner_timezone_falls_back_without_breaking_delivery(tmp_path, bad):
+    center = NotificationCenter(tmp_path / "n.sqlite3", owner_timezone=lambda: bad)
+    assert center.get_settings().timezone == "UTC"
+    assert send(center)["decision"] == "queued"
+
+    def broken():
+        raise RuntimeError("settings store offline")
+
+    other = NotificationCenter(tmp_path / "n2.sqlite3", owner_timezone=broken)
+    assert other.get_settings().timezone == "UTC"

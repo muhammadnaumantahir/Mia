@@ -998,7 +998,7 @@ def _ntf_cleanup(ctx):
           }
           await fetch('/api/notifications/settings', {method: 'PUT',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({voice_enabled: false, timezone: 'UTC'})});
+            body: JSON.stringify({voice_enabled: false, follow_owner_timezone: true})});
           await fetch('/api/notifications');
         }"""
     )
@@ -1039,6 +1039,7 @@ def test_notification_settings_validate_and_save(ctx):
     try:
         ctx.page.click("#ntfToggle")
         ctx.page.click("#ntfSettingsToggle")
+        ctx.page.uncheck("#ntfFollowTz")
         ctx.page.fill("#ntfTimezone", "Nowhere/Land")
         ctx.page.click("#ntfSave")
         ctx.wait("document.getElementById('ntfSettingsMsg').textContent.toLowerCase().includes('timezone')")

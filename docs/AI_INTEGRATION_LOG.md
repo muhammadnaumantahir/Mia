@@ -692,3 +692,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 
 ## 2026-11-22T17:30Z - MIA-COMP-01 claimed (A7)
 - Verified OPEN immediately before claiming. Scope: `docs/SECURITY_THREAT_MODEL.md`, a typed capability registry `src/mia/security/capabilities.py` mapping every real side-effecting tool/route to side effects, approval class, scope, resource bounds and recovery, and a coverage test that fails when code gains an unregistered side-effecting route. No enforcement changes (that is MIA-COMP-04). Dependency gap recorded: LIFE-13 design not done, so device identity is an explicit assumption.
+
+## 2026-11-22T13:10Z - MIA-LIFE-09 timezone unification (A4)
+- Paths: src/mia/life/notifications.py (follow_owner_timezone + provider), src/mia/life/notification_api.py (field), src/mia/observatory/api.py (provider wiring, read-only on A1's settings), src/mia/assistant.html (one checkbox in the notification settings), tests (notifications, notification API, voice browser), docs/STATUS.md.
+- Tests: see STATUS.md. Resolves the follow-up recorded after the task producer.

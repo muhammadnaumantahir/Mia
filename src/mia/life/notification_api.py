@@ -29,6 +29,7 @@ class NotificationSettingsInput(BaseModel):
     inbox_enabled: bool | None = None
     voice_enabled: bool | None = None
     timezone: str | None = Field(default=None, max_length=64)
+    follow_owner_timezone: bool | None = None
     quiet_hours_enabled: bool | None = None
     quiet_start_minute: int | None = None
     quiet_end_minute: int | None = None

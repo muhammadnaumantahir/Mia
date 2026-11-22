@@ -1713,7 +1713,10 @@ def create_app(
         )
 
     life_store = life or LifeStore(data_dir / "mia-life.sqlite3")
-    notification_center = notifications or NotificationCenter(data_dir / "mia-notifications.sqlite3")
+    notification_center = notifications or NotificationCenter(
+        data_dir / "mia-notifications.sqlite3",
+        owner_timezone=lambda: memory_store.settings.get("owner_timezone"),
+    )
     register_notification_routes(
         app, notification_center,
         producers=[lambda: sync_due_tasks(memory_store.personal, notification_center)],

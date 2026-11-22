@@ -15,9 +15,9 @@ import json
 import re
 import sqlite3
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, fields, replace
 from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
@@ -49,6 +49,7 @@ class NotificationSettings:
     inbox_enabled: bool = True
     voice_enabled: bool = False  # spoken only at the start of a voice session, opt-in
     timezone: str = "UTC"
+    follow_owner_timezone: bool = True  # use the main `owner_timezone` setting unless the owner picks one here
     quiet_hours_enabled: bool = False
     quiet_start_minute: int = 22 * 60  # local minutes after midnight
     quiet_end_minute: int = 7 * 60
@@ -70,7 +71,7 @@ _INT_RANGES = {
     "default_snooze_minutes": (1, MAX_SNOOZE_MINUTES),
     "dismiss_cooldown_hours": (0, 24 * 365),
 }
-_BOOLS = {"enabled", "inbox_enabled", "voice_enabled", "quiet_hours_enabled", "urgent_bypasses_quiet"}
+_BOOLS = {"follow_owner_timezone", "enabled", "inbox_enabled", "voice_enabled", "quiet_hours_enabled", "urgent_bypasses_quiet"}
 
 
 def _zone(name: str) -> ZoneInfo:
@@ -117,7 +118,8 @@ def _clean(text: Any, limit: int, name: str, *, required: bool = True) -> str:
 
 
 class NotificationCenter:
-    def __init__(self, database_path: str | Path) -> None:
+    def __init__(self, database_path: str | Path, owner_timezone: Callable[[], str | None] | None = None) -> None:
+        self._owner_timezone = owner_timezone
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
@@ -169,13 +171,23 @@ class NotificationCenter:
             stored = {r["key"]: json.loads(r["value"]) for r in db.execute("SELECT * FROM notification_settings")}
         known = {f.name for f in fields(NotificationSettings)}
         try:
-            return NotificationSettings(**{k: v for k, v in validate_settings(
-                {k: v for k, v in stored.items() if k in known}).items()})
+            settings = NotificationSettings(**validate_settings({k: v for k, v in stored.items() if k in known}))
         except ValueError:
-            return NotificationSettings()  # corrupt stored values fall back to safe defaults
+            settings = NotificationSettings()  # corrupt stored values fall back to safe defaults
+        if settings.follow_owner_timezone and self._owner_timezone is not None:
+            try:
+                name = self._owner_timezone()
+                if name:
+                    _zone(name)
+                    settings = replace(settings, timezone=name)
+            except Exception:  # an unreadable or invalid main setting must never break delivery
+                pass
+        return settings
 
     def update_settings(self, changes: dict[str, Any]) -> NotificationSettings:
         cleaned = validate_settings(changes)
+        if "timezone" in cleaned and "follow_owner_timezone" not in cleaned:
+            cleaned["follow_owner_timezone"] = False  # choosing a zone here is an explicit override
         merged = {**asdict(self.get_settings()), **cleaned}
         if merged["quiet_hours_enabled"] and merged["quiet_start_minute"] == merged["quiet_end_minute"]:
             raise ValueError("quiet hours need different start and end times")

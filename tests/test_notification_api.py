@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from mia.life.notifications import NotificationCenter
+from mia.memory.store import MemoryStore
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
 
@@ -81,3 +82,15 @@ def test_voice_digest_route_is_opt_in_and_announces_each_item_once(env):
     first = client.post("/api/notifications/voice-digest").json()["items"]
     assert [i["title"] for i in first] == ["T b"]
     assert client.post("/api/notifications/voice-digest").json() == {"items": []}
+
+
+def test_notification_timezone_follows_the_main_owner_timezone_setting(tmp_path):
+    memory = MemoryStore(tmp_path / "m.sqlite3")
+    memory.settings.update({"owner_timezone": "Asia/Karachi"})
+    app = create_app(store=ObservatoryStore(tmp_path / "o.sqlite3"), memory=memory)
+    client = TestClient(app)
+    assert client.get("/api/notifications/settings").json()["settings"]["timezone"] == "Asia/Karachi"
+    memory.settings.update({"owner_timezone": "Europe/London"})
+    assert client.get("/api/notifications/settings").json()["settings"]["timezone"] == "Europe/London"
+    chosen = client.put("/api/notifications/settings", json={"timezone": "Asia/Tokyo"}).json()["settings"]
+    assert chosen["timezone"] == "Asia/Tokyo" and chosen["follow_owner_timezone"] is False

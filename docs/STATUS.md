@@ -33,6 +33,12 @@ The Code Graph is a required cross-cutting developer capability, initialized dur
 - Code Graph snapshot refresh remains a local development step and is not claimed as complete by these remote source edits.
 - PR #20 is merged; older notes below that say it is awaiting CI are historical and superseded by this current status.
 
+## Life update - MIA-LIFE-09 one timezone setting (agent A4, 2026-11-22)
+
+- **Change:** the notification timezone now follows the main `owner_timezone` setting by default (`follow_owner_timezone`, on by default), so quiet hours, the daily-cap day and the due times shown in notifications move with it. Choosing a timezone in the notification settings is an explicit override and turns following off; a "Use my main timezone" checkbox in the panel turns it back on. An unreadable or invalid main setting falls back to the last explicit/default zone (UTC) and never blocks delivery. A1's memory settings are only read (`memory_store.settings.get("owner_timezone")`), not changed.
+- **Tests actually run:** 3 new unit tests and 1 new API test (following, override, change moving quiet hours, bad/missing/raising provider); mutating the follow logic makes 2 of them fail. Notification unit/API/task suites (66) and the 4 notification Chromium tests pass; `test_app_lifespan.py`, `test_life.py`, `test_assistant_life_inbox.py` still pass. `ruff` clean. Full suite not run.
+- **Still open:** the outreach inbox and briefings are not routed through the center (recommended to do with LIFE-14), a real screen-reader/contrast check (owner-only), push-to-talk starts skip the voice announcement.
+
 ## Life update - MIA-LIFE-09 notification UI and voice announcement (agent A4, 2026-11-22)
 
 - **UI (`src/mia/assistant.html`):** a "Notifications" button with an unread badge opens an accessible panel (real buttons, `aria-expanded`/`aria-controls`, live region, visible focus, badge `aria-label`). Each item shows its title, body, **why** and **source**, priority, repeat count and expiry, with Mark read, Snooze 1 hour, Snooze 1 day, Dismiss and a lazy History expander. An empty state explains when items are only waiting for quiet hours or the daily limit. A Settings section edits notifications on/off, voice mention, timezone, quiet hours, urgent bypass and the daily limit, with server validation errors shown. All text is set with `textContent` (a title containing HTML stays text); no `innerHTML`. Polls every 60 s like the inbox.

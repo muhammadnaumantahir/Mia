@@ -143,6 +143,7 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
  <div class="ntf-form" id="ntfSettings" hidden role="group" aria-label="Notification settings">
   <label><input type="checkbox" id="ntfEnabled"> Notifications on</label>
   <label><input type="checkbox" id="ntfVoice"> Mention new notifications when a voice conversation starts</label>
+  <label><input type="checkbox" id="ntfFollowTz"> Use my main timezone</label>
   <label>Timezone <input type="text" id="ntfTimezone" placeholder="Asia/Karachi" autocomplete="off" spellcheck="false" aria-describedby="ntfSettingsMsg"></label>
   <label><input type="checkbox" id="ntfQuiet"> Quiet hours</label>
   <label>From <input type="time" id="ntfQuietStart"> to <input type="time" id="ntfQuietEnd"></label>
@@ -308,7 +309,7 @@ function ntfAction(label,kind,callback){const button=document.createElement('but
 function ntfShowSettings(settings){
  if(!settings)return;
  $('ntfEnabled').checked=!!settings.enabled;$('ntfVoice').checked=!!settings.voice_enabled;
- $('ntfTimezone').value=settings.timezone||'UTC';$('ntfQuiet').checked=!!settings.quiet_hours_enabled;
+ $('ntfFollowTz').checked=settings.follow_owner_timezone!==false;$('ntfTimezone').value=settings.timezone||'UTC';$('ntfTimezone').disabled=$('ntfFollowTz').checked;$('ntfQuiet').checked=!!settings.quiet_hours_enabled;
  $('ntfQuietStart').value=ntfTime(settings.quiet_start_minute);$('ntfQuietEnd').value=ntfTime(settings.quiet_end_minute);
  $('ntfUrgent').checked=!!settings.urgent_bypasses_quiet;$('ntfMaxDay').value=settings.max_per_day;
 }
@@ -381,8 +382,9 @@ async function ntfPost(id,action,body){
 async function ntfSave(){
  const message=$('ntfSettingsMsg');
  const start=ntfMinutes($('ntfQuietStart').value),end=ntfMinutes($('ntfQuietEnd').value);
- const changes={enabled:$('ntfEnabled').checked,voice_enabled:$('ntfVoice').checked,timezone:$('ntfTimezone').value.trim(),
+ const changes={enabled:$('ntfEnabled').checked,voice_enabled:$('ntfVoice').checked,follow_owner_timezone:$('ntfFollowTz').checked,
   quiet_hours_enabled:$('ntfQuiet').checked,urgent_bypasses_quiet:$('ntfUrgent').checked,max_per_day:Number($('ntfMaxDay').value)};
+ if(!changes.follow_owner_timezone)changes.timezone=$('ntfTimezone').value.trim();
  if(Number.isFinite(start))changes.quiet_start_minute=start;
  if(Number.isFinite(end))changes.quiet_end_minute=end;
  try{
@@ -401,6 +403,7 @@ $('ntfSettingsToggle').addEventListener('click',()=>{
  const open=$('ntfSettings').hidden;$('ntfSettings').hidden=!open;$('ntfSettingsToggle').setAttribute('aria-expanded',String(open));
 });
 $('ntfSave').addEventListener('click',ntfSave);
+$('ntfFollowTz').addEventListener('change',()=>{$('ntfTimezone').disabled=$('ntfFollowTz').checked;});
 async function announceNotifications(){
  try{
   const response=await fetch('/api/notifications/voice-digest',{method:'POST'});
