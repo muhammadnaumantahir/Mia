@@ -122,6 +122,7 @@ from mia.observatory.activity import ExperimentActivityCollector
 from mia.observatory.runtime_state import register_runtime_routes
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider, normalize_stt_language
 from mia.voice.tts import Pyttsx3SpeechSynthesizer, SpeechSynthesisError, SpeechSynthesizer
+from mia.voice.voice_select import available_tts_languages, choose_voice, normalize_tts_language
 from mia.voice.wake import offline_wake_word_status
 from mia.voice.wake_transport import register_wake_routes, websocket_runtime_available
 
@@ -261,6 +262,8 @@ class ApprovalExecutionInput(BaseModel):
 class SpeechSynthesisInput(BaseModel):
     text: str = Field(min_length=1, max_length=3000)
     voice_id: str | None = Field(default=None, max_length=1024)
+    # Optional: auto | en | ur. Ignored when voice_id is given (an explicit voice wins).
+    language: str | None = Field(default=None, max_length=8)
     rate: int = Field(default=175, ge=100, le=220)
 
 
@@ -3214,9 +3217,12 @@ def create_app(
         tts_installed = bool(getattr(speech_synthesizer, "available", False))
         tts_voice_count = 0
         tts_error = None
+        tts_languages: dict[str, bool] = {"en": False, "ur": False}
         if tts_installed:
             try:
-                tts_voice_count = len(speech_synthesizer.list_voices())
+                installed_voices = speech_synthesizer.list_voices()
+                tts_voice_count = len(installed_voices)
+                tts_languages = available_tts_languages(installed_voices)
             except Exception:
                 tts_error = "system_speech_engine_unavailable"
         if not tts_installed:
@@ -3233,6 +3239,8 @@ def create_app(
             "model": getattr(speech_to_text, "model_size", "custom"),
             "local_text_to_speech": local_tts_status,
             "local_tts_voice_count": tts_voice_count,
+            # Evidence from installed voices only; Roman Urdu has no voice of its own.
+            "local_tts_languages": tts_languages,
             "local_tts_error": tts_error,
             "text_to_speech": (
                 "local_and_browser_speech_synthesis"
@@ -3262,10 +3270,26 @@ def create_app(
     async def synthesize_voice(item: SpeechSynthesisInput) -> Response:
         started = time.perf_counter()
         try:
+            requested_language = normalize_tts_language(item.language)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        voice_id = item.voice_id
+        selection = "explicit" if voice_id else "default"
+        spoken_language = None
+        approximate = False
+        if not voice_id and requested_language:
+            try:
+                voices = await run_in_threadpool(speech_synthesizer.list_voices)
+            except SpeechSynthesisError as exc:
+                raise HTTPException(status_code=503, detail=str(exc)) from exc
+            choice = choose_voice(voices, language=requested_language, text=item.text)
+            voice_id, selection = choice.voice_id, choice.status
+            spoken_language, approximate = choice.language, choice.approximate
+        try:
             audio = await run_in_threadpool(
                 speech_synthesizer.synthesize,
                 item.text,
-                voice_id=item.voice_id,
+                voice_id=voice_id,
                 rate=item.rate,
             )
         except SpeechSynthesisError as exc:
@@ -3282,7 +3306,10 @@ def create_app(
             payload={
                 "engine": "pyttsx3-local",
                 "text_characters": len(item.text),
-                "voice_id": item.voice_id,
+                "voice_id": voice_id,
+                "voice_selection": selection,
+                "voice_language": spoken_language,
+                "approximate_language": approximate,
                 "rate": item.rate,
                 "latency_ms": latency_ms,
                 "audio_retained": False,
@@ -3291,7 +3318,13 @@ def create_app(
         return Response(
             content=audio,
             media_type="audio/wav",
-            headers={"Cache-Control": "no-store", "X-Mia-Latency-Ms": str(latency_ms)},
+            headers={
+                "Cache-Control": "no-store",
+                "X-Mia-Latency-Ms": str(latency_ms),
+                "X-Mia-Voice-Selection": selection,
+                **({"X-Mia-Voice-Language": spoken_language} if spoken_language else {}),
+                **({"X-Mia-Voice-Approximate": "true"} if approximate else {}),
+            },
         )
 
     # Loopback-only offline wake-word transport. Registering routes does not start any
