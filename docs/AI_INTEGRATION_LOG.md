@@ -581,3 +581,11 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Tests actually run: 21 new tests with a fixed clock (10 mutations; 1 survivor found and killed by a new boundary test); full suite 2240 passed, 1 skipped, 0 failed by progress-dot count (21st test run separately); ruff clean; after the final rebase the four LIFE suites were re-run.
 - Not covered: scheduler/notification delivery (LIFE-09), persisted briefing preferences, UI, Brain intent, calendar integration, model-written summaries, live evidence. A3 (co-owner) was not consulted.
 - A1 now IDLE. Remaining A1-involved tasks all depend on A5/A6/A3 co-owners or other agents' work: LIFE-03 (UI + intents, A6), LIFE-06/08/10 (A5), LIFE-14, COMP-01/04, EVOL-01, OBS-08, and the A6 UI half of LIFE-04.
+
+## 2026-11-22T10:04Z — MIA-OBS-01 DONE (A3)
+
+- Commit 79c55dd on remote main (verified). Paths: src/mia/observatory/measurements.py (new), store.py, snapshot_capture.py, tests/test_observatory_measurements.py, docs/observatory/MEASUREMENTS.md.
+- Delivered: versioned metric definitions (unit, range, sampling, source, missing semantics), enforced in `record_metric`; non-finite values rejected; unregistered metrics accepted but tagged; every sample records schema/definition version; `metric_samples` immutable by trigger; fixed the daily snapshot storing benchmark duration with unit `percent` (now `seconds`).
+- Tests actually run: 6 new tests; related observatory/experiment/baseline/benchmark files 67 passed; three mutants (wrong unit, no triggers, no validation) each failed tests; full suite on the merged tree 2228 tests, 0 failed, 0 errors, 1 skipped; ruff clean.
+- Limits: samples written before this change keep their old data (immutable) and carry no definition version; pre-fix duration samples have the wrong unit and should be read as seconds. Nothing here measures any model.
+- Next candidates for A3: OBS-02 (needs a look at the existing baseline.py against 'refuse to overwrite' and missing-stays-missing) and OBS-05 (benchmark suite). Not claimed yet.
