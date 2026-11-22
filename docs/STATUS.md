@@ -433,3 +433,7 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 ## 2026-11-21T21:11Z A1 personal data model (MIA-LIFE-01)
 
 - Owner-scoped tasks/reminders/notes (`personal_items`, migration 6) with provenance, project filter, hard delete, owner-triggered retention, export and REST API. Not in model context, not encrypted at rest, no UI. Commit `5c5f14f`; tested with unit/API tests only.
+
+## 2026-11-22 M1 evidence report (MIA-M1-13, agent A3)
+
+- Delivered \`docs/M1_EVIDENCE_REPORT.md\`: criterion-by-criterion automated completion versus owner-only checks, run on 5a64019 (eval 31/31; 2119 tests, 0 failed, 1 skipped, Chromium tests included; ruff clean). **M1 acceptance is pending the owner's checks**; nothing in the report claims live-model quality.

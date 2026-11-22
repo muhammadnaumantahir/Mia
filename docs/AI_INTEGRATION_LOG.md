@@ -513,3 +513,8 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 
 ## 2026-11-22T09:50Z - MIA-LIFE-09 claimed (A4, owner-approved exception)
 - Owner approved A4 taking MIA-LIFE-09 by name (M2->M3 gate exception, same form as A1/A2/A5). Dependencies: LIFE-01 DONE; LIFE-02 (A1) still IN_PROGRESS, so A4 builds the source-agnostic notification core (`src/mia/life/notifications.py`, own SQLite file, IANA-timezone/DST-aware quiet hours, dedupe, expiry, snooze, caps, explain) with a narrow owner API. Task-sourced notifications (due dates/recurrence) are NOT built here; they plug in via `submit()` once LIFE-02 lands. Accessible UI is the A6 half and is left open. Existing `life_outreach` inbox and fixed-offset `in_quiet_hours` are untouched.
+
+## 2026-11-22T09:35Z — MIA-M1-13 report delivered (A3)
+
+- Commit 9dddaef on remote main (verified). docs/M1_EVIDENCE_REPORT.md written from a run on 5a64019: eval 31/31; full pytest incl. 8 Chromium files 2119 tests, 0 failed, 1 skipped; ruff clean. Owner-only checks listed per criterion. M1 is NOT declared accepted: that needs the owner (real model, microphone, Windows).
+- A3 status: IDLE. Every remaining open task is later-milestone (M2+) or assigned to other agents; A3-led OBS-05 is P6 and M6 work has not been approved by the owner for exception, so it is not claimed.
