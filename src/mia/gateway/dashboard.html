@@ -47,6 +47,10 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
  <div class="section-head"><h2>Recent routing decisions</h2><span class="label">No prompts or credentials are stored here</span></div>
  <div id="decisions"><div class="empty">Loading routing decisions…</div></div>
 </section>
+<section class="section card" aria-labelledby="usage-title">
+ <div class="section-head"><h2 id="usage-title">Usage &amp; resources</h2><span class="label">Read-only. Values Mia could not measure show as Unknown, never as zero.</span></div>
+ <div id="usage-dash" class="qgrid" aria-live="polite"><div class="empty">Loading usage and resources</div></div>
+</section>
 <section class="section card" aria-labelledby="quality-title">
  <div class="section-head"><h2 id="quality-title">Quality controls</h2><span class="label">Read-only view. This page has no switches for these settings.</span></div>
  <div id="quality" class="qgrid" aria-live="polite"><div class="empty">Loading quality controls</div></div>
@@ -159,13 +163,123 @@ async function loadQuality(){
  const [judges,escalation]=await Promise.all([fetchQuality('/api/brain/judges','Judges'),fetchQuality('/api/gateway/escalation','Escalation')]);
  renderQuality($('quality'),judges,escalation);
 }
+const known=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v));
+const NUM=v=>known(v)?Number(v).toLocaleString(undefined,{maximumFractionDigits:2}):'Unknown';
+const PCT=v=>known(v)?Number(v).toFixed(1)+' %':'Unknown';
+const MS=v=>known(v)?Number(v).toLocaleString(undefined,{maximumFractionDigits:0})+' ms':'Unknown';
+function BYTES(v){
+ if(!known(v))return 'Unknown';
+ let n=Number(v);const units=['B','KB','MB','GB','TB'];let i=0;
+ while(n>=1024&&i<units.length-1){n/=1024;i++}
+ return n.toLocaleString(undefined,{maximumFractionDigits:i?1:0})+' '+units[i];
+}
+function latencyText(stats){
+ if(!stats||!known(stats.count)||Number(stats.count)===0)return 'Not measured';
+ return 'median '+MS(stats.median)+' · p95 '+MS(stats.p95)+' ('+NUM(stats.count)+' samples)';
+}
+function usageCard(title,sec,build){
+ if(!sec||sec.status!=='ok'){
+  const failed=qCard(title,'Unavailable',false);
+  failed.append(node('p','qnote',(sec&&sec.reason)||'No data was returned for this section.'));
+  if(sec&&sec.source)failed.append(node('p','qnote','Source: '+sec.source));
+  return failed;
+ }
+ const card=qCard(title,'Measured',true);
+ const list=node('dl','kv');build(list,card);card.append(list);
+ card.append(node('p','qnote','Source: '+sec.source+' · measured '+sec.measured_at));
+ return card;
+}
+function inferenceCard(sec){
+ return usageCard('Inference usage',sec,(l,card)=>{
+  qRow(l,'Window',NUM(sec.window_days)+' days');
+  qRow(l,'Requests',NUM(sec.requests));
+  qRow(l,'Paid / non-local requests',NUM(sec.paid_requests)+' / '+NUM(sec.non_local_requests));
+  qRow(l,'Tokens in / out',NUM(sec.input_tokens)+' / '+NUM(sec.output_tokens));
+  qRow(l,'Recorded cost',money(sec.cost_usd));
+  const lat=sec.latency_ms||{};
+  qRow(l,'Total latency',latencyText(lat.total));
+  qRow(l,'First-token latency',latencyText(lat.first_token));
+  for(const m of (sec.by_model||[]).slice(0,8)){
+   qRow(l,m.provider_id+' / '+m.model_id,NUM(m.requests)+' req · avg '+MS(m.avg_total_ms)+' · cost '+money(m.cost_usd)+(m.data_local?' · local':''));
+  }
+  for(const n of sec.notes||[])card.append(node('p','qnote',n));
+ });
+}
+function budgetText(entry){
+ if(!entry||!entry.configured)return 'Not configured';
+ return entry.valid?money(entry.limit_usd):'Invalid configuration';
+}
+function spendCard(sec){
+ return usageCard('Spend and budgets',sec,l=>{
+  const spend=sec.spend||{},budget=sec.budget||{},limits=budget.limits||{},res=sec.reservations||{};
+  qRow(l,'Spent today (UTC)',money(spend.today_utc_usd));
+  qRow(l,'Spent this month (UTC)',money(spend.month_utc_usd));
+  qRow(l,'Paid inference',budget.allow_paid?'Enabled':'Off');
+  qRow(l,'Per-request limit',budgetText(limits.per_request));
+  qRow(l,'Daily limit',budgetText(limits.daily));
+  qRow(l,'Monthly limit',budgetText(limits.monthly));
+  qRow(l,'Active budget holds',NUM(res.active_count)+' ('+money(res.active_reserved_usd)+' reserved)');
+ });
+}
+function resourcesCard(sec){
+ return usageCard('CPU and memory',sec,l=>{
+  qRow(l,'CPU (host)',PCT(sec.cpu_percent));
+  qRow(l,'Memory used (host)',PCT(sec.memory_percent));
+  qRow(l,'Memory available / total',BYTES(sec.memory_available_bytes)+' / '+BYTES(sec.memory_total_bytes));
+  qRow(l,'Processes (host)',NUM(sec.process_count));
+  const p=sec.mia_process||{};
+  qRow(l,'Mia memory (RSS)',p.measured?BYTES(p.memory_rss_bytes):'Unknown');
+  qRow(l,'Mia CPU time (total)',p.measured&&known(p.cpu_seconds_total)?NUM(p.cpu_seconds_total)+' s':'Unknown');
+  qRow(l,'Mia threads',p.measured?NUM(p.threads):'Unknown');
+ });
+}
+function storageCard(sec){
+ return usageCard('Storage',sec,(l,card)=>{
+  qRow(l,'Disk free / total',BYTES(sec.disk_free_bytes)+' / '+BYTES(sec.disk_total_bytes));
+  qRow(l,'Disk used',BYTES(sec.disk_used_bytes));
+  qRow(l,'Mia data folder',(sec.data_dir_truncated?'at least ':'')+BYTES(sec.data_dir_bytes)+' in '+NUM(sec.data_dir_files)+' files');
+  for(const f of sec.largest_files||[])qRow(l,f.name,BYTES(f.bytes));
+  if(sec.data_dir_truncated)card.append(node('p','qnote','The folder walk stopped at its file limit, so these totals are lower bounds.'));
+ });
+}
+function workloadLabel(name){
+ return name==='autonomous_life'?'Autonomous life':name==='experiment_snapshots'?'Experiment snapshots':name;
+}
+function workloadState(item){
+ if(item.status!=='ok')return item.reason||'Unavailable';
+ const bits=[item.enabled?'enabled':'disabled',item.running?'running':'not running'];
+ if(item.paused)bits.push('paused');
+ if(item.emergency_stop)bits.push('emergency stop');
+ if(item.quiet_hours_active)bits.push('quiet hours');
+ if(known(item.cycles_today))bits.push(NUM(item.cycles_today)+' cycles today');
+ return bits.join(' · ');
+}
+function workloadCard(sec){
+ return usageCard('Background workload',sec,(l,card)=>{
+  for(const item of sec.items||[])qRow(l,workloadLabel(item.name),workloadState(item));
+  card.append(node('p','qnote','Shows whether background workers are on and running. It does not measure how busy they are.'));
+ });
+}
+function renderUsageDash(host,result){
+ host.replaceChildren();
+ if(!result.ok){
+  const failed=qCard('Usage and resources','Unavailable',false);
+  failed.append(node('p','qnote',result.message));host.append(failed);return;
+ }
+ const d=result.data||{};
+ host.append(inferenceCard(d.usage),spendCard(d.usage),resourcesCard(d.resources),storageCard(d.storage),workloadCard(d.workload));
+}
+async function loadUsageDash(){
+ const result=await fetchQuality('/api/usage/dashboard','Usage dashboard');
+ renderUsageDash($('usage-dash'),result);
+}
 async function updateModel(model,settings,control){
  control.disabled=true;
  try{const url='/api/gateway/models/'+encodeURIComponent(model.provider_id)+'/'+encodeURIComponent(model.model_id)+'/settings';const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)});if(!res.ok)throw new Error((await res.json()).detail||'Could not update model');await load()}
  catch(e){$('error').textContent=e.message}finally{control.disabled=false}
 }
 async function load(){
- $('error').textContent='';$('refresh').disabled=true;loadQuality();
+ $('error').textContent='';$('refresh').disabled=true;loadQuality();loadUsageDash();
  try{const response=await fetch('/api/gateway/overview',{cache:'no-store'});if(!response.ok)throw new Error('Gateway overview failed: HTTP '+response.status);render(await response.json())}
  catch(e){$('error').textContent=e.message}
  finally{$('refresh').disabled=false}

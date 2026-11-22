@@ -130,6 +130,7 @@ from .baseline import BaselineCaptureError, capture_baseline_manifest
 from .snapshot_capture import ExperimentSnapshotCapturer, SnapshotCaptureError
 from .snapshot_scheduler import ExperimentSnapshotScheduler
 from .store import ObservatoryStore
+from .usage_dashboard import build_usage_dashboard
 
 
 class TaskInput(BaseModel):
@@ -5411,6 +5412,32 @@ def create_app(
     @app.get("/api/gateway/usage")
     def gateway_usage(days: int = 30) -> dict[str, Any]:
         return ledger.summary(days)
+
+    def _life_workload() -> dict[str, Any]:
+        status = life_runner.status()
+        settings = status["settings"]
+        return {
+            "enabled": life_background_enabled,
+            "running": life_scheduler.running,
+            "paused": bool(settings.get("paused")),
+            "emergency_stop": bool(settings.get("emergency_stop")),
+            "quiet_hours_active": status["quiet_hours_active"],
+            "cycles_today": status["cycles_today"],
+        }
+
+    @app.get("/api/usage/dashboard")
+    def usage_dashboard(days: int = 30) -> dict[str, Any]:
+        """Read-only usage, spend, latency, CPU/RAM, storage and background-workload snapshot."""
+        return build_usage_dashboard(
+            ledger=ledger,
+            resource_monitor=resource_monitor_service,
+            data_dir=data_dir,
+            workload_probes={
+                "autonomous_life": _life_workload,
+                "experiment_snapshots": experiment_snapshot_scheduler.status,
+            },
+            days=days,
+        )
 
     @app.get("/api/gateway/overview")
     async def gateway_overview() -> dict[str, Any]:
