@@ -40,6 +40,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # archived, rejected, expired). None keeps them. Live records are never covered,
     # and nothing is deleted until the owner runs the retention action.
     "structured_retention_days": None,
+    # IANA timezone used for the owner's wall-clock semantics (recurring tasks keep their
+    # local time across daylight-saving changes). Timestamps are always stored in UTC.
+    "owner_timezone": "UTC",
 }
 
 
@@ -80,6 +83,16 @@ def validate_setting(key: str, value: Any) -> Any:
         if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 36500:
             raise ValueError("structured_retention_days must be null or 1 to 36500")
         return value
+    if key == "owner_timezone":
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        if not isinstance(value, str) or not value.strip() or len(value) > 64:
+            raise ValueError("owner_timezone must be an IANA timezone name such as Asia/Karachi")
+        try:
+            ZoneInfo(value.strip())
+        except (ZoneInfoNotFoundError, ValueError, OSError) as exc:
+            raise ValueError(f"unknown timezone: {value}") from exc
+        return value.strip()
     raise ValueError(f"unknown memory setting: {key}")  # pragma: no cover
 
 

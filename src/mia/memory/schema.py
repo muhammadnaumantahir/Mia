@@ -142,6 +142,34 @@ def _migration_6_personal_items(db: sqlite3.Connection) -> None:
     PersonalData.initialize(db)
 
 
+def _migration_7_task_manager(db: sqlite3.Connection) -> None:
+    """Priority, recurrence, series, duplicate key and structural history (MIA-LIFE-02)."""
+    for column, ddl in (
+        ("priority", "INTEGER NOT NULL DEFAULT 2"),
+        ("recurrence", "TEXT"),
+        ("series_id", "TEXT"),
+        ("dedupe_key", "TEXT"),
+    ):
+        _add_column(db, "personal_items", column, ddl)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS personal_item_history (
+            history_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id TEXT NOT NULL,
+            changed_at TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            field TEXT NOT NULL,
+            old_value TEXT,
+            new_value TEXT
+        )
+    """)
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_personal_history_item ON personal_item_history(item_id)"
+    )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_personal_dedupe ON personal_items(dedupe_key, status)"
+    )
+
+
 # (version, description, function). Append new migrations; never edit applied ones.
 MIGRATIONS: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (2, "identity versions and memory audit log", _migration_2_identity_and_audit),
@@ -149,6 +177,7 @@ MIGRATIONS: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (4, "optional conversation project assignment", _migration_4_conversation_project),
     (5, "optional structured record project scope", _migration_5_record_project),
     (6, "owner-scoped personal items", _migration_6_personal_items),
+    (7, "task priority, recurrence, duplicates and history", _migration_7_task_manager),
 ]
 
 LATEST_VERSION = max([BASELINE_VERSION, *[version for version, _, _ in MIGRATIONS]])

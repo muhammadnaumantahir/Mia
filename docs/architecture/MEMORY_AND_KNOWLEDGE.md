@@ -205,3 +205,30 @@ SQLite file as the rest of memory. Code: `src/mia/memory/personal.py`; API: `/ap
 - **Export.** `GET /api/memory/export` now includes `personal_items`, unfiltered.
 - **Encryption boundary.** Not encrypted at rest here (plain SQLite, like other memory); encrypted
   backup/restore is MIA-LIFE-11. No remote/device sync (MIA-LIFE-13).
+
+## Task manager semantics (MIA-LIFE-02)
+
+Built on `personal_items` (migration 7 adds `priority`, `recurrence`, `series_id`, a duplicate
+key and the `personal_item_history` table). API: `/api/personal/items` (+ `/complete`, `/history`).
+
+- **Priority.** 1 high, 2 normal (default), 3 low; list filter `priority`.
+- **Time.** All timestamps are stored in UTC and must be timezone-aware on input. The owner's
+  wall-clock zone is the memory setting `owner_timezone` (IANA name, default `UTC`).
+  Filters: `overdue` (open and past due) and `due_before`.
+- **Recurrence.** `{"freq": "daily|weekly|monthly", "interval": 1..365}`, requires a due time.
+  Completing a recurring item with `complete` marks it done and creates the next occurrence:
+  the first one after both the old due time and now, computed in the owner's timezone, so a
+  09:00 task stays 09:00 local across daylight-saving changes and an overdue daily task does
+  not pile up missed copies. Monthly rules clamp to the month's last day without drifting
+  (31st -> 28th -> 31st). A local time that does not exist on a day (DST gap) resolves to the
+  earlier offset. Completing twice never creates a second occurrence. Changing status to done
+  on a recurring item through `PATCH` is refused; use `complete`.
+- **Duplicates.** An open item with the same kind, normalised title and project is refused
+  (HTTP 409 with `existing_item_id`) on create, rename, project change and reopen;
+  `allow_duplicate` overrides. Finished items never block. Rows created before migration 7
+  have no duplicate key, so they do not block either.
+- **History.** Status, priority, due time, project, recurrence and privacy changes keep old and
+  new values; title and details changes record only that the field changed. History is deleted
+  with the item, included in the export (`personal_item_history`), and never holds item text.
+- **Limits.** No UI, no Brain intents (LIFE-03), no reminders delivery (LIFE-09), no calendar
+  integration, no sub-tasks. Recurrence is "after completion", not a fixed calendar schedule.

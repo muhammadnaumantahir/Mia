@@ -116,7 +116,9 @@ class MemoryStore:
         self.settings = SettingsStore(self._connection)
         self.relationships = RelationshipStore(self._connection)
         self.usage = UsageLog(self._connection)
-        self.personal = PersonalData(self._connection)
+        self.personal = PersonalData(
+            self._connection, timezone=lambda: self.settings.get("owner_timezone")
+        )
         self._initialize()
 
     @contextmanager
@@ -481,6 +483,7 @@ class MemoryStore:
             "memory_items": [self._decode_item(row) for row in items],
             "structured_memory": self.structured.export(),
             "personal_items": self.personal.export(),
+            "personal_item_history": self.personal.export_history(),
         }
         canonical = json.dumps(
             payload,

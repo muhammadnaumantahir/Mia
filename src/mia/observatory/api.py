@@ -108,7 +108,7 @@ from mia.memory.identity import (
     render_identity_prompt,
 )
 from mia.memory.maintenance import MaintenanceService
-from mia.memory.personal import PersonalItemNotFoundError
+from mia.memory.personal import DuplicateItemError, PersonalItemNotFoundError
 from mia.memory.relationships import RelationshipNotFoundError
 from mia.memory.semantic import LocalOllamaEmbeddingReranker
 from mia.memory.store import MemoryStore
@@ -337,6 +337,9 @@ class PersonalItemInput(BaseModel):
     due_at: str | None = Field(default=None, max_length=40)
     project: str | None = Field(default=None, max_length=64)
     private: bool = False
+    priority: int | None = None
+    recurrence: dict[str, Any] | None = None
+    allow_duplicate: bool = False
 
 
 class PersonalItemPatch(BaseModel):
@@ -350,6 +353,10 @@ class PersonalItemPatch(BaseModel):
     project: str | None = Field(default=None, max_length=64)
     clear_project: bool = False
     private: bool | None = None
+    priority: int | None = None
+    recurrence: dict[str, Any] | None = None
+    clear_recurrence: bool = False
+    allow_duplicate: bool = False
 
 
 class PersonalRetentionInput(BaseModel):
@@ -392,6 +399,7 @@ class MemorySettingsInput(BaseModel):
     pending_retention_days: int | None = None
     conversation_retention_days: int | None = None
     structured_retention_days: int | None = None
+    owner_timezone: str | None = Field(default=None, max_length=64)
 
 
 class RelationshipInput(BaseModel):
@@ -4743,6 +4751,11 @@ def create_app(
     def add_personal_item(item: PersonalItemInput) -> dict[str, Any]:
         try:
             item_id = memory_store.personal.add(**item.model_dump())
+        except DuplicateItemError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"message": str(exc), "existing_item_id": exc.existing_id},
+            ) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"item_id": item_id, "item": memory_store.personal.get(item_id)}
@@ -4753,11 +4766,15 @@ def create_app(
         status: str | None = None,
         project: str | None = None,
         unscoped: bool = False,
+        priority: int | None = None,
+        overdue: bool = False,
+        due_before: str | None = None,
         limit: int = 100,
     ) -> dict[str, Any]:
         try:
             items = memory_store.personal.list(
-                kind=kind, status=status, project=project, unscoped=unscoped, limit=limit
+                kind=kind, status=status, project=project, unscoped=unscoped,
+                priority=priority, overdue=overdue, due_before=due_before, limit=limit,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -4776,9 +4793,29 @@ def create_app(
             changed = memory_store.personal.update(item_id, **item.model_dump(exclude_unset=True))
         except PersonalItemNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Item not found") from exc
+        except DuplicateItemError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"message": str(exc), "existing_item_id": exc.existing_id},
+            ) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"item": memory_store.personal.get(item_id), "changed": changed}
+
+    @app.post("/api/personal/items/{item_id}/complete")
+    def complete_personal_item(item_id: str) -> dict[str, Any]:
+        """Mark done; a recurring item creates its next occurrence."""
+        try:
+            outcome = memory_store.personal.complete(item_id)
+        except PersonalItemNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Item not found") from exc
+        return {**outcome, "item": memory_store.personal.get(item_id)}
+
+    @app.get("/api/personal/items/{item_id}/history")
+    def personal_item_history(item_id: str) -> dict[str, Any]:
+        if memory_store.personal.get(item_id) is None:
+            raise HTTPException(status_code=404, detail="Item not found")
+        return {"history": memory_store.personal.history(item_id)}
 
     @app.delete("/api/personal/items/{item_id}")
     def delete_personal_item(item_id: str) -> dict[str, Any]:
