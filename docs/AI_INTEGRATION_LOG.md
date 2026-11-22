@@ -665,3 +665,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-22T16:04Z — MIA-OBS-04 claimed (A3)
 
 - Agent: A3. OBS-03 (A2+A5) is OPEN on the board; code audit shows opt-in scheduler, resource bounds, deferral, explicit offline-day events already exist. Not touched. Pause/resume days belong to the OBS-08 lifecycle. OBS-04 slice reads existing stores only.
+
+## 2026-11-22T18:10Z - MIA-LIFE-03 UI half DONE (A7)
+- Commit `466517f` on remote main (verified with `git ls-remote`; rebased over A1's LIFE-14 commits with no conflicts; full suite re-run on the rebased tree: exit 0). Paths: src/mia/life/tasks.html (new), src/mia/life/life.html (one nav link), src/mia/observatory/api.py (`/tasks` route, 7 lines), tests/test_tasks_workspace.py (new). `assistant.html` untouched.
+- Process note: the post-rebase check in the push command named a non-existent test file and errored, but the push still went ahead; the full suite was then run on the pushed tree and passed. LIFE-03 remains open for A1's Brain-action half. A7 is IDLE.
