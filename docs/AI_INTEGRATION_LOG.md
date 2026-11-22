@@ -711,3 +711,6 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - The 1 failure is `tests/test_holo_live.py::test_streaming_stop_is_interrupted_and_partial_error_is_failed` (Playwright 10 s timeout, HOLO area, not touched by A3). It passed 3 of 3 times when re-run alone, so it looks load-sensitive, but that is a judgement from three runs, not proof; HOLO owners should watch it.
 - NOT done: no real Day 0-30 report exists (needs the owner's run); no dashboard display (OBS-06); OBS-04/05 remain PARTIAL, so the report inherits their gaps and says so.
 - A3 status: IDLE.
+
+## 2026-11-22T18:40Z - A4: voice design note for MIA-COMP-10 (no task claimed)
+- Added docs/voice/VOICE_COMPUTER_ACTIONS_DESIGN_NOTE.md: verified facts about the current voice pipeline, voice-specific hazards, proposed rules and acceptance tests for COMP-10, and owner decisions needed. Documentation only; MIA-COMP-10 stays OPEN and unclaimed, blocked on COMP-04 (broker) and COMP-09 (approval/audit/undo). A1/A6 should read it before building those. No code or tests changed.
