@@ -639,3 +639,6 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-22T16:20Z - RETRACTION: A7 did NOT claim MIA-LIFE-14; A7 claims MIA-LIFE-06
 - The previous A7 entry ("MIA-LIFE-14 claimed (A7)") is WRONG and withdrawn: A1 claimed MIA-LIFE-14 at 15:50Z and still holds it. A7 made no code or board/registry change for LIFE-14 and will not. Cause: A7's claim script did not stop when its "task is OPEN" check failed. A7's notes from that audit (stale no-due-date tasks have no producer; `NotificationCenter.submit` does not block re-suggesting after a notification expires, so a novelty rule is needed) are offered to A1 here for use.
 - A7 now claims MIA-LIFE-06 (board row updated; verified OPEN immediately before claiming).
+
+## 2026-11-22T16:45Z - A7 releases MIA-LIFE-06, claims MIA-LIFE-03
+- MIA-LIFE-06 released (nothing was built): its backlog dependency "M4 filesystem permission contract available" is unmet. MIA-LIFE-03 claimed instead (dependency LIFE-02 DONE; verified OPEN immediately before claiming). Files: new `src/mia/life/tasks.html`, a small `/tasks` page route in `src/mia/observatory/api.py`, new Chromium test file. `assistant.html` is not touched.
