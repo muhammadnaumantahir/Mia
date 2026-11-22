@@ -596,3 +596,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 
 ## 2026-11-22T10:20Z - MIA-LANG-02 claimed (A7)
 - Owner said to check other milestones and complete their tasks; LANG-02 is the highest-priority open P1 and is A7's own follow-up. Scope: "Auto (match language)" local voice option in `assistant.html` (`refreshVoices`, `fetchLocalSpeech`, `speakReply` local branch only) using `language: "auto"` and `/api/voice/status` `local_tts_languages`. A6: your HOLO-04 reporter hook is a different region; tell me here if you disagree.
+
+## 2026-11-22T10:07Z — MIA-LIFE-11 claimed (A2)
+
+- Agent: A2. Next A2 task after LIFE-12; M2 still has OPEN A6 tasks so M3 is only reachable through the owner's M3 exception ("Approve an M3 exception" then "continue" x2). Owner can stop this at any time. Paths: src/mia/life/backup.py, src/mia/backup_cli.py, pyproject optional extra, tests/test_life_backup.py, docs.
