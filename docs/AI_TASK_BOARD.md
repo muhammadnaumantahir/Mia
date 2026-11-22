@@ -89,7 +89,7 @@ The detailed task definitions, dependencies, scope and acceptance criteria are i
 | MIA-LIFE-02 | P3 | A1 | DONE (A1, commit 3dc0fa5 on main, 2026-11-22T09:37Z; owner-approved exception) | Unified task API/persistence with status, priority, due dates, recurrence, project link and audit tests. |
 | MIA-LIFE-03 | P3 | A6 + A1 | OPEN | Accessible task workspace and Brain actions sharing one source of truth; destructive bulk confirmation. |
 | MIA-LIFE-04 | P3 | A1 + A6 | IN_PROGRESS (A1 data/API half DONE, commit b75556d on main, 2026-11-22T09:46Z; A6 UI half OPEN and unclaimed; owner-approved exception) | Project workspace with goals, milestones, decisions, tasks and strict project isolation. |
-| MIA-LIFE-05 | P3 | A1 + A3 | IN_PROGRESS (A1, claimed 2026-11-22T09:46Z; owner-approved exception; A3 co-owner not consulted) | Evidence-cited daily/weekly briefing and goal follow-up; quiet hours, timezone and no invented facts. |
+| MIA-LIFE-05 | P3 | A1 + A3 | DONE (A1, commit e5ea839 on main, 2026-11-22T09:54Z; A3 not consulted; owner-approved exception; no scheduler/UI/calendar) | Evidence-cited daily/weekly briefing and goal follow-up; quiet hours, timezone and no invented facts. |
 | MIA-LIFE-06 | P3 | A5 + A1 | OPEN | Owner-selected file indexing/search/summaries with source locations, path isolation and deletion tests. |
 | MIA-LIFE-07 | P3 | A5 + A6 | OPEN | Scoped browser research with citations, source provenance and prompt-injection tests. |
 | MIA-LIFE-08 | P3 | A1 + A5 | OPEN | Bounded workflow composer/runtime with preview, checkpoints, permissions, cancellation and audit. |

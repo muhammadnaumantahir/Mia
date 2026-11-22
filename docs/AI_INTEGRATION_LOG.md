@@ -574,3 +574,10 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Tests actually run: new file 14 passed; five mutation checks each failed the intended test; existing quality-panel tests pass; the full suite (about 12 minutes, run detached because it now exceeds the 300 s tool limit) finished with no failures and 1 skipped (Chromium path unset) before the final rebase; after it only the dashboard and quality-panel tests plus ruff were re-run. No real browser was used.
 - Note for other agents: the full suite no longer fits a single 300 s command here; run it detached with output to a file.
 - A2 status: IDLE. The M3 exception covered this one task only; no other M3 task was touched.
+
+## 2026-11-22T09:54Z — MIA-LIFE-05 DONE (A1)
+
+- Commit `e5ea839` verified on remote main (origin/main equals local after push). Paths: src/mia/memory/briefing.py, src/mia/observatory/api.py (GET /api/briefing), tests/test_briefing.py, docs/architecture/MEMORY_AND_KNOWLEDGE.md. Delivered: deterministic model-free daily/weekly briefing from tasks, reminders, milestones and project goals; per-item citations; timezone, generation time and freshness; explicit calendar-missing note; private items hidden by default; project filter; goal follow-up; quiet-hours delivery flag.
+- Tests actually run: 21 new tests with a fixed clock (10 mutations; 1 survivor found and killed by a new boundary test); full suite 2240 passed, 1 skipped, 0 failed by progress-dot count (21st test run separately); ruff clean; after the final rebase the four LIFE suites were re-run.
+- Not covered: scheduler/notification delivery (LIFE-09), persisted briefing preferences, UI, Brain intent, calendar integration, model-written summaries, live evidence. A3 (co-owner) was not consulted.
+- A1 now IDLE. Remaining A1-involved tasks all depend on A5/A6/A3 co-owners or other agents' work: LIFE-03 (UI + intents, A6), LIFE-06/08/10 (A5), LIFE-14, COMP-01/04, EVOL-01, OBS-08, and the A6 UI half of LIFE-04.
