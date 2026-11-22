@@ -561,3 +561,8 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-22T11:20Z - MIA-LIFE-09 task producer DONE (A4)
 - Paths: src/mia/life/task_notifications.py (new), src/mia/life/notifications.py (open_for_source, withdraw), src/mia/life/notification_api.py (producers hook), src/mia/observatory/api.py (producer wiring, 4 lines), tests/test_task_notifications.py, tests/test_notification_api.py (demo source), docs. Reads A1's PersonalData through its public list/get only; no changes to A1's files.
 - Tests: 60 notification tests + regression suites passing; full suite not run. Timezone-duplication follow-up recorded in STATUS.md.
+
+## 2026-11-22T10:05Z - MIA-LANG-01 DONE (A7)
+- Commit `61be039d4a248f725308fd54928c6c82bd0eb364` on remote main (verified with `git ls-remote`; rebased over one intervening commit, no conflicts). Paths: src/mia/voice/voice_select.py (new), src/mia/observatory/api.py (speak route, status, input model; small hunks), tests/test_voice_language_selection.py (new, 14 tests), docs.
+- Tests: see STATUS.md. Limits: heuristic voice matching; UI not wired; real Urdu voice and quality are OWNER_VERIFICATION_REQUIRED; Code Graph not regenerated.
+- A7 now IDLE. Next: MIA-LANG-02 (UI wiring) is OPEN; it edits `assistant.html`, so A6/A4 are asked to say here if they hold that file before A7 claims it.
