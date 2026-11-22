@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata as importlib_metadata
 import json
 import math
 import os
 import platform
+import re
 import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from pathlib import Path
@@ -217,11 +220,65 @@ def _environment() -> dict[str, Any]:
     }
 
 
+_REQUIREMENT_NAME = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9_.-]*)")
+
+# What a Day 0 capture deliberately does not measure. Stored so a missing value is visibly
+# missing (with the reason), never silently absent and never a zero.
+NOT_CAPTURED = {
+    "model_inventory": "Day 0 verification runs offline and does not query any model provider",
+    "inference_latency": "no model inference happens during Day 0 verification",
+    "inference_cost": "no model inference happens during Day 0 verification",
+}
+
+
+def _dependency_versions(root: Path) -> dict[str, Any]:
+    """Installed versions of the packages pyproject.toml declares; unknown stays null."""
+    try:
+        project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    except (OSError, tomllib.TOMLDecodeError, KeyError, TypeError):
+        return {"available": False, "reason": "pyproject.toml could not be read"}
+    requirements = list(project.get("dependencies", []))
+    for group in project.get("optional-dependencies", {}).values():
+        requirements.extend(group)
+    packages: dict[str, str | None] = {}
+    for requirement in requirements:
+        match = _REQUIREMENT_NAME.match(str(requirement))
+        if not match:
+            continue
+        name = match.group(1).lower().replace("_", "-")
+        try:
+            packages[name] = importlib_metadata.version(name)
+        except importlib_metadata.PackageNotFoundError:
+            packages[name] = None  # declared but not installed on this host
+    return {"available": True, "packages": dict(sorted(packages.items()))}
+
+
+def _default_resource_probe() -> dict[str, float]:
+    import psutil
+
+    return {"cpu_percent": float(psutil.cpu_percent(interval=0.5)),
+            "memory_percent": float(psutil.virtual_memory().percent)}
+
+
+def _resource_sample(probe: Callable[[], dict[str, float]] | None) -> dict[str, Any]:
+    try:
+        reading = (probe or _default_resource_probe)()
+        cpu, memory = float(reading["cpu_percent"]), float(reading["memory_percent"])
+        if not (math.isfinite(cpu) and math.isfinite(memory)
+                and 0 <= cpu <= 100 and 0 <= memory <= 100):
+            raise ValueError("resource reading out of range")
+    except (ImportError, OSError, KeyError, TypeError, ValueError):
+        return {"available": False, "reason": "no valid host resource reading"}
+    return {"available": True, "cpu_percent": cpu, "memory_percent": memory,
+            "taken": "before the Day 0 test run, on the capture host"}
+
+
 def capture_baseline_manifest(
     repo_root: str | Path,
     *,
     subprocess_run: Callable[..., Any] | None = None,
     timeout_seconds: int = 600,
+    resource_probe: Callable[[], dict[str, float]] | None = None,
 ) -> dict[str, Any]:
     """Run Ruff and all repository tests on the Mia host and return a manifest.
 
@@ -282,6 +339,9 @@ def capture_baseline_manifest(
             separators=(",", ":"),
         ).encode("utf-8")
     )
+
+    resource_sample = _resource_sample(resource_probe)
+    dependencies = _dependency_versions(root)
 
     started = time.monotonic()
     try:
@@ -377,6 +437,9 @@ def capture_baseline_manifest(
         "benchmark_suite_id": BENCHMARK_SUITE_ID,
         "environment": _environment(),
         "runtime_settings": runtime_configuration,
+        "dependencies": dependencies,
+        "resource_sample": resource_sample,
+        "not_captured": dict(NOT_CAPTURED),
         "baseline_results": {
             **regression_results,
             "ruff_passed": ruff_passed,

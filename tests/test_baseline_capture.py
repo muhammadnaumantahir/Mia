@@ -553,3 +553,80 @@ def test_invalid_runtime_policy_prevents_baseline_capture(
 
     with pytest.raises(BaselineCaptureError, match=message):
         capture_baseline_manifest(tmp_path, subprocess_run=FakeSubprocess())
+
+
+# ---- MIA-OBS-02: dependency versions, resource sample and explicit not-captured items ----------
+
+def _capture(tmp_path, monkeypatch, *, probe=None, pyproject=None):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    _write_baseline_files(tmp_path)
+    if pyproject is not None:
+        (tmp_path / "pyproject.toml").write_text(pyproject, encoding="utf-8")
+    runner = FakeSubprocess()
+    return capture_baseline_manifest(
+        tmp_path, subprocess_run=runner, resource_probe=probe or (lambda: {
+            "cpu_percent": 12.5, "memory_percent": 40.0})), runner
+
+
+def test_unreadable_pyproject_records_dependencies_as_unavailable(tmp_path, monkeypatch):
+    manifest, _ = _capture(tmp_path, monkeypatch)  # fixture pyproject is not valid TOML
+    assert manifest["dependencies"] == {
+        "available": False, "reason": "pyproject.toml could not be read"}
+
+
+def test_declared_dependencies_record_installed_version_or_null(tmp_path, monkeypatch):
+    toml = ('[project]\nname = "x"\ndependencies = ["pytest>=8", "no_such_pkg_for_mia>=1"]\n'
+            '[project.optional-dependencies]\ndev = ["ruff>=0.6"]\n')
+    manifest, _ = _capture(tmp_path, monkeypatch, pyproject=toml)
+    deps = manifest["dependencies"]
+    assert deps["available"] is True
+    assert isinstance(deps["packages"]["pytest"], str) and deps["packages"]["pytest"][0].isdigit()
+    assert deps["packages"]["no-such-pkg-for-mia"] is None      # declared, not installed: null
+    assert "ruff" in deps["packages"]
+
+
+def test_resource_sample_is_taken_before_the_test_run(tmp_path, monkeypatch):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    _write_baseline_files(tmp_path)
+    runner = FakeSubprocess()
+    seen = []
+
+    def probe():
+        seen.append([c[0][1] if c[0][0] != "git" else "git" for c in runner.calls])
+        return {"cpu_percent": 5.0, "memory_percent": 30.0}
+
+    manifest = capture_baseline_manifest(tmp_path, subprocess_run=runner, resource_probe=probe)
+    assert manifest["resource_sample"]["available"] is True
+    assert seen == [["git", "git"]]  # only the two git calls ran: sampled before ruff and pytest
+
+
+@pytest.mark.parametrize("probe", [
+    lambda: {"cpu_percent": 150.0, "memory_percent": 10.0},
+    lambda: {"cpu_percent": float("nan"), "memory_percent": 10.0},
+    lambda: {"cpu_percent": 1.0},
+    lambda: (_ for _ in ()).throw(ImportError("psutil")),
+])
+def test_invalid_resource_reading_is_missing_not_zero(tmp_path, monkeypatch, probe):
+    manifest, _ = _capture(tmp_path, monkeypatch, probe=probe)
+    assert manifest["resource_sample"] == {
+        "available": False, "reason": "no valid host resource reading"}
+
+
+def test_manifest_states_what_day_zero_did_not_capture(tmp_path, monkeypatch):
+    manifest, _ = _capture(tmp_path, monkeypatch)
+    assert set(manifest["not_captured"]) == {"model_inventory", "inference_latency", "inference_cost"}
+    assert all(reason for reason in manifest["not_captured"].values())
+
+
+def test_store_rejects_malformed_new_sections_but_accepts_legacy_manifests(tmp_path, monkeypatch):
+    manifest, _ = _capture(tmp_path, monkeypatch)
+    store = ObservatoryStore(tmp_path / "o.sqlite3")
+    for key, bad in (("dependencies", {"packages": {}}), ("resource_sample", "x"),
+                     ("not_captured", ["a"])):
+        with pytest.raises(ValueError):
+            store.prepare_experiment(name="n", baseline_manifest={**manifest, key: bad})
+    legacy = {k: v for k, v in manifest.items()
+              if k not in ("dependencies", "resource_sample", "not_captured")}
+    assert store.prepare_experiment(name="n", baseline_manifest=legacy)["experiment_id"]
+    other = ObservatoryStore(tmp_path / "o2.sqlite3")  # one active experiment per store
+    assert other.prepare_experiment(name="m", baseline_manifest=manifest)["experiment_id"]

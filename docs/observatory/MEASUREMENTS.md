@@ -13,3 +13,13 @@ Registered: cpu_percent, memory_percent, test_pass_rate, fixed_benchmark_pass_ra
 Fixed in this change: daily snapshots stored `fixed_benchmark_duration_seconds` with unit `percent`; it is now `seconds`. Samples already written with the wrong unit stay as they were (immutable); readers should treat any such pre-fix sample as seconds.
 
 Not covered here (later M6 tasks): the Day 0 baseline format (OBS-02), scheduler behaviour (OBS-03), attribution (OBS-04), benchmark suites (OBS-05).
+
+## Day 0 baseline manifest additions (MIA-OBS-02)
+
+`capture_baseline_manifest` now also records, beside commit, configuration hash, environment and test results:
+
+- `dependencies`: installed versions of every package `pyproject.toml` declares (core and optional). A declared package that is not installed is `null`; an unreadable `pyproject.toml` gives `{"available": false, "reason": ...}`. Dependencies are **not** part of `configuration_hash`, so a later upgrade is visible as drift instead of blocking daily snapshots.
+- `resource_sample`: host CPU and memory percent read **before** the test run (so the tests do not skew it). An unavailable or out-of-range reading is `{"available": false, ...}`, never 0.
+- `not_captured`: explicit reasons for what Day 0 does not measure: model inventory, inference latency, inference cost. Those start at the first daily snapshot that has real usage evidence.
+
+`prepare_experiment` checks the shape of these sections when present and still accepts older manifests without them. The baseline itself stays immutable: it cannot be overwritten or deleted (triggers), and a second preparation while one is active is refused.

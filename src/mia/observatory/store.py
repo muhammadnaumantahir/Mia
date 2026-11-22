@@ -197,6 +197,14 @@ class ObservatoryStore:
             for key in ("os", "python", "platform", "machine")
         ):
             raise ValueError("environment must record local OS, Python, platform and machine")
+        for section in ("dependencies", "resource_sample"):
+            value = baseline_manifest.get(section)
+            if value is not None and not (isinstance(value, dict) and isinstance(value.get("available"), bool)):
+                raise ValueError(f"{section} must state whether it is available")
+        if baseline_manifest.get("not_captured") is not None and not isinstance(
+            baseline_manifest["not_captured"], dict
+        ):
+            raise ValueError("not_captured must map each missing item to a reason")
         runtime_settings = baseline_manifest["runtime_settings"]
         required_runtime_settings = {
             "MIA_EXPERIMENT_AUTO_CAPTURE", "MIA_AUTONOMY_ENABLED",
