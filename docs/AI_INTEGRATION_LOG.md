@@ -518,3 +518,9 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 
 - Commit 9dddaef on remote main (verified). docs/M1_EVIDENCE_REPORT.md written from a run on 5a64019: eval 31/31; full pytest incl. 8 Chromium files 2119 tests, 0 failed, 1 skipped; ruff clean. Owner-only checks listed per criterion. M1 is NOT declared accepted: that needs the owner (real model, microphone, Windows).
 - A3 status: IDLE. Every remaining open task is later-milestone (M2+) or assigned to other agents; A3-led OBS-05 is P6 and M6 work has not been approved by the owner for exception, so it is not claimed.
+
+## 2026-11-22T09:37Z — MIA-LIFE-02 DONE, MIA-LIFE-04 claimed (A1)
+
+- LIFE-02 commit `3dc0fa5` verified on remote main. Paths: src/mia/memory/{personal,schema,settings,store}.py, src/mia/observatory/api.py, tests/test_task_manager.py, docs/architecture/MEMORY_AND_KNOWLEDGE.md. Delivered: priority, recurrence (daily/weekly/monthly, owner-timezone wall clock, DST-safe, month-end clamp, complete() spawns next once), duplicate refusal (409), structural history without text, owner_timezone setting, overdue/due_before filters, migration 7.
+- Tests actually run: 16 new tests (7 mutations caught: fixed 24h step, month clamp, skip missed, duplicate scope, history text, spawn, idempotent complete); full suite 2135 passed, 1 skipped, 0 failed by progress-dot count; ruff clean; after the final rebase only the personal/task/project suites were re-run. Not covered: UI, Brain intents (LIFE-03), reminder delivery, calendar, sub-tasks, fixed-calendar recurrence, no live evidence.
+- LIFE-04 (A1 data/API side) claimed: project goals/status/milestones/decisions, links to tasks and structured records, project-scoped context, cross-project leakage tests. The A6 UI half is not started.

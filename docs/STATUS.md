@@ -437,3 +437,7 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 ## 2026-11-22 M1 evidence report (MIA-M1-13, agent A3)
 
 - Delivered `docs/M1_EVIDENCE_REPORT.md`: criterion-by-criterion automated completion versus owner-only checks, run on 5a64019 (eval 31/31; 2119 tests, 0 failed, 1 skipped, Chromium tests included; ruff clean). **M1 acceptance is pending the owner's checks**; nothing in the report claims live-model quality.
+
+## 2026-11-22T09:37Z A1 task manager (MIA-LIFE-02)
+
+- Tasks gain priority, recurrence (owner-timezone, DST-safe), duplicate refusal, structural history and an owner_timezone setting. No UI or Brain intents yet. Commit `3dc0fa5`; unit/API tests only.
