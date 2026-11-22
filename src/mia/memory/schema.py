@@ -170,6 +170,13 @@ def _migration_7_task_manager(db: sqlite3.Connection) -> None:
     )
 
 
+def _migration_8_project_workspace(db: sqlite3.Connection) -> None:
+    """Project registry (goal, status) and milestones (MIA-LIFE-04)."""
+    from mia.memory.projects import ProjectStore
+
+    ProjectStore.initialize(db)
+
+
 # (version, description, function). Append new migrations; never edit applied ones.
 MIGRATIONS: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (2, "identity versions and memory audit log", _migration_2_identity_and_audit),
@@ -178,6 +185,7 @@ MIGRATIONS: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (5, "optional structured record project scope", _migration_5_record_project),
     (6, "owner-scoped personal items", _migration_6_personal_items),
     (7, "task priority, recurrence, duplicates and history", _migration_7_task_manager),
+    (8, "project workspace and milestones", _migration_8_project_workspace),
 ]
 
 LATEST_VERSION = max([BASELINE_VERSION, *[version for version, _, _ in MIGRATIONS]])

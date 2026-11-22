@@ -104,6 +104,7 @@ from mia.life.reflect import Reflector
 from mia.life.runner import LifeRunner, LifeScheduler
 from mia.life.store import ITEM_STATES, LifeStore
 from mia.life.web import ResearchExplorer, normalise_research_url
+from mia.memory import projects as project_workspaces
 from mia.memory.capture import CaptureService
 from mia.memory.identity import (
     identity_system_prompt,
@@ -111,6 +112,7 @@ from mia.memory.identity import (
 )
 from mia.memory.maintenance import MaintenanceService
 from mia.memory.personal import DuplicateItemError, PersonalItemNotFoundError
+from mia.memory.projects import MilestoneNotFoundError, ProjectNotFoundError
 from mia.memory.relationships import RelationshipNotFoundError
 from mia.memory.semantic import LocalOllamaEmbeddingReranker
 from mia.memory.store import MemoryStore
@@ -359,6 +361,37 @@ class PersonalItemPatch(BaseModel):
     recurrence: dict[str, Any] | None = None
     clear_recurrence: bool = False
     allow_duplicate: bool = False
+
+
+class ProjectInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64)
+    goal: str = Field(default="", max_length=2_000)
+    status: str = Field(default="active", max_length=12)
+
+
+class ProjectPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal: str | None = Field(default=None, max_length=2_000)
+    status: str | None = Field(default=None, max_length=12)
+
+
+class MilestoneInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=200)
+    due_at: str | None = Field(default=None, max_length=40)
+
+
+class MilestonePatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    status: str | None = Field(default=None, max_length=8)
+    due_at: str | None = Field(default=None, max_length=40)
+    clear_due: bool = False
 
 
 class PersonalRetentionInput(BaseModel):
@@ -4758,6 +4791,82 @@ def create_app(
             {"record_id": new_id, "supersedes_id": record_id, "conflicts_with": conflicts},
         )
         return {"record_id": new_id, "supersedes_id": record_id, "conflicts_with": conflicts}
+
+    @app.post("/api/projects", status_code=201)
+    def create_project(item: ProjectInput) -> dict[str, Any]:
+        try:
+            created = memory_store.projects.create(item.name, goal=item.goal, status=item.status)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return created
+
+    @app.get("/api/projects")
+    def list_project_workspaces() -> dict[str, Any]:
+        return {"projects": project_workspaces.list_projects(memory_store)}
+
+    @app.get("/api/projects/{name}")
+    def get_project_workspace(name: str) -> dict[str, Any]:
+        try:
+            return project_workspaces.workspace(memory_store, name)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.patch("/api/projects/{name}")
+    def patch_project(name: str, item: ProjectPatch) -> dict[str, Any]:
+        try:
+            changed = memory_store.projects.update(name, **item.model_dump(exclude_unset=True))
+        except ProjectNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Project workspace not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"project": memory_store.projects.get(name), "changed": changed}
+
+    @app.delete("/api/projects/{name}")
+    def delete_project(name: str) -> dict[str, Any]:
+        """Remove goal, status and milestones; tasks, decisions and chats keep their label."""
+        try:
+            removed = memory_store.projects.delete(name)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not removed:
+            raise HTTPException(status_code=404, detail="Project workspace not found")
+        return {"deleted": name}
+
+    @app.post("/api/projects/{name}/milestones", status_code=201)
+    def add_project_milestone(name: str, item: MilestoneInput) -> dict[str, Any]:
+        try:
+            milestone_id = memory_store.projects.add_milestone(
+                name, item.title, due_at=item.due_at
+            )
+        except ProjectNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Project workspace not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"milestone_id": milestone_id}
+
+    @app.patch("/api/projects/{name}/milestones/{milestone_id}")
+    def patch_project_milestone(
+        name: str, milestone_id: str, item: MilestonePatch
+    ) -> dict[str, Any]:
+        try:
+            changed = memory_store.projects.update_milestone(
+                name, milestone_id, **item.model_dump(exclude_unset=True)
+            )
+        except MilestoneNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Milestone not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"changed": changed}
+
+    @app.delete("/api/projects/{name}/milestones/{milestone_id}")
+    def delete_project_milestone(name: str, milestone_id: str) -> dict[str, Any]:
+        try:
+            removed = memory_store.projects.delete_milestone(name, milestone_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not removed:
+            raise HTTPException(status_code=404, detail="Milestone not found")
+        return {"deleted": milestone_id}
 
     @app.post("/api/personal/items", status_code=201)
     def add_personal_item(item: PersonalItemInput) -> dict[str, Any]:

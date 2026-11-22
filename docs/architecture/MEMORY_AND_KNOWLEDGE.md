@@ -232,3 +232,28 @@ key and the `personal_item_history` table). API: `/api/personal/items` (+ `/comp
   with the item, included in the export (`personal_item_history`), and never holds item text.
 - **Limits.** No UI, no Brain intents (LIFE-03), no reminders delivery (LIFE-09), no calendar
   integration, no sub-tasks. Recurrence is "after completion", not a fixed calendar schedule.
+
+## Project workspace (MIA-LIFE-04, data/API half)
+
+`projects` + `project_milestones` (migration 8); code `src/mia/memory/projects.py`; API
+`/api/projects` (+ `/{name}`, `/{name}/milestones`). The registry only adds a goal, a status
+(`active|paused|completed|archived`) and milestones (open/done, optional timezone-aware due
+time). Tasks (`personal_items`), decisions (structured records of type `decision`, scoped by
+MIA-BRAIN-06) and conversations (assigned by the owner) stay in their own stores and are
+*selected* by project key, never copied.
+
+- **Isolation.** A workspace shows only items whose project key matches (case/spacing-
+  insensitive). Unassigned material and other projects' tasks, decisions, conversations and
+  milestone ids never appear; a milestone id from another project is refused. Temporary
+  (private) conversations are never listed or counted. Finished tasks and retired decisions
+  are hidden. The name is an owner-view filter, not a security boundary.
+- **Unregistered projects.** A name that appears on tasks, decisions or chats but has no
+  registry row still gets a workspace view (`registered: false`) and appears in the listing.
+- **Delete.** Removes goal, status and milestones only; labelled work keeps its label.
+- **Audit/export.** Audit holds ids and field names only (no goal or titles); export includes
+  `projects` and `project_milestones`.
+- **Not done (honest limits).** No UI (the A6 half of this task is untouched), no rename of a
+  project (it would have to rewrite every store), names containing `/` cannot be addressed in
+  the URL path, and the Brain does not yet receive the goal/milestones in its prompt context;
+  project-scoped *recall* of conversations and records already exists (M1 project continuity,
+  MIA-BRAIN-06).

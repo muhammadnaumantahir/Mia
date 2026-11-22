@@ -18,6 +18,7 @@ from typing import Any
 from mia.memory import schema
 from mia.memory.identity import IdentityStore
 from mia.memory.personal import PersonalData
+from mia.memory.projects import ProjectStore
 from mia.memory.relationships import RelationshipStore
 from mia.memory.schema import AuditLog
 from mia.memory.settings import SettingsStore
@@ -119,6 +120,7 @@ class MemoryStore:
         self.personal = PersonalData(
             self._connection, timezone=lambda: self.settings.get("owner_timezone")
         )
+        self.projects = ProjectStore(self._connection)
         self._initialize()
 
     @contextmanager
@@ -484,6 +486,7 @@ class MemoryStore:
             "structured_memory": self.structured.export(),
             "personal_items": self.personal.export(),
             "personal_item_history": self.personal.export_history(),
+            **self.projects.export(),
         }
         canonical = json.dumps(
             payload,
