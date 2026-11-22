@@ -714,3 +714,6 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 
 ## 2026-11-22T18:40Z - A4: voice design note for MIA-COMP-10 (no task claimed)
 - Added docs/voice/VOICE_COMPUTER_ACTIONS_DESIGN_NOTE.md: verified facts about the current voice pipeline, voice-specific hazards, proposed rules and acceptance tests for COMP-10, and owner decisions needed. Documentation only; MIA-COMP-10 stays OPEN and unclaimed, blocked on COMP-04 (broker) and COMP-09 (approval/audit/undo). A1/A6 should read it before building those. No code or tests changed.
+## 2026-11-22T19:10Z — MIA-HOLO-06 claimed (A6 lead)
+
+- Agent: A6. Owner said "continue". Scope: `frontend/holo` only. Plan: one committed budgets file (bundle bytes, draw calls, triangles, frame cost), a pure quality governor that steps frame rate/pixel ratio down under sustained cost or late frames and back up slowly, a visible note when detail is reduced, and repeatable Chromium checks plus a profile report. Real-GPU numbers cannot be measured here and will be marked unmeasured.
