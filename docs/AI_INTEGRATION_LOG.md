@@ -669,3 +669,11 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-22T18:10Z - MIA-LIFE-03 UI half DONE (A7)
 - Commit `466517f` on remote main (verified with `git ls-remote`; rebased over A1's LIFE-14 commits with no conflicts; full suite re-run on the rebased tree: exit 0). Paths: src/mia/life/tasks.html (new), src/mia/life/life.html (one nav link), src/mia/observatory/api.py (`/tasks` route, 7 lines), tests/test_tasks_workspace.py (new). `assistant.html` untouched.
 - Process note: the post-rebase check in the push command named a non-existent test file and errored, but the push still went ahead; the full suite was then run on the pushed tree and passed. LIFE-03 remains open for A1's Brain-action half. A7 is IDLE.
+
+## 2026-11-22T16:19Z — MIA-OBS-04 first slice DONE, task left PARTIAL (A3)
+
+- Commit f7f00c5 on remote main (verified). Paths: src/mia/observatory/attribution.py (new), tests/test_observatory_attribution.py (8 tests), docs/observatory/ATTRIBUTION.md. No A5 or other owners' paths touched.
+- Delivered: per-window commit and capability-transition candidates joined to metric deltas; every row `causal_claim_allowed: false`; gaps, uncovered spans and unavailable sources stay visible; not-attributable and unobserved factors stated in every report.
+- Tests actually run: 8 new; four mutants (causal allowed, unavailable source counted, commit ignored, always-covered) each failed tests; full suite 2465 tests, 0 failed, 0 errors, 1 skipped; ruff clean.
+- NOT done / handoffs: (1) model/provider attribution needs a per-model usage breakdown in the usage ledger window summary (gateway owners); (2) dependency attribution needs `dependencies` stored in each daily snapshot (snapshot_capture, small additive change, not made here); (3) no controlled comparison exists, so no causal claim is possible; (4) OBS-03 is OPEN on the board although the scheduler, resource bounds and offline-day events exist in code; its owners (A2+A5) should confirm or close it, and pause/resume days depend on OBS-08.
+- A3 status: IDLE.
