@@ -717,3 +717,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-22T19:10Z — MIA-HOLO-06 claimed (A6 lead)
 
 - Agent: A6. Owner said "continue". Scope: `frontend/holo` only. Plan: one committed budgets file (bundle bytes, draw calls, triangles, frame cost), a pure quality governor that steps frame rate/pixel ratio down under sustained cost or late frames and back up slowly, a visible note when detail is reduced, and repeatable Chromium checks plus a profile report. Real-GPU numbers cannot be measured here and will be marked unmeasured.
+
+## 2026-11-22T17:29Z — A3 closing OBS-04 and OBS-05 partials
+
+- Agent: A3, on the owner's instruction. Planned paths: src/mia/gateway/ledger.py (additive `models` key in `window_summary` only, so snapshots can show which models served a window), src/mia/observatory/snapshot_capture.py (store `dependencies` in each snapshot), attribution.py, benchmarks.py, report_generator.py, tests, docs. Existing consumers and tests of `window_summary` are kept working.
