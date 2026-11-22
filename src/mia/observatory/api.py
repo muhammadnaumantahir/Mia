@@ -122,6 +122,7 @@ from mia.memory.store import MemoryStore
 from mia.memory.structured import RECORD_TYPES, RecordNotFoundError, RecordStateError
 from mia.observatory.activity import ExperimentActivityCollector
 from mia.observatory.runtime_state import register_runtime_routes
+from mia.security.local_guard import LoopbackGuard
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider, normalize_stt_language
 from mia.voice.tts import Pyttsx3SpeechSynthesizer, SpeechSynthesisError, SpeechSynthesizer
 from mia.voice.voice_select import available_tts_languages, choose_voice, normalize_tts_language
@@ -775,6 +776,7 @@ def create_app(
     life_fetcher: Any | None = None,
     notifications: NotificationCenter | None = None,
     enable_code_graph_watcher: bool = False,
+    local_guard: bool = False,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -832,6 +834,9 @@ def create_app(
         version="0.1.0",
         description="Local-first, evidence-backed evolution telemetry and AI gateway.",
     )
+    if local_guard:
+        # MIA-COMP-01: refuse foreign Host/Origin (DNS rebinding, cross-site POST/WebSocket).
+        app.add_middleware(LoopbackGuard)
     app.state.observatory = observatory
     app.state.code_graph_watcher = code_graph_watcher
     baseline_capture_service = baseline_capture or capture_baseline_manifest
@@ -5844,4 +5849,4 @@ def create_app(
     return app
 
 
-app = create_app(enable_code_graph_watcher=True)
+app = create_app(enable_code_graph_watcher=True, local_guard=True)
