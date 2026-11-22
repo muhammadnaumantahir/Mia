@@ -257,3 +257,28 @@ MIA-BRAIN-06) and conversations (assigned by the owner) stay in their own stores
   the URL path, and the Brain does not yet receive the goal/milestones in its prompt context;
   project-scoped *recall* of conversations and records already exists (M1 project continuity,
   MIA-BRAIN-06).
+
+## Daily and weekly briefing (MIA-LIFE-05)
+
+`GET /api/briefing` (code: `src/mia/memory/briefing.py`). Deterministic and model-free: it is
+assembled from stored records, so every line traces to a record. Nothing is sent from here.
+
+- **Sources.** Open tasks and reminders, open dated project milestones (active projects only) and
+  the goals of active projects. **There is no calendar source**: no calendar event is ever listed,
+  and `missing_sources` always says so. Empty sources are reported as empty, not filled in.
+- **Citations.** Each item carries `source` (`personal_item` / `project_milestone` / `project` and
+  its id); the text form shows the type and short id. The briefing also reports `timezone` (the
+  `owner_timezone` setting), `generated_at`, a freshness block per source, undated open items and
+  items omitted by the per-section limit.
+- **Windows.** `daily` = the rest of today in the owner's local day, `weekly` = through the 7th
+  local day; `horizon_days` (1-31) overrides. Overdue = open and due before now. An item due
+  exactly now is "coming up".
+- **Privacy.** `private` items are hidden and only counted unless `include_private=true`.
+  `project=` limits everything to one project (no other project's items appear).
+- **Goal follow-up.** An active project with a goal and no task, milestone or goal change for
+  `stale_goal_days` (default 14) is listed with the days idle and its last activity.
+- **Quiet hours.** Optional `quiet_start_minute`/`quiet_end_minute` (minutes after local midnight;
+  overnight windows work). Content is still built; `deliver_now` is false inside the window.
+  No quiet hours are assumed when none are given. Delivery itself belongs to MIA-LIFE-09.
+- **Not done.** No scheduler or notification, no persisted briefing preferences (configuration is
+  per request), no UI, no model-written summary, no Brain intent, no calendar integration.

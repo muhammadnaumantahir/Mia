@@ -106,6 +106,7 @@ from mia.life.store import ITEM_STATES, LifeStore
 from mia.life.task_notifications import sync_due_tasks
 from mia.life.web import ResearchExplorer, normalise_research_url
 from mia.memory import projects as project_workspaces
+from mia.memory.briefing import generate_briefing
 from mia.memory.capture import CaptureService
 from mia.memory.identity import (
     identity_system_prompt,
@@ -4829,6 +4830,28 @@ def create_app(
             {"record_id": new_id, "supersedes_id": record_id, "conflicts_with": conflicts},
         )
         return {"record_id": new_id, "supersedes_id": record_id, "conflicts_with": conflicts}
+
+    @app.get("/api/briefing")
+    def briefing(
+        period: str = "daily",
+        project: str | None = None,
+        include_private: bool = False,
+        horizon_days: int | None = None,
+        stale_goal_days: int = 14,
+        max_items: int = 10,
+        quiet_start_minute: int | None = None,
+        quiet_end_minute: int | None = None,
+    ) -> dict[str, Any]:
+        """Deterministic briefing from owner-approved sources; nothing is sent from here."""
+        try:
+            return generate_briefing(
+                memory_store, period=period, project=project, include_private=include_private,
+                horizon_days=horizon_days, stale_goal_days=stale_goal_days,
+                max_items=max_items, quiet_start_minute=quiet_start_minute,
+                quiet_end_minute=quiet_end_minute,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/projects", status_code=201)
     def create_project(item: ProjectInput) -> dict[str, Any]:
