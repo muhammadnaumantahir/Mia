@@ -538,3 +538,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Tests actually run: new file 22 passed, 5 consecutive runs stable; full suite 2132 passed, 1 skipped; ruff clean. Mutation checks: reintroducing the inherited-key bug fails 1 test; unknown->idle fails 1 test; a source edit without rebuilding fails the staleness test. One test was initially flaky (the page re-applies its picker state after the contract fetch, overwriting a directly-driven renderer); fixed by waiting for network idle in the test opener.
 - Limits: software GL only, no real-GPU/Windows evidence (HOLO-06); not wired to live events (HOLO-04); accessibility is basic (status live region, decorative canvas, text fallback) with no screen-reader or contrast audit (HOLO-05); the committed 542 KB bundle bloats the repo diff each rebuild (the staleness test guards drift, not size).
 - Next: MIA-HOLO-04 (A6 + A4 + A1) is unblocked: post client evidence to `POST /api/runtime/resolve` and call `window.__holo.show(state)` equivalent (`show` in `frontend/holo/src/main.js`).
+
+## 2026-11-22T09:45Z — MIA-OBS-01 claimed (A3, owner-approved M6 exception)
+
+- Agent: A3. Owner approved M6 work in chat. Existing observatory code (store, baseline, snapshot capture/scheduler, report) already covers much of OBS-02/03/07; OBS-01 is limited to demonstrated gaps (see board row). A5 is not consulted yet; A5 owns code-graph/evolution paths, none touched.
