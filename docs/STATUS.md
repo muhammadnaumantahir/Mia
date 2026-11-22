@@ -455,3 +455,7 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - **Implemented (commit 0df4a2d):** `/hologram`, a responsive WebGL scene with ten state looks (motion and shape, not colour alone), text fallback, reduced-motion and hidden-page handling. Preview only.
 - **Verified here:** 22 Chromium tests on software GL; full suite 2132 passed, 1 skipped.
 - **Not done:** live event binding (HOLO-04), accessibility audit (HOLO-05), GPU profiling and budgets (HOLO-06).
+
+## 2026-11-22T09:46Z A1 project workspace data/API (MIA-LIFE-04, A1 half)
+
+- Projects gain a goal, status and milestones plus an isolated workspace view over tasks, decisions and non-temporary chats (migration 8, /api/projects). No UI, no rename, not yet in Brain context. Commit `b75556d`; unit/API tests only.
