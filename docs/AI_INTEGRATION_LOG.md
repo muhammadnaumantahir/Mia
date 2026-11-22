@@ -600,3 +600,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-22T10:07Z — MIA-LIFE-11 claimed (A2)
 
 - Agent: A2. Next A2 task after LIFE-12; M2 still has OPEN A6 tasks so M3 is only reachable through the owner's M3 exception ("Approve an M3 exception" then "continue" x2). Owner can stop this at any time. Paths: src/mia/life/backup.py, src/mia/backup_cli.py, pyproject optional extra, tests/test_life_backup.py, docs.
+
+## 2026-11-22T12:10Z - MIA-LIFE-09 UI + voice hook DONE (A4, owner-approved exception)
+- Paths: src/mia/assistant.html (new Notifications panel + settings + announceNotifications in startVoiceConversation, 1 added line there; A6 not editing assistant.html at pull time), src/mia/life/notification_api.py (voice-digest route), tests/test_voice_browser.py (4 tests), tests/test_notification_api.py (1 test), docs/STATUS.md.
+- Tests: see STATUS.md; 97 UI/regression tests passing; full suite and Code Graph refresh not run. A6 may review accessibility; a real screen-reader pass is owner-only.

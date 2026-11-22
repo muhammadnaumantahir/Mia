@@ -66,6 +66,7 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 .life-inbox-panel[hidden]{display:none!important}.life-inbox-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.life-inbox-head strong{font-size:13px;color:#d8eee3}.life-inbox-head small{display:block;font-size:10px;color:#86a296;margin-top:3px}.life-inbox-list{display:grid;gap:8px;margin-top:10px;max-height:290px;overflow:auto}
 .life-inbox-item{border:1px solid #29483c;border-radius:10px;background:#0c1715;padding:10px}.life-inbox-item strong{font-size:12px;color:#d8eee3;overflow-wrap:anywhere}.life-inbox-item p{font-size:11px;line-height:1.5;color:#a3b9ae;margin:5px 0;white-space:pre-wrap;overflow-wrap:anywhere}.life-inbox-item small{font-size:9px;color:#718b80}.life-inbox-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.life-inbox-actions button{border:1px solid #35594a;background:#18352b;color:#c7f0dc;border-radius:8px;padding:5px 8px;font-size:10px;cursor:pointer}.life-inbox-actions button.danger{background:#322724;color:#edc4b6;border-color:#684c43}.life-inbox-empty,.life-inbox-error{font-size:11px;color:#8fa99e;padding:12px 2px}.life-inbox-error{color:#f0b7a8}
 .life-inbox-toggle:focus-visible,.life-inbox-actions button:focus-visible{outline:2px solid #70dca8;outline-offset:2px}
+.ntf-form{display:grid;gap:8px;margin-top:10px;border-top:1px solid #29483c;padding-top:10px;font-size:11px;color:#a3b9ae}.ntf-form label{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.ntf-form input[type=text],.ntf-form input[type=time],.ntf-form input[type=number]{background:#0c1715;color:#d8eee3;border:1px solid #35594a;border-radius:7px;padding:4px 7px;font-size:11px}.ntf-form input:focus-visible,.ntf-why:focus-visible{outline:2px solid #70dca8;outline-offset:2px}.ntf-form[hidden]{display:none!important}.ntf-meta{display:block;margin-top:3px}.ntf-hist{margin:4px 0 0;padding-left:16px;font-size:10px;color:#86a296}
 @media(max-width:800px){.life-inbox-panel{width:calc(100% - 32px)}}
 
 
@@ -131,11 +132,25 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 <div class="sidecard"><b>Local-first by design</b><p>Mia tries local models first. Cloud providers are optional, and paid routing remains disabled unless you explicitly configure it.</p></div>
 </aside>
 <main>
-<header class="top"><div class="context">Personal assistant <span style="color:#527d6c">/</span> Conversation</div><div style="display:flex;align-items:center;gap:9px"><button class="life-inbox-toggle" id="lifeInboxToggle" type="button" aria-expanded="false" aria-controls="lifeInboxPanel">Mia Inbox <span class="life-inbox-count" id="lifeInboxCount">…</span></button><div class="state" id="providerState">Checking AI providers…</div></div></header>
+<header class="top"><div class="context">Personal assistant <span style="color:#527d6c">/</span> Conversation</div><div style="display:flex;align-items:center;gap:9px"><button class="life-inbox-toggle" id="ntfToggle" type="button" aria-expanded="false" aria-controls="ntfPanel">Notifications <span class="life-inbox-count" id="ntfCount" aria-label="Loading notifications">…</span></button><button class="life-inbox-toggle" id="lifeInboxToggle" type="button" aria-expanded="false" aria-controls="lifeInboxPanel">Mia Inbox <span class="life-inbox-count" id="lifeInboxCount">…</span></button><div class="state" id="providerState">Checking AI providers…</div></div></header>
 <section class="life-inbox-panel" id="lifeInboxPanel" hidden aria-label="Mia inbox">
  <div class="life-inbox-head"><div><strong>Mia's proactive inbox</strong><small>Owner-controlled messages based on Mia's journal, with source references. No push notifications are sent.</small></div><div style="display:flex;gap:7px"><button class="memory-refresh" id="refreshLifeInbox" type="button">↻ Refresh</button><button class="memory-refresh" id="closeLifeInbox" type="button" aria-label="Close inbox">Close</button></div></div>
  <div class="life-inbox-list" id="lifeInboxMessages" aria-live="polite"><div class="life-inbox-empty">Loading inbox…</div></div>
  <div style="margin-top:8px"><a href="/life" style="font-size:10px;color:#9bd9b8">Open autonomous life controls and full inbox →</a></div>
+</section>
+<section class="life-inbox-panel" id="ntfPanel" hidden aria-label="Notifications">
+ <div class="life-inbox-head"><div><strong>Notifications</strong><small>Only Mia's own features create these. Each one says why it exists and where it came from. Nothing leaves this computer.</small></div><div style="display:flex;gap:7px"><button class="memory-refresh" id="ntfSettingsToggle" type="button" aria-expanded="false" aria-controls="ntfSettings">Settings</button><button class="memory-refresh" id="ntfRefresh" type="button">↻ Refresh</button><button class="memory-refresh" id="ntfClose" type="button" aria-label="Close notifications">Close</button></div></div>
+ <div class="ntf-form" id="ntfSettings" hidden role="group" aria-label="Notification settings">
+  <label><input type="checkbox" id="ntfEnabled"> Notifications on</label>
+  <label><input type="checkbox" id="ntfVoice"> Mention new notifications when a voice conversation starts</label>
+  <label>Timezone <input type="text" id="ntfTimezone" placeholder="Asia/Karachi" autocomplete="off" spellcheck="false" aria-describedby="ntfSettingsMsg"></label>
+  <label><input type="checkbox" id="ntfQuiet"> Quiet hours</label>
+  <label>From <input type="time" id="ntfQuietStart"> to <input type="time" id="ntfQuietEnd"></label>
+  <label><input type="checkbox" id="ntfUrgent"> Urgent items may break through quiet hours</label>
+  <label>Most per day <input type="number" id="ntfMaxDay" min="0" max="200"></label>
+  <div><button class="memory-refresh" id="ntfSave" type="button">Save settings</button> <span id="ntfSettingsMsg" role="status" aria-live="polite"></span></div>
+ </div>
+ <div class="life-inbox-list" id="ntfList" aria-live="polite"><div class="life-inbox-empty">Loading notifications…</div></div>
 </section>
 <section class="content">
 <div class="welcome" id="welcome"><div class="orb">✳</div><h1>What can I help with?</h1><p>Talk naturally, ask questions, explore ideas or plan a task. Mia will use an available model that meets the current cost and capability rules.</p></div>
@@ -257,6 +272,117 @@ $('refreshLifeInbox').addEventListener('click',loadLifeInbox);
 $('closeLifeInbox').addEventListener('click',()=>{
  $('lifeInboxPanel').hidden=true;$('lifeInboxToggle').setAttribute('aria-expanded','false');
 });
+let ntfLoading=false;
+function ntfMinutes(value){const parts=String(value||'').split(':');return parts.length===2?(Number(parts[0])*60+Number(parts[1])):NaN;}
+function ntfTime(minutes){const m=Number(minutes)||0;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}
+function ntfAction(label,kind,callback){const button=document.createElement('button');button.type='button';button.textContent=label;if(kind)button.classList.add(kind);button.addEventListener('click',callback);return button;}
+function ntfShowSettings(settings){
+ if(!settings)return;
+ $('ntfEnabled').checked=!!settings.enabled;$('ntfVoice').checked=!!settings.voice_enabled;
+ $('ntfTimezone').value=settings.timezone||'UTC';$('ntfQuiet').checked=!!settings.quiet_hours_enabled;
+ $('ntfQuietStart').value=ntfTime(settings.quiet_start_minute);$('ntfQuietEnd').value=ntfTime(settings.quiet_end_minute);
+ $('ntfUrgent').checked=!!settings.urgent_bypasses_quiet;$('ntfMaxDay').value=settings.max_per_day;
+}
+function renderNotifications(items,counts){
+ const list=$('ntfList');list.replaceChildren();
+ const unread=(items||[]).filter(item=>item.state==='pending').length;
+ $('ntfCount').textContent=String(unread);
+ $('ntfCount').setAttribute('aria-label',unread+' unread notifications');
+ if(!items.length){const empty=document.createElement('div');empty.className='life-inbox-empty';
+  const held=(counts&&counts.held)||0;
+  empty.textContent=held?('Nothing to show right now. '+held+' notification'+(held===1?' is':'s are')+' waiting for quiet hours or your daily limit to end.'):'No notifications. You are all caught up.';
+  list.append(empty);return;}
+ items.forEach(item=>{
+  const card=document.createElement('article');card.className='life-inbox-item';
+  const title=document.createElement('strong');title.textContent=item.title||'Notification';
+  card.append(title);
+  if(item.body){const body=document.createElement('p');body.textContent=item.body;card.append(body);}
+  const why=document.createElement('small');why.className='ntf-meta';why.textContent='Why: '+(item.reason||'no reason recorded');card.append(why);
+  const source=document.createElement('small');source.className='ntf-meta';
+  source.textContent='Source: '+String(item.source_type||'unknown')+' · '+String(item.source_ref||'')+' · '+String(item.priority||'normal')+(item.occurrences>1?(' · seen '+item.occurrences+' times'):'')+' · expires '+String(item.expires_at||'');
+  card.append(source);
+  const actions=document.createElement('div');actions.className='life-inbox-actions';
+  if(item.state==='pending')actions.append(ntfAction('Mark read','',()=>ntfPost(item.notification_id,'read')));
+  actions.append(
+   ntfAction('Snooze 1 hour','',()=>ntfPost(item.notification_id,'snooze',{minutes:60})),
+   ntfAction('Snooze 1 day','',()=>ntfPost(item.notification_id,'snooze',{minutes:1440})),
+   ntfAction('Dismiss','danger',()=>ntfPost(item.notification_id,'dismiss'))
+  );
+  const history=document.createElement('button');history.type='button';history.className='ntf-why';history.textContent='History';history.setAttribute('aria-expanded','false');
+  const historyBox=document.createElement('ul');historyBox.className='ntf-hist';historyBox.hidden=true;
+  history.addEventListener('click',async()=>{
+   if(!historyBox.hidden){historyBox.hidden=true;history.setAttribute('aria-expanded','false');return;}
+   try{
+    const response=await fetch('/api/notifications/'+encodeURIComponent(item.notification_id)+'/explain',{cache:'no-store'});
+    const data=await response.json();if(!response.ok)throw new Error(data.detail||'History unavailable');
+    historyBox.replaceChildren();
+    (data.history||[]).forEach(entry=>{const li=document.createElement('li');li.textContent=String(entry.at||'')+' · '+String(entry.event||'')+' · '+String(entry.detail||'');historyBox.append(li);});
+   }catch(error){historyBox.replaceChildren();const li=document.createElement('li');li.textContent=error.message;historyBox.append(li);}
+   historyBox.hidden=false;history.setAttribute('aria-expanded','true');
+  });
+  actions.append(history);card.append(actions,historyBox);
+  list.append(card);
+ });
+}
+async function loadNotifications(){
+ if(ntfLoading)return;ntfLoading=true;
+ try{
+  const response=await fetch('/api/notifications?limit=50',{cache:'no-store'});
+  const data=await response.json();
+  if(!response.ok)throw new Error(data.detail||'Notifications are unavailable');
+  renderNotifications(Array.isArray(data.notifications)?data.notifications:[],data.counts||{});
+  if($('ntfSettings').hidden)ntfShowSettings(data.settings);
+ }catch(error){
+  const list=$('ntfList');list.replaceChildren();
+  const message=document.createElement('div');message.className='life-inbox-error';message.textContent=error.message||'Notifications could not be loaded';list.append(message);
+  $('ntfCount').textContent='!';
+ }finally{ntfLoading=false;}
+}
+async function ntfPost(id,action,body){
+ const buttons=$('ntfList').querySelectorAll('button');buttons.forEach(button=>button.disabled=true);
+ try{
+  const response=await fetch('/api/notifications/'+encodeURIComponent(id)+'/'+action,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
+  const data=await response.json();if(!response.ok)throw new Error(data.detail||'Update failed');
+  await loadNotifications();
+ }catch(error){
+  const notice=document.createElement('div');notice.className='life-inbox-error';notice.textContent=error.message;$('ntfList').prepend(notice);
+  buttons.forEach(button=>button.disabled=false);
+ }
+}
+async function ntfSave(){
+ const message=$('ntfSettingsMsg');
+ const start=ntfMinutes($('ntfQuietStart').value),end=ntfMinutes($('ntfQuietEnd').value);
+ const changes={enabled:$('ntfEnabled').checked,voice_enabled:$('ntfVoice').checked,timezone:$('ntfTimezone').value.trim(),
+  quiet_hours_enabled:$('ntfQuiet').checked,urgent_bypasses_quiet:$('ntfUrgent').checked,max_per_day:Number($('ntfMaxDay').value)};
+ if(Number.isFinite(start))changes.quiet_start_minute=start;
+ if(Number.isFinite(end))changes.quiet_end_minute=end;
+ try{
+  const response=await fetch('/api/notifications/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(changes)});
+  const data=await response.json();if(!response.ok)throw new Error(typeof data.detail==='string'?data.detail:'Those settings were not accepted');
+  ntfShowSettings(data.settings);message.textContent='Saved.';await loadNotifications();
+ }catch(error){message.textContent=error.message;}
+}
+$('ntfToggle').addEventListener('click',()=>{
+ const open=$('ntfPanel').hidden;$('ntfPanel').hidden=!open;$('ntfToggle').setAttribute('aria-expanded',String(open));
+ if(open)loadNotifications();
+});
+$('ntfRefresh').addEventListener('click',loadNotifications);
+$('ntfClose').addEventListener('click',()=>{$('ntfPanel').hidden=true;$('ntfToggle').setAttribute('aria-expanded','false');$('ntfToggle').focus();});
+$('ntfSettingsToggle').addEventListener('click',()=>{
+ const open=$('ntfSettings').hidden;$('ntfSettings').hidden=!open;$('ntfSettingsToggle').setAttribute('aria-expanded',String(open));
+});
+$('ntfSave').addEventListener('click',ntfSave);
+async function announceNotifications(){
+ try{
+  const response=await fetch('/api/notifications/voice-digest',{method:'POST'});
+  if(!response.ok)return;
+  const data=await response.json();const items=Array.isArray(data.items)?data.items:[];
+  if(!items.length)return;
+  const lead=items.length===1?'You have one notification: ':'You have '+items.length+' notifications: ';
+  await speakReply(lead+items.map(item=>item.title).join('. ')+'.',{force:true});
+  loadNotifications();
+ }catch(error){}
+}
 function setTaskStatus(message,isError=false){
  const status=$('taskStatus');status.textContent=message;status.classList.toggle('error',isError);
 }
@@ -1594,6 +1720,8 @@ async function startVoiceConversation({wakeWord=false}={}){
   return;
  }
  setVoiceState('ready');
+ await announceNotifications();
+ if(!voiceMode)return;
  setVoiceStatus('Requesting microphone access…');
  startVoiceRecognition();
 }
@@ -1904,4 +2032,6 @@ loadConversationList();
 loadMemoryRecords();
 loadLifeInbox();
 window.setInterval(loadLifeInbox,60000);
+loadNotifications();
+window.setInterval(loadNotifications,60000);
 </script></body></html>

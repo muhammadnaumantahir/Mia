@@ -79,6 +79,15 @@ def register_notification_routes(
             "settings": asdict(center.get_settings()),
         }
 
+    @app.post("/api/notifications/voice-digest")
+    def voice_digest() -> dict[str, Any]:
+        """Items to mention at voice-session start; each is returned at most once."""
+        _produce()
+        items = center.voice_digest(limit=3)
+        return {"items": [
+            {"notification_id": i["notification_id"], "title": i["title"], "priority": i["priority"]} for i in items
+        ]}
+
     @app.get("/api/notifications/settings")
     def get_notification_settings() -> dict[str, Any]:
         return {"settings": asdict(center.get_settings())}

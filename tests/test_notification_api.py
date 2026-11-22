@@ -70,3 +70,14 @@ def test_there_is_no_http_route_to_create_notifications(env):
     for method in ("post", "put"):
         response = getattr(client, method)("/api/notifications", json={"title": "x", "reason": "y"})
         assert response.status_code in {404, 405}
+
+
+def test_voice_digest_route_is_opt_in_and_announces_each_item_once(env):
+    client, center = env
+    seed(center)
+    assert client.post("/api/notifications/voice-digest").json() == {"items": []}  # voice channel off
+    center.update_settings({"voice_enabled": True})
+    seed(center, "b")
+    first = client.post("/api/notifications/voice-digest").json()["items"]
+    assert [i["title"] for i in first] == ["T b"]
+    assert client.post("/api/notifications/voice-digest").json() == {"items": []}

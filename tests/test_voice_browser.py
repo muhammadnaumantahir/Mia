@@ -973,3 +973,104 @@ def test_code_block_is_not_spoken_half_way_through_a_stream(ctx):
     ctx.provider.hold.set()
     ctx.wait("window.__tts.spoken.length>=2")
     assert not any("print" in text for text in _spoken(ctx))
+
+
+def _ntf_task(ctx, title, hours=2):
+    return ctx.page.evaluate(
+        """async ([title, hours]) => {
+          const due = new Date(Date.now() + hours * 3600 * 1000).toISOString();
+          const r = await fetch('/api/personal/items', {method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({kind: 'task', title, due_at: due})});
+          return (await r.json()).item_id;
+        }""",
+        [title, hours],
+    )
+
+
+def _ntf_cleanup(ctx):
+    ctx.js(
+        """async () => {
+          const r = await fetch('/api/personal/items?status=open');
+          const data = await r.json();
+          for (const item of (data.items || [])) {
+            await fetch('/api/personal/items/' + item.item_id + '/complete', {method: 'POST'});
+          }
+          await fetch('/api/notifications/settings', {method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({voice_enabled: false, timezone: 'UTC'})});
+          await fetch('/api/notifications');
+        }"""
+    )
+
+
+def test_notification_panel_shows_reason_source_and_snooze(ctx):
+    """MIA-LIFE-09 UI: owner sees why/source, can snooze, and the badge follows."""
+    try:
+        _ntf_task(ctx, "Pay the electricity bill")
+        ctx.page.click("#ntfToggle")
+        ctx.wait("document.getElementById('ntfList').textContent.includes('Pay the electricity bill')")
+        assert ctx.js("document.getElementById('ntfToggle').getAttribute('aria-expanded')") == "true"
+        text = ctx.js("document.getElementById('ntfList').textContent")
+        assert "Why: This task is due" in text and "Source: task" in text
+        assert ctx.js("document.getElementById('ntfCount').textContent") == "1"
+        assert "1 unread" in ctx.js("document.getElementById('ntfCount').getAttribute('aria-label')")
+        ctx.page.click("#ntfList >> text=History")
+        ctx.wait("document.getElementById('ntfList').textContent.includes('delivered')")
+        ctx.page.click("#ntfList >> text=Snooze 1 hour")
+        ctx.wait("document.getElementById('ntfList').textContent.includes('all caught up')")
+        assert ctx.js("document.getElementById('ntfCount').textContent") == "0"
+    finally:
+        _ntf_cleanup(ctx)
+
+
+def test_notification_panel_never_renders_html_from_titles(ctx):
+    try:
+        _ntf_task(ctx, "<img src=x onerror=window.__pwned=1>Call back")
+        ctx.page.click("#ntfToggle")
+        ctx.wait("document.getElementById('ntfList').textContent.includes('Call back')")
+        assert ctx.js("document.querySelectorAll('#ntfList img').length") == 0
+        assert ctx.js("window.__pwned === undefined")
+    finally:
+        _ntf_cleanup(ctx)
+
+
+def test_notification_settings_validate_and_save(ctx):
+    try:
+        ctx.page.click("#ntfToggle")
+        ctx.page.click("#ntfSettingsToggle")
+        ctx.page.fill("#ntfTimezone", "Nowhere/Land")
+        ctx.page.click("#ntfSave")
+        ctx.wait("document.getElementById('ntfSettingsMsg').textContent.toLowerCase().includes('timezone')")
+        ctx.page.fill("#ntfTimezone", "Asia/Karachi")
+        ctx.page.check("#ntfQuiet")
+        ctx.page.fill("#ntfQuietStart", "23:00")
+        ctx.page.fill("#ntfQuietEnd", "06:30")
+        ctx.page.click("#ntfSave")
+        ctx.wait("document.getElementById('ntfSettingsMsg').textContent==='Saved.'")
+        saved = ctx.js("fetch('/api/notifications/settings').then(r => r.json())")["settings"]
+        assert saved["timezone"] == "Asia/Karachi" and saved["quiet_hours_enabled"] is True
+        assert saved["quiet_start_minute"] == 23 * 60 and saved["quiet_end_minute"] == 6 * 60 + 30
+    finally:
+        ctx.js("fetch('/api/notifications/settings', {method: 'PUT', headers: {'Content-Type': 'application/json'},"
+               " body: JSON.stringify({quiet_hours_enabled: false})})")
+        _ntf_cleanup(ctx)
+
+
+def test_voice_conversation_start_mentions_pending_notifications_once(ctx):
+    try:
+        ctx.js("fetch('/api/notifications/settings', {method: 'PUT', headers: {'Content-Type': 'application/json'},"
+               " body: JSON.stringify({voice_enabled: true})})")
+        _ntf_task(ctx, "Renew the passport")
+        ctx.start()
+        ctx.wait("window.__tts.spoken.length>=1")
+        spoken = _spoken(ctx)[0]
+        assert "one notification" in spoken and "Renew the passport" in spoken
+        ctx.listening()  # the microphone starts only after the announcement
+        ctx.js("document.getElementById('voiceMode').click()")  # end the conversation
+        ctx.wait("document.getElementById('voiceMode').getAttribute('aria-pressed')==='false'")
+        ctx.start()
+        ctx.listening()
+        assert not any("notification" in text for text in _spoken(ctx)[1:])  # announced only once
+    finally:
+        _ntf_cleanup(ctx)
