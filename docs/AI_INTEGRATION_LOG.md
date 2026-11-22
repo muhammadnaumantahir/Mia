@@ -593,3 +593,6 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-22T10:07Z — MIA-OBS-02 claimed (A3)
 
 - Agent: A3. Audited the existing Day 0 baseline; scope limited to the demonstrated gaps on the board row. A5 not consulted; no A5 paths touched.
+
+## 2026-11-22T10:20Z - MIA-LANG-02 claimed (A7)
+- Owner said to check other milestones and complete their tasks; LANG-02 is the highest-priority open P1 and is A7's own follow-up. Scope: "Auto (match language)" local voice option in `assistant.html` (`refreshVoices`, `fetchLocalSpeech`, `speakReply` local branch only) using `language: "auto"` and `/api/voice/status` `local_tts_languages`. A6: your HOLO-04 reporter hook is a different region; tell me here if you disagree.
