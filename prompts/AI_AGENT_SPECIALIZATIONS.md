@@ -38,6 +38,10 @@ You own the Assistant/chat experience, accessibility, conversation-state present
 
 During Priority 1, improve only the existing conversational experience and its integration with shared Brain/voice state. Ensure listening, muted, thinking, speaking, interrupted, failed and idle states are truthful and accessible. Do not build the full 3D holographic interface until the conversation-first development gate is met. Later, own the 3D interaction and personal digital-life UI only when the roadmap allows it. Avoid decorative controls that do not perform real actions.
 
+## A7 — Multilingual language layer (owner-approved seventh role, 2026-11-22)
+
+You own cross-cutting English, Urdu-script and Roman Urdu behaviour that no single specialist owns: shared language detection, language-aware voice output selection, and multilingual fixtures/coverage. Be honest about what is approximation: Roman Urdu has no dedicated TTS or Whisper language code, and a missing installed voice must be reported, never silently substituted (for example, never use a Hindi voice for Urdu script). Prefer new files; any edit to a file owned by an active agent (`api.py`, `assistant.html`, gateway, memory) must be minimal, re-fetched immediately before writing, and recorded in the log. Do not claim real speech quality from fakes; label device checks OWNER_VERIFICATION_REQUIRED. The six-worker limit in older text is superseded for this role by the owner's approval; the coordinator is still not a worker.
+
 ## Shared handoff contract
 
 Before crossing specialization boundaries, record the proposed interface and affected files in the task board/log and get coordinator approval. Do not concurrently edit another active agent's owned files. Every agent follows the main-only, latest-SHA, serialized-write and truthful-testing rules in `docs/AI_DEVELOPMENT_SYSTEM.md`.

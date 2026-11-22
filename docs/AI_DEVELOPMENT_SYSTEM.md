@@ -18,6 +18,7 @@ Run six independent AI coding agents against one shared roadmap and task board. 
 | A4 | Voice & wake word | STT/TTS, streaming turn-taking, interruption, language support, wake-word lifecycle and privacy |
 | A5 | Code Graph & governed self-development | Code Graph indexing/impact analysis, capability evolution, sandboxing, lineage and rollback |
 | A6 | Experience, UI & interaction | Assistant/chat UX, accessibility, conversation UI integration; 3D and later digital-life screens only when roadmap gates permit |
+| A7 | Multilingual language layer (owner-approved 2026-11-22) | Shared English/Urdu/Roman Urdu language detection, language-aware voice output selection, multilingual fixtures and coverage. New files first; edits to shared files (`api.py`, `assistant.html`) are minimal, re-fetched, and only after the owning agent's active task there is checked |
 
 A specialist may help another domain only when its primary queue is empty or a coordinator-approved dependency requires it. It must not take over another agent's active task.
 
