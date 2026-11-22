@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .baseline import BaselineCaptureError
+from .measurements import METRIC_DEFINITIONS
 from .store import ObservatoryStore
 
 
@@ -225,13 +226,14 @@ class ExperimentSnapshotCapturer:
             ("memory_percent", memory),
             ("test_pass_rate", test_pass_rate),
             ("fixed_benchmark_pass_rate", fixed_pass_rate),
-            ("fixed_benchmark_duration_seconds", float(manifest["fixed_benchmark_results"]["duration_seconds"])),
+            ("fixed_benchmark_duration_seconds",
+             float(manifest["fixed_benchmark_results"]["duration_seconds"])),
         ):
             self.observatory.record_metric(
                 day_index=day_index,
                 metric_name=metric_name,
                 value=value,
-                unit="percent",
+                unit=METRIC_DEFINITIONS[metric_name].unit,
                 benchmark_id=manifest["benchmark_suite_id"],
                 experiment_id=experiment_id,
                 source_event_id=event_id,

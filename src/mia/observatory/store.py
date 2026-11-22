@@ -12,6 +12,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .measurements import validate_sample
+
 
 def utc_now() -> str:
     return datetime.now(UTC).isoformat()
@@ -128,6 +130,18 @@ class ObservatoryStore:
                 BEFORE DELETE ON daily_snapshots
                 BEGIN
                     SELECT RAISE(ABORT, 'daily snapshot is immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS immutable_metric_update
+                BEFORE UPDATE ON metric_samples
+                BEGIN
+                    SELECT RAISE(ABORT, 'metric sample is immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS immutable_metric_delete
+                BEFORE DELETE ON metric_samples
+                BEGIN
+                    SELECT RAISE(ABORT, 'metric sample is immutable');
                 END;
             """)
 
@@ -904,6 +918,8 @@ class ObservatoryStore:
     ) -> str:
         if day_index < 0:
             raise ValueError("day_index cannot be negative")
+        meta = validate_sample(metric_name, value, unit)
+        context = {**(context or {}), **meta}
         sample_id = uuid.uuid4().hex
         with self._connection() as db:
             db.execute("""
@@ -915,7 +931,7 @@ class ObservatoryStore:
             """, (
                 sample_id, utc_now(), experiment_id, day_index, metric_name,
                 float(value), unit, benchmark_id, source_event_id,
-                json.dumps(context or {}, sort_keys=True),
+                json.dumps(context, sort_keys=True),
             ))
         return sample_id
 

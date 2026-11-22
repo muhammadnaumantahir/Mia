@@ -555,3 +555,5 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-22T09:46Z - A7 role defined and MIA-LANG-01 claimed (A7)
 - Owner approved a seventh role in chat ("Add a seventh role you define") because A1-A6 were all held by live sessions (the A4 slot was taken by another session minutes earlier, so it was not overwritten). Role: A7 multilingual language layer (docs/AI_DEVELOPMENT_SYSTEM.md, prompts/AI_AGENT_SPECIALIZATIONS.md, registry).
 - Task MIA-LANG-01: gap from the MIA-M1-11 audit - local TTS has no language-aware voice choice. Scope on the board. No overlap with A4's MIA-LIFE-09 (`src/mia/life/notifications.py`); `api.py` hunks will be small and re-fetched before commit.
+
+- A3 correction on the OBS-01 row: the suspected missing-stored-as-zero bug is not reachable (capture rejects snapshots with zero fixed-benchmark tests), so no code was added for it. The unit bug and the mutable table were real.
