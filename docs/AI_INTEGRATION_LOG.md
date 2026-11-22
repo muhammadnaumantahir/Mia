@@ -685,3 +685,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-22T17:06Z — MIA-OBS-07 claimed (A3)
 
 - Agent: A3. Existing `build_experiment_report` already verifies hashes and lists missing/unavailable days and events; the generator composes it with attribution and benchmark runs. A6 not consulted (no dashboard paths touched); OBS-06 stays OPEN.
+
+## 2026-11-22T17:06Z — MIA-OBS-03 claimed (A2)
+
+- Agent: A2. No in-gate A2 task was eligible (LIFE-13/COMP-02 blocked on the unmet identity/threat-model dependency). Claimed OBS-03 on the owner's repeated "continue" (same convention as A3's OBS-04 and A6's HOLO-05 claims). Owner can stop it at any time.
