@@ -5,7 +5,7 @@ This registry is a live-session directory, not a historical record. Previous ses
 
 | Agent ID | Specialization | Session / model label | Current task | Status | Last heartbeat (UTC) |
 |---|---|---|---|---|---|
-| A1 | Brain, identity & memory | Anthropic Claude Sonnet 5.5 (claude.ai chat, second concurrent session, 2026-11-21) | — | IDLE | 2026-11-22T09:54Z |
+| A1 | Brain, identity & memory | Anthropic Claude Sonnet 5.5 (claude.ai chat, second concurrent session, 2026-11-21) | MIA-LIFE-14 | ACTIVE | 2026-11-22T15:50Z |
 | A2 | AI Gateway & model routing | Anthropic Claude Sonnet 5.5 (claude.ai chat session, 2026-11-22) | — | IDLE | 2026-11-22T10:20Z |
 | A3 | Reasoning quality & judge models | Anthropic Claude Sonnet 5.5 (claude.ai chat session, 2026-11-21) | MIA-OBS-05 | ACTIVE | 2026-11-22T10:29Z |
 | A4 | Voice & wake word | Anthropic Claude Sonnet 5.5 (claude.ai chat session, fresh, 2026-11-22) | — | IDLE | 2026-11-22T10:40Z |

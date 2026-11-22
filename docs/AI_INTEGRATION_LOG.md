@@ -627,3 +627,8 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-22T10:29Z — MIA-OBS-05 claimed (A3)
 
 - Agent: A3. Audit: no benchmark registry, run record or regression comparison exists; only the pass/fail foundation suite, the 31-scenario eval and the opt-in live harness. Scope is the bounded first slice on the board row; the rest of OBS-05 stays open and is stated as such.
+
+## 2026-11-22T15:50Z — MIA-LIFE-14 claimed (A1)
+
+- Owner instruction: "check other milestones and complete that tasks". A1 re-read the board; A1 co-owned tasks needing A5 (COMP-01/04, LIFE-06/08/10, EVOL-05/06) are left for A5 (security-critical or A5-led). LIFE-14 depends on LIFE-05 (done), LIFE-09 (partial; backend + task notifications done by A4) and LIFE-12 (done).
+- Scope: stalled-work suggestions only (idle project goals, idle open tasks) with deterministic relevance, duplicate/stale/low-confidence suppression and withdrawal of pending suggestions whose evidence changed, delivered through the existing OutreachEngine policy (quiet hours, caps, emergency stop, cooldown, dismissed memory). Due/overdue notifications remain LIFE-09's. Paths: src/mia/life/suggestions.py, life settings, API, tests, docs.
