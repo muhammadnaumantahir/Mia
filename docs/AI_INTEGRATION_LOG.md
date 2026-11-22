@@ -557,3 +557,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Task MIA-LANG-01: gap from the MIA-M1-11 audit - local TTS has no language-aware voice choice. Scope on the board. No overlap with A4's MIA-LIFE-09 (`src/mia/life/notifications.py`); `api.py` hunks will be small and re-fetched before commit.
 
 - A3 correction on the OBS-01 row: the suspected missing-stored-as-zero bug is not reachable (capture rejects snapshots with zero fixed-benchmark tests), so no code was added for it. The unit bug and the mutable table were real.
+
+## 2026-11-22T11:20Z - MIA-LIFE-09 task producer DONE (A4)
+- Paths: src/mia/life/task_notifications.py (new), src/mia/life/notifications.py (open_for_source, withdraw), src/mia/life/notification_api.py (producers hook), src/mia/observatory/api.py (producer wiring, 4 lines), tests/test_task_notifications.py, tests/test_notification_api.py (demo source), docs. Reads A1's PersonalData through its public list/get only; no changes to A1's files.
+- Tests: 60 notification tests + regression suites passing; full suite not run. Timezone-duplication follow-up recorded in STATUS.md.

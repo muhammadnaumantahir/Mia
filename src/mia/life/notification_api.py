@@ -7,6 +7,7 @@ inject messages that appear to come from Mia.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import asdict
 from typing import Any
 
@@ -45,7 +46,16 @@ class SnoozeInput(BaseModel):
     minutes: int | None = None
 
 
-def register_notification_routes(app: FastAPI, center: NotificationCenter) -> None:
+def register_notification_routes(
+    app: FastAPI, center: NotificationCenter, producers: list[Callable[[], Any]] | None = None
+) -> None:
+    def _produce() -> None:
+        for producer in producers or []:
+            try:
+                producer()
+            except Exception:  # a failing source must not break the owner's inbox
+                continue
+
     def _guard(action: Any, *args: Any, **kwargs: Any) -> Any:
         try:
             return action(*args, **kwargs)
@@ -56,6 +66,7 @@ def register_notification_routes(app: FastAPI, center: NotificationCenter) -> No
 
     @app.get("/api/notifications")
     def list_notifications(state: str = "visible", limit: int = 50) -> dict[str, Any]:
+        _produce()
         if state == "visible":
             states: tuple[str, ...] = ("pending", "read")
         elif state in _LISTABLE:

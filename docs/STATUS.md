@@ -33,6 +33,13 @@ The Code Graph is a required cross-cutting developer capability, initialized dur
 - Code Graph snapshot refresh remains a local development step and is not claimed as complete by these remote source edits.
 - PR #20 is merged; older notes below that say it is awaiting CI are historical and superseded by this current status.
 
+## Life update - MIA-LIFE-09 task producer (agent A4, 2026-11-22)
+
+- **Now that MIA-LIFE-02 is DONE**, `src/mia/life/task_notifications.py` (`sync_due_tasks`) turns open tasks and reminders that are due within 24 hours or overdue into notifications. It runs whenever the owner opens `GET /api/notifications` (pull model, so it works with no scheduler and catches up after downtime). A failing producer cannot break the inbox. Each notification carries the task as source and evidence and a reason with the due time in the owner's notification timezone. Repeats merge; a recurring task's next occurrence notifies again; overdue high-priority items are urgent; completed, cancelled, deleted or re-dated tasks are withdrawn (`NotificationCenter.withdraw`, which sets no dismiss cooldown). Private items never put their title or details into a notification.
+- **Tests actually run:** `tests/test_task_notifications.py` (10) plus the notification suites: 60 passed, 0 failed. Three deliberate breakages (private-title leak, no withdrawal, due time missing from the dedupe key) each made tests fail. `test_task_manager.py`, `test_app_lifespan.py`, `test_life.py` and the other notification tests still pass. `ruff` clean. Full suite not run.
+- **Known gap:** the notification center has its own `timezone` setting, separate from the memory setting `owner_timezone` used for recurring tasks. They can disagree (quiet hours and the shown due time would then use the notification one). Unifying them is a one-line decision for the owner or A1, so I did not override either.
+- **Still open for LIFE-09:** the accessible UI (A6), a voice-session hook for `voice_digest()`, and feeding the existing outreach inbox and future briefings into the center.
+
 ## Life update - MIA-LIFE-09 notification center, backend half (agent A4, 2026-11-22)
 
 - **Authority:** owner-approved exception to the M2->M3 gate, named in chat ("MIA-LIFE-09"). LIFE-01 is DONE; LIFE-02 (A1) is still IN_PROGRESS, so this is a source-agnostic core. Due-date and recurrence notifications from tasks plug in through `submit()` once LIFE-02 lands; none are built here.

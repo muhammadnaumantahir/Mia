@@ -16,7 +16,7 @@ def env(tmp_path):
 
 
 def seed(center, key="a", **kw):
-    args = dict(source_type="task", source_ref=f"task-{key}", title=f"T {key}", body="b",
+    args = dict(source_type="demo", source_ref=f"demo-{key}", title=f"T {key}", body="b",
                 reason="It is due", relevance=0.9)
     args.update(kw)
     return center.submit(**args)["notification_id"]
@@ -39,7 +39,7 @@ def test_read_snooze_dismiss_and_explain_flow(env):
     snoozed = client.post(f"/api/notifications/{n}/snooze", json={"minutes": 30}).json()["notification"]
     assert snoozed["state"] == "snoozed"
     why = client.get(f"/api/notifications/{n}/explain").json()
-    assert why["why"] == "It is due" and why["source"] == {"type": "task", "ref": "task-a"}
+    assert why["why"] == "It is due" and why["source"] == {"type": "demo", "ref": "demo-a"}
     assert [h["event"] for h in why["history"]][-2:] == ["read", "snoozed"]
     assert client.post(f"/api/notifications/{n}/dismiss").json()["notification"]["state"] == "dismissed"
 

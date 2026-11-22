@@ -103,6 +103,7 @@ from mia.life.notifications import NotificationCenter
 from mia.life.reflect import Reflector
 from mia.life.runner import LifeRunner, LifeScheduler
 from mia.life.store import ITEM_STATES, LifeStore
+from mia.life.task_notifications import sync_due_tasks
 from mia.life.web import ResearchExplorer, normalise_research_url
 from mia.memory import projects as project_workspaces
 from mia.memory.capture import CaptureService
@@ -1697,7 +1698,10 @@ def create_app(
 
     life_store = life or LifeStore(data_dir / "mia-life.sqlite3")
     notification_center = notifications or NotificationCenter(data_dir / "mia-notifications.sqlite3")
-    register_notification_routes(app, notification_center)
+    register_notification_routes(
+        app, notification_center,
+        producers=[lambda: sync_due_tasks(memory_store.personal, notification_center)],
+    )
     life_background_enabled = os.getenv("MIA_LIFE_ENABLED", "false").strip().lower() == "true"
 
     def record_life_cycle(result: dict[str, Any]) -> None:

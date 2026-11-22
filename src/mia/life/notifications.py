@@ -448,6 +448,28 @@ class NotificationCenter:
             self._event(db, nid, now, "snoozed", f"until {self._iso(wake)}")
             return self._decode(self._get(db, nid))
 
+    def open_for_source(self, source_type: str) -> list[dict[str, Any]]:
+        """Open (held, pending, read or snoozed) notifications raised by one kind of source."""
+        with self._db() as db:
+            rows = db.execute("SELECT * FROM notifications WHERE source_type=? AND state IN "
+                              "('held','pending','read','snoozed')", (source_type,)).fetchall()
+        return [self._decode(r) for r in rows]
+
+    def withdraw(self, nid: str, note: str, now: datetime | None = None) -> bool:
+        """Retire an open notification because its source no longer needs attention.
+
+        Unlike dismiss this is not the owner's choice, so it sets no dismiss cooldown.
+        """
+        now = (now or utc_now()).astimezone(UTC)
+        with self._db() as db:
+            row = db.execute("SELECT state FROM notifications WHERE notification_id=?", (nid,)).fetchone()
+            if row is None or row["state"] not in OPEN_STATES:
+                return False
+            db.execute("UPDATE notifications SET state='expired', terminal_note=? WHERE notification_id=?",
+                       (f"withdrawn:{note}"[:100], nid))
+            self._event(db, nid, now, "withdrawn", note)
+            return True
+
     def explain(self, nid: str, now: datetime | None = None) -> dict[str, Any]:
         self.refresh(now)
         with self._db() as db:
