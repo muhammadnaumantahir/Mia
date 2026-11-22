@@ -24,12 +24,16 @@ dev = [
   "respx>=0.21,<1",
   "ruff>=0.6,<1",
   "psutil>=6,<8",
+  "cryptography>=43,<51",
 ]
 gateway = [
   "httpx>=0.27,<1",
 ]
 credentials = [
   "keyring>=25,<27",
+]
+backup = [
+  "cryptography>=43,<51",
 ]
 voice = [
   "faster-whisper>=1.1,<2",
@@ -60,6 +64,7 @@ documents = [
 [project.scripts]
 mia = "mia.__main__:main"
 mia-credentials = "mia.credentials_cli:main"
+mia-backup = "mia.backup_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
