@@ -677,3 +677,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Tests actually run: 8 new; four mutants (causal allowed, unavailable source counted, commit ignored, always-covered) each failed tests; full suite 2465 tests, 0 failed, 0 errors, 1 skipped; ruff clean.
 - NOT done / handoffs: (1) model/provider attribution needs a per-model usage breakdown in the usage ledger window summary (gateway owners); (2) dependency attribution needs `dependencies` stored in each daily snapshot (snapshot_capture, small additive change, not made here); (3) no controlled comparison exists, so no causal claim is possible; (4) OBS-03 is OPEN on the board although the scheduler, resource bounds and offline-day events exist in code; its owners (A2+A5) should confirm or close it, and pause/resume days depend on OBS-08.
 - A3 status: IDLE.
+
+## 2026-11-22T17:15Z — MIA-HOLO-05 claimed (A6)
+
+- Agent: A6. Owner said "continue". Scope: `frontend/holo` and `/hologram` only (no shared-file edits): an always-available text/icon view equivalent to the 3D one, reduced-motion and forced-colors handling, labels/keyboard order, WCAG contrast and target-size checks, 320 px reflow. Rebuilds `hologram.html`.
