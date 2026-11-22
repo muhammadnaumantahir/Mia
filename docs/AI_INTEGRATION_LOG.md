@@ -661,3 +661,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Tests actually run: 34 across benchmarks/measurements/eval files; four mutants (ignore version, point-estimate verdict, order-dependent hash, record empty run) each failed a test; full suite 2385 tests, 0 failed, 0 errors, 1 skipped; ruff clean.
 - NOT done, so the task is not marked DONE: fixed benchmark workloads for latency, cost and resource use; a scored voice benchmark; live-model benchmarks (owner-run only). No CLI or dashboard wiring (OBS-06/07). Scripted results say nothing about live-model quality.
 - A3 status: IDLE.
+
+## 2026-11-22T16:04Z — MIA-OBS-04 claimed (A3)
+
+- Agent: A3. OBS-03 (A2+A5) is OPEN on the board; code audit shows opt-in scheduler, resource bounds, deferral, explicit offline-day events already exist. Not touched. Pause/resume days belong to the OBS-08 lifecycle. OBS-04 slice reads existing stores only.
