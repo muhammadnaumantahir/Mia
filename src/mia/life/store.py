@@ -29,7 +29,7 @@ OUTCOMES = frozenset(
     {"completed", "no_op", "deferred", "rejected", "failed", "cancelled", "awaiting_approval"}
 )
 TRIGGERS = frozenset({"schedule", "event", "owner"})
-OUTREACH_STATES = frozenset({"pending", "read", "acted", "dismissed"})
+OUTREACH_STATES = frozenset({"pending", "read", "acted", "dismissed", "withdrawn"})
 LEASE_SECONDS = 300
 
 
@@ -68,6 +68,10 @@ class LifeSettings:
     outreach_cooldown_days: int = 7
     max_unanswered_outreach: int = 3
     conversation_capture_enabled: bool = True
+    # Stalled-work suggestions (MIA-LIFE-14). Only sent when outreach_enabled is also on.
+    suggestions_enabled: bool = True
+    suggestion_min_relevance_pct: int = 40
+    suggestion_idle_task_days: int = 14
 
 
 _SETTING_RANGES: dict[str, tuple[int, int]] = {
@@ -85,9 +89,11 @@ _SETTING_RANGES: dict[str, tuple[int, int]] = {
     "min_outreach_gap_minutes": (0, 10_080),
     "outreach_cooldown_days": (1, 365),
     "max_unanswered_outreach": (1, 50),
+    "suggestion_min_relevance_pct": (0, 100),
+    "suggestion_idle_task_days": (1, 365),
 }
 _BOOL_SETTINGS = {"paused", "emergency_stop", "quiet_hours_enabled", "outreach_enabled",
-                  "conversation_capture_enabled"}
+                  "conversation_capture_enabled", "suggestions_enabled"}
 
 
 def validate_settings(values: dict[str, Any]) -> dict[str, Any]:

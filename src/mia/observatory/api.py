@@ -103,6 +103,7 @@ from mia.life.notifications import NotificationCenter
 from mia.life.reflect import Reflector
 from mia.life.runner import LifeRunner, LifeScheduler
 from mia.life.store import ITEM_STATES, LifeStore
+from mia.life.suggestions import run_suggestions as run_stalled_suggestions
 from mia.life.task_notifications import sync_due_tasks
 from mia.life.web import ResearchExplorer, normalise_research_url
 from mia.memory import projects as project_workspaces
@@ -534,7 +535,17 @@ class LifeSettingsInput(BaseModel):
     min_outreach_gap_minutes: int | None = None
     outreach_cooldown_days: int | None = None
     max_unanswered_outreach: int | None = None
+    suggestions_enabled: bool | None = None
+    suggestion_min_relevance_pct: int | None = None
+    suggestion_idle_task_days: int | None = None
     conversation_capture_enabled: bool | None = None
+
+
+class SuggestionRunInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dry_run: bool = True
+    max_per_run: int = 1
 
 
 class OutreachStateInput(BaseModel):
@@ -1906,6 +1917,22 @@ def create_app(
     @app.post("/api/life/cycle")
     async def run_life_cycle() -> dict[str, Any]:
         return await run_in_threadpool(life_runner.run_cycle, "owner", "owner requested a cycle")
+
+    @app.post("/api/life/suggestions/run")
+    def run_life_suggestions(item: SuggestionRunInput) -> dict[str, Any]:
+        """Evaluate stalled work once; a dry run (the default) sends nothing."""
+        try:
+            report = run_stalled_suggestions(
+                memory_store, life_store, dry_run=item.dry_run, max_per_run=item.max_per_run
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if report["sent"] or report["withdrawn"]:
+            _life_event(
+                "suggestions_run", "Evaluated stalled-work suggestions",
+                {"sent": len(report["sent"]), "withdrawn": len(report["withdrawn"])},
+            )
+        return report
 
     @app.get("/api/life/outreach")
     def list_life_outreach(state: str | None = None, limit: int = 50) -> dict[str, Any]:

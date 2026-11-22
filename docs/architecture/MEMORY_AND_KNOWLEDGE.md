@@ -282,3 +282,33 @@ assembled from stored records, so every line traces to a record. Nothing is sent
   No quiet hours are assumed when none are given. Delivery itself belongs to MIA-LIFE-09.
 - **Not done.** No scheduler or notification, no persisted briefing preferences (configuration is
   per request), no UI, no model-written summary, no Brain intent, no calendar integration.
+
+## Proactive stalled-work suggestions (MIA-LIFE-14)
+
+`POST /api/life/suggestions/run` (code: `src/mia/life/suggestions.py`). Deterministic and
+model-free; the message is a template over stored fields. A **dry run is the default** and sends
+nothing. Sent suggestions go to the in-app outreach inbox only (pull, never push).
+
+- **What Mia may speak up about.** An *idle goal* (active project with a goal and no task,
+  milestone or goal change for `stale_goal_days`) and an *idle task* (open, non-private, no change
+  for `suggestion_idle_task_days`, not already due/overdue). Due and overdue items belong to the
+  notification center (MIA-LIFE-09), so the two never duplicate. Private tasks never produce a
+  suggestion.
+- **Suppression, in order, with the reason reported.** `stale` (idle > 90 days: too old to
+  interrupt about), `low_confidence` (Mia captured it from a chat and the owner never touched it
+  for 14 days; confidence 0.4 < 0.5), `low_relevance` (below `suggestion_min_relevance_pct`,
+  default 40), `duplicate` (same title and project as a higher-ranked candidate), then the shared
+  `OutreachEngine` policy: emergency stop, outreach opt-in (`outreach_enabled`, off by default),
+  paused, quiet hours, daily cap, minimum gap, unanswered backlog, dismissed-topic memory (30 days)
+  and per-topic cooldown. At most `max_per_run` (1-3, default 1) are sent per run.
+- **Relevance** is a documented formula, not a model score: task 0.45, goal 0.55, priority 1 `+0.2`,
+  priority 3 `-0.2`, plus up to `+0.2` as idle time grows beyond the threshold.
+- **Evidence and rationale.** Each message cites its record (`personal_item` or `project`) and says
+  how long the item has been idle.
+- **Withdrawal and opt-out.** Pending suggestions whose evidence changed (task done, deleted, edited,
+  made private; goal edited, paused or active again) are withdrawn (`withdrawn` state, which frees the
+  unanswered backlog but keeps the cooldown). Turning `suggestions_enabled` off or pressing the
+  emergency stop withdraws all pending suggestions on the next run. Other outreach kinds are never touched.
+- **Not done.** No scheduler: it runs when called (owner request), and the autonomous runner does
+  not call it yet. Suppressed candidates are returned in the run report but not stored.
+  No notification-center delivery, UI, calendar, model-written text or live evidence.
