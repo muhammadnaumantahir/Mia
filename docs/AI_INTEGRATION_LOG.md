@@ -611,3 +611,6 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Delivered: Day 0 manifest now records declared-dependency versions (null when not installed; explicit unavailable when pyproject is unreadable), a host CPU/memory sample taken before the test run (unavailable is explicit, never 0), and `not_captured` reasons for model inventory, latency and cost. Overwrite refusal was already enforced by immutability triggers and was left as is.
 - Tests actually run: related observatory/baseline/experiment/benchmark files 76 passed; three mutants (resource as zero, null as version, no store check) each failed tests; full suite 2304 tests, 0 failed, 0 errors, 1 skipped; ruff clean.
 - Limits: no real model inventory or latency/cost baseline exists at Day 0 by design; a real Day 0 capture on the owner's machine is still an owner action. Daily captures also run the new probes (about 0.5 s extra).
+
+## 2026-11-22T10:55Z - MIA-LANG-02 DONE (A7)
+- Commit `fd652ede0bddbd279f87c253665de046a2c67177` on remote main (verified with `git ls-remote`; rebased over A4's MIA-LIFE-09 `assistant.html` commit 1984ac2 with no conflicts and the affected Chromium suites re-run). Paths: src/mia/assistant.html (voice dropdown, fetchLocalSpeech, speakReply local branch), tests/test_assistant_voice_language.py (new). Evidence in STATUS.md. A7 is IDLE.
