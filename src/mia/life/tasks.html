@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
+<title>Mia — Tasks</title>
+<style>
+:root{font-family:Inter,Segoe UI,system-ui,sans-serif;color:#eef4f2;background:#0c1214}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#0c1214}
+.shell{max-width:900px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:16px;margin:0 0 10px}
+nav a{color:#9be5c5;font-size:14px;margin-right:16px}
+.sub{color:#a9bdb6;font-size:14px;line-height:1.5}
+.panel{background:#131d20;border:1px solid #2b4044;border-radius:14px;padding:16px;margin-top:16px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:8px 0}
+label{font-size:13px;color:#c3d3ce;display:flex;flex-direction:column;gap:4px}
+label.inline{flex-direction:row;align-items:center;gap:8px}
+input,select,textarea,button{font:inherit;font-size:14px;min-height:40px}
+input,select,textarea{background:#0e1719;color:#eef4f2;border:1px solid #4c6a66;border-radius:8px;padding:8px 10px;max-width:100%}
+input[type=checkbox]{min-height:0;width:20px;height:20px}
+button{background:#1f7a5c;color:#fff;border:1px solid #1f7a5c;border-radius:8px;padding:8px 14px;cursor:pointer}
+button.alt{background:#1b2a2c;border-color:#4c6a66;color:#e3ece8}
+button.danger{background:#9b3a2c;border-color:#9b3a2c}
+button:disabled{opacity:.55;cursor:not-allowed}
+:focus-visible{outline:3px solid #ffd27a;outline-offset:2px}
+ul.items{list-style:none;margin:0;padding:0}
+li.item{border-top:1px solid #2b4044;padding:12px 0;display:grid;grid-template-columns:auto 1fr;gap:6px 12px}
+li.item:first-child{border-top:0}
+.title{font-size:15px;overflow-wrap:anywhere}.done .title{text-decoration:line-through;color:#9fb3ac}
+.meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.tag{font-size:12px;border:1px solid #4c6a66;border-radius:999px;padding:2px 9px;color:#d5e3de}
+.tag.warn{border-color:#d9a441;color:#ffd98f}
+.actions{grid-column:2;display:flex;gap:8px;flex-wrap:wrap}
+.details{color:#b6c8c2;font-size:13px;margin-top:4px;overflow-wrap:anywhere;white-space:pre-wrap}
+form.edit{grid-column:1 / -1;border:1px dashed #4c6a66;border-radius:10px;padding:12px}
+#notice{min-height:22px;font-size:14px;color:#a6e3c4;margin-top:12px}#notice.error{color:#ffb4a3}
+dialog{background:#131d20;color:#eef4f2;border:1px solid #6a8782;border-radius:14px;max-width:min(520px,92vw);padding:20px}
+dialog::backdrop{background:#000a}
+dialog ul{padding-left:20px;margin:8px 0;overflow-wrap:anywhere}
+.empty{border:1px dashed #4c6a66;border-radius:10px;padding:18px;text-align:center;color:#b6c8c2}
+@media(max-width:560px){.row{flex-direction:column;align-items:stretch}li.item{grid-template-columns:auto 1fr}button{min-height:44px}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+</style></head>
+<body><main class="shell">
+<nav aria-label="Mia pages"><a href="/">Observatory</a><a href="/assistant">Assistant</a><a href="/life">Autonomous life</a></nav>
+<h1>Tasks</h1>
+<p class="sub">Your tasks, reminders and notes, read from Mia's real personal store. Mia's conversations use the same list, so a change here is a change everywhere. Nothing is deleted or cancelled in bulk without a confirmation.</p>
+<div id="notice" role="status" aria-live="polite"></div>
+
+<section class="panel" aria-labelledby="addHeading"><h2 id="addHeading">Add an item</h2>
+<form id="addForm" class="row" autocomplete="off">
+<label>Title<input id="addTitle" required maxlength="200" style="min-width:220px"></label>
+<label>Type<select id="addKind"><option value="task">Task</option><option value="reminder">Reminder</option><option value="note">Note</option></select></label>
+<label>Due (optional)<input id="addDue" type="datetime-local"></label>
+<label>Priority<select id="addPriority"><option value="2">Normal</option><option value="1">High</option><option value="3">Low</option></select></label>
+<label>Project (optional)<input id="addProject" maxlength="64"></label>
+<label class="inline"><input id="addPrivate" type="checkbox"> Private</label>
+<button type="submit">Add</button>
+</form></section>
+
+<section class="panel" aria-labelledby="listHeading"><h2 id="listHeading" tabindex="-1">Your list</h2>
+<div class="row">
+<label>Show<select id="fStatus"><option value="open">Open</option><option value="done">Done</option><option value="cancelled">Cancelled</option><option value="">All</option></select></label>
+<label>Type<select id="fKind"><option value="">All types</option><option value="task">Tasks</option><option value="reminder">Reminders</option><option value="note">Notes</option></select></label>
+<label>Search this list<input id="fText" type="search" maxlength="100"></label>
+</div>
+<div class="row" role="group" aria-label="Actions for selected items">
+<label class="inline"><input id="selectAll" type="checkbox"> Select all shown</label>
+<span id="selCount" aria-live="polite">0 selected</span>
+<button id="bulkComplete" class="alt" type="button" disabled>Complete selected</button>
+<button id="bulkReopen" class="alt" type="button" disabled>Reopen selected</button>
+<button id="bulkCancel" class="alt" type="button" disabled>Cancel selected…</button>
+<button id="bulkDelete" class="danger" type="button" disabled>Delete selected…</button>
+</div>
+<p id="summary" class="sub"></p>
+<ul id="items" class="items" aria-labelledby="listHeading"></ul>
+</section>
+
+<dialog id="confirm" aria-labelledby="confirmTitle" aria-describedby="confirmBody">
+<h2 id="confirmTitle"></h2><div id="confirmBody"></div>
+<div class="row"><button id="confirmNo" class="alt" type="button" autofocus>Keep them</button><button id="confirmYes" class="danger" type="button">Confirm</button></div>
+</dialog>
+
+<script>
+const $=id=>document.getElementById(id);
+let items=[],selected=new Set(),busy=false;
+const PRIORITY={1:'High',2:'Normal',3:'Low'};
+
+function say(text,error=false){const n=$('notice');n.textContent=text;n.className=error?'error':'';n.setAttribute('role',error?'alert':'status');}
+async function api(path,options={}){
+ const response=await fetch(path,{headers:{'Content-Type':'application/json'},...options});
+ let body=null;try{body=await response.json();}catch(error){}
+ if(!response.ok){
+  const detail=body&&body.detail;
+  const message=typeof detail==='string'?detail:(detail&&detail.message)||(Array.isArray(detail)?detail.map(d=>d.msg).join('; '):'Request failed ('+response.status+')');
+  const err=new Error(message);err.status=response.status;err.detail=detail;throw err;
+ }
+ return body;
+}
+function toIsoDue(value){return value?new Date(value).toISOString():null;}
+function toLocalInput(iso){if(!iso)return '';const d=new Date(iso);const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes());}
+function dueText(iso){return new Date(iso).toLocaleString([],{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}
+function tag(text,warn=false){const s=document.createElement('span');s.className='tag'+(warn?' warn':'');s.textContent=text;return s;}
+function button(text,label,handler,cls='alt'){const b=document.createElement('button');b.type='button';b.className=cls;b.textContent=text;b.setAttribute('aria-label',label);b.addEventListener('click',handler);return b;}
+
+function shown(){
+ const text=$('fText').value.trim().toLowerCase();
+ return text?items.filter(i=>(i.title+' '+(i.details||'')+' '+(i.project||'')).toLowerCase().includes(text)):items;
+}
+function updateBulk(){
+ const visible=new Set(shown().map(i=>i.item_id));
+ for(const id of [...selected])if(!visible.has(id))selected.delete(id);
+ const n=selected.size;
+ $('selCount').textContent=n+' selected';
+ for(const id of ['bulkComplete','bulkReopen','bulkCancel','bulkDelete'])$(id).disabled=busy||n===0;
+ const all=$('selectAll');all.checked=visible.size>0&&n===visible.size;all.indeterminate=n>0&&n<visible.size;
+}
+
+function render(focusId){
+ const list=$('items');list.replaceChildren();
+ const rows=shown();
+ $('summary').textContent=rows.length+(rows.length===1?' item shown':' items shown');
+ if(!rows.length){const li=document.createElement('li');li.className='empty';li.textContent='Nothing here. Items you add, or that Mia captures from conversation, appear in this list.';list.append(li);}
+ const now=Date.now();
+ for(const item of rows){
+  const li=document.createElement('li');li.className='item'+(item.status==='done'?' done':'');li.dataset.id=item.item_id;
+  const box=document.createElement('input');box.type='checkbox';box.checked=selected.has(item.item_id);box.setAttribute('aria-label','Select: '+item.title);
+  box.addEventListener('change',()=>{box.checked?selected.add(item.item_id):selected.delete(item.item_id);updateBulk();});
+  const main=document.createElement('div');
+  const title=document.createElement('div');title.className='title';title.textContent=item.title;main.append(title);
+  const meta=document.createElement('div');meta.className='meta';
+  meta.append(tag(item.kind==='reminder'?'Reminder':item.kind==='note'?'Note':'Task'),tag(item.status==='open'?'Open':item.status==='done'?'Done':'Cancelled'),tag('Priority: '+(PRIORITY[item.priority]||'Normal')));
+  if(item.due_at)meta.append(tag((item.status==='open'&&new Date(item.due_at).getTime()<now?'Overdue · ':'Due ')+dueText(item.due_at),item.status==='open'&&new Date(item.due_at).getTime()<now));
+  if(item.project)meta.append(tag('Project: '+item.project));
+  if(item.private)meta.append(tag('Private'));
+  if(item.recurrence)meta.append(tag('Repeats '+item.recurrence.freq));
+  if(item.provenance==='conversation_captured')meta.append(tag('Captured from conversation'));
+  main.append(meta);
+  if(item.details){const d=document.createElement('div');d.className='details';d.textContent=item.details;main.append(d);}
+  const actions=document.createElement('div');actions.className='actions';
+  if(item.status==='open')actions.append(button('Complete','Complete: '+item.title,()=>act(item,'complete'),'')); else actions.append(button('Reopen','Reopen: '+item.title,()=>act(item,'reopen')));
+  actions.append(button('Edit','Edit: '+item.title,()=>openEdit(li,item)));
+  if(item.status==='open')actions.append(button('Cancel…','Cancel: '+item.title,()=>confirmBulk('cancel',[item],li)));
+  actions.append(button('Delete…','Delete: '+item.title,()=>confirmBulk('delete',[item],li),'danger'));
+  li.append(box,main,actions);list.append(li);
+ }
+ updateBulk();
+ if(focusId){const target=list.querySelector('[data-id="'+CSS.escape(focusId)+'"] button')||$('listHeading');target.focus();}
+}
+
+async function load(focusId){
+ const params=new URLSearchParams({limit:'500'});
+ if($('fStatus').value)params.set('status',$('fStatus').value);
+ if($('fKind').value)params.set('kind',$('fKind').value);
+ try{const data=await api('/api/personal/items?'+params);items=data.items||[];render(focusId);}
+ catch(error){say('Could not load your list: '+error.message,true);}
+}
+
+async function perform(item,action){
+ if(action==='complete'){await api('/api/personal/items/'+encodeURIComponent(item.item_id)+'/complete',{method:'POST'});}
+ else if(action==='reopen'){await api('/api/personal/items/'+encodeURIComponent(item.item_id),{method:'PATCH',body:JSON.stringify({status:'open'})});}
+ else if(action==='cancel'){await api('/api/personal/items/'+encodeURIComponent(item.item_id),{method:'PATCH',body:JSON.stringify({status:'cancelled'})});}
+ else if(action==='delete'){await api('/api/personal/items/'+encodeURIComponent(item.item_id),{method:'DELETE'});}
+}
+const PAST={complete:'completed',reopen:'reopened',cancel:'cancelled',delete:'deleted'};
+async function runMany(action,targets){
+ busy=true;updateBulk();let ok=0;const failures=[];
+ for(const item of targets){
+  try{await perform(item,action);ok++;selected.delete(item.item_id);}
+  catch(error){failures.push(item.title+': '+error.message);}
+ }
+ busy=false;
+ say(failures.length?ok+' '+PAST[action]+', '+failures.length+' failed — '+failures.join(' | '):ok+(ok===1?' item ':' items ')+PAST[action]+'.',failures.length>0);
+ await load();
+ $('listHeading').focus();
+}
+function act(item,action){return runMany(action,[item]);}
+
+let confirmOpener=null,confirmAction=null,confirmTargets=[];
+function confirmBulk(action,targets,opener){
+ confirmOpener=opener||null;confirmAction=action;confirmTargets=targets;
+ const n=targets.length;const noun=n===1?'item':'items';
+ $('confirmTitle').textContent=(action==='delete'?'Delete ':'Cancel ')+n+' '+noun+'?';
+ const body=$('confirmBody');body.replaceChildren();
+ const p=document.createElement('p');
+ p.textContent=action==='delete'?'This permanently deletes the '+(n===1?'item':n+' items')+' below. It cannot be undone from this page.':'These items will be marked cancelled. You can reopen them later from the Cancelled list.';
+ const ul=document.createElement('ul');
+ for(const item of targets.slice(0,10)){const li=document.createElement('li');li.textContent=item.title;ul.append(li);}
+ if(n>10){const li=document.createElement('li');li.textContent='…and '+(n-10)+' more';ul.append(li);}
+ body.append(p,ul);
+ $('confirmYes').textContent=action==='delete'?'Delete '+n+' '+noun:'Cancel '+n+' '+noun;
+ $('confirmNo').textContent=action==='delete'?'Keep them':'Do not cancel';
+ $('confirm').showModal();
+}
+$('confirmNo').addEventListener('click',()=>$('confirm').close());
+$('confirm').addEventListener('close',()=>{if(confirmOpener&&confirmOpener.isConnected)confirmOpener.querySelector('button').focus();else $('listHeading').focus();});
+$('confirmYes').addEventListener('click',async()=>{const action=confirmAction,targets=confirmTargets;confirmAction=null;confirmTargets=[];confirmOpener=null;$('confirm').close();if(action)await runMany(action,targets);});
+
+function selectedItems(){return items.filter(i=>selected.has(i.item_id));}
+$('bulkComplete').addEventListener('click',()=>runMany('complete',selectedItems().filter(i=>i.status==='open')));
+$('bulkReopen').addEventListener('click',()=>runMany('reopen',selectedItems().filter(i=>i.status!=='open')));
+$('bulkCancel').addEventListener('click',()=>confirmBulk('cancel',selectedItems().filter(i=>i.status==='open'),null));
+$('bulkDelete').addEventListener('click',()=>confirmBulk('delete',selectedItems(),null));
+$('selectAll').addEventListener('change',e=>{selected=e.target.checked?new Set(shown().map(i=>i.item_id)):new Set();render();});
+for(const id of ['fStatus','fKind'])$(id).addEventListener('change',()=>{selected=new Set();load();});
+$('fText').addEventListener('input',()=>render());
+
+async function submitAdd(allowDuplicate){
+ const payload={kind:$('addKind').value,title:$('addTitle').value.trim(),priority:Number($('addPriority').value),private:$('addPrivate').checked,allow_duplicate:allowDuplicate};
+ const due=toIsoDue($('addDue').value);if(due)payload.due_at=due;
+ const project=$('addProject').value.trim();if(project)payload.project=project;
+ try{
+  await api('/api/personal/items',{method:'POST',body:JSON.stringify(payload)});
+  $('addForm').reset();say('Added: '+payload.title);await load();$('addTitle').focus();
+ }catch(error){
+  if(error.status===409){say('You already have something very similar. Press Add again to add it anyway.',true);$('addForm').dataset.duplicate='1';}
+  else say('Could not add it: '+error.message,true);
+ }
+}
+$('addForm').addEventListener('submit',e=>{e.preventDefault();const dup=$('addForm').dataset.duplicate==='1';delete $('addForm').dataset.duplicate;submitAdd(dup);});
+
+function openEdit(li,item){
+ const existing=li.querySelector('form.edit');if(existing){existing.querySelector('input').focus();return;}
+ const form=document.createElement('form');form.className='edit';form.setAttribute('aria-label','Edit: '+item.title);
+ form.innerHTML='';
+ const mk=(text,input)=>{const l=document.createElement('label');l.append(document.createTextNode(text),input);return l;};
+ const title=Object.assign(document.createElement('input'),{value:item.title,required:true,maxLength:200});
+ const due=Object.assign(document.createElement('input'),{type:'datetime-local',value:toLocalInput(item.due_at)});
+ const priority=document.createElement('select');for(const [v,t] of [[1,'High'],[2,'Normal'],[3,'Low']]){const o=new Option(t,String(v));o.selected=Number(item.priority||2)===v;priority.append(o);}
+ const project=Object.assign(document.createElement('input'),{value:item.project||'',maxLength:64});
+ const details=Object.assign(document.createElement('textarea'),{value:item.details||'',maxLength:5000,rows:3});
+ const priv=Object.assign(document.createElement('input'),{type:'checkbox',checked:!!item.private});
+ const privLabel=document.createElement('label');privLabel.className='inline';privLabel.append(priv,document.createTextNode(' Private'));
+ const row=document.createElement('div');row.className='row';
+ row.append(mk('Title',title),mk('Due',due),mk('Priority',priority),mk('Project',project));
+ const save=Object.assign(document.createElement('button'),{type:'submit',textContent:'Save'});
+ const cancel=button('Cancel edit','Cancel editing: '+item.title,()=>{form.remove();li.querySelector('.actions button:nth-child(2)').focus();});
+ form.append(row,mk('Details',details),privLabel,Object.assign(document.createElement('div'),{className:'row'}));
+ form.lastChild.append(save,cancel);
+ form.addEventListener('submit',async e=>{
+  e.preventDefault();const patch={title:title.value.trim(),details:details.value,priority:Number(priority.value),private:priv.checked,allow_duplicate:true};
+  const dueIso=toIsoDue(due.value);if(dueIso){if(dueIso!==item.due_at)patch.due_at=dueIso;}else if(item.due_at)patch.clear_due=true;
+  const proj=project.value.trim();if(proj){if(proj!==item.project)patch.project=proj;}else if(item.project)patch.clear_project=true;
+  try{await api('/api/personal/items/'+encodeURIComponent(item.item_id),{method:'PATCH',body:JSON.stringify(patch)});say('Saved: '+patch.title);await load(item.item_id);}
+  catch(error){say('Could not save: '+error.message,true);}
+ });
+ li.append(form);title.focus();
+}
+load();
+</script></main></body></html>
