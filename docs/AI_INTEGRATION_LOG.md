@@ -502,3 +502,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Tests actually run: 14 new tests (4 mutations caught: purge scope, audit text, timezone requirement, project filter); full suite 2106 passed, 1 skipped, 0 failed (progress-dot count; `websockets` installed); ruff clean. After the final rebase only the new personal/project tests were re-run.
 - Not covered: no UI, no recurrence/timezone display, no Brain intents, not encrypted at rest, no live evidence. A5 (co-owner) was not consulted on encryption boundaries; the boundary is documented as 'none yet, see LIFE-11'.
 - LIFE-02 (A1) claimed next: recurrence policy, duplicate handling, status history, timezone semantics on top of `personal_items`.
+
+## 2026-11-22T09:29Z — MIA-HOLO-03 claimed (A6)
+
+- Agent: A6, resumed after a pause; re-read main, board and registry first. Dependencies HOLO-01/02 DONE. Scope: a responsive holographic scene module with the ten HOLO-01 visual states, isolated from Brain/business logic, served by the app as a static asset and shown on a dedicated page, with deterministic tests. Not binding live events (HOLO-04), accessibility fallback depth (HOLO-05) or profiling budgets (HOLO-06). No edits to A1/A2/A4 areas; `assistant.html` is not changed in this task.
