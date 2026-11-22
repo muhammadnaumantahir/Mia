@@ -542,3 +542,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-22T09:45Z — MIA-OBS-01 claimed (A3, owner-approved M6 exception)
 
 - Agent: A3. Owner approved M6 work in chat. Existing observatory code (store, baseline, snapshot capture/scheduler, report) already covers much of OBS-02/03/07; OBS-01 is limited to demonstrated gaps (see board row). A5 is not consulted yet; A5 owns code-graph/evolution paths, none touched.
+
+## 2026-11-22T09:45Z — MIA-HOLO-04 claimed (A6 lead)
+
+- Agent: A6. Owner said "continue" (or work another milestone); HOLO-04 chosen as the in-milestone next task. Plan: a small evidence reporter in `assistant.html` (chat stream start/delta/done/error/stop, voice listening/muted/speaking/interrupted, wake listening) published on a same-origin BroadcastChannel; `/hologram` resolves it with server evidence via `POST /api/runtime/resolve`, handles backend loss/reconnect, cancellation and offline. A4/A1 files are not edited beyond the minimal reporter hook in `assistant.html`; any A4-owned voice-state wiring is read-only here and noted for A4 review.
