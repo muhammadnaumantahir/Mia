@@ -589,3 +589,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Tests actually run: 6 new tests; related observatory/experiment/baseline/benchmark files 67 passed; three mutants (wrong unit, no triggers, no validation) each failed tests; full suite on the merged tree 2228 tests, 0 failed, 0 errors, 1 skipped; ruff clean.
 - Limits: samples written before this change keep their old data (immutable) and carry no definition version; pre-fix duration samples have the wrong unit and should be read as seconds. Nothing here measures any model.
 - Next candidates for A3: OBS-02 (needs a look at the existing baseline.py against 'refuse to overwrite' and missing-stays-missing) and OBS-05 (benchmark suite). Not claimed yet.
+
+## 2026-11-22T10:07Z — MIA-OBS-02 claimed (A3)
+
+- Agent: A3. Audited the existing Day 0 baseline; scope limited to the demonstrated gaps on the board row. A5 not consulted; no A5 paths touched.
