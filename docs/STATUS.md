@@ -449,3 +449,9 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 ## 2026-11-22T09:37Z A1 task manager (MIA-LIFE-02)
 
 - Tasks gain priority, recurrence (owner-timezone, DST-safe), duplicate refusal, structural history and an owner_timezone setting. No UI or Brain intents yet. Commit `3dc0fa5`; unit/API tests only.
+
+## 2026-11-22 — MIA-HOLO-03 (A6): hologram scene
+
+- **Implemented (commit 0df4a2d):** `/hologram`, a responsive WebGL scene with ten state looks (motion and shape, not colour alone), text fallback, reduced-motion and hidden-page handling. Preview only.
+- **Verified here:** 22 Chromium tests on software GL; full suite 2132 passed, 1 skipped.
+- **Not done:** live event binding (HOLO-04), accessibility audit (HOLO-05), GPU profiling and budgets (HOLO-06).
