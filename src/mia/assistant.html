@@ -199,6 +199,35 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 </section></main></div>
 <script>
 const $=id=>document.getElementById(id);
+// MIA-HOLO-04: publish runtime evidence (event names only, never message text) to the /hologram page
+// open in this same browser, over a same-origin BroadcastChannel. It reports what really happened here;
+// the server's contract (/api/runtime/contract) decides what state that means.
+const rt=(()=>{
+ let channel=null;
+ try{if('BroadcastChannel' in window)channel=new BroadcastChannel('mia-runtime-evidence');}catch(error){}
+ const sender=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():String(Math.random()).slice(2);
+ const send=message=>{if(!channel)return;try{channel.postMessage(Object.assign({v:1,sender},message));}catch(error){}};
+ const held=new Set();
+ return{
+  set(kind,detail){send({type:'set',kind,detail:detail||{}});},
+  hold(kind,on){if(on){held.add(kind);send({type:'set',kind,detail:{}});}else if(held.delete(kind))send({type:'retract',kind});},
+  gone(){held.clear();send({type:'gone'});},
+ };
+})();
+// Long-lived states are derived from the real flags each time, so a path that forgets to clear one
+// cannot leave a stale "speaking" or "listening" behind; the 20 s timer re-asserts the true ones.
+function rtSync(){
+ try{
+  const orb=document.getElementById('voiceOrb');
+  const wake=document.getElementById('offlineWakeBadge');
+  rt.hold('voice_speaking',typeof voiceSpeaking!=='undefined'&&voiceSpeaking===true);
+  rt.hold('voice_listening',Boolean(orb)&&orb.dataset.state==='listening'&&!(typeof voiceSpeaking!=='undefined'&&voiceSpeaking));
+  rt.hold('wake_listening',Boolean(wake)&&wake.dataset.on==='true');
+ }catch(error){}
+ // A long turn must not fade to "unknown" while it is genuinely still running.
+ try{if(chatBusy===true)rt.set('chat_turn_started');}catch(error){}
+}
+setInterval(rtSync,20000);
 let conversationId=new URLSearchParams(window.location.search).get('conversation_id');
 let registeredTools=[];
 let lifeInboxLoading=false;
@@ -604,6 +633,24 @@ function usageMeta(d){
  return m;
 }
 async function streamReply(body,bubble,signal,onDelta){
+ rt.set('chat_turn_started');
+ let lastDelta=0;
+ try{
+  const result=await streamReplyCore(body,bubble,signal,text=>{
+   const now=Date.now();
+   if(now-lastDelta>2000){lastDelta=now;rt.set('chat_delta');}
+   if(onDelta)onDelta(text);
+  });
+  if(result.aborted)rt.set('chat_stopped_by_owner');
+  else if(result.done)rt.set('chat_done');
+  else rt.set('chat_error',{partial:true});
+  return result;
+ }catch(error){
+  rt.set('chat_error',{partial:false});
+  throw error;
+ }
+}
+async function streamReplyCore(body,bubble,signal,onDelta){
  const isAbort=error=>Boolean(error&&error.name==='AbortError');
  let response;
  try{response=await fetch('/api/gateway/chat/stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal});}
@@ -861,6 +908,7 @@ function interruptSpeech(){
  if(!voiceSpeaking)return false;
  cancelSpeech();
  voiceInterrupted=true;
+ rt.set('voice_interrupted');
  if(voiceMode){
   setVoiceState(voicePushToTalk?'ready':'listening');
   setVoiceStatus(voicePushToTalk?'Interrupted · hold the talk button to speak.':'Interrupted · listening…');
@@ -1118,12 +1166,14 @@ async function submitPrompt(prompt,{voiceReply=false}={}){
  $('send').disabled=true;
  $('send').textContent='Thinking…';
  $('hint').textContent=$('useTools').checked?'Mia is selecting an available model…':'Streaming reply…';
- let speaker=null;
+ let speaker=null;let bufferedTurn=false;
  try{
   const useTools=$('useTools').checked;let result;
   if(useTools){
+   bufferedTurn=true;rt.set('chat_turn_started');// the streaming path reports its own turn inside streamReply
    const response=await fetch('/api/gateway/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,task_type:taskType,max_output_tokens:1024,conversation_id:conversationId,use_tools:true,interface:voiceReply?'voice':'text'}),signal:chatSignal});
    result=await response.json();if(!response.ok){const httpFailure=new Error(result.detail||'The model request failed.');httpFailure.status=response.status;throw httpFailure;}
+   rt.set('chat_done');
    conversationId=result.conversation_id;
    const assistantBubble=addMessage('assistant',result.content,result.provider_id+' · '+result.model_id);
    renderMemoryReferences(assistantBubble,result.context_references||[]);
@@ -1156,6 +1206,7 @@ async function submitPrompt(prompt,{voiceReply=false}={}){
   $('hint').textContent='Response received';
  }catch(error){
   if(speaker)speaker.cancel();
+  if(bufferedTurn)rt.set(error&&error.name==='AbortError'?'chat_stopped_by_owner':'chat_error',{partial:false});
   if(error&&error.name==='AbortError'){
    addMessage('assistant','You stopped this request before a reply arrived. The server may already have processed it, so check the conversation history or Task Desk before repeating it.');
    $('hint').textContent='Stopped.';
@@ -1407,6 +1458,7 @@ function setVoiceState(state){
  $('voiceOrb').dataset.state=state;
  $('voiceState').textContent=labels[state]||state;
  $('voiceInterrupt').hidden=state!=='speaking';
+ rtSync();
 }
 function setMicBadge(active,label){
  const badge=$('voiceMicBadge');
@@ -1833,6 +1885,7 @@ function setOfflineWakeUi(state,note){
  stop.hidden=!active;
  start.hidden=active;
  if(note!==undefined)$('offlineWakeNote').textContent=note;
+ rtSync();
 }
 async function refreshOfflineWake(note){
  if(offlineWake)return;
@@ -2032,6 +2085,7 @@ window.addEventListener('pagehide',()=>{
  if(voiceMode)stopVoiceConversation('Voice session ended.');
  if(recording&&mediaRecorder){recording=false;try{mediaRecorder.onstop=null;mediaRecorder.stop();}catch(error){}releaseRecordingStream();setMicBadge(false);}
  cancelSpeech();
+ rt.gone();
 });
 $('refreshMemory').addEventListener('click',loadMemoryRecords);
 refreshVoices();

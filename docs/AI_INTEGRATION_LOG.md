@@ -642,3 +642,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 
 ## 2026-11-22T16:45Z - A7 releases MIA-LIFE-06, claims MIA-LIFE-03
 - MIA-LIFE-06 released (nothing was built): its backlog dependency "M4 filesystem permission contract available" is unmet. MIA-LIFE-03 claimed instead (dependency LIFE-02 DONE; verified OPEN immediately before claiming). Files: new `src/mia/life/tasks.html`, a small `/tasks` page route in `src/mia/observatory/api.py`, new Chromium test file. `assistant.html` is not touched.
+
+## 2026-11-22T15:55Z — MIA-HOLO-04 done (A6)
+
+- Agent: A6. Added live event binding (assistant.html reporter -> BroadcastChannel -> /hologram). Touched A4/A1-shared `assistant.html` with add-only hooks. Fixed HOLO-01 supersession so a new turn or owner Stop replaces an old failure; ties between mutually superseding kinds fall back to priority. Full suite and ruff pass; mutation checks fail the right tests. Next A6 candidates: HOLO-05, HOLO-06.

@@ -11,7 +11,7 @@ const result = await build({
 const js = result.outputFiles[0].text.replaceAll('</script', '<\\/script');
 const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mia hologram (preview)</title>
+<title>Mia hologram</title>
 <style>
 [hidden]{display:none!important}
 :root{color-scheme:dark}
@@ -23,6 +23,10 @@ h1{font-size:1.25rem;margin:0}
 #status{font-size:1.05rem;margin:0;min-height:3rem}
 .note{color:#9db8c0;font-size:.9rem;margin:0}
 label{display:block;margin-bottom:.25rem}
+fieldset{border:1px solid #1d3a44;border-radius:8px;margin:0 0 .75rem;padding:.4rem .75rem}
+legend{padding:0 .25rem;color:#9db8c0}
+label.inline{display:inline-block;margin-right:1rem}
+select:disabled{opacity:.5}
 select{font:inherit;padding:.4rem;background:#0b141c;color:inherit;border:1px solid #2a4a56;border-radius:6px}
 @media (min-width:60rem){main{grid-template-columns:2fr 1fr;align-items:start}h1{grid-column:1/-1}}
 </style></head>
@@ -32,8 +36,12 @@ select{font:inherit;padding:.4rem;background:#0b141c;color:inherit;border:1px so
 <p id="fallback" hidden>3D view unavailable on this device. Chat and voice are unaffected.</p></div>
 <div>
 <p id="status" role="status" aria-live="polite"></p>
+<p id="evidence" class="note" aria-live="off"></p>
+<fieldset><legend>Show</legend>
+<label class="inline"><input type="radio" name="mode" value="live"> Live activity</label>
+<label class="inline"><input type="radio" name="mode" value="preview"> Preview a state</label></fieldset>
 <label for="preview">Preview a state</label><select id="preview"></select>
-<p class="note">Preview only: this page is not connected to Mia's live activity yet, so the state shown is the one you pick, not what Mia is doing.</p>
+<p id="previewNote" class="note" hidden>Preview only: the state shown is the one you pick, not what Mia is doing. Switch to Live activity to see real activity.</p>
 </div>
 </main>
 <!-- three.js (MIT, https://github.com/mrdoob/three.js) is bundled below. Rebuild: cd frontend/holo && npm ci && npm run build -->

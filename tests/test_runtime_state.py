@@ -138,6 +138,31 @@ def test_a_new_turn_after_done_is_thinking_again():
                  ) is RuntimeState.THINKING
 
 
+def test_a_new_turn_after_a_failure_is_thinking_not_failed():
+    # Regression (found end to end): an old failure must not mask the reply being generated now.
+    assert state(ev("chat_error", 5, "client", partial=False), ev("chat_turn_started", 1, "client")
+                 ) is RuntimeState.THINKING
+    assert state(ev("chat_error", 5, "client"), ev("chat_delta", 1, "client")) is RuntimeState.THINKING
+
+
+def test_stopping_the_new_turn_after_a_failure_is_interrupted():
+    assert state(ev("chat_error", 9, "client"), ev("chat_turn_started", 5, "client"),
+                 ev("chat_stopped_by_owner", 1, "client")) is RuntimeState.INTERRUPTED
+
+
+def test_a_failure_after_the_new_turn_started_is_still_failed():
+    assert state(ev("chat_turn_started", 5, "client"), ev("chat_error", 1, "client")
+                 ) is RuntimeState.FAILED
+
+
+def test_simultaneous_mutually_superseding_events_do_not_cancel_each_other():
+    # chat_turn_started and chat_error name each other; at the same instant priority decides.
+    snap = resolve([ev("chat_turn_started", 3, "client"), ev("chat_error", 3, "client")], NOW)
+    assert snap.state is RuntimeState.FAILED and snap.reason == "chat_error"
+    both = resolve([ev("chat_delta", 2, "client"), ev("chat_done", 2, "client")], NOW)
+    assert both.state is not RuntimeState.UNKNOWN
+
+
 def test_error_ends_thinking_and_reports_failed_with_partial_flag():
     snap = resolve([ev("chat_turn_started", 10, "client"),
                     ev("chat_error", 1, "client", partial=True)], NOW)

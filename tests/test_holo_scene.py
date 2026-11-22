@@ -44,7 +44,8 @@ def test_route_serves_the_page_and_it_declares_itself_a_preview(tmp_path):
     response = client.get("/hologram")
     assert response.status_code == 200 and "text/html" in response.headers["content-type"]
     body = response.text
-    assert "not connected to Mia's live activity" in body
+    assert "Preview only: the state shown is the one you pick" in body  # the preview mode says so
+    assert 'name="mode"' in body and "Live activity" in body
     assert 'role="status"' in body and 'aria-hidden="true"' in body  # canvas is decorative
 
 
@@ -127,13 +128,17 @@ def browser():
 def open_page(browser, base):
     contexts = []
 
-    def opener(query="", *, init_script=None, reduced_motion="no-preference", size=(1000, 800)):
-        context = browser.new_context(reduced_motion=reduced_motion,
-                                      viewport={"width": size[0], "height": size[1]})
-        contexts.append(context)
+    def opener(query="", *, init_script=None, reduced_motion="no-preference", size=(1000, 800),
+               live=False, context=None):
+        if context is None:
+            context = browser.new_context(reduced_motion=reduced_motion,
+                                          viewport={"width": size[0], "height": size[1]})
+            contexts.append(context)
         if init_script:
             context.add_init_script(init_script)
         page = context.new_page()
+        if not live and "state=" not in query and "mode=" not in query:
+            query = (query + "&" if query else "?") + "mode=preview"  # scene tests drive states by hand
         page.goto(f"{base}/hologram{query}")
         # The page re-applies its picker state once the runtime-contract fetch lands; let that
         # finish so tests that drive the renderer directly are not overwritten mid-test.

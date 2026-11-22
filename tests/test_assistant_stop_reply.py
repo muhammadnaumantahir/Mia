@@ -99,6 +99,7 @@ function makeBubble() {
   return {textContent: '', kids: [], appendChild(n) { this.kids.push(n); }, scrollIntoView() {}};
 }
 global.document = {createElement: () => ({style: {}, textContent: ''})};
+global.rt = {set() {}};  // MIA-HOLO-04 runtime-evidence reporter; its own harness is in test_holo_live.py
 
 (async () => {
   const out = {};

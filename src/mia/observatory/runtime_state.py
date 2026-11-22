@@ -12,9 +12,9 @@ Rules, in short:
   (the backend answered, or a turn finished).
 * Unknown evidence kinds, future-dated evidence and server-only kinds sent by a
   client are *rejected* and reported, never mapped to a state.
-* A newer terminal event of the same source supersedes older activity (a finished
-  chat turn ends "thinking"). ``offline`` wins over everything while the newest
-  backend probe says unreachable.
+* A newer event supersedes the older evidence it names (a finished chat turn ends
+  "thinking"; a new turn replaces an old failure). ``offline`` wins over everything
+  while the newest backend probe says unreachable.
 * Evidence carries no free text from models or tools; ``detail`` is a short
   allow-listed set of flags.
 """
@@ -78,6 +78,9 @@ def _k(name, source, state, ttl, priority, reporter, backing, supersedes=()):
 
 
 _CHAT_ACTIVE = ("chat_turn_started", "chat_delta")
+# A newer turn replaces what the previous turn left behind: an old failure, stop or "done" must not
+# mask a reply that is being generated now (found by the HOLO-04 end-to-end test).
+_CHAT_RESULTS = ("chat_error", "chat_done", "chat_stopped_by_owner")
 
 EVIDENCE_KINDS: dict[str, EvidenceKind] = {k.name: k for k in (
     # Backend reachability. Answering this very request is itself evidence.
@@ -87,9 +90,9 @@ EVIDENCE_KINDS: dict[str, EvidenceKind] = {k.name: k for k in (
        "a request to the backend failed at the network level", ("backend_reachable",)),
     # Text conversation, from POST /api/gateway/chat/stream events.
     _k("chat_turn_started", Source.CHAT_STREAM, RuntimeState.THINKING, 120, 60, "client",
-       "POST /api/gateway/chat/stream issued"),
+       "a chat request was issued (POST /api/gateway/chat or /chat/stream)", _CHAT_RESULTS),
     _k("chat_delta", Source.CHAT_STREAM, RuntimeState.THINKING, 30, 60, "client",
-       "SSE event: delta (a reply is being generated)", ("chat_turn_started",)),
+       "SSE event: delta (a reply is being generated)", ("chat_turn_started", *_CHAT_RESULTS)),
     _k("chat_done", Source.CHAT_STREAM, RuntimeState.IDLE, 20, 10, "client",
        "SSE event: done", _CHAT_ACTIVE),
     _k("chat_error", Source.CHAT_STREAM, RuntimeState.FAILED, 60, 65, "client",
@@ -199,16 +202,20 @@ def resolve(evidence: Iterable[Evidence], now: datetime | None = None) -> Runtim
         else:
             valid.append(item)
 
-    # Newer terminal events end older activity of the kinds they supersede.
-    live: list[Evidence] = []
-    for item in valid:
-        superseded = any(
-            other.observed_at >= item.observed_at and other is not item
-            and item.kind in EVIDENCE_KINDS[other.kind].supersedes
-            for other in valid
-        )
-        if not superseded:
-            live.append(item)
+    # A newer event ends older evidence of the kinds it supersedes. On an exact tie it does so only
+    # when the pair is one-directional: if both kinds list each other, neither wins the tie and
+    # priority decides, so two simultaneous events can never cancel each other into "unknown".
+    def replaces(other: Evidence, item: Evidence) -> bool:
+        if other is item or item.kind not in EVIDENCE_KINDS[other.kind].supersedes:
+            return False
+        if other.observed_at > item.observed_at:
+            return True
+        return other.observed_at == item.observed_at and (
+            other.kind not in EVIDENCE_KINDS[item.kind].supersedes)
+
+    live: list[Evidence] = [
+        item for item in valid if not any(replaces(other, item) for other in valid)
+    ]
 
     fresh: list[Evidence] = []
     stale: list[str] = []
