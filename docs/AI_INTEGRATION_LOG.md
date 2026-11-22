@@ -635,3 +635,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 
 ## 2026-11-22T16:05Z - MIA-LIFE-14 claimed (A7)
 - Re-checked the board first: A3 had claimed MIA-OBS-05 and A2 finished MIA-LIFE-11, so A7 took the next roadmap-order task instead. Audit: outreach (`outreach.py`) and due-date notifications already enforce quiet hours, daily caps, gaps, cooldowns, dismissal suppression, opt-in and emergency stop. Gap: no producer for stale unfinished tasks without a due date, no suggestion-specific opt-in/novelty rule. Scope: new `src/mia/life/suggestions.py`; small additive hunks in `notifications.py` (settings + history lookup) and the `api.py` producers list; tests. No UI changes (settings are API-only in this slice).
+
+## 2026-11-22T16:20Z - RETRACTION: A7 did NOT claim MIA-LIFE-14; A7 claims MIA-LIFE-06
+- The previous A7 entry ("MIA-LIFE-14 claimed (A7)") is WRONG and withdrawn: A1 claimed MIA-LIFE-14 at 15:50Z and still holds it. A7 made no code or board/registry change for LIFE-14 and will not. Cause: A7's claim script did not stop when its "task is OPEN" check failed. A7's notes from that audit (stale no-due-date tasks have no producer; `NotificationCenter.submit` does not block re-suggesting after a notification expires, so a novelty rule is needed) are offered to A1 here for use.
+- A7 now claims MIA-LIFE-06 (board row updated; verified OPEN immediately before claiming).
