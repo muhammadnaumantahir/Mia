@@ -64,6 +64,9 @@ METRIC_DEFINITIONS: dict[str, MetricDefinition] = {m.name: m for m in (
     _d("inference_latency_p95_ms", "ms", "95th percentile total request latency in the window.",
        "one value per daily snapshot", "usage ledger",
        missing_when="no request had a measured latency"),
+    _d("benchmark_pass_rate", "percent", "Passed / total items of one versioned benchmark suite run.",
+       "one value per recorded benchmark run", "benchmark runner", maximum=100.0,
+       missing_when="the run had no items (the rate is undefined, not 0)"),
     _d("baseline_checks_passed", "checks", "Foundation baseline checks that passed.",
        "one value per baseline run", "foundation benchmark"),
 )}
