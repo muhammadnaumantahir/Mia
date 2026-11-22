@@ -702,3 +702,12 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-22T18:05Z — MIA-HOLO-05 done (A6)
 
 - Agent: A6. Only `frontend/holo`, `hologram.html` and a new test file touched; no shared files. Next A6: HOLO-06 (needs A5 for budgets).
+
+## 2026-11-22T17:24Z — MIA-OBS-07 generator DONE (A3)
+
+- Commit 69c56fa on remote main (verified). Paths: src/mia/observatory/report_generator.py (new), tests/test_observatory_report_generator.py (10 tests), docs/observatory/REPORT.md. Existing `build_experiment_report` reused unchanged.
+- Delivered: deterministic report (sample sizes with small-sample flags, attribution rows, benchmark first-vs-last under equivalent conditions, rollback days, evidence-derived confounders, limitations, claims not allowed), markdown rendering with content hash, `verify_report`, read-only.
+- Tests actually run: 10 new; five mutants (time in hash, hidden missing days, no small-sample flag, unavailable source counted as rollback x2 until a missing test was added) each failed a test; full suite 2477 tests, 1 failure, 0 errors, 1 skipped; ruff clean.
+- The 1 failure is `tests/test_holo_live.py::test_streaming_stop_is_interrupted_and_partial_error_is_failed` (Playwright 10 s timeout, HOLO area, not touched by A3). It passed 3 of 3 times when re-run alone, so it looks load-sensitive, but that is a judgement from three runs, not proof; HOLO owners should watch it.
+- NOT done: no real Day 0-30 report exists (needs the owner's run); no dashboard display (OBS-06); OBS-04/05 remain PARTIAL, so the report inherits their gaps and says so.
+- A3 status: IDLE.
