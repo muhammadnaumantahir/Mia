@@ -681,3 +681,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-22T17:15Z — MIA-HOLO-05 claimed (A6)
 
 - Agent: A6. Owner said "continue". Scope: `frontend/holo` and `/hologram` only (no shared-file edits): an always-available text/icon view equivalent to the 3D one, reduced-motion and forced-colors handling, labels/keyboard order, WCAG contrast and target-size checks, 320 px reflow. Rebuilds `hologram.html`.
+
+## 2026-11-22T17:06Z — MIA-OBS-07 claimed (A3)
+
+- Agent: A3. Existing `build_experiment_report` already verifies hashes and lists missing/unavailable days and events; the generator composes it with attribution and benchmark runs. A6 not consulted (no dashboard paths touched); OBS-06 stays OPEN.
