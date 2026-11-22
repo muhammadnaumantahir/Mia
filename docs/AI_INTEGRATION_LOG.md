@@ -696,3 +696,6 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-22T13:10Z - MIA-LIFE-09 timezone unification (A4)
 - Paths: src/mia/life/notifications.py (follow_owner_timezone + provider), src/mia/life/notification_api.py (field), src/mia/observatory/api.py (provider wiring, read-only on A1's settings), src/mia/assistant.html (one checkbox in the notification settings), tests (notifications, notification API, voice browser), docs/STATUS.md.
 - Tests: see STATUS.md. Resolves the follow-up recorded after the task producer.
+
+## 2026-11-22T17:50Z - A4 review: HOLO-04 voice wiring OK with streamed speech; LIFE-09 leftovers closed
+- Added tests/test_voice_browser.py::test_runtime_evidence_keeps_speaking_held_across_streamed_sentences (mutation-checked). No source changes in this step; assistant.html untouched. LIFE-09 leftover "route outreach/briefings through the center" is closed by design (LIFE-14 keeps disjoint content); remaining LIFE-09 items are owner-only checks and push-to-talk announcement.

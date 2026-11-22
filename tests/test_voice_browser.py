@@ -1075,3 +1075,32 @@ def test_voice_conversation_start_mentions_pending_notifications_once(ctx):
         assert not any("notification" in text for text in _spoken(ctx)[1:])  # announced only once
     finally:
         _ntf_cleanup(ctx)
+
+
+def test_runtime_evidence_keeps_speaking_held_across_streamed_sentences(ctx):
+    """MIA-VOICE-05 x MIA-HOLO-04: the hologram must not see 'speaking' drop between sentences."""
+    import threading
+
+    ctx.provider.parts = ["First point is made. Second is", " also made. Third."]
+    ctx.provider.hold = threading.Event()
+    ctx.js("document.getElementById('useTools').checked=false")
+    ctx.js("window.__tts.duration=400")
+    ctx.js("window.__ev=[];const c=new BroadcastChannel('mia-runtime-evidence');"
+           "c.onmessage=e=>window.__ev.push([e.data.type,e.data.kind]);window.__evch=c;")
+    ctx.start()
+    ctx.listening()
+    ctx.say("Give me three points")
+    ctx.wait("window.__tts.spoken.length>=1")
+    ctx.wait("window.__ev.some(e=>e[0]==='set'&&e[1]==='voice_speaking')")
+    ctx.provider.hold.set()
+    ctx.wait("window.__tts.spoken.length>=2")
+    events = ctx.js("window.__ev")  # the third sentence is still being spoken (fake duration)
+    assert ["set", "voice_speaking"] in events
+    assert ["retract", "voice_speaking"] not in events, "speaking must stay held between sentences"
+    assert ctx.js("voiceSpeaking") is True  # Interrupt and echo protection rely on this flag mid-stream
+    assert ctx.js("document.getElementById('voiceOrb').dataset.state") == "speaking"
+    ctx.wait("window.__tts.spoken.length>=3")
+    ctx.listening()
+    ctx.wait("window.__ev.some(e=>e[0]==='retract'&&e[1]==='voice_speaking')")
+    # speaking was retracted only after the last sentence had been handed to the speaker
+    assert len(_spoken(ctx)) == 3
