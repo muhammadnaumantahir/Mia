@@ -1914,6 +1914,13 @@ def create_app(
             raise HTTPException(status_code=404, detail="Memory page is not installed")
         return FileResponse(page, media_type="text/html")
 
+    @app.get("/hologram")
+    def hologram() -> FileResponse:
+        page = Path(__file__).with_name("hologram.html")
+        if not page.exists():
+            raise HTTPException(status_code=404, detail="Hologram asset not found")
+        return FileResponse(page, media_type="text/html")
+
     @app.get("/assistant")
     def assistant() -> FileResponse:
         page = Path(__file__).resolve().parents[1] / "assistant.html"

@@ -1,9 +1,0 @@
-{
-  "name": "mia-holo-renderer-spike",
-  "private": true,
-  "version": "0.0.0",
-  "description": "MIA-HOLO-02 renderer spike. Isolated from the Mia app; nothing here is imported by src/mia.",
-  "type": "module",
-  "scripts": { "build": "node build.mjs" },
-  "devDependencies": { "esbuild": "0.28.2", "three": "0.187.0" }
-}

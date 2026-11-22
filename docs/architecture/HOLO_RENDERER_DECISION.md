@@ -21,7 +21,7 @@ sizes are a local disk/parse cost, not a network cost.
 
 ## Decision
 
-Use **three.js** behind the small interface in `spikes/holo-renderer/src/renderer.js`.
+Use **three.js** behind the small interface in `frontend/holo/src/renderer.js`.
 
 Why: it is the actively maintained option (published within the last month), MIT-licensed, has no
 runtime dependencies, tree-shakes, and has the widest ecosystem for the later work (picking,
@@ -34,7 +34,7 @@ hardware (switch to OGL; only `renderer.js` changes), or three.js drops tree-sha
 
 ## What the spike proves (real Chromium, software GL)
 
-`tests/test_holo_renderer_spike.py` (8 tests):
+`tests/test_holo_scene.py` (originally the spike tests, now run against the served `/hologram` page):
 
 - WebGL path renders and animates; draw calls are recorded.
 - Missing WebGL returns `{ok:false, reason:"webgl_unavailable"}` and shows a text fallback
@@ -70,3 +70,12 @@ that creates a renderer, camera, one sphere mesh and a render loop (Babylon impo
 scene, camera, mesh builder and vector modules); `esbuild --bundle --minify --format=iife`; size with
 `stat` and `gzip -9 -c | wc -c`. Licences from each package's `package.json`; publish dates from
 `npm view <pkg> time.modified`. Numbers are for these specific minimal scenes, not whole applications.
+
+## Update (MIA-HOLO-03, 2026-11-22)
+
+The spike was promoted: sources moved from `spikes/holo-renderer` to `frontend/holo`, and the built,
+self-contained page `src/mia/observatory/hologram.html` (542 KB, committed so running Mia needs no Node)
+is served at `GET /hologram`. The decision above is unchanged. Added: per-state motion and core shape so
+colour is never the only cue, a pure `poseAt` and manual `step(dt)` for deterministic tests, a responsive
+layout, and a status line from `GET /api/runtime/contract`. The page is a labelled preview; binding to live
+events is MIA-HOLO-04.

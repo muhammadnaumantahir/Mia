@@ -1,0 +1,9 @@
+{
+  "name": "mia-holo-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Sources for the hologram page (MIA-HOLO-02 spike, MIA-HOLO-03 scene). Node is needed only to rebuild; the built page is committed.",
+  "type": "module",
+  "scripts": { "build": "node build.mjs" },
+  "devDependencies": { "esbuild": "0.28.2", "three": "0.187.0" }
+}

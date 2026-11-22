@@ -51,6 +51,5 @@ Desktop.ini
 # Node / frontend tooling if later added
 node_modules/
 
-# MIA-HOLO-02 renderer spike (generated)
-spikes/holo-renderer/node_modules/
-spikes/holo-renderer/spike.html
+# Hologram frontend build tooling (the built page src/mia/observatory/hologram.html IS committed)
+frontend/holo/node_modules/

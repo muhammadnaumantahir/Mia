@@ -65,7 +65,7 @@ mia-credentials = "mia.credentials_cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"mia.observatory" = ["dashboard.html", "assistant.html", "memory.html", "identity.html"]
+"mia.observatory" = ["dashboard.html", "assistant.html", "memory.html", "identity.html", "hologram.html"]
 "mia.brain" = ["diagnostics.html"]
 "mia.life" = ["life.html"]
 "mia.gateway" = ["dashboard.html"]
