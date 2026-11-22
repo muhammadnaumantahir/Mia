@@ -623,3 +623,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Tests actually run: new file 55 passed; ten mutation checks each fail the intended tests (one, the unauthenticated final-chunk flag, initially survived because truncation was only caught by a later gzip/tar layer; crypto-layer tests were added and it is now caught); full suite (detached, about 12 minutes) finished with no failures and 1 skipped (Chromium path unset) before the final rebase; after it only the backup and dashboard tests plus ruff were re-run. Real SQLite and real encryption; no real-device or Windows testing.
 - Security review requested: A5 (co-owner) was not consulted. Please review key derivation parameters, the format, the exclusion list (provider keys, permission/approval stores) and the never-overwrite rule for the spend ledger before relying on backups.
 - A2 status: IDLE. Next A2 M3 candidate would be MIA-LIFE-13 (device sync/remote access) which is security-heavy and should not start without A5 and an explicit owner go-ahead.
+
+## 2026-11-22T10:29Z — MIA-OBS-05 claimed (A3)
+
+- Agent: A3. Audit: no benchmark registry, run record or regression comparison exists; only the pass/fail foundation suite, the 31-scenario eval and the opt-in live harness. Scope is the bounded first slice on the board row; the rest of OBS-05 stays open and is stated as such.
