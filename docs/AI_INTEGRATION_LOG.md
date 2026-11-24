@@ -903,7 +903,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 
 ## 2026-11-24T17:30Z — MIA-LIFE-08 workflow UI DONE (A6)
 
-- Commit SHA_HERE. New `/workflows` page over A7's `/api/workflows`; no API change. Add-only: route in `api.py`, nav link in `life.html`, package-data entry.
+- Commit c0311f2. New `/workflows` page over A7's `/api/workflows`; no API change. Add-only: route in `api.py`, nav link in `life.html`, package-data entry.
 - Verified: `tests/test_workflows_page.py` (17 Chromium tests, real engine and stores), mutation checks (innerHTML, stale guard, cancel confirmation, step cap, empty-plan guard, approval tag all caught; the run-button busy guard is an equivalent mutant because the button is also disabled), full suite passed, ruff clean.
 - Owner-required: real screen reader pass; browsers other than Chromium. Retry only re-arms a step; the owner then runs the workflow (engine behaviour, shown in the page text).
 - Next: no eligible task left for A6 that is unowned (COMP-10/COMP-07 UI halves wait on COMP-09/04/05).

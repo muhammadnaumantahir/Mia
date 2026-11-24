@@ -610,5 +610,5 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - **MIA-LIFE-07 UI half (A6, 2026-11-24T12:59Z):** `/research` page with provenance, injection marking, verbatim citations and owner review. Owner check: one real-site read.
 
 ## 2026-11-24 — Workflow UI (MIA-LIFE-08, agent A6)
-- Commit SHA_HERE. `/workflows` lets the owner build a plan from the safe internal actions, preview risk and approval, run, pause, cancel (with confirmation) and retry failed steps, and read events and the report.
+- Commit c0311f2. `/workflows` lets the owner build a plan from the safe internal actions, preview risk and approval, run, pause, cancel (with confirmation) and retry failed steps, and read events and the report.
 - Verified: 17 Chromium tests over the real workflow engine, mutation checks, full suite, ruff. Not verified: real screen readers, non-Chromium browsers.
