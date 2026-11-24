@@ -70,7 +70,7 @@ mia-backup = "mia.backup_cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"mia.observatory" = ["dashboard.html", "assistant.html", "memory.html", "identity.html", "hologram.html"]
+"mia.observatory" = ["dashboard.html", "assistant.html", "memory.html", "identity.html", "hologram.html", "trends.html"]
 "mia.brain" = ["diagnostics.html"]
 "mia.life" = ["life.html", "tasks.html", "projects.html"]
 "mia.gateway" = ["dashboard.html"]

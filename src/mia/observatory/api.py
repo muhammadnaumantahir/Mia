@@ -126,6 +126,7 @@ from mia.memory.store import MemoryStore
 from mia.memory.structured import RECORD_TYPES, RecordNotFoundError, RecordStateError
 from mia.observatory.activity import ExperimentActivityCollector
 from mia.observatory.runtime_state import register_runtime_routes
+from mia.observatory.trend_view import build_trend_view
 from mia.security.local_guard import LoopbackGuard
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider, normalize_stt_language
 from mia.voice.tts import Pyttsx3SpeechSynthesizer, SpeechSynthesisError, SpeechSynthesizer
@@ -2037,6 +2038,13 @@ def create_app(
             raise HTTPException(status_code=404, detail="Memory page is not installed")
         return FileResponse(page, media_type="text/html")
 
+    @app.get("/trends")
+    def trends_page() -> FileResponse:
+        page = Path(__file__).with_name("trends.html")
+        if not page.exists():
+            raise HTTPException(status_code=404, detail="Trends page asset not found")
+        return FileResponse(page, media_type="text/html")
+
     @app.get("/hologram")
     def hologram() -> FileResponse:
         page = Path(__file__).with_name("hologram.html")
@@ -2176,6 +2184,17 @@ def create_app(
         if report is None:
             raise HTTPException(status_code=404, detail="Experiment not found")
         return {**report, "markdown": render_markdown(report)}
+
+    @app.get("/api/experiments/{experiment_id}/trends")
+    def experiment_trends(experiment_id: str) -> dict[str, Any]:
+        """Read-only display model: per-day coverage, real metric series, evidence hashes (OBS-06)."""
+        try:
+            view = build_trend_view(observatory, experiment_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        if view is None:
+            raise HTTPException(status_code=404, detail="Experiment not found")
+        return view
 
     @app.post("/api/experiments/prepare", status_code=201)
     async def prepare_experiment(item: ExperimentPreparation) -> dict[str, Any]:

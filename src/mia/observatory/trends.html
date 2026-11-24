@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
+<title>Mia — Experiment trends</title>
+<style>
+:root{font-family:Inter,Segoe UI,system-ui,sans-serif;color:#eef4f2;background:#0c1214}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#0c1214}
+.shell{max-width:1000px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:17px;margin:0 0 10px}h3{font-size:15px;margin:0 0 6px}
+nav{display:flex;flex-wrap:wrap;gap:4px 16px}nav a{color:#9be5c5;font-size:14px;padding:6px 0}
+.sub{color:#a9bdb6;font-size:14px;line-height:1.5}
+.panel{background:#131d20;border:1px solid #2b4044;border-radius:14px;padding:16px;margin-top:16px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:8px 0}
+label{font-size:13px;color:#c3d3ce;display:flex;flex-direction:column;gap:4px}
+select,button{font:inherit;font-size:14px;min-height:40px}
+select{background:#0e1719;color:#eef4f2;border:1px solid #4c6a66;border-radius:8px;padding:8px 10px;max-width:100%}
+button{background:#1b2a2c;border:1px solid #4c6a66;color:#e3ece8;border-radius:8px;padding:8px 14px;cursor:pointer}
+:focus-visible{outline:3px solid #ffd27a;outline-offset:2px}
+#notice{min-height:22px;font-size:14px;color:#a6e3c4;margin-top:12px}#notice.error{color:#ffb4a3}
+ol.days{list-style:none;margin:8px 0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
+ol.days button{width:100%;text-align:left;background:#0e1719;border:2px solid #2b4044;padding:8px;line-height:1.3;min-height:56px}
+ol.days button[aria-pressed=true]{border-color:#9be5c5}
+ol.days .st{display:block;font-size:12px;color:#c3d3ce}
+ol.days .glyph{font-weight:700;margin-right:4px}
+ol.days button.captured{border-style:solid}
+ol.days button.missed,ol.days button.capture_failed{border-color:#e08a7a;border-style:dashed}
+ol.days button.paused,ol.days button.deferred,ol.days button.unavailable{border-color:#d9a441;border-style:dotted}
+ol.days button.not_yet,ol.days button.due_today{border-color:#4c6a66;border-style:double}
+#dayDetail{border:1px dashed #4c6a66;border-radius:10px;padding:12px;margin-top:8px;overflow-wrap:anywhere}
+.counts{font-size:14px;color:#d5e3de;margin:6px 0}
+.tag{font-size:12px;border:1px solid #4c6a66;border-radius:999px;padding:2px 9px;color:#d5e3de;display:inline-block;margin:0 6px 4px 0}
+.tag.warn{border-color:#d9a441;color:#ffd98f}
+svg.chart{width:100%;height:auto;display:block;background:#0e1719;border:1px solid #2b4044;border-radius:10px}
+.cap{font-size:13px;color:#b6c8c2;margin:6px 0;overflow-wrap:anywhere}
+details{margin:8px 0}summary{cursor:pointer;min-height:32px}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px solid #2b4044;padding:6px 8px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+th{color:#c3d3ce;font-weight:600}
+.scroll{overflow-x:auto}
+code,.hash{font-family:ui-monospace,Consolas,monospace;font-size:12px;overflow-wrap:anywhere}
+ul.plain{margin:6px 0;padding-left:20px}ul.plain li{margin:4px 0;overflow-wrap:anywhere}
+.empty{border:1px dashed #4c6a66;border-radius:10px;padding:16px;text-align:center;color:#b6c8c2}
+.series{border-top:1px solid #2b4044;padding-top:14px;margin-top:14px}.series:first-of-type{border-top:0;margin-top:0;padding-top:0}
+@media(max-width:560px){.row{flex-direction:column;align-items:stretch}button,select{min-height:44px}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+@media(forced-colors:active){ol.days button{border-color:CanvasText}ol.days button[aria-pressed=true]{border-width:4px}}
+</style></head>
+<body><main class="shell">
+<nav aria-label="Mia pages"><a href="/">Observatory</a><a href="/assistant">Assistant</a><a href="/tasks">Tasks</a><a href="/projects">Projects</a></nav>
+<h1>Experiment trends</h1>
+<p class="sub">What Mia's 30-day experiment has actually recorded. Every number comes from a stored snapshot and links to that snapshot's hash. Days with no evidence are shown as gaps and are never filled in, estimated or smoothed. A change that happened near a metric movement is listed as a candidate, never as the cause.</p>
+<div id="notice" role="status" aria-live="polite"></div>
+
+<section class="panel" aria-labelledby="pickHeading"><h2 id="pickHeading">Experiment</h2>
+<div class="row"><label>Choose an experiment<select id="exp"></select></label>
+<button id="reload" type="button">Reload from the store</button></div>
+<p id="summary" class="sub"></p></section>
+
+<div id="body" hidden>
+<section class="panel" aria-labelledby="covHeading"><h2 id="covHeading" tabindex="-1">Day by day</h2>
+<p id="counts" class="counts"></p>
+<ol id="days" class="days" aria-label="Days of the experiment"></ol>
+<div id="dayDetail" hidden aria-live="polite"></div></section>
+
+<section class="panel" aria-labelledby="metHeading"><h2 id="metHeading">Recorded metrics</h2>
+<div id="metrics"></div></section>
+
+<section class="panel" aria-labelledby="probHeading"><h2 id="probHeading">Failed, deferred and paused captures</h2>
+<div id="problems"></div></section>
+
+<section class="panel" aria-labelledby="benchHeading"><h2 id="benchHeading">Benchmarks, timing and rollbacks</h2>
+<div id="bench"></div></section>
+
+<section class="panel" aria-labelledby="limHeading"><h2 id="limHeading">What this does not show</h2>
+<div id="limits"></div></section>
+
+<section class="panel" aria-labelledby="evHeading"><h2 id="evHeading">Evidence</h2>
+<div id="evidence"></div></section>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const DAY={captured:['Captured','✓'],missed:['Missed','✕'],paused:['Paused','‖'],capture_failed:['Capture failed','!'],
+ deferred:['Deferred','…'],unavailable:['Unavailable','?'],due_today:['Due today','◔'],not_yet:['Not yet reached','·']};
+const WINDOW_TEXT={
+ window_not_covered_by_evidence:()=>'Not covered by evidence: days around this window have no snapshot, so recorded changes cannot be listed.',
+ no_recorded_change_in_window:()=>'No recorded change in this window. Factors Mia does not observe are not ruled out.',
+ single_candidate_correlation_only:t=>'One recorded change ('+t+') happened in this window. Correlation only, not a cause.',
+ confounded_multiple_candidates:t=>'Several recorded changes ('+t+') happened in this window and cannot be separated.'};
+const TYPE_TEXT={commit:'new code commit',capability_transitions:'capability status change'};
+let seq=0,view=null,experiments=[],selectedDay=null;
+
+const mk=(tagName,text,cls)=>{const e=document.createElement(tagName);if(text!==undefined&&text!==null)e.textContent=text;if(cls)e.className=cls;return e;};
+const tag=(text,warn)=>mk('span',text,'tag'+(warn?' warn':''));
+const plural=(n,one,many)=>n+' '+(n===1?one:many);
+const short=h=>h?h.slice(0,12)+'…':'none';
+const num=v=>Number.isInteger(v)?String(v):String(Math.round(v*1000)/1000);
+function say(text,error=false){const n=$('notice');n.textContent=text;n.className=error?'error':'';n.setAttribute('role',error?'alert':'status');}
+async function api(path){
+ const r=await fetch(path);let body=null;try{body=await r.json();}catch(e){}
+ if(!r.ok){const d=body&&body.detail;const m=typeof d==='string'?d:'Request failed ('+r.status+')';const err=new Error(m);err.status=r.status;throw err;}
+ return body;
+}
+function clearBody(){$('body').hidden=true;view=null;}
+function table(headers,rows){
+ const wrap=mk('div',undefined,'scroll');const t=mk('table');const head=mk('thead');const hr=mk('tr');
+ for(const h of headers)hr.append(Object.assign(mk('th',h),{scope:'col'}));head.append(hr);t.append(head);
+ const b=mk('tbody');for(const r of rows){const tr=mk('tr');for(const c of r){const td=mk('td');if(c instanceof Node)td.append(c);else td.textContent=c;tr.append(td);}b.append(tr);}
+ t.append(b);wrap.append(t);return wrap;
+}
+function hashSpan(h){const s=mk('span',short(h),'hash');if(h)s.title=h;return s;}
+
+/* ---------- picker and loading ---------- */
+async function init(){
+ try{experiments=(await api('/api/experiments')).items||[];}
+ catch(e){say('Could not load the experiments: '+e.message,true);return;}
+ const sel=$('exp');sel.replaceChildren();
+ if(!experiments.length){
+  sel.append(new Option('No experiments',''));sel.disabled=true;
+  $('summary').textContent='No experiment has been prepared yet, so there is nothing to show. This page never shows sample or placeholder data.';
+  return;
+ }
+ for(const e of experiments)sel.append(new Option(e.name+' ('+e.status+')',e.experiment_id));
+ const want=new URLSearchParams(location.search).get('id');
+ if(want&&experiments.some(e=>e.experiment_id===want))sel.value=want;
+ await load();
+}
+async function load(){
+ const id=$('exp').value;if(!id)return;const mine=++seq;
+ say('Loading…');
+ let data;
+ try{data=await api('/api/experiments/'+encodeURIComponent(id)+'/trends');}
+ catch(e){
+  if(mine!==seq)return;clearBody();$('summary').textContent='';
+  say(e.status===500?'The stored evidence for this experiment failed its integrity check, so nothing from it is shown: '+e.message
+   :'Could not load this experiment: '+e.message,true);return;
+ }
+ if(mine!==seq)return;
+ view=data;selectedDay=null;
+ try{history.replaceState(null,'','?id='+encodeURIComponent(id));}catch(e){}
+ render();say('Loaded '+data.experiment.name+' at '+new Date().toLocaleTimeString()+'.');
+}
+
+/* ---------- rendering ---------- */
+function render(){
+ const v=view,x=v.experiment;$('body').hidden=false;
+ $('summary').textContent=x.name+': '+x.status.replace('_',' ')+', '+plural(x.planned_days,'planned day','planned days')
+  +(x.today_index!==null?', now on day '+x.today_index:'')+'. '+plural(v.evidence.metric_count,'metric sample','metric samples')+' and '+plural(v.evidence.event_count,'event','events')+' recorded.';
+ renderDays();renderMetrics();renderProblems();renderBench();renderLimits();renderEvidence();
+}
+function renderDays(){
+ const v=view,c=v.day_counts,parts=[];
+ for(const k of Object.keys(DAY))if(c[k])parts.push(c[k]+' '+DAY[k][0].toLowerCase());
+ $('counts').textContent=parts.join(' · ');
+ const ol=$('days');ol.replaceChildren();
+ for(const d of v.days){
+  const li=mk('li');const b=mk('button',undefined,d.state);b.type='button';b.dataset.day=d.day;b.setAttribute('aria-pressed','false');
+  b.append(mk('span',DAY[d.state][1],'glyph'),document.createTextNode(d.day===0?'Day 0 (baseline)':'Day '+d.day),mk('span',DAY[d.state][0],'st'));
+  b.setAttribute('aria-label',(d.day===0?'Day 0 baseline':'Day '+d.day)+': '+DAY[d.state][0]);
+  b.addEventListener('click',()=>showDay(d.day));li.append(b);ol.append(li);
+ }
+ $('dayDetail').hidden=true;
+}
+function showDay(day){
+ const d=view.days.find(x=>x.day===day);selectedDay=day;
+ for(const b of $('days').querySelectorAll('button'))b.setAttribute('aria-pressed',String(Number(b.dataset.day)===day));
+ const box=$('dayDetail');box.replaceChildren();box.hidden=false;
+ box.append(mk('h3',(day===0?'Day 0 (baseline)':'Day '+day)+': '+DAY[d.state][0]));
+ for(const r of d.reasons)box.append(mk('p',r,'cap'));
+ if(d.snapshot){
+  const dl=mk('p',undefined,'cap');
+  dl.append(document.createTextNode('Snapshot captured '+new Date(d.snapshot.captured_at).toLocaleString()+' at commit '),Object.assign(mk('span',d.snapshot.source_commit.slice(0,12),'hash')),document.createTextNode('. Evidence hash '),hashSpan(d.snapshot.manifest_sha256),document.createTextNode(' (full value in the Evidence section).'));
+  box.append(dl);
+ }
+ if(d.event_ids.length)box.append(mk('p','Explained by event '+d.event_ids.join(', ')+'.','cap'));
+}
+
+function chart(series,planned,problemDays){
+ const NS='http://www.w3.org/2000/svg',W=640,H=200,L=16,R=16,T=14,B=18;
+ const svg=document.createElementNS(NS,'svg');svg.setAttribute('viewBox','0 0 '+W+' '+H);svg.setAttribute('class','chart');svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');
+ const el=(n,a)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);svg.append(e);return e;};
+ const x=d=>L+(W-L-R)*d/Math.max(1,planned);
+ const vals=series.points.map(p=>p.value);let lo=Math.min(...vals),hi=Math.max(...vals);if(lo===hi){lo-=1;hi+=1;}
+ const y=v=>T+(H-T-B)*(1-(v-lo)/(hi-lo));
+ el('rect',{x:L,y:T,width:W-L-R,height:H-T-B,fill:'none',stroke:'#2b4044'});
+ for(const d of problemDays)el('line',{x1:x(d),x2:x(d),y1:T,y2:H-B,stroke:'#e08a7a','stroke-width':2,'stroke-dasharray':'3 5'});
+ const by={};for(const p of series.points)(by[p.day]=by[p.day]||[]).push(p);
+ const days=Object.keys(by).map(Number).sort((a,b)=>a-b);
+ // A line joins two points only when they are on consecutive days; a gap is left open.
+ for(let i=1;i<days.length;i++)if(days[i]-days[i-1]===1){
+  const a=by[days[i-1]].at(-1),b=by[days[i]][0];
+  el('line',{x1:x(a.day),y1:y(a.value),x2:x(b.day),y2:y(b.value),stroke:'#9be5c5','stroke-width':2.5});
+ }
+ for(const p of series.points)el('circle',{cx:x(p.day),cy:y(p.value),r:5,fill:'#0e1719',stroke:'#9be5c5','stroke-width':3});
+ return {svg,lo,hi};
+}
+function renderMetrics(){
+ const host=$('metrics');host.replaceChildren();const v=view;
+ if(!v.series.length){host.append(mk('p','No metric has been recorded for this experiment yet. Nothing is drawn until real samples exist.','empty'));return;}
+ const gapDays=v.days.filter(d=>['missed','capture_failed','paused','deferred','unavailable'].includes(d.state)).map(d=>d.day);
+ for(const s of v.series){
+  const sec=mk('div',undefined,'series');sec.dataset.metric=s.name;
+  sec.append(mk('h3',s.name.replace(/_/g,' ')+(s.unit?' ('+s.unit+')':'')));
+  const days=[...new Set(s.points.map(p=>p.day))].sort((a,b)=>a-b);
+  const meta=mk('div');
+  meta.append(tag(plural(s.sample_size.samples,'sample','samples')+' on '+plural(days.length,'day','days')),
+   ...(s.sample_size.small_sample?[tag('Small sample (under '+s.sample_size.threshold+'): read with caution',true)]:[]),
+   ...(s.mixed_units?[tag('Mixed units: not plotted as one line',true)]:[]));
+  sec.append(meta);
+  if(!s.mixed_units){
+   const {svg,lo,hi}=chart(s,view.experiment.planned_days,gapDays);sec.append(svg);
+   sec.append(mk('p','Chart: days 0 to '+view.experiment.planned_days+' left to right; values from '+num(lo)+' to '+num(hi)+(s.unit?' '+s.unit:'')+'. Dots are recorded samples, a line joins only consecutive days, dashed vertical lines mark days with no snapshot.','cap'));
+  }
+  const ba=s.before_after;
+  sec.append(mk('p',ba.comparable?
+   'First recorded: day '+ba.from.day+' = '+num(ba.from.value)+' '+ba.unit+'. Latest recorded: day '+ba.to.day+' = '+num(ba.to.value)+' '+ba.unit+'. Observed difference '+(ba.delta>0?'+':'')+num(ba.delta)+' '+ba.unit+(ba.starts_at_day_zero?'':' (the first value is not from Day 0)')+'. '+ba.note
+   :'No before/after comparison: '+ba.reason,'cap'));
+  const det=mk('details');det.append(mk('summary','Values and evidence for '+s.name.replace(/_/g,' ')));
+  det.append(table(['Day','Value','Unit','Recorded at','Snapshot evidence'],s.points.map(p=>[String(p.day),num(p.value),p.unit,new Date(p.occurred_at).toLocaleString(),p.snapshot_manifest_sha256?hashSpan(p.snapshot_manifest_sha256):'no snapshot for this day'])));
+  if(s.windows.length){
+   det.append(mk('h3','Between recorded days'));const ul=mk('ul',undefined,'plain');
+   for(const w of s.windows){
+    const types=w.candidate_types.map(t=>TYPE_TEXT[t]||t).join(', ');
+    const li=mk('li','Day '+w.from_day+' to '+w.to_day+': '+(w.delta>0?'+':'')+num(w.delta)+' ('+num(w.from_value)+' to '+num(w.to_value)+'). '+WINDOW_TEXT[w.status](types)
+     +(w.days_without_evidence_inside_window.length?' No evidence for days '+w.days_without_evidence_inside_window.join(', ')+'.':''));ul.append(li);
+   }
+   det.append(ul);
+  }
+  sec.append(det);host.append(sec);
+ }
+}
+function renderProblems(){
+ const host=$('problems');host.replaceChildren();
+ if(!view.problems.length){host.append(mk('p','No failed, deferred or paused capture has been recorded.','empty'));return;}
+ host.append(table(['Day','What happened','Outcome','When','Event'],view.problems.map(p=>[p.day===null?'—':String(p.day),p.summary,p.outcome||'—',new Date(p.occurred_at).toLocaleString(),Object.assign(mk('span',p.event_id.slice(0,12)+'…','hash'),{title:p.event_id})])));
+}
+function renderBench(){
+ const host=$('bench');host.replaceChildren();const v=view;const suites=Object.entries(v.benchmarks);
+ if(!suites.length)host.append(mk('p','No benchmark run has been recorded in this experiment.','empty'));
+ else host.append(table(['Suite','Runs','First run','Latest run','First vs latest'],suites.map(([id,s])=>{
+  const f=s.runs[0],l=s.runs.at(-1),c=s.first_vs_last;
+  return [id,String(s.runs.length),'day '+f.day_index+': '+f.passed+'/'+f.total,'day '+l.day_index+': '+l.passed+'/'+l.total,
+   c.comparable===false?'Not comparable: '+((c.reasons||[]).join('; ')||'no reason recorded'):(c.summary||'Comparable; see the report for the difference.')];})));
+ const t=v.timing.runs;
+ host.append(mk('h3','Timing runs'));
+ host.append(t.length?table(['Day','Median ms','Min ms','Max ms','Repeats'],t.map(r=>['day '+r.day_index,num(r.median_ms),num(r.min_ms),num(r.max_ms),String(r.repeats)])):mk('p','No timing run has been recorded.','empty'));
+ host.append(mk('h3','Rollbacks'));
+ const rb=v.rollbacks.days_with_rollbacks;
+ host.append(mk('p',rb.length?'Capability rollbacks were counted on days '+rb.map(r=>r.day_index+' ('+r.rolled_back_transitions+')').join(', ')+'. '+v.rollbacks.note:'No capability rollback was recorded on any captured day. '+v.rollbacks.note,'cap'));
+ if(v.change_markers.some(m=>m.changes.length)){
+  host.append(mk('h3','Recorded changes by window'));const ul=mk('ul',undefined,'plain');
+  for(const m of v.change_markers)if(m.changes.length)ul.append(mk('li','Day '+m.from_day+' to '+m.to_day+': '+m.changes.map(c=>TYPE_TEXT[c.type]||c.type).join(', ')+'.'));
+  host.append(ul);
+ }
+}
+function renderLimits(){
+ const host=$('limits');host.replaceChildren();
+ const block=(title,items)=>{host.append(mk('h3',title));const ul=mk('ul',undefined,'plain');for(const i of items)ul.append(mk('li',i));host.append(ul);};
+ block('Confounders and gaps in this experiment',view.confounders);
+ block('Limitations',view.limitations);
+ block('Claims this page does not make',view.claims_not_allowed);
+}
+function renderEvidence(){
+ const host=$('evidence');host.replaceChildren();const e=view.evidence;
+ const p=mk('p',undefined,'cap');p.append(document.createTextNode('Report hash '),Object.assign(mk('span',e.report_sha256,'hash')),document.createTextNode('. The same stored evidence always gives the same hash. Baseline hash '),Object.assign(mk('span',e.baseline_sha256,'hash')),document.createTextNode('.'));
+ host.append(p);
+ const raw=mk('p','Raw, integrity-checked report: ','cap');const rawPath='/api/experiments/'+encodeURIComponent(view.experiment.experiment_id)+'/report';
+ raw.append(Object.assign(mk('a',rawPath),{href:rawPath}));host.append(raw);
+ host.append(table(['Day','Snapshot manifest hash'],Object.entries(e.snapshot_manifest_sha256).map(([d,h])=>[d,Object.assign(mk('span',h,'hash'))])));
+}
+$('exp').addEventListener('change',load);
+$('reload').addEventListener('click',()=>{if($('exp').value)load();else init();});
+init();
+</script></main></body></html>

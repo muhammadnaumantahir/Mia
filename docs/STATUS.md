@@ -594,3 +594,4 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 ## 2026-11-24 Scoped research with provenance and verified citations (MIA-LIFE-07 backend, agent A7)
 - Commit 9668d84. Owner supplies 1-5 URLs on hosts they already allowlisted; Mia reads them read-only, records provenance, compares sources by an explainable checkability score, and accepts a claim only if every citation is a verbatim quote from a source in that run. Instruction-like page text is flagged and cannot be cited; owner confirm/reject turns a claim into a finding.
 - Not done / not verified: research UI page, search step, model synthesis, saving findings into long-term memory; live internet fetch not run (mock transport only); pattern-based injection detection is not exhaustive.
+- **MIA-OBS-06 extension (A6, 2026-11-24T11:30Z):** `/trends` page with per-day coverage and gap-preserving charts, additive to A3's Evidence panel. Not verified: real 30-day data, other browsers.
