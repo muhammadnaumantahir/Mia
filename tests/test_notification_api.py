@@ -9,6 +9,12 @@ from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
 
 
+@pytest.fixture(autouse=True)
+def _isolated_data_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("MIA_DATA_DIR", str(tmp_path / "data"))
+
+
+
 @pytest.fixture()
 def env(tmp_path):
     center = NotificationCenter(tmp_path / "n.sqlite3")

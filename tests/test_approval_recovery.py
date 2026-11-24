@@ -16,6 +16,12 @@ from mia.observatory.store import ObservatoryStore
 PAYLOAD = {"root_id": "root_1", "relative_path": "a.txt", "content": "hello"}
 
 
+@pytest.fixture(autouse=True)
+def _isolated_data_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("MIA_DATA_DIR", str(tmp_path / "data"))
+
+
+
 @pytest.fixture()
 def env(tmp_path):
     approvals = ApprovalStore(tmp_path / "a.sqlite3")

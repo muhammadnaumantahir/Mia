@@ -15,6 +15,12 @@ from mia.observatory.store import ObservatoryStore
 NOW = datetime(2026, 6, 1, 12, 0, tzinfo=UTC)
 
 
+@pytest.fixture(autouse=True)
+def _isolated_data_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("MIA_DATA_DIR", str(tmp_path / "data"))
+
+
+
 def iso(moment):
     return moment.isoformat()
 

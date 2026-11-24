@@ -15,6 +15,12 @@ from mia.observatory.store import ObservatoryStore
 from mia.voice.stt import FasterWhisperTranscriber, normalize_stt_language
 
 
+@pytest.fixture(autouse=True)
+def _isolated_data_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("MIA_DATA_DIR", str(tmp_path / "data"))
+
+
+
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [

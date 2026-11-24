@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from fastapi.testclient import TestClient
 
 from mia.computer import approvals as approvals_module
@@ -10,6 +11,12 @@ from mia.computer.filesystem import FilesystemAdapter
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
 from tests.test_chat_tools import ToolCallingProvider, build_client
+
+
+@pytest.fixture(autouse=True)
+def _isolated_data_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("MIA_DATA_DIR", str(tmp_path / "data"))
+
 
 
 def make(tmp_path, monkeypatch, content="Created only after approval."):

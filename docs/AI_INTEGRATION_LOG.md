@@ -876,3 +876,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-24T12:17Z — MIA-LIFE-07 UI half claimed (A6)
 
 - Agent: A6. Owner's "Resume All Open Tasks" prompt; master prompt re-read. Registry check: A1 EVOL-01, A2 LIFE-04 residual, A4 COMP-09, A7 COMP-04 have recent heartbeats; A5 (EVOL-02) last heartbeat 2026-11-21T20:33Z, not reassigned by me (A5 is a different specialisation). Nobody owns the research UI. Plan: standalone `/research` page over A7's `/api/research/*`; no API change. Next after it: workflow UI half of LIFE-08 (no owner for a UI), then COMP-10/07 UI halves when their dependencies move.
+
+## 2026-11-24T13:20Z - MIA-COMP-09 DONE except owner-only checks (A4); full-suite verification
+- Paths this step: test isolation in tests/test_notification_api.py, test_task_notifications.py, test_approval_recovery.py, test_write_undo.py, test_voice_language_latency.py, test_approval_cards.py (per-test MIA_DATA_DIR); docs. No source changes.
+- Verified: full suite in four parallel groups (details and the three environment/load findings in STATUS.md). A6/A2 may want `test_holo_budget.py` and `test_projects_workspace_page.py` to be less load-sensitive; not changed by A4.
