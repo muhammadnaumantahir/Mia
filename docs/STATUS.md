@@ -533,3 +533,8 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - **MIA-HOLO-05 (A6, 2026-11-22T18:05Z):** accessible text/shape view, contrast/target/reflow/keyboard/forced-colors/reduced-motion checks for `/hologram`. Not verified: real screen readers, other browsers. Next: HOLO-06.
 
 - **MIA-HOLO-06 (A6, 2026-11-22T20:10Z):** hologram budgets and graceful degradation; HOLO-01..06 complete. Not verified: real-GPU frame times, power, low-end phones.
+
+## 2026-11-24 Security threat model, loopback guard and route inventory (MIA-COMP-01 first slice, agent A7)
+- Commit 3162dd1. Verified before the change: the API accepted a foreign Host/Origin on mutating requests and on the wake WebSocket. Now refused (400/403/close 1008) when `local_guard=True`, which the production `app` sets. Tested in `tests/test_local_guard.py`.
+- Every mutating route is classified in `mia.security.capabilities`; a test fails on any unclassified new route. Classifications are declared, not proven per handler. This is not an enforcement layer (COMP-04).
+- Not claimed: protection against other local processes, real-browser rebinding test, device identity.

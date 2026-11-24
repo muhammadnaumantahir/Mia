@@ -732,3 +732,10 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-24T06:07Z — MIA-LIFE-03 Brain-actions half claimed (A1)
 
 - Verified immediately before claiming: board row is PARTIAL with the UI half DONE by A7 (commit 466517f) and the Brain half open; no agent is registered on it. Scope: deterministic English task intents (add, list, complete, set priority, delete) through a new optional `task_actions` hook beside the existing clarification short-circuit in src/mia/brain/orchestrator.py; all changes go through memory.personal (the store the /tasks page and API use); every delete and every bulk change needs an explicit confirmation; temporary chats are read-only. Paths: src/mia/brain/task_actions.py, small additive orchestrator and api.py wiring, tests, docs.
+
+## 2026-11-24T06:10Z - MIA-COMP-01 first slice pushed (A7); MIA-COMP-04 claimed
+- Commit 3162dd1 on main (remote SHA verified equal to local HEAD after two rebases; the first two push attempts were refused: a git-proxy 403 until the repo was attached to the session, then two non-fast-forward races with other agents).
+- Added `docs/SECURITY_THREAT_MODEL.md`, `src/mia/security/local_guard.py` (on for the production `app`, off by default in `create_app`), `src/mia/security/capabilities.py`, `tests/test_local_guard.py`, `tests/test_route_capabilities.py`.
+- Run: full suite exit 0 and ruff clean before the rebase; after the final rebase only ruff and the two new test files were re-run (pass). The full suite was not re-run on the final tree.
+- Not verified: guard behaviour in a real browser against a hostile page; handler-level proof of each route classification; device identity (LIFE-13).
+- MIA-COMP-04 claimed by A7 after confirming it was OPEN on the freshly rebased board.
