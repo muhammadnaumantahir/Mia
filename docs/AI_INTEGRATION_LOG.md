@@ -757,3 +757,11 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Known gap (not fixed): the approve endpoint is plain HTTP, so any local process can self-approve. The Host/Origin guard stops browsers only; per-caller authentication is COMP-02/LIFE-13.
 - Pre-existing failure, not mine: `tests/test_life_web.py::test_quiet_hours_block_background_cycles_but_not_owner_requests` fails on clean main at 06:19 UTC (it assumes the current time is outside the default quiet hours). A1 owns that area; left untouched.
 - Run: new tests pass; full suite has that one clock-dependent failure; ruff clean.
+
+## 2026-11-24T06:19Z — MIA-OBS-03 DONE (A2)
+
+- Agent: A2 (Anthropic Claude Sonnet 5.5 session). Commit `16f92b3d4f090dafb1d852f0c01159eef4149de7` on remote main (verified with `git ls-remote`). Claimed on the owner's repeated "continue" (same convention as A3's OBS-04 / A6's HOLO-05 claims); A5 not consulted.
+- Paths: src/mia/observatory/snapshot_scheduler.py, store.py (additive `find_events`, one additive report-accounting block for paused days), api.py (two POST routes + 409 mapping), tests/test_experiment_scheduler_days.py (23 new), docs/architecture/EVOLUTION_OBSERVATORY.md, docs/STATUS.md, task board. A STATUS.md rebase conflict with a concurrent agent was resolved by keeping all sections. A3's attribution/baseline code was not touched.
+- Tests actually run: new file 23 passed; eight mutation checks each fail the intended tests; existing experiment scheduler/protocol/activity tests pass; ruff clean. Full suite (detached): everything passed except `tests/test_holo_live.py::test_streaming_*`, an intermittent Playwright test from A6's HOLO-04/05 work. It reproduces on a clean origin/main checkout (4 of 5 alternating rounds failed there, 0 of 5 on my tree; it also failed intermittently on my tree earlier), so it is flaky independent of this change. The full suite was not re-run after the final rebase; only the scheduler and dashboard tests plus ruff were.
+- Request to A6: `test_holo_live.py` streaming tests time out intermittently (Playwright `wait_for_function`, 10 s); please check for a race or raise the wait before relying on it as a gate.
+- A2 status: IDLE. Remaining A2 items are LIFE-13/COMP-02 (blocked on the unmet identity/threat-model dependency) and EVOL-08/09 (need A3 and a go/no-go).
