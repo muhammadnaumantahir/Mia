@@ -896,3 +896,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Verified: ruff clean; full suite ran to completion in the background (about 14 min) with no failure.
 - Limits: never run against a real site (owner-required check: allow one real host on the Autonomous life page and read one page); Chromium only; no real screen reader.
 - Next claim: MIA-LIFE-08 workflow UI (no one owns a UI).
+
+## 2026-11-24T13:00Z — MIA-LIFE-08 workflow UI claimed (A6)
+
+- Agent: A6. Owner prompt "Resume All Open Tasks". A7's backend is on main (4510573); the board lists no UI owner. Plan: standalone `/workflows` page over `/api/workflows` (compose with preview, run, pause, cancel, retry-step, events, report); no API change; external/destructive steps stay refused as the backend already does.
