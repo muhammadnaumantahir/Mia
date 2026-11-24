@@ -91,6 +91,8 @@ _RULES: tuple[Capability, ...] = (
     # Outbound inference and web.
     Capability("POST /api/gateway/*", _S.EXTERNAL_NETWORK, _A.NONE, "gateway", "paid inference is off by default; budget limits apply"),
     Capability("POST /api/runtime/resolve", _S.INTERNAL_STATE, _A.NONE, "gateway", "read-like resolution"),
+    Capability("POST /api/research/runs", _S.EXTERNAL_NETWORK, _A.NONE, "research", "read-only fetches of owner-allowlisted hosts; DELETE run; emergency stop honoured"),
+    Capability("POST /api/research/*", _S.OWNER_DATA, _A.NONE, "research", "reject claim; DELETE run"),
     Capability("POST /api/knowledge/ingest", _S.EXTERNAL_NETWORK, _A.NONE, "knowledge", "delete ingested items"),
     Capability("*/api/life/sources*", _S.EXTERNAL_NETWORK, _A.NONE, "life", "DELETE source"),
     Capability("POST /api/life/cycle", _S.EXTERNAL_NETWORK, _A.NONE, "life", "pause/emergency stop"),

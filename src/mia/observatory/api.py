@@ -103,6 +103,7 @@ from mia.life.capture import capture_from_message as capture_curiosity_from_mess
 from mia.life.notification_api import register_notification_routes
 from mia.life.notifications import NotificationCenter
 from mia.life.reflect import Reflector
+from mia.life.research import ResearchService, register_research_routes
 from mia.life.runner import LifeRunner, LifeScheduler
 from mia.life.store import ITEM_STATES, LifeStore
 from mia.life.suggestions import run_suggestions as run_stalled_suggestions
@@ -795,6 +796,7 @@ def create_app(
     enable_code_graph_watcher: bool = False,
     local_guard: bool = False,
     workflows: Any | None = None,
+    research: Any | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -2953,6 +2955,19 @@ def create_app(
         notifications=notification_center, control=control,
     )
     app.state.workflow_engine = workflow_engine
+
+    # MIA-LIFE-07: scoped research with provenance, verified citations and owner review.
+    research_service = research or ResearchService(
+        data_dir / "mia-research.sqlite3",
+        source_allowed=life_store.source_allowed,
+        should_stop=lambda: control.stop_requested or life_store.get_settings().emergency_stop,
+    )
+    app.state.research = research_service
+    register_research_routes(
+        app, research_service,
+        lambda **kw: observatory.record_event(category="research", layer_id="SPS-04", **kw),
+        lambda description: control.activity("research", description, mode="observing"),
+    )
     register_workflow_routes(
         app, workflow_engine,
         lambda **kw: observatory.record_event(category="workflow", layer_id="SPS-10", **kw),
