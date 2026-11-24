@@ -838,3 +838,8 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - The 1 failure is again `tests/test_life_web.py::test_quiet_hours_block_background_cycles_but_not_owner_requests` (LIFE, not A3's). Correction of an earlier note: it fails when run during the 22:00-07:00 UTC default quiet window (the full run started about 06:36 UTC and failed; alone at 06:26 UTC it failed) and passes when run alone at 11:54 UTC. So it is wall-clock dependent; LIFE owners should inject a fixed daytime clock.
 - Not done: no human has looked at the page, so visual quality is unreviewed. OBS-08 (lifecycle controls, privacy notice, export) not started: it acts on the owner's real experiment.
 - A3 status: IDLE.
+
+## 2026-11-24T11:55Z — MIA-LIFE-04 residual claimed (A2)
+
+- Agent: A2 (same registered session; owner's "Resume All Open Tasks" prompt re-read prompts/AI_MASTER_AGENT.md). Registry check at 2026-11-24T11:55Z: A1 EVOL-01 (hb 11:49Z), A3/A6 OBS-06 (hb 06:31Z/07:10Z, recent A3 commit 06:40Z), A4 COMP-09 (08:30Z), A5 EVOL-02 (hb 2026-11-21T20:33Z, no commits since; STALE but not reassigned: EVOL-02 depends on EVOL-01 which A1 is doing, so it is not eligible anyway), A7 LIFE-07 (live).
+- Eligibility audit: LIFE-10 not eligible (needs LIFE-06 OPEN/blocked on M4 file permissions and LIFE-07 in progress); LIFE-13 needs the device model that COMP-02 defines; COMP-02 is M4 while M3 tasks are OPEN. Earliest-milestone dependency-ready work is the LIFE-04 residual (A1's half). Paths: src/mia/memory/projects.py, brain context, projects API/page, tests, docs.
