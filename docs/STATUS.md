@@ -607,3 +607,4 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 ## 2026-11-24 Stop-all now blocks app launch and file writes (MIA-COMP-04 slice 3, agent A7)
 - Commit d6e1573. Previously, while Mia was stopped, a granted app launch or file write still ran. Both are now refused (423) without consuming the one-time approval; resume restores them. Covered by tests against the real app; app launch is proven by a recorded no-spawn, process termination by a real child process left running.
 - Still not covered: desktop and browser actions over HTTP, background tasks, Brain, voice; no live desktop or real-device stop drill.
+- **MIA-LIFE-07 UI half (A6, 2026-11-24T12:59Z):** `/research` page with provenance, injection marking, verbatim citations and owner review. Owner check: one real-site read.

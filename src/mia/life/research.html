@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
+<title>Mia — Research</title>
+<style>
+:root{font-family:Inter,Segoe UI,system-ui,sans-serif;color:#eef4f2;background:#0c1214}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#0c1214}
+.shell{max-width:1000px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:17px;margin:0 0 10px}h3{font-size:15px;margin:16px 0 6px}
+nav{display:flex;flex-wrap:wrap;gap:4px 16px}nav a{color:#9be5c5;font-size:14px;padding:6px 0}
+a{color:#9be5c5}
+.sub{color:#a9bdb6;font-size:14px;line-height:1.5}
+.panel{background:#131d20;border:1px solid #2b4044;border-radius:14px;padding:16px;margin-top:16px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:8px 0}
+label{font-size:13px;color:#c3d3ce;display:flex;flex-direction:column;gap:4px}
+input,select,textarea,button{font:inherit;font-size:14px;min-height:40px}
+input,select,textarea{background:#0e1719;color:#eef4f2;border:1px solid #4c6a66;border-radius:8px;padding:8px 10px;max-width:100%;width:100%}
+select{width:auto}
+textarea{min-height:72px}
+button{background:#1f7a5c;color:#fff;border:1px solid #1f7a5c;border-radius:8px;padding:8px 14px;cursor:pointer}
+button.alt{background:#1b2a2c;border-color:#4c6a66;color:#e3ece8}
+button.danger{background:#9b3a2c;border-color:#9b3a2c}
+button:disabled{opacity:.55;cursor:not-allowed}
+:focus-visible{outline:3px solid #ffd27a;outline-offset:2px}
+ul.items{list-style:none;margin:0;padding:0}
+li.item{border-top:1px solid #2b4044;padding:12px 0}li.item:first-child{border-top:0}
+.runs button.runbtn{width:100%;text-align:left;background:#0e1719;border:1px solid #2b4044;color:#eef4f2;margin:0 0 8px;display:block;padding:10px 12px;line-height:1.35;overflow-wrap:anywhere}
+.runs button.runbtn[aria-current=true]{border-color:#9be5c5;background:#16302b}
+.runs .counts{display:block;font-size:12px;color:#a9bdb6;margin-top:2px}
+.title{font-size:15px;overflow-wrap:anywhere}
+.meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.tag{font-size:12px;border:1px solid #4c6a66;border-radius:999px;padding:2px 9px;color:#d5e3de}
+.tag.warn{border-color:#d9a441;color:#ffd98f}.tag.good{border-color:#5fbf97;color:#a6e3c4}.tag.bad{border-color:#e08a7a;color:#ffb4a3}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.note{color:#b6c8c2;font-size:13px;overflow-wrap:anywhere}
+blockquote{margin:6px 0;padding:6px 12px;border-left:4px solid #5fbf97;background:#0e1719;overflow-wrap:anywhere;white-space:pre-wrap}
+.srcurl{font-family:ui-monospace,Consolas,monospace;font-size:12px;overflow-wrap:anywhere;color:#c3d3ce}
+.hash{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+#viewer{border:1px solid #4c6a66;border-radius:10px;background:#0e1719;padding:12px;max-height:26rem;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.5}
+mark.flag{background:#4a2b21;color:#ffd5c8;border:1px dashed #e08a7a;border-radius:4px;padding:0 2px}
+mark.flag .flaglabel{font-size:11px;font-weight:700;margin-right:4px;border:1px solid #e08a7a;border-radius:4px;padding:0 4px}
+fieldset.cite{border:1px solid #2b4044;border-radius:10px;margin:8px 0;padding:10px;min-width:0}
+fieldset.cite legend{font-size:13px;color:#c3d3ce}
+#notice{min-height:22px;font-size:14px;color:#a6e3c4;margin-top:12px}#notice.error{color:#ffb4a3}
+dialog{background:#131d20;color:#eef4f2;border:1px solid #6a8782;border-radius:14px;max-width:min(520px,92vw);padding:20px}
+dialog::backdrop{background:#000a}
+.empty{border:1px dashed #4c6a66;border-radius:10px;padding:14px;text-align:center;color:#b6c8c2}
+.safety{border:1px solid #d9a441;border-radius:10px;padding:10px 12px;background:#221c0e;color:#ffe5b0;font-size:14px;line-height:1.5;margin-top:12px}
+@media(max-width:560px){.row{flex-direction:column;align-items:stretch}button{min-height:44px}select{width:100%}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+@media(forced-colors:active){mark.flag{border:2px solid CanvasText}.runs button.runbtn[aria-current=true]{border-width:3px}}
+</style></head>
+<body><main class="shell">
+<nav aria-label="Mia pages"><a href="/">Observatory</a><a href="/assistant">Assistant</a><a href="/life">Autonomous life</a><a href="/tasks">Tasks</a><a href="/projects">Projects</a></nav>
+<h1>Research</h1>
+<p class="sub">Ask Mia to read pages you choose, then save only what you have checked yourself. Mia reads only sites you have allowed on the <a href="/life">Autonomous life</a> page.</p>
+<p class="safety" role="note"><strong>Web pages are untrusted.</strong> Mia treats everything on a page as data and never follows instructions found there. A page that talks to an AI reader is marked below, and its text cannot be used as evidence. Nothing becomes a saved finding until you confirm it, and every citation must be an exact quote from a page that was read in the same run.</p>
+<div id="notice" role="status" aria-live="polite"></div>
+
+<section class="panel" aria-labelledby="newHeading"><h2 id="newHeading">New research run</h2>
+<form id="runForm" autocomplete="off">
+<label>Question<input id="question" required minlength="3" maxlength="300"></label>
+<label>Pages to read, one address per line (up to 5)<textarea id="urls" required rows="3" placeholder="https://example.org/page"></textarea></label>
+<div class="row"><button id="runBtn" type="submit">Read these pages</button></div>
+</form></section>
+
+<section class="panel" aria-labelledby="runsHeading"><h2 id="runsHeading" tabindex="-1">Earlier runs</h2>
+<ul id="runs" class="items runs"></ul></section>
+
+<section id="detail" class="panel" aria-labelledby="detailTitle" hidden>
+<h2 id="detailTitle" tabindex="-1"></h2>
+<p id="comparison" class="note"></p>
+<h3 id="srcHeading">Sources read</h3>
+<ul id="sources" class="items" aria-labelledby="srcHeading"></ul>
+<div id="viewerBox" hidden>
+<h3 id="viewerHeading"></h3>
+<div id="viewer" tabindex="0" role="region" aria-labelledby="viewerHeading"></div>
+<div class="actions"><button id="useSel" class="alt" type="button">Use selected text as a quote</button><button id="closeViewer" class="alt" type="button">Close source text</button></div>
+</div>
+<h3 id="claimHeading">Claims and citations</h3>
+<ul id="claims" class="items" aria-labelledby="claimHeading"></ul>
+<form id="claimForm" autocomplete="off" aria-labelledby="addClaimHeading">
+<h3 id="addClaimHeading">Propose a claim</h3>
+<label>Claim, in your own words<textarea id="claimText" required minlength="5" maxlength="600" rows="2"></textarea></label>
+<div id="cites"></div>
+<div class="row"><button id="addCite" class="alt" type="button">Add another citation</button><button type="submit">Propose claim</button></div>
+<p class="note">A claim is only stored when every quote appears word for word in the page it names. You then decide whether to save it as a finding.</p>
+</form>
+<div class="actions"><button id="deleteRun" class="danger" type="button">Delete this run…</button></div>
+</section>
+
+<section class="panel" aria-labelledby="findHeading"><h2 id="findHeading">Saved findings</h2>
+<p class="note">Claims you confirmed, with the exact quotes and where they came from.</p>
+<ul id="findings" class="items"></ul></section>
+
+<dialog id="confirm" aria-labelledby="confirmTitle" aria-describedby="confirmBody">
+<h2 id="confirmTitle"></h2><div id="confirmBody"></div>
+<div class="row"><button id="confirmNo" class="alt" type="button" autofocus>Keep it</button><button id="confirmYes" class="danger" type="button">Confirm</button></div>
+</dialog>
+
+<script>
+const $=id=>document.getElementById(id);
+const FAIL={source_not_permitted:'This site is not on your allowed list, so it was not read.',redirect_not_permitted:'The page redirected to a site that is not on your allowed list.',
+ invalid_url:'This is not a valid web address.',bad_redirect:'The page sent an invalid redirect.',blocked_target:'This address points to a private or local network, which Mia never reads.',
+ stopped:'Stopped by the emergency stop or Stop all.',unsupported_content_type:'This is not a readable web page.',timeout:'The site took too long to answer.',
+ network_error:'Could not connect to the site.',too_many_redirects:'The page redirected too many times.',no_readable_text:'The page had no readable text.'};
+function failText(code){if(FAIL[code])return FAIL[code];const m=/^http_(\d+)$/.exec(code||'');if(m)return 'The site answered with error '+m[1]+'.';return 'Could not be read ('+code+').';}
+const PATTERN={override_instructions:'tries to override instructions',role_reassignment:'tries to give the AI a new role',prompt_exfiltration:'asks to reveal secrets or prompts',chat_markup:'imitates chat markup',run_command:'asks to run a command',send_data:'asks to send data somewhere',conceal_from_user:'asks to hide something from you',address_to_ai:'is addressed to an AI reader'};
+const STATUS={proposed:['Proposed: waiting for your decision','warn'],confirmed:['Saved as a finding','good'],rejected:['Rejected','bad']};
+let runs=[],current=null,run=null,seq=0,viewed=null,lastQuote=null;
+
+const mk=(t,text,cls)=>{const e=document.createElement(t);if(text!==undefined&&text!==null)e.textContent=text;if(cls)e.className=cls;return e;};
+const tag=(text,kind)=>mk('span',text,'tag'+(kind?' '+kind:''));
+const plural=(n,a,b)=>n+' '+(n===1?a:b);
+const short=h=>h?h.slice(0,12)+'…':'';
+const when=iso=>new Date(iso).toLocaleString();
+function say(text,error=false){const n=$('notice');n.textContent=text;n.className=error?'error':'';n.setAttribute('role',error?'alert':'status');}
+async function api(path,method='GET',body){
+ const r=await fetch(path,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
+ let data=null;try{data=await r.json();}catch(e){}
+ if(!r.ok){const d=data&&data.detail;const msg=typeof d==='string'?d:Array.isArray(d)?d.map(x=>x.msg).join('; '):'Request failed ('+r.status+')';const err=new Error(msg);err.status=r.status;throw err;}
+ return data;
+}
+function safeUrl(u){try{const x=new URL(u);return (x.protocol==='https:'||x.protocol==='http:')?x.href:null;}catch(e){return null;}}
+
+/* ---- confirm dialog ---- */
+let confirmResolve=null,confirmOpener=null;
+function confirmDialog({title,lines,yes,no},opener){return new Promise(res=>{confirmResolve=res;confirmOpener=opener||null;$('confirmTitle').textContent=title;const b=$('confirmBody');b.replaceChildren();const ul=mk('ul');for(const l of lines)ul.append(mk('li',l));b.append(ul);$('confirmYes').textContent=yes;$('confirmNo').textContent=no;$('confirm').showModal();});}
+function endConfirm(a){const r=confirmResolve;confirmResolve=null;if($('confirm').open)$('confirm').close();if(r)r(a);}
+$('confirmNo').addEventListener('click',()=>endConfirm(false));$('confirmYes').addEventListener('click',()=>endConfirm(true));
+$('confirm').addEventListener('close',()=>{if(confirmResolve){const r=confirmResolve;confirmResolve=null;r(false);}const o=confirmOpener;confirmOpener=null;if(o&&o.isConnected)o.focus();else $('runsHeading').focus();});
+
+/* ---- runs ---- */
+function renderRuns(){
+ const ul=$('runs');ul.replaceChildren();
+ if(!runs.length){ul.append(mk('li','No research run yet. Start one above.','empty'));return;}
+ for(const r of runs){
+  const li=mk('li');const b=mk('button',undefined,'runbtn');b.type='button';b.dataset.id=r.run_id;
+  b.append(mk('span',r.question),mk('span',when(r.created_at)+' · '+plural(r.sources,'page read','pages read')+' · '+plural(r.findings,'saved finding','saved findings'),'counts'));
+  b.setAttribute('aria-label','Open run: '+r.question);if(r.run_id===current)b.setAttribute('aria-current','true');
+  b.addEventListener('click',()=>openRun(r.run_id,{focus:true}));li.append(b);ul.append(li);
+ }
+}
+async function loadRuns(){try{runs=(await api('/api/research/runs')).items;renderRuns();}catch(e){say('Could not load earlier runs: '+e.message,true);}}
+async function loadFindings(){
+ const ul=$('findings');
+ let items;try{items=(await api('/api/research/findings')).items;}catch(e){say('Could not load saved findings: '+e.message,true);return;}
+ ul.replaceChildren();
+ if(!items.length){ul.append(mk('li','Nothing saved yet. Confirm a proposed claim to save it here.','empty'));return;}
+ for(const c of items)ul.append(claimItem(c,false));
+}
+async function openRun(id,{focus=false,quiet=false}={}){
+ const mine=++seq;current=id;renderRuns();
+ let data;try{data=await api('/api/research/runs/'+encodeURIComponent(id));}
+ catch(e){if(mine!==seq)return;say('Could not open this run: '+e.message,true);return;}
+ if(mine!==seq)return;run=data;viewed=null;renderRun();
+ if(!quiet)say('Showing: '+data.question);
+ if(focus)$('detailTitle').focus();
+}
+function renderRun(){
+ $('detail').hidden=false;$('detailTitle').textContent=run.question;$('comparison').textContent=run.comparison_note;
+ const ul=$('sources');ul.replaceChildren();
+ if(!run.sources.length)ul.append(mk('li','No page was recorded for this run.','empty'));
+ for(const s of run.sources)ul.append(sourceItem(s));
+ closeViewer();renderClaims();resetClaimForm();
+}
+function sourceItem(s){
+ const li=mk('li',undefined,'item');li.dataset.source=s.source_id;
+ if(s.failure){
+  li.append(mk('div',s.requested_url,'srcurl'));
+  const m=mk('div',undefined,'meta');m.append(tag('Not read','bad'));li.append(m,mk('p',failText(s.failure),'note'));return li;
+ }
+ li.append(mk('div',s.title||s.host,'title'));
+ const link=safeUrl(s.url);
+ if(link){const a=mk('a',s.url,'srcurl');a.href=link;a.target='_blank';a.rel='noopener noreferrer';li.append(a);}else li.append(mk('div',s.url,'srcurl'));
+ const m=mk('div',undefined,'meta');
+ m.append(tag('Checkability '+s.score+'/100 (not a truth rating)'));
+ m.append(s.page_date?tag('Page says it is dated '+s.page_date+' ('+s.date_source+')'):tag('The page declares no date','warn'));
+ if(s.injection_flags.length)m.append(tag('Contains text aimed at an AI reader ('+s.injection_flags.length+')','warn'));
+ if(s.truncated)m.append(tag('Only the first part was read','warn'));
+ m.append(tag('Read '+when(s.fetched_at)));li.append(m);
+ const rs=mk('ul',undefined,'note');rs.style.paddingLeft='20px';for(const r of s.score_reasons)rs.append(mk('li',r));li.append(rs);
+ li.append(mk('p','Content hash '+short(s.sha256)+' · '+plural(s.text_chars,'character','characters')+' of readable text','note'));
+ if(s.injection_flags.length){const f=mk('ul',undefined,'note');f.style.paddingLeft='20px';for(const x of s.injection_flags)f.append(mk('li','Instruction-like text that '+(PATTERN[x.pattern]||'tries to steer an AI reader')+'. It cannot be cited.'));li.append(f);}
+ const a=mk('div',undefined,'actions');
+ const b=mk('button','Read the text','alt');b.type='button';b.setAttribute('aria-label','Read the text of '+(s.title||s.host));b.addEventListener('click',()=>viewSource(s));a.append(b);li.append(a);return li;
+}
+
+/* ---- source text viewer (flagged passages are marked, never hidden) ---- */
+async function viewSource(s){
+ let data;try{data=await api('/api/research/runs/'+encodeURIComponent(run.run_id)+'/sources/'+encodeURIComponent(s.source_id));}
+ catch(e){say('Could not load the page text: '+e.message,true);return;}
+ viewed=s.source_id;const box=$('viewer');box.replaceChildren();
+ const flags=[...data.injection_flags].sort((a,b)=>a.start-b.start);let at=0;
+ for(const f of flags){
+  if(f.start<at)continue;
+  if(f.start>at)box.append(document.createTextNode(data.text.slice(at,f.start)));
+  const m=mk('mark',undefined,'flag');m.append(mk('span','Instruction-like text, cannot be cited:','flaglabel'),document.createTextNode(data.text.slice(f.start,f.end)));box.append(m);at=f.end;
+ }
+ if(at<data.text.length)box.append(document.createTextNode(data.text.slice(at)));
+ $('viewerHeading').textContent='Text of '+(s.title||s.host)+' (untrusted page content)';
+ $('viewerBox').hidden=false;$('viewer').focus();
+ const sel=document.querySelector('#cites select');if(sel&&!sel.dataset.touched)sel.value=s.source_id;
+}
+function closeViewer(){$('viewerBox').hidden=true;$('viewer').replaceChildren();viewed=null;}
+$('closeViewer').addEventListener('click',()=>{closeViewer();$('detailTitle').focus();});
+$('useSel').addEventListener('click',()=>{
+ const sel=window.getSelection();const text=(sel?sel.toString():'').replace(/\s+/g,' ').trim();
+ const inside=sel&&sel.rangeCount&&$('viewer').contains(sel.getRangeAt(0).commonAncestorContainer);
+ if(!text||!inside){say('Select some of the page text first, or type the quote yourself below.',true);return;}
+ const target=(lastQuote&&lastQuote.isConnected)?lastQuote:document.querySelector('#cites textarea');
+ target.value=text;const s=target.closest('fieldset').querySelector('select');if(viewed){s.value=viewed;s.dataset.touched='1';}
+ say('Quote filled in. Check the claim, then propose it.');target.focus();
+});
+
+/* ---- claims ---- */
+function claimItem(c,withActions){
+ const li=mk('li',undefined,'item');li.dataset.claim=c.claim_id;
+ li.append(mk('div',c.text,'title'));
+ const m=mk('div',undefined,'meta');const st=STATUS[c.status];m.append(tag(st[0],st[1]));if(c.reviewed_at)m.append(tag('Decided '+when(c.reviewed_at)));li.append(m);
+ for(const x of c.citations){
+  li.append(mk('blockquote',x.quote));
+  li.append(mk('p','From '+(x.title||x.host)+' ('+x.host+'), read '+when(x.fetched_at)+(x.page_date?', page dated '+x.page_date:', no date declared')+'. Content hash '+short(x.sha256)+'.','note'));
+ }
+ if(withActions&&c.status==='proposed'){
+  const a=mk('div',undefined,'actions');
+  const yes=mk('button','Save as a finding');yes.type='button';yes.setAttribute('aria-label','Save as a finding: '+c.text);yes.addEventListener('click',()=>review(c,'confirm'));
+  const no=mk('button','Reject','alt');no.type='button';no.setAttribute('aria-label','Reject: '+c.text);no.addEventListener('click',()=>review(c,'reject'));
+  a.append(yes,no);li.append(a);
+ }
+ return li;
+}
+function renderClaims(){
+ const ul=$('claims');ul.replaceChildren();
+ if(!run.claims.length)ul.append(mk('li','No claim yet. Read a source, then propose a claim with exact quotes.','empty'));
+ for(const c of run.claims)ul.append(claimItem(c,true));
+}
+async function review(c,decision){
+ try{await api('/api/research/claims/'+encodeURIComponent(c.claim_id)+'/review','POST',{decision});say(decision==='confirm'?'Saved as a finding.':'Claim rejected.');}
+ catch(e){say('Could not record your decision: '+e.message,true);}
+ await openRun(run.run_id,{quiet:true});await Promise.all([loadRuns(),loadFindings()]);
+ const t=document.querySelector('[data-claim="'+CSS.escape(c.claim_id)+'"]');if(t){t.setAttribute('tabindex','-1');t.focus();}
+}
+function citeRow(index){
+ const f=mk('fieldset',undefined,'cite');f.append(mk('legend','Citation '+index));
+ const sel=mk('select');sel.setAttribute('aria-label','Source for citation '+index);
+ for(const s of run.sources.filter(x=>!x.failure))sel.append(new Option((s.title||s.host)+' ('+s.host+')',s.source_id));
+ sel.addEventListener('change',()=>{sel.dataset.touched='1';});
+ const l1=mk('label');l1.append(document.createTextNode('Source'),sel);
+ const ta=mk('textarea');ta.required=true;ta.maxLength=1000;ta.rows=2;ta.addEventListener('focus',()=>{lastQuote=ta;});
+ const l2=mk('label');l2.append(document.createTextNode('Exact quote from that page (12 to 500 characters)'),ta);
+ f.append(l1,l2);
+ if(index>1){const rm=mk('button','Remove this citation','alt');rm.type='button';rm.addEventListener('click',()=>{f.remove();relabel();$('addCite').disabled=false;});f.append(rm);}
+ return f;
+}
+function relabel(){[...$('cites').children].forEach((f,i)=>{f.querySelector('legend').textContent='Citation '+(i+1);});}
+function resetClaimForm(){
+ $('claimText').value='';$('cites').replaceChildren();$('addCite').disabled=false;lastQuote=null;
+ const usable=run.sources.some(s=>!s.failure);
+ $('claimForm').hidden=!usable;
+ if(usable)$('cites').append(citeRow(1));
+}
+$('addCite').addEventListener('click',()=>{
+ const n=$('cites').children.length;if(n>=5)return;$('cites').append(citeRow(n+1));if(n+1>=5)$('addCite').disabled=true;
+ $('cites').lastElementChild.querySelector('textarea').focus();
+});
+$('claimForm').addEventListener('submit',async e=>{
+ e.preventDefault();if(!run)return;
+ const citations=[...$('cites').children].map(f=>({source_id:f.querySelector('select').value,quote:f.querySelector('textarea').value}));
+ try{await api('/api/research/runs/'+encodeURIComponent(run.run_id)+'/claims','POST',{text:$('claimText').value,citations});}
+ catch(err){say('This claim was not stored: '+err.message,true);return;}
+ say('Claim stored as proposed. Review it below.');
+ await openRun(run.run_id,{quiet:true});await loadRuns();$('claimHeading').scrollIntoView({block:'nearest'});
+});
+
+/* ---- start / delete ---- */
+$('runForm').addEventListener('submit',async e=>{
+ e.preventDefault();
+ const urls=$('urls').value.split(/\s+/).map(u=>u.trim()).filter(Boolean);
+ if(!urls.length||urls.length>5){say('Give between 1 and 5 page addresses.',true);$('urls').focus();return;}
+ const btn=$('runBtn');btn.disabled=true;$('runForm').setAttribute('aria-busy','true');say('Reading '+plural(urls.length,'page','pages')+'. This can take a few seconds.');
+ let data;
+ try{data=await api('/api/research/runs','POST',{question:$('question').value,urls});}
+ catch(err){say(err.status===409?'Research is stopped by the emergency stop or Stop all, so nothing was read: '+err.message:'Could not start the run: '+err.message,true);btn.disabled=false;$('runForm').removeAttribute('aria-busy');return;}
+ btn.disabled=false;$('runForm').removeAttribute('aria-busy');$('runForm').reset();
+ const ok=data.sources.filter(s=>!s.failure).length;
+ await loadRuns();await openRun(data.run_id,{focus:true,quiet:true});
+ const firstFail=data.sources.find(s=>s.failure);
+ say(ok===0?'No page could be read. '+(firstFail?failText(firstFail.failure):''):'Read '+ok+' of '+plural(data.sources.length,'page','pages')+'.'+(ok<data.sources.length?' Some pages could not be read; see the reasons below.':''),ok===0);
+});
+$('deleteRun').addEventListener('click',async e=>{
+ const r=run;if(!r)return;
+ const ok=await confirmDialog({title:'Delete this research run?',lines:['The stored page text, claims and citations for “'+r.question+'” are removed.',
+  plural(r.claims.filter(c=>c.status==='confirmed').length,'saved finding','saved findings')+' from this run will also be removed.'],yes:'Delete run',no:'Keep it'},e.currentTarget);
+ if(!ok)return;
+ try{await api('/api/research/runs/'+encodeURIComponent(r.run_id),'DELETE');}catch(err){say('Could not delete the run: '+err.message,true);return;}
+ run=null;current=null;seq+=1;$('detail').hidden=true;await Promise.all([loadRuns(),loadFindings()]);say('Run deleted.');$('runsHeading').focus();
+});
+
+(async()=>{await Promise.all([loadRuns(),loadFindings()]);})();
+</script></main></body></html>

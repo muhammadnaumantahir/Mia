@@ -2084,6 +2084,13 @@ def create_app(
             raise HTTPException(status_code=404, detail="Tasks page asset not found")
         return FileResponse(page, media_type="text/html")
 
+    @app.get("/research")
+    def research_page() -> FileResponse:
+        page = Path(__file__).resolve().parents[1] / "life" / "research.html"
+        if not page.exists():
+            raise HTTPException(status_code=404, detail="Research page asset not found")
+        return FileResponse(page, media_type="text/html")
+
     @app.get("/projects")
     def projects_page() -> FileResponse:
         page = Path(__file__).resolve().parents[1] / "life" / "projects.html"

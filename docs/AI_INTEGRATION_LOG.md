@@ -890,3 +890,9 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - BUG FOUND AND FIXED: with an active owner grant, `POST /api/computer/apps/launch/execute` and `POST /api/computer/files/write/execute` still succeeded after `stop-all` (the launcher and filesystem adapter had no link to `AutomationControl`). Both now call `assert_active()` before consuming approvals; `create_app` links the shared control; the write route no longer turns the stop into a 400 (AutomationStopped is an OSError subclass), so both return the app-wide 423.
 - Run: full suite exit 0 and ruff clean before the final rebase; after it the broker, route-capability, application and process test files were re-run (pass). The first push command timed out in the shell after the commit had already reached remote (verified with merge-base --is-ancestor); no duplicate commit.
 - Not covered: desktop control and browser click/actions over HTTP, background tasks, Brain, voice. OWNER_VERIFICATION_REQUIRED: real desktop app launch and real stop-all drill on the owner's machine.
+## 2026-11-24T12:59Z — MIA-LIFE-07 UI half done (A6)
+
+- Agent: A6. New: `src/mia/life/research.html`, `tests/test_research_page.py` (28 tests, real service + store, scripted fetcher, no network). Shared files, add-only: `/research` route in `api.py`, nav link in `life.html`, package-data in `pyproject.toml`. No API change.
+- Verified: ruff clean; full suite ran to completion in the background (about 14 min) with no failure.
+- Limits: never run against a real site (owner-required check: allow one real host on the Autonomous life page and read one page); Chromium only; no real screen reader.
+- Next claim: MIA-LIFE-08 workflow UI (no one owns a UI).
