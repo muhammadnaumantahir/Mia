@@ -872,3 +872,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Tests actually run: 10 new; six mutants (no acknowledgement gate, version not sent, no stop confirmation, export ignores refusal, pause enabled when capture is off, notice as HTML) each failed tests; full suite 2804 tests, 0 failed, 0 errors, 1 skipped (the LIFE quiet-hours test passes: the run began 12:01 UTC, outside the 22:00-07:00 window); ruff clean.
 - OWNER-REQUIRED (not claimed): run the real 30-day experiment, press Start/Stop/Export on your own machine, look at the page in a browser, decide whether to require acknowledgement server-side.
 - A3 status: IDLE.
+
+## 2026-11-24T12:17Z — MIA-LIFE-07 UI half claimed (A6)
+
+- Agent: A6. Owner's "Resume All Open Tasks" prompt; master prompt re-read. Registry check: A1 EVOL-01, A2 LIFE-04 residual, A4 COMP-09, A7 COMP-04 have recent heartbeats; A5 (EVOL-02) last heartbeat 2026-11-21T20:33Z, not reassigned by me (A5 is a different specialisation). Nobody owns the research UI. Plan: standalone `/research` page over A7's `/api/research/*`; no API change. Next after it: workflow UI half of LIFE-08 (no owner for a UI), then COMP-10/07 UI halves when their dependencies move.
