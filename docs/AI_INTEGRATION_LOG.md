@@ -746,3 +746,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-24T10:10Z - MIA-COMP-09 slice 1 DONE (A4): approval recovery and failure audit
 - Paths: src/mia/computer/approvals.py (release, clearer state messages), src/mia/observatory/api.py (/api/approvals/{id}/execute failure handling only), tests/test_approval_recovery.py, docs/STATUS.md. assistant.html untouched in this slice.
 - Tests: see STATUS.md. Task stays IN_PROGRESS: recoverable pending cards, exact-action review and undo surface remain.
+
+## 2026-11-24T12:30Z - MIA-COMP-09 slice 2 (A4): restorable approval cards
+- Paths: src/mia/computer/approvals.py (card_json column with migration, save_card/pending_cards/expires_at), src/mia/observatory/api.py (register_tool card hook, GET /api/computer/approvals/cards), src/mia/assistant.html (renderApprovalCards effect/expiry lines, restorePendingApprovals; A6's LIFE-04 UI edits merged cleanly at pull), tests/test_approval_cards.py, tests/test_voice_browser.py (3 tests). Task stays IN_PROGRESS.
+- Tests: see STATUS.md.

@@ -1104,3 +1104,82 @@ def test_runtime_evidence_keeps_speaking_held_across_streamed_sentences(ctx):
     ctx.wait("window.__ev.some(e=>e[0]==='retract'&&e[1]==='voice_speaking')")
     # speaking was retracted only after the last sentence had been handed to the speaker
     assert len(_spoken(ctx)) == 3
+
+
+def _stub_cards(ctx, cards):
+    import json as _json
+
+    ctx.page.route(
+        "**/api/computer/approvals/cards",
+        lambda route: route.fulfill(status=200, content_type="application/json", body=_json.dumps({"items": cards})),
+    )
+
+
+def _card(**kw):
+    from datetime import UTC, datetime, timedelta
+
+    card = {"approval_id": "appr-1", "kind": "filesystem.write", "summary": "Write notes/a.txt (5 bytes)",
+            "display": {"target": "notes/a.txt", "size_bytes": 5}, "payload": {"root_id": "root_1",
+            "relative_path": "notes/a.txt", "content": "hello"}, "restorable": True,
+            "expires_at": (datetime.now(UTC) + timedelta(minutes=9)).isoformat()}
+    card.update(kw)
+    return card
+
+
+def test_pending_approval_is_restored_after_reload_with_effect_and_expiry(ctx):
+    """MIA-COMP-09: a reloaded page shows the exact pending action again, once, and it can run."""
+    import json as _json
+
+    _stub_cards(ctx, [_card()])
+    seen = []
+    ctx.page.route(
+        "**/api/approvals/appr-1/execute",
+        lambda route: (seen.append(_json.loads(route.request.post_data)), route.fulfill(
+            status=200, content_type="application/json",
+            body=_json.dumps({"status": "completed", "result": {"relative_path": "notes/a.txt"}})))[1],
+    )
+    ctx.js("restorePendingApprovals()")
+    ctx.wait("document.querySelectorAll('.approval-card').length===1")
+    text = ctx.js("document.getElementById('messages').textContent")
+    assert "still waiting for your approval" in text and "Nothing has been done yet" in text
+    card = ctx.js("document.querySelector('.approval-card').textContent")
+    assert "File: notes/a.txt" in card and "What happens: Creates or replaces this file" in card
+    assert "Valid until" in card and "Review proposed file content" in card
+    ctx.js("restorePendingApprovals()")  # a second restore must not duplicate the card
+    ctx.sleep(0.3)
+    assert ctx.js("document.querySelectorAll('.approval-card').length") == 1
+    ctx.page.click(".approval-card .approve-action")
+    ctx.wait("document.querySelector('.approval-state').textContent.startsWith('Completed')")
+    assert seen == [{"kind": "filesystem.write", "payload": _card()["payload"]}]
+
+
+def test_restored_card_that_failed_can_be_retried(ctx):
+    import json as _json
+
+    _stub_cards(ctx, [_card()])
+    answers = [(409, {"detail": "Approved payload has changed"}),
+               (200, {"status": "completed", "result": {"relative_path": "notes/a.txt"}})]
+    ctx.page.route(
+        "**/api/approvals/appr-1/execute",
+        lambda route: (lambda a: route.fulfill(status=a[0], content_type="application/json", body=_json.dumps(a[1])))(
+            answers.pop(0)),
+    )
+    ctx.js("restorePendingApprovals()")
+    ctx.wait("document.querySelectorAll('.approval-card').length===1")
+    ctx.page.click(".approval-card .approve-action")
+    ctx.wait("document.querySelector('.approval-state').textContent.includes('payload has changed')")
+    assert ctx.js("document.querySelector('.approve-action').disabled") is False  # still retryable
+    ctx.page.click(".approval-card .approve-action")
+    ctx.wait("document.querySelector('.approval-state').textContent.startsWith('Completed')")
+
+
+def test_oversized_restored_card_offers_only_reject_and_html_stays_text(ctx):
+    _stub_cards(ctx, [_card(approval_id="appr-2", restorable=False, payload={},
+                            summary="<img src=x onerror=window.__pwned=1>Big write")])
+    ctx.js("restorePendingApprovals()")
+    ctx.wait("document.querySelectorAll('.approval-card').length===1")
+    assert ctx.js("document.querySelectorAll('.approval-card .approve-action').length") == 0
+    assert ctx.js("document.querySelectorAll('.approval-card .reject-action').length") == 1
+    assert "too large to restore" in ctx.js("document.querySelector('.approval-state').textContent")
+    assert ctx.js("document.querySelectorAll('.approval-card img').length") == 0
+    assert ctx.js("window.__pwned === undefined")

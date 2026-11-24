@@ -554,8 +554,16 @@ $('toggleTasks').addEventListener('click',async()=>{
 $('refreshTasks').addEventListener('click',refreshTaskList);
 $('createResourceCheck').addEventListener('click',createResourceCheck);
 $('planTaskForm').addEventListener('submit',proposeTaskPlan);
+const renderedApprovals=new Set();
+const APPROVAL_EFFECTS={
+ 'filesystem.write':'Creates or replaces this file. The previous version is backed up first so it can be recovered.',
+ 'application.launch':'Starts this application. Mia cannot undo a launch; closing it is up to you.',
+ 'browser.click':'Clicks this control on the page shown. A click on a website may not be reversible.',
+ 'desktop.type_text':'Types this text into that window. Mia cannot undo typed text.'
+};
 function renderApprovalCards(actions){
  (actions||[]).forEach(action=>{
+  if(action.approval_id){if(renderedApprovals.has(action.approval_id))return;renderedApprovals.add(action.approval_id);}
   const card=document.createElement('div');card.className='approval-card';
   const title=document.createElement('strong');
   title.textContent='Approval required · '+(action.summary||action.kind);
@@ -573,6 +581,17 @@ function renderApprovalCards(actions){
   if(display.new_sha256)parts.push('SHA-256: '+display.new_sha256);
   detail.textContent=parts.join(' · ')||'Review the action before approving.';
   card.append(title,detail);
+  const effect=document.createElement('span');effect.className='approval-detail';
+  effect.textContent='What happens: '+(APPROVAL_EFFECTS[action.kind]||'Review the details before approving; Mia may not be able to undo this.');
+  card.append(effect);
+  if(action.expires_at){
+   const when=new Date(action.expires_at);
+   if(!isNaN(when.getTime())){
+    const expiry=document.createElement('span');expiry.className='approval-detail';
+    expiry.textContent='Valid until '+when.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+'; after that you will need a new preview.';
+    card.append(expiry);
+   }
+  }
   if(action.kind==='desktop.type_text' && typeof action.payload?.text==='string'){
    const details=document.createElement('details');
    const summary=document.createElement('summary');summary.textContent='Review exact text to be entered';
@@ -617,9 +636,24 @@ function renderApprovalCards(actions){
     approve.remove();reject.remove();
    }catch(error){state.textContent=error.message;approve.disabled=false;reject.disabled=false;}
   });
-  actionsBox.append(approve,reject);card.append(actionsBox,state);
+  if(action.restorable===false){
+   state.textContent='This action is too large to restore after a reload. Reject it and ask Mia to prepare it again.';
+   actionsBox.append(reject);
+  }else actionsBox.append(approve,reject);
+  card.append(actionsBox,state);
   $('messages').append(card);
  });
+}
+async function restorePendingApprovals(){
+ try{
+  const response=await fetch('/api/computer/approvals/cards',{cache:'no-store'});
+  if(!response.ok)return;
+  const data=await response.json();
+  const fresh=(Array.isArray(data.items)?data.items:[]).filter(item=>item.approval_id&&!renderedApprovals.has(item.approval_id));
+  if(!fresh.length)return;
+  addMessage('assistant',fresh.length===1?'One action is still waiting for your approval from earlier. Nothing has been done yet.':fresh.length+' actions are still waiting for your approval from earlier. Nothing has been done yet.');
+  renderApprovalCards(fresh);
+ }catch(error){}
 }
 function addMessage(role,text,meta=''){
  $('welcome').hidden=true;const row=document.createElement('div');row.className='message '+role;
@@ -2103,4 +2137,5 @@ loadLifeInbox();
 window.setInterval(loadLifeInbox,60000);
 loadNotifications();
 window.setInterval(loadNotifications,60000);
+restorePendingApprovals();
 </script></body></html>

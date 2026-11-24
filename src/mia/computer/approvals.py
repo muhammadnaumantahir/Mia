@@ -27,6 +27,9 @@ def _digest(action_id: str, payload: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+MAX_CARD_BYTES = 64 * 1024
+
+
 class ApprovalError(RuntimeError):
     """An approval is invalid, expired, mismatched or already consumed."""
 
@@ -80,6 +83,9 @@ class ApprovalStore:
                 CREATE INDEX IF NOT EXISTS idx_approvals_status_expiry
                 ON action_approvals(status, expires_at)
             """)
+            columns = {row["name"] for row in db.execute("PRAGMA table_info(action_approvals)")}
+            if "card_json" not in columns:  # exact-action card kept only while the approval is pending
+                db.execute("ALTER TABLE action_approvals ADD COLUMN card_json TEXT")
 
     def request(
         self,
@@ -176,7 +182,7 @@ class ApprovalStore:
                 db.execute(
                     """
                     UPDATE action_approvals
-                    SET status = 'rejected'
+                    SET status = 'rejected', card_json = NULL
                     WHERE approval_id = ? AND status = 'pending'
                     """,
                     (approval_id,),
@@ -223,7 +229,7 @@ class ApprovalStore:
                 updated = db.execute(
                     """
                     UPDATE action_approvals
-                    SET status = 'consumed', consumed_at = ?
+                    SET status = 'consumed', consumed_at = ?, card_json = NULL
                     WHERE approval_id = ? AND status = 'approved'
                     """,
                     (now_text, approval_id),
@@ -232,6 +238,59 @@ class ApprovalStore:
                     raise ApprovalError("Approval was already consumed")
         if expired:
             raise ApprovalError("Approval has expired")
+
+    def save_card(self, approval_id: str, card: dict[str, Any]) -> bool:
+        """Remember the exact action shown for a pending approval so it survives a page reload.
+
+        The card is dropped as soon as the approval is used, rejected or expired. Cards over
+        64 KB keep their summary and display text but not the (large) payload, and are marked
+        ``restorable: false`` because the exact payload is needed to execute.
+        """
+        keep = {
+            "kind": str(card.get("kind", ""))[:80],
+            "summary": str(card.get("summary", ""))[:500],
+            "display": card.get("display") if isinstance(card.get("display"), dict) else {},
+            "payload": card.get("payload") if isinstance(card.get("payload"), dict) else {},
+            "restorable": True,
+        }
+        text = json.dumps(keep, ensure_ascii=False, default=str)
+        if len(text.encode("utf-8")) > MAX_CARD_BYTES:
+            keep["payload"] = {}
+            keep["restorable"] = False
+            text = json.dumps(keep, ensure_ascii=False, default=str)
+        with self._connection() as db:
+            updated = db.execute(
+                "UPDATE action_approvals SET card_json = ? WHERE approval_id = ? AND status = 'pending'",
+                (text, approval_id),
+            )
+            return updated.rowcount == 1
+
+    def expires_at(self, approval_id: str) -> str | None:
+        with self._connection() as db:
+            row = db.execute("SELECT expires_at FROM action_approvals WHERE approval_id = ?",
+                             (approval_id,)).fetchone()
+        return str(row["expires_at"]) if row else None
+
+    def pending_cards(self) -> list[dict[str, Any]]:
+        """Cards for approvals still waiting for the owner, oldest first; stale cards are purged."""
+        now = _now().isoformat()
+        with self._connection() as db:
+            db.execute(
+                "UPDATE action_approvals SET card_json = NULL WHERE card_json IS NOT NULL "
+                "AND (status != 'pending' OR expires_at <= ?)",
+                (now,),
+            )
+            rows = db.execute(
+                "SELECT approval_id, summary, created_at, expires_at, card_json FROM action_approvals "
+                "WHERE status = 'pending' AND card_json IS NOT NULL AND expires_at > ? ORDER BY created_at",
+                (now,),
+            ).fetchall()
+        cards = []
+        for row in rows:
+            card = json.loads(row["card_json"])
+            cards.append({**card, "approval_id": row["approval_id"], "created_at": row["created_at"],
+                          "expires_at": row["expires_at"]})
+        return cards
 
     def release(self, approval_id: str) -> bool:
         """Return an approved-but-unused approval to ``pending`` after a failed attempt.

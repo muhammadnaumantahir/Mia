@@ -9,6 +9,7 @@ import ast
 import asyncio
 import hashlib
 import hmac
+import inspect
 import ipaddress
 import json
 import math
@@ -1240,6 +1241,32 @@ def create_app(
     startup_handlers.append(start_experiment_snapshot_scheduler)
     shutdown_handlers.append(stop_experiment_snapshot_scheduler)
 
+    def _remember_card(result: Any) -> None:
+        """Keep the exact action of any pending approval so it can be restored after a reload."""
+        pending = getattr(result, "pending_action", None)
+        if isinstance(pending, dict) and pending.get("approval_id"):
+            try:
+                approval_store.save_card(str(pending["approval_id"]), pending)
+                pending.setdefault("expires_at", approval_store.expires_at(str(pending["approval_id"])))
+            except Exception:  # remembering a card must never break the tool call itself
+                pass
+
+    def _with_card_memory(handler: Any) -> Any:
+        if inspect.iscoroutinefunction(handler):
+            async def remembered_async(args: dict[str, Any]) -> Any:
+                result = await handler(args)
+                _remember_card(result)
+                return result
+
+            return remembered_async
+
+        def remembered(args: dict[str, Any]) -> Any:
+            result = handler(args)
+            _remember_card(result)
+            return result
+
+        return remembered
+
     def register_tool(name, description, properties, required, permission, mode, handler):
         tool_registry.register(
             name=name,
@@ -1252,7 +1279,7 @@ def create_app(
             },
             permission=permission,
             mode=mode,
-            handler=handler,
+            handler=_with_card_memory(handler),
         )
 
     def tool_filesystem_list(args: dict[str, Any]) -> ToolResult:
@@ -3200,6 +3227,11 @@ def create_app(
     @app.get("/api/computer/approvals")
     def computer_pending_approvals() -> dict[str, Any]:
         return {"items": approval_store.list_pending()}
+
+    @app.get("/api/computer/approvals/cards")
+    def computer_pending_approval_cards() -> dict[str, Any]:
+        """Exact actions still waiting for the owner, so a reloaded page can show them again."""
+        return {"items": approval_store.pending_cards()}
 
     @app.post("/api/computer/approvals/{approval_id}/approve")
     def computer_approve(approval_id: str) -> dict[str, str]:
