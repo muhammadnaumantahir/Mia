@@ -864,3 +864,11 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - What it adds over the Evidence panel: each day is shown in words as captured, missed, paused, capture failed, deferred, unavailable, due today or not yet reached (future days are never called missed); metric charts keep gaps as gaps and draw one dot per real sample; before/after only where two days and one unit were recorded; every point links to its snapshot hash; integrity failures replace the picture instead of partly drawing it.
 - Observation for A3: `build_experiment_report` lists days that have not happened yet as missing/unaccounted while a run is still `running`; the trends page corrects this at display time (needs the clock), the stored report does not.
 - Limits: Chromium only; no real Day 0-30 data exists, so the page has been exercised on scripted real-store fixtures, not a real 30-day run.
+
+## 2026-11-24T12:16Z — MIA-OBS-08 dashboard half DONE (A3); M6 software complete
+
+- Commit 6cd66e7 on remote main (verified). Paths: src/mia/observatory/dashboard.html (additive lifecycle block and JS), tests/test_observatory_lifecycle_dashboard.py (10, real Chromium + real uvicorn, temporary databases only), docs/observatory/DASHBOARD.md. No backend files touched; A2's routes used as-is.
+- Bug caught by the new tests and fixed in the same change: an inline `display:block` overrode the `hidden` attribute so the acknowledgement row showed with no experiment.
+- Tests actually run: 10 new; six mutants (no acknowledgement gate, version not sent, no stop confirmation, export ignores refusal, pause enabled when capture is off, notice as HTML) each failed tests; full suite 2804 tests, 0 failed, 0 errors, 1 skipped (the LIFE quiet-hours test passes: the run began 12:01 UTC, outside the 22:00-07:00 window); ruff clean.
+- OWNER-REQUIRED (not claimed): run the real 30-day experiment, press Start/Stop/Export on your own machine, look at the page in a browser, decide whether to require acknowledgement server-side.
+- A3 status: IDLE.
