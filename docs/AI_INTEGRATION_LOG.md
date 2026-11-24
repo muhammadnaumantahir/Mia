@@ -797,3 +797,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-24T06:31Z — MIA-OBS-08 claimed (A2, owner-approved M6 exception)
 
 - Agent: A2. Owner: "you can work on Milestone 6". Taking the backend lifecycle slice of OBS-08; A1/A6 may take the UI (dashboard) half. I will not touch A3's baseline/attribution code.
+
+## 2026-11-24T06:50Z - MIA-COMP-04 slice 2 pushed (73abe6b); MIA-LIFE-08 claimed (A7)
+- COMP-04 slice 2: `tests/test_broker_terminal.py` (6 tests; mutation of the terminal approval consume made 4 fail; source restored). Remaining COMP-04 adapters: process terminate, app launch, desktop, browser click/actions, background tasks, Brain, voice.
+- Claimed LIFE-08 after verifying OPEN on the freshly rebased board; P3 outranks P4 and the owner said to work on other milestones.
