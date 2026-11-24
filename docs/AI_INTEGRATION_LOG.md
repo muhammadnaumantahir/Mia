@@ -724,3 +724,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-22T20:10Z — MIA-HOLO-06 done (A6)
 
 - Agent: A6. `frontend/holo` only, plus one HOLO-01 fix in `runtime_state.py` (exact-timestamp ties: a result now beats the activity it ends) found when a live test flaked under load. Hologram milestone tasks HOLO-01..06 are all DONE. Real-GPU measurement remains open for whoever has a GPU: run the profile report on that machine.
+
+## 2026-11-24T06:20Z — MIA-LIFE-04 UI half claimed (A6)
+
+- Agent: A6. Owner said "continue"; A1's data/API half is on main (b75556d) and the board lists the UI half as open for A6. Plan: a standalone `/projects` page (`src/mia/life/projects.html`, same pattern as `/tasks`) over the existing `/api/projects*` routes: project list incl. discovered-but-unregistered names, create, goal/status edit, milestones (add/edit/done/delete), strictly read-only isolated tasks/decisions/chats, confirmed delete, stale-response guard so a fast switch never shows another project's items. Shared-file edits are add-only: one `/projects` route in `api.py` and one nav link in `life.html`. No API change planned; the `/`-in-name limitation is surfaced in the UI, not fixed.
