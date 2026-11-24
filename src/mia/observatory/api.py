@@ -63,7 +63,7 @@ from mia.computer.control import AutomationControl, AutomationStopped
 from mia.computer.desktop_control import _CONSEQUENTIAL, DesktopController, make_window_guard
 from mia.computer.environment import detect_environment
 from mia.computer.fileops import FileOperationError, FileOperations
-from mia.computer.filesystem import FilesystemAccessError, FilesystemAdapter
+from mia.computer.filesystem import FilesystemAccessError, FilesystemAdapter, FileUndoConflict
 from mia.computer.permissions import PermissionError_, PermissionPolicy
 from mia.computer.processes import ProcessAccessError, ProcessManager
 from mia.computer.task_handlers import build_handlers
@@ -259,6 +259,14 @@ class FileWritePreview(BaseModel):
 
 class FileWriteExecution(FileWritePreview):
     approval_id: str | None = Field(default=None, min_length=32, max_length=32)
+
+
+class FileWriteUndo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    root_id: str = Field(min_length=1, max_length=80)
+    relative_path: str = Field(min_length=1, max_length=1000)
+    expected_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    backup: str | None = Field(default=None, max_length=1000)
 
 
 class ApprovalExecutionInput(BaseModel):
@@ -3360,6 +3368,33 @@ def create_app(
             return approval_store.approve(approval_id)
         except ApprovalError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/computer/files/write/undo")
+    def computer_write_undo(item: FileWriteUndo) -> dict[str, Any]:
+        """Undo one completed approved write while the file is still exactly as Mia left it."""
+        try:
+            result = computer_files.undo_write(
+                root_id=item.root_id, relative_path=item.relative_path,
+                expected_sha256=item.expected_sha256, backup=item.backup,
+            )
+        except FileUndoConflict as exc:
+            observatory.record_event(
+                category="computer", event_type="write_undo_refused", summary="Undo of a file write was refused",
+                outcome="refused", layer_id="SPS-10",
+                payload={"root_id": item.root_id, "relative_path": item.relative_path, "reason": str(exc)[:200]},
+            )
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except FilesystemAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(status_code=422, detail="The undo could not be completed") from exc
+        observatory.record_event(
+            category="computer", event_type="write_undone",
+            summary=f"Undid the write to {result['relative_path']} ({result['action']})",
+            outcome="success", layer_id="SPS-10",
+            payload={"root_id": item.root_id, **{k: v for k, v in result.items() if k != "sha256"}},
+        )
+        return {"status": "undone", "result": result}
 
     @app.post("/api/computer/files/write/execute")
     def computer_write_execute(item: FileWriteExecution) -> dict[str, Any]:

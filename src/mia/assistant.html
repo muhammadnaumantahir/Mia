@@ -621,6 +621,22 @@ function renderApprovalCards(actions){
     state.textContent='Completed: '+(result.result?.relative_path||result.result?.display_name||result.result?.title||action.kind);
     state.style.color='#a9ebcb';
     approve.remove();reject.remove();
+    const written=result.result||{};
+    if(action.kind==='filesystem.write'&&written.sha256&&action.payload){
+     const undo=document.createElement('button');undo.className='reject-action undo-action';undo.type='button';undo.textContent='Undo this change';
+     undo.addEventListener('click',async()=>{
+      undo.disabled=true;state.textContent='Undoing…';
+      try{
+       const reply=await fetch('/api/computer/files/write/undo',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({root_id:action.payload.root_id,relative_path:action.payload.relative_path,expected_sha256:written.sha256,backup:written.backup||null})});
+       const data=await reply.json();
+       if(!reply.ok)throw new Error(typeof data.detail==='string'?data.detail:'Nothing was undone');
+       state.textContent=data.result?.action==='removed_created_file'?'Undone: the file Mia created was removed. A recovery copy is kept.':'Undone: the earlier version was restored. The version it replaced is kept in the recovery folder.';
+       state.style.color='#c7b8a9';undo.remove();
+      }catch(failure){state.textContent=failure.message;state.style.color='#f2b6a7';undo.disabled=false;}
+     });
+     actionsBox.append(undo);
+    }
    }catch(error){
     state.textContent=error.message;state.style.color='#f2b6a7';
     approve.disabled=false;reject.disabled=false;

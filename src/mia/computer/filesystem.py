@@ -17,6 +17,10 @@ class FilesystemAccessError(PermissionError):
     """The requested path is outside the granted filesystem scope."""
 
 
+class FileUndoConflict(FilesystemAccessError):
+    """The file is no longer in the state Mia left it in, so an undo would destroy newer work."""
+
+
 _BLOCKED_FILENAMES = {
     ".env", "id_rsa", "id_ed25519", ".npmrc", ".pypirc", ".netrc", "netrc",
     "credentials.json", "secrets.json", "token.json", "service-account.json",
@@ -257,6 +261,49 @@ class FilesystemAdapter:
             "size_bytes": len(encoded),
             "backup": backup,
         }
+
+    def _recovery_backup(self, root_id: str, backup: str, target_name: str) -> Path:
+        requested = Path(backup)
+        root = self.roots[root_id]
+        if requested.is_absolute() or ".." in requested.parts or requested.parts[:2] != (RECOVERY_DIR, "backups") \
+                or len(requested.parts) != 3 or not requested.name.endswith(f"-{target_name}"):
+            raise FilesystemAccessError("That is not a recovery copy of this file")
+        candidate = root / requested
+        if _is_link(candidate) or not candidate.is_file():
+            raise FileUndoConflict("The saved earlier version is no longer available, so nothing was undone")
+        return candidate
+
+    def undo_write(
+        self, *, root_id: str, relative_path: str, expected_sha256: str, backup: str | None = None,
+    ) -> dict[str, str | None]:
+        """Reverse one approved write, only while the file is still exactly what Mia wrote.
+
+        With a recovery copy the earlier version is restored; without one the file Mia created is
+        removed. What is replaced or removed is first copied into the recovery area, so the undo
+        itself can be recovered.
+        """
+        path = self._resolve(root_id, relative_path)
+        self._validate_write_path(path)
+        if _is_link(path) or not path.is_file():
+            raise FileUndoConflict("The file is no longer there, so there is nothing to undo")
+        if hashlib.sha256(path.read_bytes()).hexdigest() != expected_sha256:
+            raise FileUndoConflict("The file has changed since Mia wrote it, so nothing was undone")
+        source = self._recovery_backup(root_id, backup, path.name) if backup else None
+        safety = self.backup_existing(root_id, path)
+        rel = str(path.relative_to(self.roots[root_id]))
+        if source is None:
+            path.unlink()
+            return {"action": "removed_created_file", "relative_path": rel, "safety_backup": safety, "sha256": None}
+        data = source.read_bytes()
+        with tempfile.NamedTemporaryFile(mode="wb", dir=path.parent, prefix=".mia-", suffix=".tmp", delete=False) as handle:
+            handle.write(data)
+            temp_path = Path(handle.name)
+        try:
+            os.replace(temp_path, path)
+        finally:
+            temp_path.unlink(missing_ok=True)
+        return {"action": "restored_previous_version", "relative_path": rel, "safety_backup": safety,
+                "sha256": hashlib.sha256(data).hexdigest()}
 
     MAX_BACKUPS = 50
 

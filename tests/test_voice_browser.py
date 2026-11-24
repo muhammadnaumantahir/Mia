@@ -1183,3 +1183,39 @@ def test_oversized_restored_card_offers_only_reject_and_html_stays_text(ctx):
     assert "too large to restore" in ctx.js("document.querySelector('.approval-state').textContent")
     assert ctx.js("document.querySelectorAll('.approval-card img').length") == 0
     assert ctx.js("window.__pwned === undefined")
+
+
+def test_completed_file_write_offers_undo_that_sends_the_exact_hash_and_backup(ctx):
+    import json as _json
+
+    _stub_cards(ctx, [_card()])
+    sha = "a" * 64
+    ctx.page.route(
+        "**/api/approvals/appr-1/execute",
+        lambda route: route.fulfill(status=200, content_type="application/json", body=_json.dumps(
+            {"status": "completed", "result": {"relative_path": "notes/a.txt", "sha256": sha,
+                                               "backup": ".mia-recovery/backups/x-a.txt"}})),
+    )
+    sent = []
+    answers = [(409, {"detail": "The file has changed since Mia wrote it, so nothing was undone"}),
+               (200, {"status": "undone", "result": {"action": "restored_previous_version"}})]
+
+    def undo_route(route):
+        sent.append(_json.loads(route.request.post_data))
+        status, body = answers.pop(0)
+        route.fulfill(status=status, content_type="application/json", body=_json.dumps(body))
+
+    ctx.page.route("**/api/computer/files/write/undo", undo_route)
+    ctx.js("restorePendingApprovals()")
+    ctx.wait("document.querySelectorAll('.approval-card').length===1")
+    assert ctx.js("document.querySelectorAll('.undo-action').length") == 0  # nothing to undo before approval
+    ctx.page.click(".approval-card .approve-action")
+    ctx.wait("document.querySelectorAll('.undo-action').length===1")
+    ctx.page.click(".undo-action")
+    ctx.wait("document.querySelector('.approval-state').textContent.includes('has changed')")
+    assert ctx.js("document.querySelector('.undo-action').disabled") is False  # may try again
+    ctx.page.click(".undo-action")
+    ctx.wait("document.querySelector('.approval-state').textContent.startsWith('Undone: the earlier version')")
+    assert ctx.js("document.querySelectorAll('.undo-action').length") == 0
+    assert sent[0] == {"root_id": "root_1", "relative_path": "notes/a.txt", "expected_sha256": sha,
+                       "backup": ".mia-recovery/backups/x-a.txt"}
