@@ -801,3 +801,9 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-24T06:50Z - MIA-COMP-04 slice 2 pushed (73abe6b); MIA-LIFE-08 claimed (A7)
 - COMP-04 slice 2: `tests/test_broker_terminal.py` (6 tests; mutation of the terminal approval consume made 4 fail; source restored). Remaining COMP-04 adapters: process terminate, app launch, desktop, browser click/actions, background tasks, Brain, voice.
 - Claimed LIFE-08 after verifying OPEN on the freshly rebased board; P3 outranks P4 and the owner said to work on other milestones.
+
+## 2026-11-24T07:20Z - MIA-LIFE-08 backend pushed (A7), commit 4510573
+- Reuses `TaskEngine` (own DB `mia-workflows.sqlite3`); 4 internal handlers; 14+ tests in `tests/test_workflows.py` incl. plan-time refusal of 8 external/destructive capability names, restart/interrupted-step, timeout, stop-all. Mutation check: removing the stop-all `control` link failed the stop-all test; restored.
+- Regression I caused and fixed before pushing: using `include_router` made `app.routes` contain wrapper objects (this FastAPI version), which broke `tests/test_life_ui.py::test_every_endpoint_the_page_calls_exists` (A6) and would have hidden routes from route enumeration. Routes are now registered directly on `app`. The COMP-01 coverage test also now descends into included routers so such routes cannot be skipped silently.
+- Run: full suite exit 1 with exactly one failure, the pre-existing clock-dependent `tests/test_life_web.py` quiet-hours test; ruff clean.
+- A7 is IDLE. COMP-04 stays PARTIAL (remaining adapters listed on its board row).

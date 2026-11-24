@@ -571,3 +571,8 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 ## 2026-11-24T06:25Z A1 conversational task actions (MIA-LIFE-03, Brain half)
 
 - Clear English task commands in chat are answered by the Brain without a model call, on the same store as the task page and API; deletes and bulk changes need an explicit yes; private tasks are invisible to chat and temporary chats are read-only. English only. Commit `5424535`; unit and API tests only. A time-of-day-dependent life test fails on clean main inside the 22:00-07:00 UTC quiet window.
+
+## 2026-11-24 Workflow composer and checkpoint runtime (MIA-LIFE-08 backend, agent A7)
+- Commit 4510573. Owner can compose a workflow of internal steps (add/list/complete tasks and notes, queue a notification), preview it without side effects, run it with a checkpoint after every step, pause/cancel it, retry a step explicitly, and read the audit trail. Stop-all pauses workflows.
+- Refused by design: computer, browser, terminal, filesystem, desktop, app and delete steps (plan-time error). No UI page and no Brain/voice entry yet.
+- Not verified: behaviour under real concurrent use; timed-out steps have unknown outcome by design.
