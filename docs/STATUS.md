@@ -566,3 +566,4 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - Commit 354a752. Verified over HTTP against the real filesystem adapter: no/forged/pending/rejected/expired/mismatched/replayed approvals and out-of-scope, revoked or wrong-capability grants never change the filesystem.
 - Not covered yet: terminal, processes, apps, desktop, browser click/actions, background tasks, Brain, voice. Local-process self-approval is an open gap (COMP-02/LIFE-13).
 - Known unrelated failure on main: clock-dependent quiet-hours test in `tests/test_life_web.py`.
+- **MIA-LIFE-04 UI half (A6, 2026-11-24T06:45Z):** `/projects` workspace page over the A1 project API. Open: rename, Brain context, '/' in names (A1). Time-dependent failing test noted in the integration log.

@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
+<title>Mia — Projects</title>
+<style>
+:root{font-family:Inter,Segoe UI,system-ui,sans-serif;color:#eef4f2;background:#0c1214}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#0c1214}
+.shell{max-width:980px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:16px;margin:0 0 10px}h3{font-size:15px;margin:18px 0 8px}
+nav{display:flex;flex-wrap:wrap;gap:4px 16px}nav a{color:#9be5c5;font-size:14px;padding:6px 0}
+.sub{color:#a9bdb6;font-size:14px;line-height:1.5}
+.panel{background:#131d20;border:1px solid #2b4044;border-radius:14px;padding:16px;margin-top:16px}
+.layout{display:grid;grid-template-columns:minmax(0,1fr);gap:0 16px}
+@media(min-width:860px){.layout{grid-template-columns:minmax(0,300px) minmax(0,1fr);align-items:start}}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:8px 0}
+label{font-size:13px;color:#c3d3ce;display:flex;flex-direction:column;gap:4px}
+label.inline{flex-direction:row;align-items:center;gap:8px}
+input,select,textarea,button{font:inherit;font-size:14px;min-height:40px}
+input,select,textarea{background:#0e1719;color:#eef4f2;border:1px solid #4c6a66;border-radius:8px;padding:8px 10px;max-width:100%}
+textarea{width:100%;min-height:80px}
+button{background:#1f7a5c;color:#fff;border:1px solid #1f7a5c;border-radius:8px;padding:8px 14px;cursor:pointer}
+button.alt{background:#1b2a2c;border-color:#4c6a66;color:#e3ece8}
+button.danger{background:#9b3a2c;border-color:#9b3a2c}
+button:disabled{opacity:.55;cursor:not-allowed}
+:focus-visible{outline:3px solid #ffd27a;outline-offset:2px}
+ul.items{list-style:none;margin:0;padding:0}
+ul.projects button{width:100%;text-align:left;background:#0e1719;border:1px solid #2b4044;color:#eef4f2;margin:0 0 8px;display:block;line-height:1.35;padding:10px 12px;overflow-wrap:anywhere}
+ul.projects button[aria-current=true]{border-color:#9be5c5;background:#16302b}
+ul.projects .counts{display:block;font-size:12px;color:#a9bdb6;margin-top:2px}
+li.item{border-top:1px solid #2b4044;padding:10px 0}
+li.item:first-child{border-top:0}
+.title{font-size:15px;overflow-wrap:anywhere}.done .title{text-decoration:line-through;color:#9fb3ac}
+.meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.tag{font-size:12px;border:1px solid #4c6a66;border-radius:999px;padding:2px 9px;color:#d5e3de}
+.tag.warn{border-color:#d9a441;color:#ffd98f}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.details{color:#b6c8c2;font-size:13px;margin-top:4px;overflow-wrap:anywhere;white-space:pre-wrap}
+form.edit{border:1px dashed #4c6a66;border-radius:10px;padding:12px;margin-top:8px}
+#notice{min-height:22px;font-size:14px;color:#a6e3c4;margin-top:12px}#notice.error{color:#ffb4a3}
+dialog{background:#131d20;color:#eef4f2;border:1px solid #6a8782;border-radius:14px;max-width:min(520px,92vw);padding:20px}
+dialog::backdrop{background:#000a}
+dialog ul{padding-left:20px;margin:8px 0;overflow-wrap:anywhere}
+.empty{border:1px dashed #4c6a66;border-radius:10px;padding:14px;text-align:center;color:#b6c8c2}
+#detailTitle{overflow-wrap:anywhere}
+.goal{white-space:pre-wrap;overflow-wrap:anywhere;color:#d5e3de}
+@media(max-width:560px){.row{flex-direction:column;align-items:stretch}button{min-height:44px}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+@media(forced-colors:active){ul.projects button[aria-current=true]{border-width:3px}}
+</style></head>
+<body><main class="shell">
+<nav aria-label="Mia pages"><a href="/">Observatory</a><a href="/assistant">Assistant</a><a href="/tasks">Tasks</a><a href="/life">Autonomous life</a></nav>
+<h1>Projects</h1>
+<p class="sub">Each project keeps its own goal, milestones, tasks, decisions and conversations. This page only ever shows the material labelled with the project you open; nothing from another project, or from conversations you marked temporary, appears here.</p>
+<div id="notice" role="status" aria-live="polite"></div>
+
+<div class="layout">
+<div>
+<section class="panel" aria-labelledby="listHeading"><h2 id="listHeading" tabindex="-1">Your projects</h2>
+<ul id="projects" class="items projects"></ul>
+<p id="listSummary" class="sub"></p></section>
+
+<section class="panel" aria-labelledby="addHeading"><h2 id="addHeading">New project</h2>
+<form id="addForm" autocomplete="off">
+<div class="row"><label>Name<input id="addName" required maxlength="64"></label>
+<label>Status<select id="addStatus"><option value="active">Active</option><option value="paused">Paused</option><option value="completed">Completed</option><option value="archived">Archived</option></select></label></div>
+<label>Goal (optional)<textarea id="addGoal" maxlength="2000" rows="3"></textarea></label>
+<div class="row"><button type="submit">Create project</button></div>
+</form></section>
+</div>
+
+<section id="detail" class="panel" aria-labelledby="detailTitle" hidden>
+<h2 id="detailTitle" tabindex="-1"></h2>
+<div id="detailTags" class="meta"></div>
+<div id="unregistered" hidden>
+<p class="sub">Mia has seen this name on your tasks, decisions or conversations, but it has no goal or milestones yet. Setting it up does not change any of that material.</p>
+<div class="row"><button id="setup" type="button">Set up this project</button></div>
+</div>
+<div id="registered" hidden>
+<form id="editForm" class="edit" aria-label="Goal and status">
+<label>Goal<textarea id="editGoal" maxlength="2000" rows="3"></textarea></label>
+<div class="row"><label>Status<select id="editStatus"><option value="active">Active</option><option value="paused">Paused</option><option value="completed">Completed</option><option value="archived">Archived</option></select></label>
+<button type="submit">Save goal and status</button>
+<button id="deleteProject" class="danger" type="button">Delete project…</button></div>
+</form>
+<h3 id="msHeading">Milestones</h3>
+<form id="msForm" class="row" autocomplete="off" aria-labelledby="msHeading">
+<label>New milestone<input id="msTitle" required maxlength="200" style="min-width:200px"></label>
+<label>Due (optional)<input id="msDue" type="datetime-local"></label>
+<button type="submit">Add milestone</button></form>
+<ul id="milestones" class="items" aria-labelledby="msHeading"></ul>
+</div>
+<div id="material" hidden>
+<h3 id="taskHeading">Open tasks</h3>
+<ul id="tasks" class="items" aria-labelledby="taskHeading"></ul>
+<p class="sub"><a href="/tasks" style="color:#9be5c5">Manage tasks in the Tasks page</a></p>
+<h3 id="decHeading">Decisions</h3>
+<ul id="decisions" class="items" aria-labelledby="decHeading"></ul>
+<h3 id="chatHeading">Conversations</h3>
+<ul id="chats" class="items" aria-labelledby="chatHeading"></ul>
+<p id="countsLine" class="sub"></p>
+</div>
+</section>
+</div>
+
+<dialog id="confirm" aria-labelledby="confirmTitle" aria-describedby="confirmBody">
+<h2 id="confirmTitle"></h2><div id="confirmBody"></div>
+<div class="row"><button id="confirmNo" class="alt" type="button" autofocus>Keep it</button><button id="confirmYes" class="danger" type="button">Confirm</button></div>
+</dialog>
+
+<script>
+const $=id=>document.getElementById(id);
+const STATUS={active:'Active',paused:'Paused',completed:'Completed',archived:'Archived'};
+let projects=[],current=null,view=null,seq=0;
+
+function say(text,error=false){const n=$('notice');n.textContent=text;n.className=error?'error':'';n.setAttribute('role',error?'alert':'status');}
+async function api(path,options={}){
+ const response=await fetch(path,{headers:{'Content-Type':'application/json'},...options});
+ let body=null;try{body=await response.json();}catch(error){}
+ if(!response.ok){
+  const detail=body&&body.detail;
+  const message=typeof detail==='string'?detail:(detail&&detail.message)||(Array.isArray(detail)?detail.map(d=>d.msg).join('; '):'Request failed ('+response.status+')');
+  const err=new Error(message);err.status=response.status;throw err;
+ }
+ return body;
+}
+const enc=encodeURIComponent;
+const mk=(tagName,text,cls)=>{const e=document.createElement(tagName);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;};
+function tag(text,warn=false){return mk('span',text,'tag'+(warn?' warn':''));}
+function button(text,label,handler,cls='alt'){const b=mk('button',text,cls);b.type='button';b.setAttribute('aria-label',label);b.addEventListener('click',handler);return b;}
+function plural(n,one,many){return n+' '+(n===1?one:many);}
+function toIso(value){return value?new Date(value).toISOString():null;}
+function toLocal(iso){if(!iso)return '';const d=new Date(iso);const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes());}
+function dueText(iso){return new Date(iso).toLocaleString([],{weekday:'short',day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});}
+// The API addresses a project by its name inside the URL path, so a name containing "/" cannot be opened yet.
+const openable=name=>!String(name).includes('/');
+const CANNOT_OPEN="This project's name contains a “/”, which Mia's project pages cannot open yet. Its tasks, decisions and conversations are not affected.";
+
+/* ---------- confirm dialog (promise based, focus returns to the opener) ---------- */
+let confirmResolve=null,confirmOpener=null;
+function confirmDialog({title,lines,yes,no},opener){
+ return new Promise(resolve=>{
+  confirmResolve=resolve;confirmOpener=opener||null;
+  $('confirmTitle').textContent=title;
+  const body=$('confirmBody');body.replaceChildren();
+  const ul=mk('ul');for(const line of lines)ul.append(mk('li',line));body.append(ul);
+  $('confirmYes').textContent=yes;$('confirmNo').textContent=no;
+  $('confirm').showModal();
+ });
+}
+function finishConfirm(answer){const r=confirmResolve;confirmResolve=null;if($('confirm').open)$('confirm').close();if(r)r(answer);}
+$('confirmNo').addEventListener('click',()=>finishConfirm(false));
+$('confirmYes').addEventListener('click',()=>finishConfirm(true));
+$('confirm').addEventListener('cancel',()=>{confirmResolve&&(()=>{const r=confirmResolve;confirmResolve=null;r(false);})();});
+$('confirm').addEventListener('close',()=>{
+ if(confirmResolve){const r=confirmResolve;confirmResolve=null;r(false);}
+ const o=confirmOpener;confirmOpener=null;
+ if(o&&o.isConnected)o.focus();else $('detailTitle').hidden?$('listHeading').focus():$('detailTitle').focus();
+});
+
+/* ---------- project list ---------- */
+function renderList(){
+ const list=$('projects');list.replaceChildren();
+ if(!projects.length){const li=mk('li','No projects yet. Create one below, or label a task or conversation with a project name and it will appear here.','empty');list.append(li);}
+ for(const p of projects){
+  const li=mk('li');
+  const b=mk('button');b.type='button';b.dataset.name=p.name;
+  b.append(mk('span',p.name),mk('span',
+   (p.registered?STATUS[p.status]||p.status:'Not set up')+' · '+plural(p.open_tasks,'open task','open tasks')+' · '+plural(p.decisions,'decision','decisions')+' · '+plural(p.conversations,'conversation','conversations'),'counts'));
+  b.setAttribute('aria-label','Open project '+p.name);
+  if(current&&current.toLowerCase()===p.name.toLowerCase())b.setAttribute('aria-current','true');
+  b.addEventListener('click',()=>openProject(p.name,{focus:true}));
+  li.append(b);list.append(li);
+ }
+ $('listSummary').textContent=plural(projects.length,'project','projects');
+}
+async function loadList(){
+ try{const data=await api('/api/projects');projects=data.projects||[];renderList();}
+ catch(error){say('Could not load your projects: '+error.message,true);}
+}
+
+/* ---------- one project ---------- */
+function clearDetail(){
+ current=null;view=null;seq+=1;$('detail').hidden=true;
+ try{history.replaceState(null,'',location.pathname);}catch(error){}
+ renderList();
+}
+async function openProject(name,{focus=false,quiet=false}={}){
+ const mine=++seq;current=name;renderList();
+ if(!openable(name)){
+  // Say so instead of failing silently, and never show a previous project under this name.
+  view=null;showShell(name);$('registered').hidden=true;$('unregistered').hidden=true;$('material').hidden=true;
+  $('detailTags').replaceChildren(tag('Cannot be opened here',true));say(CANNOT_OPEN,true);
+  if(focus)$('detailTitle').focus();return;
+ }
+ let data;
+ try{data=await api('/api/projects/'+enc(name));}
+ catch(error){if(mine!==seq)return;say('Could not open “'+name+'”: '+error.message,true);return;}
+ if(mine!==seq)return; // a newer click won: do not paint this project over it
+ view=data;current=data.name;renderDetail();
+ try{history.replaceState(null,'','?name='+enc(data.name));}catch(error){}
+ if(!quiet)say('Showing project “'+data.name+'”.');
+ if(focus)$('detailTitle').focus();
+}
+function showShell(name){
+ $('detail').hidden=false;$('detailTitle').textContent=name;
+}
+function fill(listId,rows,emptyText,build){
+ const ul=$(listId);ul.replaceChildren();
+ if(!rows.length){ul.append(mk('li',emptyText,'empty'));return;}
+ for(const row of rows)ul.append(build(row));
+}
+function renderDetail(){
+ const v=view;showShell(v.name);
+ const tags=$('detailTags');tags.replaceChildren(tag(v.registered?'Status: '+(STATUS[v.status]||v.status):'Not set up yet',!v.registered));
+ $('unregistered').hidden=v.registered;$('registered').hidden=!v.registered;$('material').hidden=false;
+ if(v.registered){
+  $('editGoal').value=v.goal||'';$('editStatus').value=v.status;
+  renderMilestones();
+ }
+ fill('tasks',v.tasks,'No open tasks labelled with this project.',t=>{
+  const li=mk('li',undefined,'item');li.append(mk('div',t.title,'title'));
+  const m=mk('div',undefined,'meta');m.append(tag('Priority: '+({1:'High',2:'Normal',3:'Low'}[t.priority]||'Normal')));
+  if(t.due_at)m.append(tag((new Date(t.due_at).getTime()<Date.now()?'Overdue · ':'Due ')+dueText(t.due_at),new Date(t.due_at).getTime()<Date.now()));
+  li.append(m);return li;});
+ fill('decisions',v.decisions,'No decisions recorded for this project.',d=>{
+  const li=mk('li',undefined,'item');li.append(mk('div',d.title,'title'));
+  if(d.body)li.append(mk('div',d.body,'details'));
+  const m=mk('div',undefined,'meta');m.append(tag(d.status==='completed'?'Completed':'Active'));li.append(m);return li;});
+ fill('chats',v.conversations,'No conversations labelled with this project.',c=>{
+  const li=mk('li',undefined,'item');li.append(mk('div',c.title||'Untitled conversation','title'));
+  const m=mk('div',undefined,'meta');m.append(tag(plural(c.message_count,'message','messages')));li.append(m);return li;});
+ const c=v.counts;
+ $('countsLine').textContent=plural(c.open_tasks,'open task','open tasks')+', '+plural(c.decisions,'decision','decisions')+', '+plural(c.conversations,'conversation','conversations')+', '+plural(c.open_milestones,'open milestone','open milestones')+'.'
+  +((v.tasks.length<c.open_tasks||v.decisions.length<c.decisions||v.conversations.length<c.conversations)?' Lists show the most recent entries only.':'');
+}
+
+/* ---------- milestones ---------- */
+function renderMilestones(){
+ fill('milestones',view.milestones,'No milestones yet. Add the first step towards the goal.',m=>{
+  const li=mk('li',undefined,'item'+(m.status==='done'?' done':''));li.dataset.id=m.milestone_id;
+  li.append(mk('div',m.title,'title'));
+  const meta=mk('div',undefined,'meta');meta.append(tag(m.status==='done'?'Done':'Open'));
+  if(m.due_at){const late=m.status==='open'&&new Date(m.due_at).getTime()<Date.now();meta.append(tag((late?'Overdue · ':'Due ')+dueText(m.due_at),late));}
+  li.append(meta);
+  const actions=mk('div',undefined,'actions');
+  actions.append(m.status==='open'
+   ?button('Mark done','Mark done: '+m.title,()=>patchMilestone(m,{status:'done'},'Milestone marked done.'),'')
+   :button('Reopen','Reopen: '+m.title,()=>patchMilestone(m,{status:'open'},'Milestone reopened.')),
+   button('Edit','Edit: '+m.title,()=>openMilestoneEdit(li,m)),
+   button('Delete…','Delete: '+m.title,async e=>{
+    const ok=await confirmDialog({title:'Delete this milestone?',lines:[m.title],yes:'Delete milestone',no:'Keep it'},e.currentTarget);
+    if(ok)await removeMilestone(m);
+   },'danger'));
+  li.append(actions);return li;});
+}
+async function refresh(focusSelector){
+ const name=current;await openProject(name,{quiet:true});
+ await loadList();
+ if(focusSelector){const t=document.querySelector(focusSelector);if(t)t.focus();}
+}
+async function patchMilestone(m,patch,okText){
+ const name=view.name;
+ try{await api('/api/projects/'+enc(name)+'/milestones/'+enc(m.milestone_id),{method:'PATCH',body:JSON.stringify(patch)});say(okText);}
+ catch(error){say('Could not change the milestone: '+error.message,true);}
+ await refresh('[data-id="'+CSS.escape(m.milestone_id)+'"] button');
+}
+async function removeMilestone(m){
+ const name=view.name;
+ try{await api('/api/projects/'+enc(name)+'/milestones/'+enc(m.milestone_id),{method:'DELETE'});say('Milestone deleted.');}
+ catch(error){say('Could not delete the milestone: '+error.message,true);}
+ await refresh('#msTitle');
+}
+function openMilestoneEdit(li,m){
+ const existing=li.querySelector('form.edit');if(existing){existing.querySelector('input').focus();return;}
+ const form=mk('form',undefined,'edit');form.setAttribute('aria-label','Edit: '+m.title);
+ const field=(text,input)=>{const l=mk('label');l.append(document.createTextNode(text),input);return l;};
+ const title=Object.assign(mk('input'),{value:m.title,required:true,maxLength:200});
+ const due=Object.assign(mk('input'),{type:'datetime-local',value:toLocal(m.due_at)});
+ const row=mk('div',undefined,'row');row.append(field('Title',title),field('Due',due));
+ const buttons=mk('div',undefined,'row');
+ buttons.append(Object.assign(mk('button','Save'),{type:'submit'}),
+  button('Cancel edit','Cancel editing: '+m.title,()=>{form.remove();li.querySelector('.actions button:nth-child(2)').focus();}));
+ form.append(row,buttons);
+ form.addEventListener('submit',async e=>{
+  e.preventDefault();const patch={title:title.value.trim()};
+  const iso=toIso(due.value);if(iso){if(iso!==m.due_at)patch.due_at=iso;}else if(m.due_at)patch.clear_due=true;
+  await patchMilestone(m,patch,'Saved: '+patch.title);
+ });
+ li.append(form);title.focus();
+}
+$('msForm').addEventListener('submit',async e=>{
+ e.preventDefault();const name=view&&view.name;if(!name)return;
+ const body={title:$('msTitle').value.trim()};const iso=toIso($('msDue').value);if(iso)body.due_at=iso;
+ try{await api('/api/projects/'+enc(name)+'/milestones',{method:'POST',body:JSON.stringify(body)});$('msForm').reset();say('Milestone added: '+body.title);}
+ catch(error){say('Could not add the milestone: '+error.message,true);return;}
+ await refresh('#msTitle');
+});
+
+/* ---------- create, set up, edit, delete ---------- */
+$('addForm').addEventListener('submit',async e=>{
+ e.preventDefault();
+ const name=$('addName').value.trim();
+ if(!openable(name)){say('Project names cannot contain “/”. Use a different name.',true);$('addName').focus();return;}
+ try{await api('/api/projects',{method:'POST',body:JSON.stringify({name,goal:$('addGoal').value,status:$('addStatus').value})});}
+ catch(error){say('Could not create the project: '+error.message,true);return;}
+ $('addForm').reset();await loadList();say('Project created: '+name);
+ await openProject(name,{focus:true,quiet:true});
+});
+$('setup').addEventListener('click',async()=>{
+ const name=view&&view.name;if(!name)return;
+ try{await api('/api/projects',{method:'POST',body:JSON.stringify({name})});}
+ catch(error){say('Could not set up the project: '+error.message,true);return;}
+ say('Project set up: '+name);await refresh('#editGoal');
+});
+$('editForm').addEventListener('submit',async e=>{
+ e.preventDefault();const name=view&&view.name;if(!name)return;
+ try{await api('/api/projects/'+enc(name),{method:'PATCH',body:JSON.stringify({goal:$('editGoal').value,status:$('editStatus').value})});say('Saved goal and status.');}
+ catch(error){say('Could not save: '+error.message,true);return;}
+ await refresh('#editGoal');
+});
+$('deleteProject').addEventListener('click',async e=>{
+ const v=view;if(!v)return;
+ const ok=await confirmDialog({title:'Delete project “'+v.name+'”?',lines:[
+  'This removes the goal, status and '+plural(v.milestones.length,'milestone','milestones')+'.',
+  'Its '+plural(v.counts.open_tasks,'task','tasks')+', '+plural(v.counts.decisions,'decision','decisions')+' and '+plural(v.counts.conversations,'conversation','conversations')+' are kept and keep their project label.'],
+  yes:'Delete project',no:'Keep project'},e.currentTarget);
+ if(!ok)return;
+ try{await api('/api/projects/'+enc(v.name),{method:'DELETE'});}
+ catch(error){say('Could not delete the project: '+error.message,true);return;}
+ clearDetail();await loadList();say('Project “'+v.name+'” deleted. Its tasks, decisions and conversations were kept.');$('listHeading').focus();
+});
+
+(async function init(){
+ await loadList();
+ const wanted=new URLSearchParams(location.search).get('name');
+ if(wanted)await openProject(wanted,{quiet:true});
+})();
+</script></main></body></html>
