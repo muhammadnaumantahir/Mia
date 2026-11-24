@@ -55,6 +55,9 @@ footer{margin-top:24px;color:#6f8580;font-size:11px;line-height:1.6}
 <div class="experiment-notice" id="dailySnapshotStatus" role="status" aria-live="polite"></div>
 <div class="experiment-actions" style="margin-top:10px"><button class="send" id="buildExperimentReport" type="button" disabled style="background:#263535;color:#d8e2dd">View experiment report</button></div>
 <div class="experiment-details" id="experimentReport" hidden></div>
+<div class="experiment-actions" style="margin-top:10px"><button class="send" id="buildEvidenceReport" type="button" disabled style="background:#263535;color:#d8e2dd">View evidence report</button></div>
+<div class="experiment-details" id="evidenceReport" hidden aria-live="polite"></div>
+<pre class="experiment-details" id="evidenceRecord" hidden style="white-space:pre-wrap;max-height:260px;overflow:auto"></pre>
 </section>
 <section class="panel"><div class="panelhead"><div><h3>Measured growth over time</h3><div class="muted">Select one metric to preserve its original unit and scale.</div></div><select id="metric" aria-label="Select metric"><option value="">No metrics yet</option></select></div>
 <div id="chartEmpty" class="empty">No benchmark or metric samples have been recorded yet.<br>Complete and freeze the Day 0 baseline to begin the experiment.</div><canvas id="chart" hidden></canvas></section>
@@ -110,7 +113,7 @@ footer{margin-top:24px;color:#6f8580;font-size:11px;line-height:1.6}
 <footer>Local preview · no cloud analytics · no sample growth data. Keep this service bound to 127.0.0.1 until authentication and remote-access controls are implemented.</footer>
 </main>
 <script>
-const el=(id)=>document.getElementById(id);let metricItems=[];
+const el=(id)=>document.getElementById(id);const $=el;let metricItems=[];
 const fmt=(v)=>Number(v).toLocaleString(undefined,{maximumFractionDigits:3});
 async function load(){
  try{
@@ -166,6 +169,7 @@ async function loadExperimentControl(){
  const reportBox=el('experimentReport');
  reportBox.hidden=true;
  reportBox.replaceChildren();
+ el('buildEvidenceReport').disabled=true;el('evidenceReport').hidden=true;el('evidenceReport').replaceChildren();el('evidenceRecord').hidden=true;
  const capture=el('captureBaseline');
  const start=el('startExperiment');
  const refresh=el('refreshExperiment');
@@ -206,6 +210,7 @@ async function loadExperimentControl(){
   const incomplete=activeExperiment.status==='incomplete';
   const snapshots=snapshotsData.items||[];
   reportButton.disabled=!(completed||incomplete);
+  el('buildEvidenceReport').disabled=false;
   let latestDay=0;
   snapshots.forEach(item=>{latestDay=Math.max(latestDay,Number(item.day_index)||0);});
 
@@ -335,6 +340,87 @@ async function showExperimentReport(){
  }catch(error){box.textContent=error.message;}
  finally{button.disabled=false;}
 }
+
+function evNode(parent,tag,text,attrs){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(attrs)Object.entries(attrs).forEach(([k,v])=>n.setAttribute(k,v));parent.appendChild(n);return n;}
+async function drillRecord(url,label){
+ const pre=el('evidenceRecord');pre.hidden=false;pre.textContent='Loading '+label+'…';
+ try{const r=await fetch(url);const d=await r.json();if(!r.ok)throw new Error(d.detail||'Record unavailable');pre.textContent=label+'\n'+JSON.stringify(d,null,2);}
+ catch(e){pre.textContent=label+': '+e.message;}
+}
+function recordLink(parent,label,url){
+ const b=evNode(parent,'button',label,{type:'button','data-record':url});
+ b.style.cssText='background:#263535;color:#d8e2dd;border:1px solid #3a4a47;border-radius:6px;margin:2px 4px 2px 0;padding:2px 8px;cursor:pointer';
+ b.addEventListener('click',()=>drillRecord(url,label));return b;
+}
+function trendSvg(rows){
+ const pts=[];rows.forEach((r,i)=>{if(i===0)pts.push([r.from_day,r.from_value]);pts.push([r.to_day,r.to_value]);});
+ const ns='http://www.w3.org/2000/svg';const svg=document.createElementNS(ns,'svg');
+ svg.setAttribute('width','180');svg.setAttribute('height','36');svg.setAttribute('role','img');
+ svg.setAttribute('aria-label','Trend drawn only from recorded samples; dashed where days have no evidence');
+ const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);
+ const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+ const sx=d=>x1===x0?90:4+(d-x0)/(x1-x0)*172,sy=v=>y1===y0?18:32-(v-y0)/(y1-y0)*28;
+ rows.forEach(r=>{const l=document.createElementNS(ns,'line');
+  l.setAttribute('x1',sx(r.from_day));l.setAttribute('y1',sy(r.from_value));l.setAttribute('x2',sx(r.to_day));l.setAttribute('y2',sy(r.to_value));
+  l.setAttribute('stroke','#7fd1b9');l.setAttribute('stroke-width','2');
+  if((r.days_without_evidence_inside_window||[]).length||r.status==='window_not_covered_by_evidence')l.setAttribute('stroke-dasharray','3 3');
+  svg.appendChild(l);});
+ pts.forEach(p=>{const c=document.createElementNS(ns,'circle');c.setAttribute('cx',sx(p[0]));c.setAttribute('cy',sy(p[1]));c.setAttribute('r','2.5');c.setAttribute('fill','#d8e2dd');svg.appendChild(c);});
+ return svg;
+}
+function candidateText(c){
+ if(c.type==='commit')return 'commit '+String(c.from).slice(0,8)+' → '+String(c.to).slice(0,8);
+ if(c.type==='capability_transitions')return 'capability transitions '+JSON.stringify(c.counts);
+ if(c.type==='dependency_versions')return 'dependency versions changed: '+Object.keys(c.changed).join(', ');
+ if(c.type==='models_used')return 'models seen serving requests: +'+(c.added.join(', ')||'none')+' −'+(c.removed.join(', ')||'none');
+ return c.type;
+}
+async function showEvidenceReport(){
+ if(!activeExperiment)return;
+ const box=el('evidenceReport');box.hidden=false;box.textContent='Loading stored evidence…';
+ el('evidenceRecord').hidden=true;
+ try{
+  const r=await fetch('/api/experiments/'+encodeURIComponent(activeExperiment.experiment_id)+'/evidence');
+  const rep=await r.json();if(!r.ok)throw new Error(rep.detail||'Evidence report unavailable');
+  box.replaceChildren();
+  const ov=rep.overview,cv=rep.coverage;
+  evNode(box,'strong',ov.name+' · '+ov.status+' · conclusion: '+ov.conclusion);
+  evNode(box,'div','Captured '+cv.captured_count+' of '+cv.planned_days+' planned days · missing: '+(cv.missing_days.join(', ')||'none')+' · offline (explicitly unavailable): '+(cv.unavailable_days.join(', ')||'none')+' · unaccounted for: '+(cv.unaccounted_days.join(', ')||'none'),{'data-section':'coverage'});
+  evNode(box,'h4','Metric changes (correlation only)');
+  const names=Object.keys(rep.metric_changes);
+  if(!names.length)evNode(box,'div','No metric changes recorded yet. Nothing is drawn until real samples exist.',{'data-section':'metrics-empty'});
+  names.forEach(name=>{
+   const rows=rep.metric_changes[name];const wrap=evNode(box,'div',undefined,{'data-metric':name});
+   evNode(wrap,'strong',name);wrap.appendChild(trendSvg(rows));
+   rows.forEach(row=>{
+    const line=evNode(wrap,'div','day '+row.from_day+' → '+row.to_day+': '+row.from_value+' → '+row.to_value+' ('+(row.delta>0?'+':'')+row.delta+') · '+row.status.replace(/_/g,' ')+(row.candidate_changes.length?' · candidates: '+row.candidate_changes.map(candidateText).join('; '):'')+(row.unknown_factors_in_window.length?' · unknown: '+row.unknown_factors_in_window.join(', '):'')+(row.days_without_evidence_inside_window.length?' · no evidence on days '+row.days_without_evidence_inside_window.join(', '):'')+' · causal claim: not allowed');
+    recordLink(line,'sample day '+row.from_day,'/api/observatory/metrics/'+encodeURIComponent(row.from_sample_id));
+    recordLink(line,'sample day '+row.to_day,'/api/observatory/metrics/'+encodeURIComponent(row.to_sample_id));
+   });
+  });
+  evNode(box,'h4','Benchmarks');
+  const suites=Object.keys(rep.benchmarks);
+  if(!suites.length)evNode(box,'div','No benchmark runs recorded in this experiment.');
+  suites.forEach(id=>{
+   const b=rep.benchmarks[id],cmp=b.first_vs_last;
+   const line=evNode(box,'div',id+' · '+b.runs.length+' run(s) · '+(cmp.comparable?'first vs last: '+cmp.verdict+(cmp.small_sample?' (small sample)':''):'not compared: '+cmp.reasons.join('; ')),{'data-suite':id});
+   b.runs.forEach(run=>recordLink(line,'run day '+run.day_index+' ('+run.passed+'/'+run.total+', version '+String(run.suite_version).slice(0,14)+')','/api/observatory/events/'+encodeURIComponent(run.event_id)));
+  });
+  if(rep.timing.runs.length){
+   const t=rep.timing.first_vs_last;
+   const line=evNode(box,'div','Pipeline timing · '+rep.timing.runs.length+' run(s) · '+(t.comparable?'first vs last: '+t.verdict:'not compared: '+t.reasons.join('; ')),{'data-section':'timing'});
+   rep.timing.runs.forEach(run=>recordLink(line,'timing day '+run.day_index+' (median '+run.median_ms+' ms, '+run.repeats+' repeats)','/api/observatory/events/'+encodeURIComponent(run.event_id)));
+  }
+  const rb=rep.rollbacks.days_with_rollbacks;
+  evNode(box,'div','Rollbacks: '+(rb.length?rb.map(x=>'day '+x.day_index+' ('+x.rolled_back_transitions+')').join(', '):'none recorded')+' — '+rep.rollbacks.note);
+  const lists=[['Confounders',rep.confounders],['Not attributable',Object.entries(rep.attribution_limits.not_attributable).map(([k,v])=>k+': '+v)],['Limitations',rep.limitations],['Claims this report does not make',rep.claims_not_allowed]];
+  lists.forEach(([title,items])=>{evNode(box,'h4',title);const ul=evNode(box,'ul');if(!items.length)evNode(ul,'li','none');items.forEach(t=>evNode(ul,'li',t));});
+  evNode(box,'h4','Version metadata');
+  evNode(box,'div','report schema '+rep.schema_version+' · report hash '+rep.report_sha256+' · baseline '+ov.baseline_sha256,{'data-section':'versions'});
+  Object.entries(rep.evidence.snapshot_manifest_sha256).forEach(([day,h])=>evNode(box,'div','snapshot day '+day+' manifest '+h.slice(0,16)+'…'));
+ }catch(e){box.textContent=e.message;}
+}
+el('buildEvidenceReport').addEventListener('click',showEvidenceReport);
 el('buildExperimentReport').addEventListener('click',showExperimentReport);
 
 el('experimentForm').addEventListener('submit',async event=>{

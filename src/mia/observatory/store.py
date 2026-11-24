@@ -949,6 +949,17 @@ class ObservatoryStore:
             ))
         return sample_id
 
+    def get_event(self, event_id: str) -> dict[str, Any] | None:
+        with self._connection() as db:
+            row = db.execute("SELECT * FROM events WHERE event_id = ?", (event_id,)).fetchone()
+        return dict(row) if row else None
+
+    def get_metric(self, sample_id: str) -> dict[str, Any] | None:
+        with self._connection() as db:
+            row = db.execute(
+                "SELECT * FROM metric_samples WHERE sample_id = ?", (sample_id,)).fetchone()
+        return dict(row) if row else None
+
     def list_events(self, limit: int = 100) -> list[dict[str, Any]]:
         safe_limit = max(1, min(int(limit), 1000))
         with self._connection() as db:

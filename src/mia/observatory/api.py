@@ -132,6 +132,7 @@ from mia.voice.wake import offline_wake_word_status
 from mia.voice.wake_transport import register_wake_routes, websocket_runtime_available
 
 from .baseline import BaselineCaptureError, capture_baseline_manifest
+from .report_generator import generate_report, render_markdown
 from .snapshot_capture import ExperimentSnapshotCapturer, SnapshotCaptureError
 from .snapshot_scheduler import ExperimentSnapshotScheduler, SchedulerNotEnabledError
 from .store import ObservatoryStore
@@ -2087,6 +2088,20 @@ def create_app(
     def metrics(metric_name: str | None = None) -> dict[str, Any]:
         return {"items": observatory.list_metrics(metric_name)}
 
+    @app.get("/api/observatory/events/{event_id}")
+    def observatory_event(event_id: str) -> dict[str, Any]:
+        record = observatory.get_event(event_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+        return record
+
+    @app.get("/api/observatory/metrics/{sample_id}")
+    def observatory_metric(sample_id: str) -> dict[str, Any]:
+        record = observatory.get_metric(sample_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Metric sample not found")
+        return record
+
     @app.post("/api/observatory/events", status_code=201)
     def add_event(item: EventInput) -> dict[str, str]:
         return {"event_id": observatory.record_event(**item.model_dump())}
@@ -2131,6 +2146,19 @@ def create_app(
         if report is None:
             raise HTTPException(status_code=404, detail="Experiment not found")
         return report
+
+    @app.get("/api/experiments/{experiment_id}/evidence")
+    def experiment_evidence(experiment_id: str) -> dict[str, Any]:
+        # Read-only: composes stored evidence; writes nothing and never creates data.
+        if experiment_id not in {item["experiment_id"] for item in observatory.list_experiments()}:
+            raise HTTPException(status_code=404, detail="Experiment not found")
+        try:
+            report = generate_report(observatory, experiment_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        if report is None:
+            raise HTTPException(status_code=404, detail="Experiment not found")
+        return {**report, "markdown": render_markdown(report)}
 
     @app.post("/api/experiments/prepare", status_code=201)
     async def prepare_experiment(item: ExperimentPreparation) -> dict[str, Any]:

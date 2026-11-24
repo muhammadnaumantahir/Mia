@@ -101,13 +101,14 @@ def build_attribution(store: ObservatoryStore, experiment_id: str,
                         "days_without_evidence_inside_window": skipped,
                         "changes": changes, "unknown_factors": unknown})
 
-    samples: dict[str, dict[int, float]] = {}
+    samples: dict[str, dict[int, tuple[float, str]]] = {}
     for sample in store.list_metrics():
         if sample["experiment_id"] != experiment_id:
             continue
         if metric_names and sample["metric_name"] not in metric_names:
             continue
-        samples.setdefault(sample["metric_name"], {})[sample["day_index"]] = sample["value"]
+        samples.setdefault(sample["metric_name"], {})[sample["day_index"]] = (
+            sample["value"], sample["sample_id"])
 
     metrics: dict[str, list[dict[str, Any]]] = {}
     for name, per_day in sorted(samples.items()):
@@ -129,8 +130,9 @@ def build_attribution(store: ObservatoryStore, experiment_id: str,
             else:
                 status = "confounded_multiple_candidates"
             rows.append({"from_day": earlier, "to_day": later,
-                         "from_value": per_day[earlier], "to_value": per_day[later],
-                         "delta": per_day[later] - per_day[earlier],
+                         "from_value": per_day[earlier][0], "to_value": per_day[later][0],
+                         "from_sample_id": per_day[earlier][1], "to_sample_id": per_day[later][1],
+                         "delta": per_day[later][0] - per_day[earlier][0],
                          "days_without_evidence_inside_window": sorted(
                              d for w in span for d in w["days_without_evidence_inside_window"]),
                          "unknown_factors_in_window": unknown,
