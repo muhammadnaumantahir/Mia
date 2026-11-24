@@ -724,6 +724,12 @@ class ObservatoryStore:
             item["payload"] = payload
             events.append(item)
             event_counts[item["event_type"]] = event_counts.get(item["event_type"], 0) + 1
+            if item["event_type"] == "daily_snapshot_skipped_paused":
+                # An owner-paused day is explained by its own event: explicit, not unaccounted.
+                paused_day = item.get("day_index")
+                if (isinstance(paused_day, int) and not isinstance(paused_day, bool)
+                        and 1 <= paused_day <= int(experiment["planned_days"])):
+                    unavailable_days.add(paused_day)
             if item["event_type"] == "daily_snapshots_unavailable":
                 days = payload.get("missing_day_indices", [])
                 if isinstance(days, list):
@@ -949,6 +955,39 @@ class ObservatoryStore:
             rows = db.execute(
                 "SELECT * FROM events ORDER BY occurred_at DESC LIMIT ?",
                 (safe_limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def find_events(
+        self,
+        event_types: tuple[str, ...] | list[str],
+        *,
+        experiment_id: str | None = None,
+        day_index: int | None = None,
+        since: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Newest-first events of the given types, optionally narrowed (read-only)."""
+        types = list(event_types)
+        if not types:
+            return []
+        clauses = [f"event_type IN ({','.join('?' for _ in types)})"]
+        params: list[Any] = list(types)
+        if experiment_id is not None:
+            clauses.append("experiment_id = ?")
+            params.append(experiment_id)
+        if day_index is not None:
+            clauses.append("day_index = ?")
+            params.append(day_index)
+        if since is not None:
+            clauses.append("occurred_at >= ?")
+            params.append(since)
+        params.append(max(1, min(int(limit), 1000)))
+        with self._connection() as db:
+            rows = db.execute(
+                f"SELECT * FROM events WHERE {' AND '.join(clauses)} "
+                "ORDER BY occurred_at DESC, rowid DESC LIMIT ?",
+                params,
             ).fetchall()
         return [dict(row) for row in rows]
 

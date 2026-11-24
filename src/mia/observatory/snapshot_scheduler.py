@@ -4,14 +4,32 @@ from __future__ import annotations
 
 import asyncio
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 from .snapshot_capture import ExperimentSnapshotCapturer, SnapshotCaptureError
 from .store import ObservatoryStore
 
+PAUSED_EVENT = "daily_snapshot_scheduler_paused"
+RESUMED_EVENT = "daily_snapshot_scheduler_resumed"
+SKIPPED_PAUSED_EVENT = "daily_snapshot_skipped_paused"
+TELEMETRY_DEFERRED_EVENT = "daily_snapshot_deferred_telemetry_unavailable"
+NOOP_DAY_EVENT = "daily_snapshot_scheduler_noop_day"
+
+
+class SchedulerNotEnabledError(RuntimeError):
+    """Pause/resume only make sense for a scheduler the owner opted in to."""
+
 
 class ExperimentSnapshotScheduler:
-    """Capture due snapshots while Mia is running, without inventing missed days."""
+    """Capture due snapshots while Mia is running, without inventing missed days.
+
+    Every day the scheduler could not or did not capture leaves an explicit, durable event
+    (failed, deferred for resource pressure or missing telemetry, skipped while paused, a
+    no-op day with nothing running) so a gap in the evidence is never silent. Days Mia was not
+    running are recorded by the capturer at the next capture. Pause state is the newest
+    paused/resumed event, so it survives restarts and shows in the audit trail.
+    """
 
     def __init__(
         self,
@@ -42,10 +60,52 @@ class ExperimentSnapshotScheduler:
         self._last_attempt: dict[str, float] = {}
         self._stop_event: asyncio.Event | None = None
         self._task: asyncio.Task[None] | None = None
+        self._noop_day: str | None = None
+
+    # ---- owner pause / resume (durable: the newest paused/resumed event wins) -------------
+
+    def _latest_pause_event(self) -> dict[str, Any] | None:
+        events = self.observatory.find_events((PAUSED_EVENT, RESUMED_EVENT), limit=1)
+        return events[0] if events else None
+
+    @property
+    def paused(self) -> bool:
+        latest = self._latest_pause_event()
+        return latest is not None and latest["event_type"] == PAUSED_EVENT
+
+    def pause(self) -> bool:
+        """Pause capture. Returns False if it was already paused. Needs an opted-in scheduler."""
+        return self._set_paused(True)
+
+    def resume(self) -> bool:
+        """Resume capture. Returns False if it was not paused."""
+        return self._set_paused(False)
+
+    def _set_paused(self, paused: bool) -> bool:
+        if not self.enabled:
+            raise SchedulerNotEnabledError(
+                "The daily snapshot scheduler is not enabled (opt in with MIA_EXPERIMENT_AUTO_CAPTURE=true)"
+            )
+        if self.paused == paused:
+            return False
+        self.observatory.record_event(
+            category="experiment",
+            event_type=PAUSED_EVENT if paused else RESUMED_EVENT,
+            summary="Owner paused automatic daily snapshots" if paused
+            else "Owner resumed automatic daily snapshots",
+            outcome="paused" if paused else "resumed",
+            layer_id="SPS-09",
+            payload={"source": "owner"},
+        )
+        return True
 
     def status(self) -> dict[str, Any]:
+        latest = self._latest_pause_event()
+        paused = latest is not None and latest["event_type"] == PAUSED_EVENT
         return {
             "enabled": self.enabled,
+            "paused": paused,
+            "paused_at": latest["occurred_at"] if paused else None,
             "running": self._task is not None and not self._task.done(),
             "interval_seconds": self.interval_seconds,
             "retry_seconds": self.retry_seconds,
@@ -59,12 +119,19 @@ class ExperimentSnapshotScheduler:
             return []
         outcomes: list[dict[str, Any]] = []
         experiments = self.observatory.list_experiments()
-        for experiment in experiments:
-            if experiment["status"] != "running":
-                continue
+        paused = self.paused
+        running = [item for item in experiments if item["status"] == "running"]
+        if not running and not paused:
+            self._record_noop_day()
+        for experiment in running:
             experiment_id = experiment["experiment_id"]
             due = self.observatory.get_snapshot_status(experiment_id)
             if due is None or not due["due"]:
+                continue
+            if paused:
+                self._record_skipped_paused(experiment_id, due["day_index"])
+                outcomes.append({"experiment_id": experiment_id, "status": "paused",
+                                 "day_index": due["day_index"]})
                 continue
             now = time.monotonic()
             last_attempt = self._last_attempt.get(experiment_id)
@@ -77,6 +144,16 @@ class ExperimentSnapshotScheduler:
                 cpu = float(resources["cpu_percent"])
                 memory = float(resources["memory_percent"])
             except (RuntimeError, OSError, ValueError, KeyError, TypeError) as exc:
+                self.observatory.record_event(
+                    category="experiment",
+                    event_type=TELEMETRY_DEFERRED_EVENT,
+                    summary=f"Daily capture deferred on Day {due['day_index']}: resource telemetry unavailable",
+                    outcome="deferred",
+                    day_index=due["day_index"],
+                    experiment_id=experiment_id,
+                    layer_id="SPS-09",
+                    payload={"error_type": type(exc).__name__},
+                )
                 outcomes.append({
                     "experiment_id": experiment_id,
                     "status": "deferred",
@@ -141,6 +218,39 @@ class ExperimentSnapshotScheduler:
                     "snapshot_id": result["snapshot_id"],
                 })
         return outcomes
+
+    def _record_skipped_paused(self, experiment_id: str, day_index: int) -> None:
+        """One explicit record per experiment-day, however often the loop checks."""
+        if self.observatory.find_events(
+            (SKIPPED_PAUSED_EVENT,), experiment_id=experiment_id, day_index=day_index, limit=1
+        ):
+            return
+        self.observatory.record_event(
+            category="experiment",
+            event_type=SKIPPED_PAUSED_EVENT,
+            summary=f"Day {day_index} snapshot not captured: automatic capture is paused",
+            outcome="skipped",
+            day_index=day_index,
+            experiment_id=experiment_id,
+            layer_id="SPS-09",
+            payload={"reason": "owner_paused"},
+        )
+
+    def _record_noop_day(self) -> None:
+        """One explicit no-op record per UTC day when the scheduler ran with nothing to capture."""
+        today = datetime.now(UTC).date().isoformat()
+        if self._noop_day == today:
+            return
+        if not self.observatory.find_events((NOOP_DAY_EVENT,), since=today, limit=1):
+            self.observatory.record_event(
+                category="experiment",
+                event_type=NOOP_DAY_EVENT,
+                summary="Scheduler active; no running experiment, so nothing to capture today",
+                outcome="no_op",
+                layer_id="SPS-09",
+                payload={"date_utc": today, "running_experiments": 0},
+            )
+        self._noop_day = today
 
     async def run(self) -> None:
         """Run until FastAPI shuts down; only active, explicitly-started experiments qualify."""

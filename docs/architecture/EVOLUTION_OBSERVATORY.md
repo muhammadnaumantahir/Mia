@@ -96,6 +96,33 @@ there is no explicitly running experiment, and never fills missed days with
 invented records. The manual dashboard capture remains available.
 
 
+### Pause, resume and explicit day records (MIA-OBS-03)
+
+`POST /api/experiments/scheduler/pause` and `/resume` (409 unless the scheduler was opted in with
+`MIA_EXPERIMENT_AUTO_CAPTURE=true`) let the owner stop and restart automatic capture without
+restarting Mia. `GET /api/experiments/scheduler/status` now reports `paused` and `paused_at`. Pause state
+is the newest `daily_snapshot_scheduler_paused` / `_resumed` event, so it survives restarts and is its own
+audit trail; repeating a pause or resume records nothing. While paused the scheduler does no telemetry or
+capture work.
+
+Every day the scheduler does not capture leaves an explicit event:
+
+| Situation | Event (outcome) |
+| --- | --- |
+| Owner paused | `daily_snapshot_skipped_paused` (skipped), once per experiment-day |
+| CPU/RAM over the limit | `daily_snapshot_deferred_resource_pressure` (deferred) |
+| CPU/RAM telemetry unavailable | `daily_snapshot_deferred_telemetry_unavailable` (deferred; error type only, never its text) |
+| Capture failed | `daily_snapshot_auto_capture_failed` (failed) |
+| Mia was not running | `daily_snapshots_unavailable`, written at the next capture |
+| Scheduler on, nothing running | `daily_snapshot_scheduler_noop_day` (no_op), once per UTC day, restart-safe |
+
+The final report lists a paused day under `days.unavailable` (explained), not `days.unaccounted`. A paused day
+that is captured after resume is simply recorded. Captures are idempotent: repeated or concurrent checks
+record each day once and never log a false failure. Network: the capture path itself opens no sockets (a test
+blocks them); the injected baseline capture runs local tools only, and this is not a claim about third-party
+code. Limits: no scheduled pause windows, no per-experiment pause, and a day lost to a deferral or failure that is
+never retried before the window closes is still reported as unaccounted rather than guessed.
+
 ## Final experiment report
 
 The read-only report endpoint is GET /api/experiments/{experiment_id}/report.

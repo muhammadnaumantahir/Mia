@@ -132,7 +132,7 @@ from mia.voice.wake_transport import register_wake_routes, websocket_runtime_ava
 
 from .baseline import BaselineCaptureError, capture_baseline_manifest
 from .snapshot_capture import ExperimentSnapshotCapturer, SnapshotCaptureError
-from .snapshot_scheduler import ExperimentSnapshotScheduler
+from .snapshot_scheduler import ExperimentSnapshotScheduler, SchedulerNotEnabledError
 from .store import ObservatoryStore
 from .usage_dashboard import build_usage_dashboard
 
@@ -2211,6 +2211,23 @@ def create_app(
     @app.get("/api/experiments/scheduler/status")
     def experiment_scheduler_status() -> dict[str, Any]:
         return experiment_snapshot_scheduler.status()
+
+    def _scheduler_toggle(pause: bool) -> dict[str, Any]:
+        try:
+            changed = (experiment_snapshot_scheduler.pause() if pause
+                       else experiment_snapshot_scheduler.resume())
+        except SchedulerNotEnabledError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {"changed": changed, **experiment_snapshot_scheduler.status()}
+
+    @app.post("/api/experiments/scheduler/pause")
+    def experiment_scheduler_pause() -> dict[str, Any]:
+        """Owner pause of automatic daily snapshots; persisted and recorded as an event."""
+        return _scheduler_toggle(True)
+
+    @app.post("/api/experiments/scheduler/resume")
+    def experiment_scheduler_resume() -> dict[str, Any]:
+        return _scheduler_toggle(False)
 
     @app.post("/api/experiments/{experiment_id}/snapshots", status_code=410)
     def reject_client_supplied_snapshot(experiment_id: str) -> None:
