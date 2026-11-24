@@ -8,7 +8,7 @@ import sqlite3
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -320,6 +320,29 @@ class ObservatoryStore:
             )
             if cursor.rowcount != 1:
                 raise ValueError("experiment is missing or is not in prepared state")
+
+    def stop_experiment(self, experiment_id: str) -> dict[str, Any]:
+        """Owner ends a running experiment early. Terminal; never reported as completed."""
+        stopped_at = utc_now()
+        with self._connection() as db:
+            cursor = db.execute(
+                """
+                UPDATE experiments
+                SET status = 'stopped', completed_at = ?
+                WHERE experiment_id = ? AND status = 'running'
+                """,
+                (stopped_at, experiment_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("experiment is missing or is not running")
+            recorded = [
+                int(row["day_index"]) for row in db.execute(
+                    "SELECT day_index FROM daily_snapshots WHERE experiment_id = ? ORDER BY day_index",
+                    (experiment_id,),
+                ).fetchall()
+            ]
+        return {"experiment_id": experiment_id, "status": "stopped", "stopped_at": stopped_at,
+                "recorded_days": recorded}
 
     def record_daily_snapshot(
         self,
@@ -761,7 +784,19 @@ class ObservatoryStore:
         captured_daily_days = set(recorded_days).difference({0})
         missing_days = set(range(1, planned_days + 1)).difference(captured_daily_days)
         unavailable_days.intersection_update(missing_days)
-        unaccounted_days = sorted(missing_days.difference(unavailable_days))
+        not_run_after_stop: list[int] = []
+        if str(experiment["status"]) == "stopped" and experiment["started_at"] and experiment["completed_at"]:
+            # Days whose 24-hour capture window had not opened when the owner stopped were never
+            # missed: they are "not run", not lost evidence.
+            started = datetime.fromisoformat(str(experiment["started_at"]))
+            stopped = datetime.fromisoformat(str(experiment["completed_at"]))
+            not_run_after_stop = sorted(
+                day for day in missing_days if started + timedelta(days=day) > stopped
+            )
+            unavailable_days.difference_update(not_run_after_stop)
+        unaccounted_days = sorted(
+            missing_days.difference(unavailable_days).difference(not_run_after_stop)
+        )
         final_snapshot = next(
             (item for item in snapshots if item["day_index"] == planned_days),
             None,
@@ -818,6 +853,8 @@ class ObservatoryStore:
             conclusion = "completed"
         elif status == "incomplete":
             conclusion = "incomplete"
+        elif status == "stopped":
+            conclusion = "stopped_by_owner"
         elif status == "running":
             conclusion = "in_progress"
         else:
@@ -834,7 +871,7 @@ class ObservatoryStore:
                 "started_at": experiment["started_at"],
                 "completed_at": experiment["completed_at"],
             },
-            "report_ready": status in {"completed", "incomplete"},
+            "report_ready": status in {"completed", "incomplete", "stopped"},
             "baseline": {
                 "captured_at": baseline_row["captured_at"],
                 "sha256": baseline_row["manifest_sha256"],
@@ -845,6 +882,7 @@ class ObservatoryStore:
                 "missing": sorted(missing_days),
                 "unavailable": sorted(unavailable_days),
                 "unaccounted": unaccounted_days,
+                "not_run_after_stop": not_run_after_stop,
                 "latest_recorded": latest_snapshot["day_index"] if latest_snapshot else 0,
                 "final_snapshot_present": final_snapshot is not None,
             },

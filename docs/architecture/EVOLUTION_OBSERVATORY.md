@@ -123,6 +123,37 @@ blocks them); the injected baseline capture runs local tools only, and this is n
 code. Limits: no scheduled pause windows, no per-experiment pause, and a day lost to a deferral or failure that is
 never retried before the window closes is still reported as unaccounted rather than guessed.
 
+### Owner lifecycle: privacy notice, stop and export (MIA-OBS-08)
+
+The software prepares the experiment; the owner starts, pauses, stops and reviews it.
+
+| Control | Endpoint | Behaviour |
+| --- | --- | --- |
+| Read the privacy notice | `GET /api/experiments/privacy-notice` | Every recorded field in plain language, where it is stored, what is never collected, the live resource caps and the controls. |
+| Start | `POST /api/experiments/{id}/start` (optional body `{"privacy_notice_version": 1}`) | Records which notice version the client acknowledged (`null` if none) and the resource caps in force. Not enforced: older clients keep working. |
+| Pause / resume capture | `POST /api/experiments/scheduler/pause` / `resume` | See the scheduler section above. |
+| Stop | `POST /api/experiments/{id}/stop` | Ends a running experiment early. Terminal (`stopped`), evidence kept, conclusion `stopped_by_owner`, never `completed`; capture and restart are refused (409). |
+| Export | `GET /api/experiments/{id}/export` | Downloads a JSON bundle (privacy notice and the hash-verified report). Refuses with 409 if stored evidence fails its hashes. |
+
+**Stopped runs.** Days whose 24-hour capture window had not opened when the owner stopped are reported as
+`days.not_run_after_stop`, not `unaccounted`. A day that was due and not captured is still reported honestly
+(`unaccounted`, or `unavailable` if its pause or offline event explains it).
+
+**Privacy notice accuracy.** The field list is `FIELD_DISCLOSURE` in `experiment_export.py`, and a test runs the
+real baseline and snapshot code and fails if a recorded top-level field is not disclosed, or a disclosed field is not
+recorded. It states, among other things, that the host name, operating system, CPU model and installed package
+versions are recorded, and that conversation text, memory, file contents, credentials and paths are not.
+
+**Verifying an export offline** (no Mia, no network): `python -m mia.observatory.experiment_export verify FILE`.
+It checks the content hash, the Day 0 baseline hash, every snapshot hash, and that every snapshot belongs to the
+recorded baseline. This is an integrity check, not a signature: it detects corruption and edits that leave the bundle
+inconsistent, but someone who rewrites the whole file consistently and recomputes every hash cannot be detected from the
+file alone, and unhashed fields (name, conclusion) are covered only by `content_sha256`. To anchor an export, note the
+`content_sha256` somewhere else when you create it.
+
+Limits: no dashboard buttons yet (OBS-06, A6); stop is per experiment and permanent; pause is global; the privacy
+acknowledgement is recorded but not required; export is not encrypted (use `mia-backup` for the data folder).
+
 ## Final experiment report
 
 The read-only report endpoint is GET /api/experiments/{experiment_id}/report.

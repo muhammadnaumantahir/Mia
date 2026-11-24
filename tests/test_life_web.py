@@ -172,7 +172,10 @@ def test_quiet_hours_block_background_cycles_but_not_owner_requests(tmp_path):
     assert life.list_journal() == []  # nothing started, nothing journaled
     assert runner.status()["quiet_hours_active"] is True
     assert runner.run_cycle("owner")["status"] == "deferred"  # explicit owner request still runs
-    runner.clock = lambda: datetime.now(UTC) + timedelta(minutes=1)
+    # Noon UTC tomorrow: after anything recorded with the real clock, and always outside the default
+    # 22:00-07:00 quiet window (the old "now + 1 minute" failed whenever the suite ran in that window).
+    outside_quiet = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    runner.clock = lambda: outside_quiet
     assert runner.status()["quiet_hours_active"] is False
     assert runner.run_cycle("schedule")["status"] in {"no_op", "deferred", "completed"}
 

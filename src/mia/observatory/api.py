@@ -133,6 +133,7 @@ from mia.voice.wake import offline_wake_word_status
 from mia.voice.wake_transport import register_wake_routes, websocket_runtime_available
 
 from .baseline import BaselineCaptureError, capture_baseline_manifest
+from .experiment_export import build_export, privacy_notice
 from .report_generator import generate_report, render_markdown
 from .snapshot_capture import ExperimentSnapshotCapturer, SnapshotCaptureError
 from .snapshot_scheduler import ExperimentSnapshotScheduler, SchedulerNotEnabledError
@@ -276,6 +277,10 @@ class SpeechSynthesisInput(BaseModel):
 
 
 CHAT_SYSTEM_PROMPT = identity_system_prompt()
+
+
+class ExperimentStartInput(BaseModel):
+    privacy_notice_version: int | None = None
 
 
 class BrainResumeInput(BaseModel):
@@ -2211,12 +2216,20 @@ def create_app(
             "environment": manifest["environment"],
         }
 
+    @app.get("/api/experiments/privacy-notice")
+    def experiment_privacy_notice() -> dict[str, Any]:
+        """What a 30-day run records, where it stays, what is never collected, and the resource caps."""
+        return privacy_notice(experiment_snapshot_scheduler.status())
+
     @app.post("/api/experiments/{experiment_id}/start")
-    def start_experiment(experiment_id: str) -> dict[str, str]:
+    def start_experiment(
+        experiment_id: str, payload: ExperimentStartInput | None = None
+    ) -> dict[str, str]:
         try:
             observatory.start_experiment(experiment_id)
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        caps = privacy_notice(experiment_snapshot_scheduler.status())["resource_caps"]
         observatory.record_event(
             category="experiment",
             event_type="experiment_started",
@@ -2225,9 +2238,51 @@ def create_app(
             day_index=0,
             experiment_id=experiment_id,
             layer_id="SPS-09",
-            payload={"started_by": "local-dashboard"},
+            payload={
+                "started_by": "local-dashboard",
+                # None means the privacy notice was not acknowledged by this client.
+                "privacy_notice_version_acknowledged": payload.privacy_notice_version if payload else None,
+                "resource_caps": caps,
+            },
         )
         return {"experiment_id": experiment_id, "status": "running"}
+
+    @app.post("/api/experiments/{experiment_id}/stop")
+    def stop_experiment(experiment_id: str) -> dict[str, Any]:
+        """Owner ends a running experiment early; terminal, evidence kept, never 'completed'."""
+        try:
+            result = observatory.stop_experiment(experiment_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        observatory.record_event(
+            category="experiment",
+            event_type="experiment_stopped",
+            summary=f"Owner stopped experiment {experiment_id} early",
+            outcome="stopped",
+            experiment_id=experiment_id,
+            layer_id="SPS-09",
+            payload={"stopped_by": "owner", "recorded_days": result["recorded_days"]},
+        )
+        return result
+
+    @app.get("/api/experiments/{experiment_id}/export")
+    def export_experiment(experiment_id: str) -> Response:
+        """Download a verifiable evidence bundle; refuses (409) if stored evidence fails its hashes."""
+        try:
+            report = observatory.build_experiment_report(experiment_id)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=409, detail=f"Not exported: stored evidence failed verification ({exc})"
+            ) from exc
+        if report is None:
+            raise HTTPException(status_code=404, detail="Experiment not found")
+        bundle = build_export(report, privacy_notice(experiment_snapshot_scheduler.status()))
+        safe_id = "".join(ch for ch in experiment_id if ch.isalnum() or ch in "-_")[:64] or "experiment"
+        return Response(
+            content=json.dumps(bundle, ensure_ascii=False, indent=1),
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="mia-experiment-{safe_id}.json"'},
+        )
 
     @app.get("/api/experiments/{experiment_id}/snapshot-status")
     def experiment_snapshot_status(experiment_id: str) -> dict[str, Any]:
