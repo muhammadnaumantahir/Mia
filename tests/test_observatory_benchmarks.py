@@ -4,17 +4,24 @@ import copy
 import dataclasses
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
 from mia.brain.evaluation import BUILTIN_SCENARIOS
 from mia.observatory.benchmarks import (
     NOT_YET_VERSIONED,
+    PYTEST_SUITES,
+    BenchmarkError,
     compare_runs,
+    compare_timing,
     families,
     list_runs,
     record_run,
+    record_timing_run,
     run_all_families,
+    run_pytest_suite,
+    run_timing_benchmark,
     suite_version,
     wilson_interval,
 )
@@ -118,6 +125,111 @@ def test_items_that_flipped_are_named_even_when_the_overall_rate_hides_it():
     assert swap["items_now_failing"] == ["a"] and swap["items_now_passing"] == ["b"]
 
 
-def test_families_without_a_versioned_benchmark_are_listed_with_reasons():
-    assert {"voice", "latency", "cost", "resource_use", "live_model_quality"} <= set(NOT_YET_VERSIONED)
-    assert all(NOT_YET_VERSIONED.values())
+def test_only_live_model_quality_is_left_to_the_owner():
+    assert set(NOT_YET_VERSIONED) == {"live_model_quality"}
+    assert "live_eval" in NOT_YET_VERSIONED["live_model_quality"]
+
+
+# ---- closing OBS-05: test-file suites, timing/memory benchmark ----------------------------------
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _tiny_repo(tmp_path, *, body="def test_a():\n    assert True\n\ndef test_b():\n    assert False\n"):
+    (tmp_path / "t.py").write_text(body, encoding="utf-8")
+    return tmp_path
+
+
+def test_every_pytest_suite_file_exists_and_is_not_a_browser_test():
+    for family, files in PYTEST_SUITES.items():
+        for name in files:
+            text = (ROOT / name).read_text(encoding="utf-8")
+            assert "chromium" not in text and "sync_playwright" not in text, (family, name)
+
+
+def test_pytest_suite_runs_real_tests_and_records_per_item_outcomes(tmp_path, monkeypatch):
+    repo = _tiny_repo(tmp_path)
+    monkeypatch.setitem(PYTEST_SUITES, "voice", ("t.py",))
+    run = run_pytest_suite("voice", repo, commit="abc")
+    assert (run["passed"], run["total"], run["suite_id"]) == (1, 2, "mia-tests-voice")
+    assert sorted(run["items"].values()) == [False, True] and run["conditions"]["commit"] == "abc"
+
+
+def test_pytest_suite_version_changes_with_the_test_files(tmp_path, monkeypatch):
+    monkeypatch.setitem(PYTEST_SUITES, "voice", ("t.py",))
+    first = run_pytest_suite("voice", _tiny_repo(tmp_path))["suite_version"]
+    (tmp_path / "t.py").write_text("def test_a():\n    assert True\n", encoding="utf-8")
+    assert run_pytest_suite("voice", tmp_path)["suite_version"] != first
+
+
+def test_a_suite_that_cannot_run_records_nothing_instead_of_zero(tmp_path, monkeypatch):
+    monkeypatch.setitem(PYTEST_SUITES, "voice", ("t.py",))
+    repo = _tiny_repo(tmp_path)
+
+    def crashed(*args, **kwargs):  # never writes the junit file
+        return subprocess.CompletedProcess(args, 2, "", "boom")
+
+    with pytest.raises(BenchmarkError):
+        run_pytest_suite("voice", repo, runner=crashed)
+    monkeypatch.setitem(PYTEST_SUITES, "voice", ("missing.py",))
+    with pytest.raises(BenchmarkError, match="missing"):
+        run_pytest_suite("voice", repo)
+    (tmp_path / "empty.py").write_text("x = 1\n", encoding="utf-8")
+    monkeypatch.setitem(PYTEST_SUITES, "voice", ("empty.py",))
+    with pytest.raises(BenchmarkError, match="no tests"):
+        run_pytest_suite("voice", repo)
+
+
+def test_pytest_suite_runs_compare_like_any_other_run(tmp_path, monkeypatch):
+    monkeypatch.setitem(PYTEST_SUITES, "voice", ("t.py",))
+    repo = _tiny_repo(tmp_path)
+    a, b = run_pytest_suite("voice", repo), run_pytest_suite("voice", repo)
+    assert compare_runs(a, b)["comparable"] and compare_runs(a, b)["verdict"] == "no clear difference"
+
+
+def _timing(median, lo, hi, *, env="host-a", repeats=5, version="sha256:v"):
+    return {"suite_id": "mia-scripted-pipeline-timing", "suite_version": version,
+            "evidence": "timing_scripted_workload",
+            "conditions": {"models": [], "environment": env, "repeats": repeats},
+            "median_ms": median, "min_ms": lo, "max_ms": hi, "median_peak_python_kib": 150.0}
+
+
+def test_timing_benchmark_reports_the_spread_and_needs_repeats():
+    run = run_timing_benchmark(BUILTIN_SCENARIOS[:3], repeats=3, commit="c")
+    assert len(run["timings_ms"]) == len(run["peak_python_kib"]) == 3
+    assert run["min_ms"] <= run["median_ms"] <= run["max_ms"] and run["median_peak_python_kib"] > 0
+    assert run["conditions"]["environment"]["python"] and "not model latency" in run["note"]
+    with pytest.raises(ValueError):
+        run_timing_benchmark(repeats=1)
+
+
+def test_timing_is_compared_only_in_equal_environments_and_with_noise_tolerance():
+    base = _timing(100, 95, 110)
+    assert compare_timing(base, _timing(105, 99, 112))["verdict"] == "no clear difference"
+    assert compare_timing(base, _timing(200, 180, 240))["verdict"] == "slower"
+    assert compare_timing(_timing(200, 180, 240), base)["verdict"] == "faster"
+    overlap = compare_timing(base, _timing(140, 90, 200))  # one repeat as fast as the baseline's
+    assert overlap["verdict"] == "no clear difference"
+    for other, why in ((_timing(100, 95, 110, env="host-b"), "environment"),
+                       (_timing(100, 95, 110, repeats=3), "repeats"),
+                       (_timing(100, 95, 110, version="sha256:w"), "suite version")):
+        result = compare_timing(base, other)
+        assert result["comparable"] is False and why in " ".join(result["reasons"])
+
+
+def test_timing_runs_are_recorded_with_metrics(tmp_path):
+    store = ObservatoryStore(tmp_path / "o.sqlite3")
+    run = run_timing_benchmark(BUILTIN_SCENARIOS[:2], repeats=2)
+    record_timing_run(store, run, day_index=1)
+    metrics = {m["metric_name"]: m for m in store.list_metrics()}
+    assert metrics["pipeline_median_ms"]["unit"] == "ms"
+    assert metrics["pipeline_peak_python_kib"]["unit"] == "kib"
+
+
+def test_skipped_tests_are_counted_as_skipped_not_as_passes(tmp_path, monkeypatch):
+    monkeypatch.setitem(PYTEST_SUITES, "voice", ("t.py",))
+    repo = _tiny_repo(tmp_path, body=(
+        "import pytest\n\ndef test_a():\n    assert True\n\n"
+        "@pytest.mark.skip(reason='x')\ndef test_b():\n    assert False\n"))
+    run = run_pytest_suite("voice", repo)
+    assert (run["passed"], run["total"], run["skipped"]) == (1, 1, 1)

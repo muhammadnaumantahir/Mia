@@ -67,6 +67,10 @@ METRIC_DEFINITIONS: dict[str, MetricDefinition] = {m.name: m for m in (
     _d("benchmark_pass_rate", "percent", "Passed / total items of one versioned benchmark suite run.",
        "one value per recorded benchmark run", "benchmark runner", maximum=100.0,
        missing_when="the run had no items (the rate is undefined, not 0)"),
+    _d("pipeline_median_ms", "ms", "Median wall time of the fixed scripted pipeline workload.",
+       "median of repeated runs per recorded timing benchmark", "timing benchmark"),
+    _d("pipeline_peak_python_kib", "kib", "Median Python-heap peak while running the scripted workload.",
+       "median of repeated runs per recorded timing benchmark", "timing benchmark (tracemalloc)"),
     _d("baseline_checks_passed", "checks", "Foundation baseline checks that passed.",
        "one value per baseline run", "foundation benchmark"),
 )}

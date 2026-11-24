@@ -132,3 +132,21 @@ def test_an_unavailable_capability_source_never_produces_a_rollback_claim(tmp_pa
     store, eid = _experiment(tmp_path)
     _day(store, eid, 1, transitions={"rolled_back": 3}, cap_available=False, cpu_percent=10.0)
     assert generate_report(store, eid)["rollbacks"]["days_with_rollbacks"] == []
+
+
+def test_timing_runs_appear_in_the_report_and_are_compared_only_when_comparable(tmp_path):
+    from mia.brain.evaluation import BUILTIN_SCENARIOS
+    from mia.observatory.benchmarks import record_timing_run, run_timing_benchmark
+    store, eid = _experiment(tmp_path)
+    _day(store, eid, 1, cpu_percent=10.0)
+    record_timing_run(store, run_timing_benchmark(BUILTIN_SCENARIOS[:2], repeats=2),
+                      day_index=1, experiment_id=eid)
+    one = generate_report(store, eid)
+    assert one["timing"]["first_vs_last"]["reasons"] == ["fewer than two timing runs"]
+    assert one["sample_sizes"]["timing_runs"] == 1
+    _day(store, eid, 2, cpu_percent=11.0)
+    record_timing_run(store, run_timing_benchmark(BUILTIN_SCENARIOS[:2], repeats=2),
+                      day_index=2, experiment_id=eid)
+    two = generate_report(store, eid)
+    assert len(two["timing"]["runs"]) == 2 and two["timing"]["first_vs_last"]["comparable"]
+    assert "pipeline timing: 2 run(s)" in render_markdown(two)

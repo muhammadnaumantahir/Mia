@@ -15,13 +15,15 @@ import json
 from typing import Any
 
 from .attribution import build_attribution
-from .benchmarks import SMALL_SAMPLE, compare_runs
+from .benchmarks import SMALL_SAMPLE, compare_runs, compare_timing
 from .store import ObservatoryStore
 
 REPORT_SCHEMA_VERSION = 1
 
 LIMITATIONS = (
-    "Scripted benchmark results describe Mia's own pipeline, not the quality of any live model.",
+    "Scripted benchmark, voice-suite, cost-accounting and timing results describe Mia's own "
+    "pipeline with fakes, not the quality, speed or cost of any live model.",
+    "Timing depends on other load on the host and is compared only across identical environments.",
     "Metric changes are correlated with recorded changes only; no causal claim is made.",
     "Capability registry counts are window counts, not linked to this experiment's ID.",
     "Model/provider and dependency-version changes are compared only where both sides of a window "
@@ -45,7 +47,8 @@ def _sample_sizes(base: dict[str, Any], benchmark_runs: dict[str, list[dict[str,
     suites = {sid: {"runs": len(runs), "items_in_latest_run": runs[-1]["total"],
                     "small_sample": runs[-1]["total"] < SMALL_SAMPLE}
               for sid, runs in sorted(benchmark_runs.items())}
-    return {"daily_snapshots": len([s for s in base["snapshots"] if s["day_index"] > 0]),
+    return {"timing_runs": len(_timing_runs(base)),
+            "daily_snapshots": len([s for s in base["snapshots"] if s["day_index"] > 0]),
             "planned_days": base["experiment"]["planned_days"], "metrics": metrics,
             "benchmarks": suites, "small_sample_threshold": SMALL_SAMPLE}
 
@@ -57,6 +60,20 @@ def _benchmarks(base: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
             runs.setdefault(event["payload"]["suite_id"], []).append(
                 {**event["payload"], "event_id": event["event_id"], "day_index": event["day_index"]})
     return runs
+
+
+def _timing_runs(base: dict[str, Any]) -> list[dict[str, Any]]:
+    return [{**e["payload"], "event_id": e["event_id"], "day_index": e["day_index"]}
+            for e in base["events"] if e["event_type"] == "benchmark_timing_run"]
+
+
+def _timing_section(runs: list[dict[str, Any]]) -> dict[str, Any]:
+    return {"runs": [{"event_id": r["event_id"], "day_index": r["day_index"],
+                      "median_ms": r["median_ms"], "min_ms": r["min_ms"], "max_ms": r["max_ms"],
+                      "repeats": r["conditions"]["repeats"],
+                      "median_peak_python_kib": r["median_peak_python_kib"]} for r in runs],
+            "first_vs_last": (compare_timing(runs[0], runs[-1]) if len(runs) > 1 else
+                              {"comparable": False, "reasons": ["fewer than two timing runs"]})}
 
 
 def _benchmark_section(runs: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
@@ -134,6 +151,7 @@ def generate_report(store: ObservatoryStore, experiment_id: str) -> dict[str, An
         "attribution_limits": {"not_attributable": attribution["not_attributable"],
                                "unobserved_factors": attribution["unobserved_factors"]},
         "benchmarks": _benchmark_section(runs),
+        "timing": _timing_section(_timing_runs(base)),
         "rollbacks": _rollbacks(base),
         "confounders": _confounders(base, attribution),
         "limitations": list(LIMITATIONS),
@@ -183,6 +201,12 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- {suite}: {len(info['runs'])} run(s); first vs last: {verdict}")
     if not report["benchmarks"]:
         lines.append("- no benchmark runs recorded")
+    timing = report["timing"]
+    if timing["runs"]:
+        t = timing["first_vs_last"]
+        verdict = t.get("verdict") if t.get("comparable") else "not comparable: " + "; ".join(
+            t["reasons"])
+        lines.append(f"- pipeline timing: {len(timing['runs'])} run(s); first vs last: {verdict}")
     rb = report["rollbacks"]["days_with_rollbacks"]
     lines += ["", "## Rollbacks", "", f"- {rb or 'none recorded'} ({report['rollbacks']['note']})",
               "", "## Confounders", ""] + [f"- {x}" for x in report["confounders"]]

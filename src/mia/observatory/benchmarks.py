@@ -17,6 +17,17 @@ import dataclasses
 import hashlib
 import json
 import math
+import os
+import platform
+import statistics
+import subprocess
+import sys
+import tempfile
+import time
+import tracemalloc
+import xml.etree.ElementTree as ET
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from mia.brain.evaluation import BUILTIN_SCENARIOS, Scenario, run_scenario
@@ -37,14 +48,28 @@ FAMILY_OF_CATEGORY = {
     "provider-failure": "gateway", "judges": "gateway", "baseline": "gateway",
 }
 
-# Families the roadmap names that have no versioned benchmark yet, with the honest reason.
-NOT_YET_VERSIONED = {
-    "voice": "covered by browser tests that pass or fail; no scored, versioned voice benchmark yet",
-    "latency": "recorded per daily snapshot (inference_latency_*_ms); no fixed benchmark workload",
-    "cost": "recorded per daily snapshot (inference_cost_usd); no fixed benchmark workload",
-    "resource_use": "recorded per daily snapshot (cpu_percent, memory_percent); no fixed workload",
-    "live_model_quality": "opt-in `python -m mia.brain.live_eval` smoke check only; owner-run",
+# Deterministic test files used as versioned benchmark suites (browser/Chromium tests excluded).
+PYTEST_SUITES: dict[str, tuple[str, ...]] = {
+    "voice": ("tests/test_voice_stt.py", "tests/test_voice_tts.py", "tests/test_voice_api.py",
+              "tests/test_voice_language_latency.py", "tests/test_voice_language_selection.py",
+              "tests/test_voice_wake.py", "tests/test_voice_wake_wiring.py",
+              "tests/test_assistant_voice_language.py"),
+    "cost": ("tests/test_gateway_budget.py",),
 }
+
+# Families the roadmap names that have no automated benchmark, with the honest reason.
+NOT_YET_VERSIONED = {
+    "live_model_quality": "needs the owner's real models: run `python -m mia.brain.live_eval` "
+                          "(a five-probe smoke check, owner-run by design)",
+}
+
+SUITE_NOTES = {
+    "voice": "server-side voice/STT/TTS/wake behaviour with fakes; no real microphone or speech",
+    "cost": "cost-cap and budget accounting correctness with fakes; not real spending",
+}
+TIMING_SUITE_ID = "mia-scripted-pipeline-timing"
+TIMING_EVIDENCE = "timing_scripted_workload"
+TIMING_TOLERANCE = 0.25
 
 
 def _stable(value: Any) -> Any:
@@ -187,3 +212,145 @@ def compare_runs(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[st
                  "(code, config, models), not evidence of its cause. Scripted scenarios say "
                  "nothing about live-model quality."),
     }
+
+
+class BenchmarkError(RuntimeError):
+    """A benchmark could not produce a trustworthy result; nothing should be recorded."""
+
+
+def _files_version(root: Path, files: tuple[str, ...]) -> str:
+    digest = hashlib.sha256()
+    for name in sorted(files):
+        path = root / name
+        if not path.is_file():
+            raise BenchmarkError(f"benchmark file missing: {name}")
+        digest.update(name.encode("utf-8") + b"\0" + hashlib.sha256(path.read_bytes()).digest())
+    return "sha256:" + digest.hexdigest()
+
+
+def _parse_junit(path: Path) -> tuple[dict[str, bool], int]:
+    root = ET.parse(path).getroot()
+    items: dict[str, bool] = {}
+    skipped = 0
+    for case in root.iter("testcase"):
+        if case.find("skipped") is not None:
+            skipped += 1
+            continue
+        failed = case.find("failure") is not None or case.find("error") is not None
+        items[f"{case.get('classname', '')}::{case.get('name', '')}"] = not failed
+    return items, skipped
+
+
+def run_pytest_suite(family: str, root: Path, *, commit: str | None = None,
+                     runner: Callable[..., Any] | None = None,
+                     timeout_seconds: int = 900) -> dict[str, Any]:
+    """Run a fixed set of deterministic test files as one versioned benchmark suite."""
+    files = PYTEST_SUITES[family]
+    version = _files_version(root, files)
+    runner = runner or subprocess.run
+    with tempfile.TemporaryDirectory() as tmp:
+        report = Path(tmp) / "junit.xml"
+        try:
+            runner([sys.executable, "-m", "pytest", *files, "-q", "-p", "no:cacheprovider",
+                    f"--junitxml={report}"], cwd=root, capture_output=True, text=True,
+                   timeout=timeout_seconds, check=False)
+            items, skipped = _parse_junit(report)
+        except (OSError, subprocess.TimeoutExpired, ET.ParseError) as exc:
+            raise BenchmarkError(f"suite {family} produced no usable result: {type(exc).__name__}"
+                                 ) from exc
+    if not items:
+        raise BenchmarkError(f"suite {family} ran no tests")
+    return {"schema_version": BENCHMARK_SCHEMA_VERSION, "suite_id": f"mia-tests-{family}",
+            "suite_version": version, "family": family, "evidence": "pytest_suite",
+            "note": SUITE_NOTES[family], "conditions": {"models": [], "commit": commit},
+            "passed": sum(items.values()), "total": len(items), "skipped": skipped,
+            "items": dict(sorted(items.items()))}
+
+
+# ---- timing and memory of a fixed scripted workload ----------------------------------------
+
+def _environment() -> dict[str, Any]:
+    return {"python": platform.python_version(), "platform": platform.platform(),
+            "machine": platform.machine(), "cpu_count": os.cpu_count()}
+
+
+def run_timing_benchmark(scenarios: tuple[Scenario, ...] = BUILTIN_SCENARIOS, *, repeats: int = 5,
+                         commit: str | None = None) -> dict[str, Any]:
+    """Time the whole scripted workload several times; report the spread, not one number."""
+    if repeats < 2:
+        raise ValueError("timing needs at least two repeats to show any spread")
+
+    async def workload() -> None:
+        for scenario in scenarios:
+            await run_scenario(scenario)
+
+    timings, peaks = [], []
+    for _ in range(repeats):
+        tracemalloc.start()
+        started = time.perf_counter()
+        asyncio.run(workload())
+        timings.append((time.perf_counter() - started) * 1000.0)
+        peaks.append(tracemalloc.get_traced_memory()[1] / 1024.0)
+        tracemalloc.stop()
+    return {"schema_version": BENCHMARK_SCHEMA_VERSION, "suite_id": TIMING_SUITE_ID,
+            "suite_version": suite_version(list(scenarios)), "family": "pipeline_timing",
+            "evidence": TIMING_EVIDENCE,
+            "conditions": {"models": [], "commit": commit, "environment": _environment(),
+                           "repeats": repeats},
+            "timings_ms": [round(t, 3) for t in timings],
+            "peak_python_kib": [round(p, 1) for p in peaks],
+            "median_ms": round(statistics.median(timings), 3),
+            "min_ms": round(min(timings), 3), "max_ms": round(max(timings), 3),
+            "median_peak_python_kib": round(statistics.median(peaks), 1),
+            "note": ("Wall time and Python-heap peak of Mia's own scripted pipeline on this host "
+                     "(tracemalloc: Python allocations only). Measures pipeline overhead, not "
+                     "model latency or cost.")}
+
+
+def compare_timing(baseline: dict[str, Any], candidate: dict[str, Any],
+                   tolerance: float = TIMING_TOLERANCE) -> dict[str, Any]:
+    """Timing is noisy: 'slower'/'faster' only when every repeat of one side is beyond the other."""
+    reasons = []
+    for key, label in (("suite_id", "suite"), ("suite_version", "suite version"),
+                       ("evidence", "kind of evidence")):
+        if baseline.get(key) != candidate.get(key):
+            reasons.append(f"different {label}")
+    if baseline["conditions"].get("environment") != candidate["conditions"].get("environment"):
+        reasons.append("different host or Python environment")
+    if baseline["conditions"].get("repeats") != candidate["conditions"].get("repeats"):
+        reasons.append("different number of repeats")
+    if reasons:
+        return {"comparable": False, "reasons": reasons,
+                "note": "Timings under different conditions are never compared."}
+    if candidate["min_ms"] > baseline["max_ms"] * (1 + tolerance):
+        verdict = "slower"
+    elif candidate["max_ms"] * (1 + tolerance) < baseline["min_ms"]:
+        verdict = "faster"
+    else:
+        verdict = "no clear difference"
+    return {"comparable": True, "verdict": verdict, "tolerance": tolerance,
+            "baseline_range_ms": [baseline["min_ms"], baseline["max_ms"]],
+            "candidate_range_ms": [candidate["min_ms"], candidate["max_ms"]],
+            "median_ratio": round(candidate["median_ms"] / baseline["median_ms"], 3),
+            "peak_python_kib": [baseline["median_peak_python_kib"],
+                                candidate["median_peak_python_kib"]],
+            "note": ("Other load on the host affects wall time. A difference is a correlation "
+                     "with what changed between runs, not proof of its cause.")}
+
+
+def record_timing_run(store: ObservatoryStore, run: dict[str, Any], *, day_index: int = 0,
+                      experiment_id: str | None = None) -> str:
+    event_id = store.record_event(
+        category="benchmark", event_type="benchmark_timing_run",
+        summary=f"{run['suite_id']}: median {run['median_ms']:g} ms over "
+                f"{run['conditions']['repeats']} runs",
+        outcome="recorded", day_index=day_index, experiment_id=experiment_id,
+        layer_id="SPS-09", payload=run)
+    for name, value, unit in (("pipeline_median_ms", run["median_ms"], "ms"),
+                              ("pipeline_peak_python_kib", run["median_peak_python_kib"], "kib")):
+        store.record_metric(day_index=day_index, metric_name=name, value=value, unit=unit,
+                            benchmark_id=run["suite_id"], experiment_id=experiment_id,
+                            source_event_id=event_id,
+                            context={"suite_version": run["suite_version"],
+                                     "repeats": run["conditions"]["repeats"]})
+    return event_id
