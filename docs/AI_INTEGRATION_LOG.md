@@ -812,3 +812,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 
 - Owner instruction: "start EVOL-01". Audit before claiming: real persisted signals are failed agent tasks (TaskStore, status failed + last_error) and corrections (structured records with origin corrects); there is NO persisted evaluation store (evaluations must be submitted explicitly) and a goal alone is not evidence of a gap (only an explicit owner request for a capability is). No consent model existed. A5's active EVOL-02 covers the generation/validation pipeline and is not overlapped.
 - Scope: new standalone gap store (own sqlite file) with per-source owner consent (off by default), minimum-evidence thresholds, deterministic confidence and impact, duplicate links, revocation that deletes evidence, no model or inference from code volume. Paths: src/mia/evolution/gaps.py, small API block, tests, docs.
+
+## 2026-11-24T12:00Z - A7 resumes; MIA-LIFE-07 claimed
+- Re-read prompts/AI_MASTER_AGENT.md and the registry/board on freshly synced main (1c2cfa6). Other agents' heartbeats are old (A2/A3 06:31Z, A5 2026-11-21) but heartbeats are informational and A3 committed at ~11:00Z, so no claim was reassigned. A5's EVOL-02 claim has a 3-day-old heartbeat; flagged for the owner/A5, not taken.
+- Blocked, exact reasons: LIFE-06 and LIFE-10 wait on COMP-04/COMP-06 and LIFE-06/07; COMP-05/06/08 list COMP-04 as a dependency; LIFE-13 needs COMP-02 style authentication.
