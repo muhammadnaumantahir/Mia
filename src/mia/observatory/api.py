@@ -108,6 +108,7 @@ from mia.life.store import ITEM_STATES, LifeStore
 from mia.life.suggestions import run_suggestions as run_stalled_suggestions
 from mia.life.task_notifications import sync_due_tasks
 from mia.life.web import ResearchExplorer, normalise_research_url
+from mia.life.workflows import make_workflow_engine, register_workflow_routes
 from mia.memory import projects as project_workspaces
 from mia.memory.briefing import generate_briefing
 from mia.memory.capture import CaptureService
@@ -780,6 +781,7 @@ def create_app(
     notifications: NotificationCenter | None = None,
     enable_code_graph_watcher: bool = False,
     local_guard: bool = False,
+    workflows: Any | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -2881,6 +2883,17 @@ def create_app(
     task_engine.recover()
     task_engine.on_cancel(terminal_executor.cancel_task)
     app.state.task_engine = task_engine
+
+    # MIA-LIFE-08: internal, non-destructive workflows on the same checkpoint engine.
+    workflow_engine = workflows or make_workflow_engine(
+        data_dir / "mia-workflows.sqlite3", approval_store, personal=memory_store.personal,
+        notifications=notification_center, control=control,
+    )
+    app.state.workflow_engine = workflow_engine
+    register_workflow_routes(
+        app, workflow_engine,
+        lambda **kw: observatory.record_event(category="workflow", layer_id="SPS-10", **kw),
+    )
 
     def _task_error(exc: Exception) -> HTTPException:
         if isinstance(exc, KeyError):

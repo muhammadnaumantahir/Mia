@@ -7,12 +7,22 @@ from mia.security.capabilities import ApprovalClass, SideEffect, all_rules, clas
 SAFE = {"GET", "HEAD", "OPTIONS"}
 
 
+def _flatten(routes, prefix=""):
+    """Yield (route, full_path); descends into routers added with include_router."""
+    for route in routes:
+        inner = getattr(route, "original_router", None)
+        if inner is not None:  # newer FastAPI wraps included routers; never skip them silently
+            yield from _flatten(inner.routes, prefix + getattr(route.include_context, "prefix", ""))
+        else:
+            yield route, prefix + route.path
+
+
 def _mutating(tmp_path):
     app = create_app(store=ObservatoryStore(tmp_path / "c.sqlite3"))
-    for route in app.routes:
+    for route, path in _flatten(app.routes):
         for method in getattr(route, "methods", None) or {"WS"}:
             if method not in SAFE:
-                yield method, route.path
+                yield method, path
 
 
 def test_every_mutating_route_is_classified(tmp_path):
@@ -49,3 +59,8 @@ def test_browser_fill_is_grant_gated_but_click_needs_preview():
 def test_specific_rules_win_over_general():
     assert classify("POST", "/api/computer/files/ops/execute").approval is ApprovalClass.PREVIEW_THEN_EXECUTE
     assert classify("DELETE", "/api/memory/items/x").approval is ApprovalClass.OWNER_CONFIRM
+
+
+def test_workflow_routes_are_enumerated_and_classified(tmp_path):
+    seen = {f"{m} {p}" for m, p in _mutating(tmp_path)}
+    assert "POST /api/workflows" in seen and "POST /api/workflows/{workflow_id}/run" in seen

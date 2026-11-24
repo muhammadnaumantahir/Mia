@@ -61,6 +61,8 @@ _RULES: tuple[Capability, ...] = (
     Capability("DELETE /api/computer/permissions/*", _S.SAFETY_CONTROL, _A.ALWAYS_ALLOWED, "computer", "grant again"),
     Capability("POST /api/computer/tasks/*/cancel", _S.SAFETY_CONTROL, _A.ALWAYS_ALLOWED, "computer", "create a new task"),
     Capability("POST /api/computer/terminal/executions/*/cancel", _S.SAFETY_CONTROL, _A.ALWAYS_ALLOWED, "computer", "re-run"),
+    Capability("POST /api/workflows/*/cancel", _S.SAFETY_CONTROL, _A.ALWAYS_ALLOWED, "workflows", "compose a new workflow"),
+    Capability("POST /api/workflows/*/pause", _S.SAFETY_CONTROL, _A.ALWAYS_ALLOWED, "workflows", "POST .../run"),
     Capability("POST /api/tasks/*/cancel", _S.SAFETY_CONTROL, _A.ALWAYS_ALLOWED, "agent tasks", "re-propose"),
     Capability("POST /api/tasks/*/reject", _S.SAFETY_CONTROL, _A.NONE, "agent tasks", "re-propose"),
     Capability("POST /api/approvals/*/reject", _S.SAFETY_CONTROL, _A.NONE, "approvals", "re-request"),
@@ -93,6 +95,7 @@ _RULES: tuple[Capability, ...] = (
     Capability("*/api/life/sources*", _S.EXTERNAL_NETWORK, _A.NONE, "life", "DELETE source"),
     Capability("POST /api/life/cycle", _S.EXTERNAL_NETWORK, _A.NONE, "life", "pause/emergency stop"),
     # Wide or destructive owner-data operations.
+    Capability("POST /api/workflows*", _S.OWNER_DATA, _A.NONE, "workflows", "internal non-destructive steps only; completed tasks can be reopened; cancel/pause"),
     Capability("POST /api/memory/purge", _S.OWNER_DATA, _A.OWNER_CONFIRM, "memory", "none after purge"),
     Capability("DELETE /api/*", _S.OWNER_DATA, _A.OWNER_CONFIRM, "owner data", "none; UI must confirm"),
     Capability("POST /api/identity/rollback", _S.OWNER_DATA, _A.NONE, "identity", "versioned"),
