@@ -90,6 +90,7 @@ class Prepared:
     tools_available: bool = False
     clarification: str = ""
     capture_result: dict[str, Any] | None = None
+    task_action: dict[str, Any] | None = None
     reply_id: str | None = None
     policy: RoutePolicy = RoutePolicy()
 
@@ -131,6 +132,7 @@ class Brain:
         max_tool_rounds: int = 4,
         run_policy: RunPolicy = RunPolicy(),
         capture: Callable[[str, str, str], dict[str, Any] | None | Awaitable[dict[str, Any] | None]] | None = None,
+        task_actions: Callable[[str, str, str], dict[str, Any] | None] | None = None,
         on_reply: Callable[[str, str, list[dict[str, Any]]], None] | None = None,
         approval_status: Callable[[str], str | None] | None = None,
         escalation_policy: Callable[[], EscalationPolicy] = escalation_policy_from_env,
@@ -158,6 +160,7 @@ class Brain:
         self.max_tool_rounds = max_tool_rounds
         self.run_policy = run_policy
         self.capture = capture
+        self.task_actions = task_actions
         self.on_reply = on_reply
         self.approval_status = approval_status
         self.escalation_policy = escalation_policy
@@ -212,6 +215,16 @@ class Brain:
         trace.intent = analysis.to_dict()
         prepared = Prepared(request, conversation_id, analysis, trace, capture_result=capture_result,
                             policy=self.route_policy())
+        if self.task_actions is not None:
+            # An explicit task command is answered here, without a model call (MIA-LIFE-03).
+            try:
+                action = self.task_actions(conversation_id, user_message_id, request.prompt)
+            except Exception:
+                action = None
+            if action and action.get("reply"):
+                prepared.task_action = action
+                trace.event("task_action", action=str(action.get("action", "")))
+                return prepared
         if analysis.needs_clarification:
             prepared.clarification = (
                 f"{analysis.clarification} Could you tell me what you mean "
@@ -341,6 +354,8 @@ class Brain:
             "route": p.trace.route, "verification": report,
             "plan": plan.to_dict() if plan else None,
             "memory_capture": p.capture_result,
+            "task_action": ({k: v for k, v in p.task_action.items() if k != "reply"}
+                            if p.task_action else None),
             "reply_id": p.reply_id,
         }
 
@@ -348,6 +363,8 @@ class Brain:
     async def run_turn(self, request: TurnRequest) -> dict[str, Any]:
         p = await self._prepare(request)
         try:
+            if p.task_action:
+                return self._direct_task(p)
             if p.clarification:
                 return self._clarify(p)
             return await self._execute(p)
@@ -359,6 +376,15 @@ class Brain:
             p.trace.finish("error", f"{type(exc).__name__}: {exc}")
             self.diagnostics.add(p.trace)
             raise
+
+    def _direct_task(self, p: Prepared) -> dict[str, Any]:
+        text = str((p.task_action or {}).get("reply", ""))
+        self._store_reply(p, text)
+        p.trace.execution = {"provider_model": "mia-brain/task-action", "attempted": []}
+        p.trace.finish("task_action")
+        self.diagnostics.add(p.trace)
+        return self._result(p, "mia-brain", "task-action", text, [], [], {"ok": True, "issues": [],
+                            "confidence": "high"}, None)
 
     def _clarify(self, p: Prepared) -> dict[str, Any]:
         text = p.clarification
@@ -684,6 +710,11 @@ class Brain:
         except (TransientProviderError, PermanentProviderError, RuntimeError, KeyError) as exc:
             yield ("error", {"detail": str(exc), "partial": False, "retry_after_seconds": None})
             return
+        if p.task_action:
+            result = self._direct_task(p)
+            yield ("delta", {"text": result["content"]})
+            yield ("done", self._done_payload(result))
+            return
         if p.clarification:
             result = self._clarify(p)
             yield ("delta", {"text": result["content"]})
@@ -773,6 +804,7 @@ class Brain:
             "pending_actions": result["pending_actions"], "turn_id": result["turn_id"],
             "verification": result["verification"], "plan": result["plan"],
             "memory_capture": result.get("memory_capture"),
+            "task_action": result.get("task_action"),
             "reply_id": result.get("reply_id"),
         }
 

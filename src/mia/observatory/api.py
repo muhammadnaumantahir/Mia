@@ -49,6 +49,7 @@ from mia.brain.self_description import (
     render_runtime_manifest,
     wants_runtime_detail,
 )
+from mia.brain.task_actions import TaskActions
 from mia.codegraph.impact import analyze_impact
 from mia.codegraph.indexer import build_graph, graph_freshness
 from mia.codegraph.watcher import CodeGraphWatcher
@@ -5533,6 +5534,7 @@ def create_app(
         capabilities=brain_capabilities,
         broker=brain_broker,
         capture=capture_from_message,
+        task_actions=TaskActions(memory_store).handle,
         on_reply=record_reply_usage,
         approval_status=approval_store.status,
     )
