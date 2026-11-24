@@ -2091,6 +2091,13 @@ def create_app(
             raise HTTPException(status_code=404, detail="Research page asset not found")
         return FileResponse(page, media_type="text/html")
 
+    @app.get("/workflows")
+    def workflows_page() -> FileResponse:
+        page = Path(__file__).resolve().parents[1] / "life" / "workflows.html"
+        if not page.exists():
+            raise HTTPException(status_code=404, detail="Workflows page asset not found")
+        return FileResponse(page, media_type="text/html")
+
     @app.get("/projects")
     def projects_page() -> FileResponse:
         page = Path(__file__).resolve().parents[1] / "life" / "projects.html"

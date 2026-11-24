@@ -608,3 +608,7 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - Commit d6e1573. Previously, while Mia was stopped, a granted app launch or file write still ran. Both are now refused (423) without consuming the one-time approval; resume restores them. Covered by tests against the real app; app launch is proven by a recorded no-spawn, process termination by a real child process left running.
 - Still not covered: desktop and browser actions over HTTP, background tasks, Brain, voice; no live desktop or real-device stop drill.
 - **MIA-LIFE-07 UI half (A6, 2026-11-24T12:59Z):** `/research` page with provenance, injection marking, verbatim citations and owner review. Owner check: one real-site read.
+
+## 2026-11-24 — Workflow UI (MIA-LIFE-08, agent A6)
+- Commit SHA_HERE. `/workflows` lets the owner build a plan from the safe internal actions, preview risk and approval, run, pause, cancel (with confirmation) and retry failed steps, and read events and the report.
+- Verified: 17 Chromium tests over the real workflow engine, mutation checks, full suite, ruff. Not verified: real screen readers, non-Chromium browsers.

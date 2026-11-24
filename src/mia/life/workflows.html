@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
+<title>Mia — Workflows</title>
+<style>
+:root{font-family:Inter,Segoe UI,system-ui,sans-serif;color:#eef4f2;background:#0c1214}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#0c1214}
+.shell{max-width:1000px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:17px;margin:0 0 10px}h3{font-size:15px;margin:16px 0 6px}
+nav{display:flex;flex-wrap:wrap;gap:4px 16px}nav a{color:#9be5c5;font-size:14px;padding:6px 0}
+a{color:#9be5c5}
+.sub{color:#a9bdb6;font-size:14px;line-height:1.5}
+.panel{background:#131d20;border:1px solid #2b4044;border-radius:14px;padding:16px;margin-top:16px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:8px 0}
+label{font-size:13px;color:#c3d3ce;display:flex;flex-direction:column;gap:4px}
+input,select,textarea,button{font:inherit;font-size:14px;min-height:40px}
+input,select,textarea{background:#0e1719;color:#eef4f2;border:1px solid #4c6a66;border-radius:8px;padding:8px 10px;max-width:100%;width:100%}
+select{width:auto}
+textarea{min-height:72px}
+button{background:#1f7a5c;color:#fff;border:1px solid #1f7a5c;border-radius:8px;padding:8px 14px;cursor:pointer}
+button.alt{background:#1b2a2c;border-color:#4c6a66;color:#e3ece8}
+button.danger{background:#9b3a2c;border-color:#9b3a2c}
+button:disabled{opacity:.55;cursor:not-allowed}
+:focus-visible{outline:3px solid #ffd27a;outline-offset:2px}
+ul.items{list-style:none;margin:0;padding:0}
+li.item{border-top:1px solid #2b4044;padding:12px 0}li.item:first-child{border-top:0}
+.runs button.runbtn{width:100%;text-align:left;background:#0e1719;border:1px solid #2b4044;color:#eef4f2;margin:0 0 8px;display:block;padding:10px 12px;line-height:1.35;overflow-wrap:anywhere}
+.runs button.runbtn[aria-current=true]{border-color:#9be5c5;background:#16302b}
+.runs .counts{display:block;font-size:12px;color:#a9bdb6;margin-top:2px}
+.title{font-size:15px;overflow-wrap:anywhere}
+.meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.tag{font-size:12px;border:1px solid #4c6a66;border-radius:999px;padding:2px 9px;color:#d5e3de}
+.tag.warn{border-color:#d9a441;color:#ffd98f}.tag.good{border-color:#5fbf97;color:#a6e3c4}.tag.bad{border-color:#e08a7a;color:#ffb4a3}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.note{color:#b6c8c2;font-size:13px;overflow-wrap:anywhere}
+blockquote{margin:6px 0;padding:6px 12px;border-left:4px solid #5fbf97;background:#0e1719;overflow-wrap:anywhere;white-space:pre-wrap}
+.srcurl{font-family:ui-monospace,Consolas,monospace;font-size:12px;overflow-wrap:anywhere;color:#c3d3ce}
+.hash{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+#viewer{border:1px solid #4c6a66;border-radius:10px;background:#0e1719;padding:12px;max-height:26rem;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.5}
+mark.flag{background:#4a2b21;color:#ffd5c8;border:1px dashed #e08a7a;border-radius:4px;padding:0 2px}
+mark.flag .flaglabel{font-size:11px;font-weight:700;margin-right:4px;border:1px solid #e08a7a;border-radius:4px;padding:0 4px}
+fieldset.step{border:1px solid #2b4044;border-radius:10px;margin:10px 0;padding:10px;min-width:0}
+fieldset.step legend{font-size:13px;color:#c3d3ce}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:8px}
+.fields label{min-width:0}
+.stepbtn{min-width:44px}
+pre.report{background:#0e1719;border:1px solid #4c6a66;border-radius:10px;padding:12px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;max-height:22rem;overflow:auto}
+.hint{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+#notice{min-height:22px;font-size:14px;color:#a6e3c4;margin-top:12px}#notice.error{color:#ffb4a3}
+dialog{background:#131d20;color:#eef4f2;border:1px solid #6a8782;border-radius:14px;max-width:min(520px,92vw);padding:20px}
+dialog::backdrop{background:#000a}
+.empty{border:1px dashed #4c6a66;border-radius:10px;padding:14px;text-align:center;color:#b6c8c2}
+.safety{border:1px solid #d9a441;border-radius:10px;padding:10px 12px;background:#221c0e;color:#ffe5b0;font-size:14px;line-height:1.5;margin-top:12px}
+@media(max-width:560px){.row{flex-direction:column;align-items:stretch}button{min-height:44px}select{width:100%}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+@media(forced-colors:active){mark.flag{border:2px solid CanvasText}.runs button.runbtn[aria-current=true]{border-width:3px}}
+</style></head>
+<body><main class="shell">
+<nav aria-label="Mia pages"><a href="/">Observatory</a><a href="/assistant">Assistant</a><a href="/life">Autonomous life</a><a href="/tasks">Tasks</a><a href="/projects">Projects</a><a href="/research">Research</a></nav>
+<h1>Workflows</h1>
+<p class="sub">Chain a few of Mia's own safe actions into one plan. You see the whole plan and what each step would do before anything runs. Only the actions listed here can be used; anything that controls your computer, a browser or a terminal is refused.</p>
+<div id="notice" role="status" aria-live="polite"></div>
+
+<section class="panel" aria-labelledby="newHeading"><h2 id="newHeading" tabindex="-1">New workflow</h2>
+<form id="planForm" autocomplete="off">
+<label>Title<input id="wfTitle" required maxlength="200"></label>
+<div id="steps"></div>
+<p class="note">A later step can use an earlier result by writing <span class="hint">${steps.1.item_id}</span> in a field (step numbers start at 1). Up to <span id="maxSteps">20</span> steps.</p>
+<div class="row"><button id="addStep" class="alt" type="button">Add a step</button><button id="planBtn" type="submit">Create plan and preview</button></div>
+</form></section>
+
+<section class="panel" aria-labelledby="listHeading"><h2 id="listHeading" tabindex="-1">Workflows</h2>
+<ul id="list" class="items runs"></ul></section>
+
+<section id="detail" class="panel" aria-labelledby="detailTitle" hidden>
+<h2 id="detailTitle" tabindex="-1"></h2>
+<p id="detailStatus" class="note"></p>
+<h3 id="planHeading">Plan</h3>
+<ol id="plan" class="items" aria-labelledby="planHeading"></ol>
+<div class="actions"><button id="runBtn" type="button">Run workflow</button><button id="pauseBtn" class="alt" type="button">Pause</button><button id="cancelBtn" class="danger" type="button">Cancel…</button><button id="refreshBtn" class="alt" type="button">Refresh</button></div>
+<h3 id="evHeading">What happened</h3>
+<ul id="events" class="items" aria-labelledby="evHeading"></ul>
+<h3 id="repHeading">Report</h3>
+<pre id="report" class="report" tabindex="0" aria-labelledby="repHeading"></pre>
+</section>
+
+<dialog id="confirm" aria-labelledby="confirmTitle" aria-describedby="confirmBody">
+<h2 id="confirmTitle"></h2><div id="confirmBody"></div>
+<div class="row"><button id="confirmNo" class="alt" type="button" autofocus>Keep it</button><button id="confirmYes" class="danger" type="button">Confirm</button></div>
+</dialog>
+
+<script>
+const $=id=>document.getElementById(id);
+const mk=(t,text,cls)=>{const e=document.createElement(t);if(text!==undefined&&text!==null)e.textContent=text;if(cls)e.className=cls;return e;};
+const tag=(text,kind)=>mk('span',text,'tag'+(kind?' '+kind:''));
+const plural=(n,a,b)=>n+' '+(n===1?a:b);
+const when=iso=>new Date(iso).toLocaleString();
+const MAX=20;
+const WF={planned:['Planned: not run yet',''],running:['Running','warn'],paused:['Paused','warn'],awaiting_approval:['Waiting for your approval','warn'],interrupted:['Interrupted','bad'],completed:['Completed','good'],failed:['Failed','bad'],cancelled:['Cancelled','bad']};
+const ST={pending:['Not run yet',''],running:['Running','warn'],succeeded:['Succeeded','good'],failed:['Failed','bad'],skipped:['Skipped',''],cancelled:['Cancelled','bad'],interrupted:['Interrupted','bad'],awaiting_approval:['Waiting for your approval','warn']};
+const RISK={low:'Low risk',medium:'Medium risk',high:'High risk',unknown:'Risk not known'};
+const KINDS=['task','reminder','note'];
+const STATUSES=['open','done','cancelled'];
+/* argument fields per capability: [name, label, type, extra] */
+const FIELDS={
+ 'personal.add':[['kind','Kind','select',KINDS],['title','Title','text'],['details','Details','text'],['due_at','Due (date and time)','text'],['project','Project','text'],['priority','Priority (number)','int']],
+ 'personal.list':[['kind','Kind','select',['',...KINDS]],['status','Status','select',['',...STATUSES]],['project','Project','text'],['limit','Limit (number)','int']],
+ 'personal.complete':[['item_id','Item to complete','text']],
+ 'notify.submit':[['title','Title','text'],['body','Message','text']]};
+let caps=[],draft=[],list=[],current=null,seq=0,busy=false;
+
+function say(text,error=false){const n=$('notice');n.textContent=text;n.className=error?'error':'';n.setAttribute('role',error?'alert':'status');}
+async function api(path,method='GET',body){
+ const r=await fetch(path,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
+ let data=null;try{data=await r.json();}catch(e){}
+ if(!r.ok){const d=data&&data.detail;const msg=typeof d==='string'?d:Array.isArray(d)?d.map(x=>x.msg).join('; '):'Request failed ('+r.status+')';const err=new Error(msg);err.status=r.status;throw err;}
+ return data;
+}
+
+/* ---- confirm dialog ---- */
+let confirmResolve=null,confirmOpener=null;
+function confirmDialog({title,lines,yes,no},opener){return new Promise(res=>{confirmResolve=res;confirmOpener=opener||null;$('confirmTitle').textContent=title;const b=$('confirmBody');b.replaceChildren();const ul=mk('ul');for(const l of lines)ul.append(mk('li',l));b.append(ul);$('confirmYes').textContent=yes;$('confirmNo').textContent=no;$('confirm').showModal();});}
+function endConfirm(a){const r=confirmResolve;confirmResolve=null;if($('confirm').open)$('confirm').close();if(r)r(a);}
+$('confirmNo').addEventListener('click',()=>endConfirm(false));$('confirmYes').addEventListener('click',()=>endConfirm(true));
+$('confirm').addEventListener('close',()=>{if(confirmResolve){const r=confirmResolve;confirmResolve=null;r(false);}const o=confirmOpener;confirmOpener=null;if(o&&o.isConnected)o.focus();else $('listHeading').focus();});
+
+/* ---- builder ---- */
+function newStep(){return {capability:caps[0]||'',values:{},raw:'{}',description:''};}
+function renderSteps(focus){
+ const box=$('steps');box.replaceChildren();
+ draft.forEach((s,i)=>{
+  const fs=mk('fieldset',undefined,'step');fs.dataset.idx=i;
+  fs.append(mk('legend','Step '+(i+1)));
+  const row=mk('div',undefined,'row');
+  const cl=mk('label','What it does');const sel=mk('select');sel.className='cap';sel.setAttribute('aria-label','Step '+(i+1)+' action');
+  for(const c of caps){const o=mk('option',c);o.value=c;sel.append(o);}
+  sel.value=s.capability;sel.addEventListener('change',()=>{s.capability=sel.value;s.values={};renderSteps({i,sel:'select.cap'});});
+  cl.append(sel);row.append(cl);
+  const mkb=(text,label,fn,dis)=>{const b=mk('button',text,'alt stepbtn');b.type='button';b.setAttribute('aria-label',label);b.disabled=!!dis;b.addEventListener('click',fn);return b;};
+  row.append(mkb('Up','Move step '+(i+1)+' up',()=>{[draft[i-1],draft[i]]=[draft[i],draft[i-1]];renderSteps({i:i-1,sel:'button.up',alt:'button.down'});},i===0));
+  row.lastChild.classList.add('up');
+  row.append(mkb('Down','Move step '+(i+1)+' down',()=>{[draft[i+1],draft[i]]=[draft[i],draft[i+1]];renderSteps({i:i+1,sel:'button.down',alt:'button.up'});},i===draft.length-1));
+  row.lastChild.classList.add('down');
+  row.append(mkb('Remove','Remove step '+(i+1),()=>{draft.splice(i,1);renderSteps(draft.length?{i:Math.min(i,draft.length-1),sel:'button.rm'}:{id:'addStep'});},false));
+  row.lastChild.classList.add('rm');
+  fs.append(row);
+  const grid=mk('div',undefined,'fields');
+  const defs=FIELDS[s.capability];
+  if(defs){
+   for(const [name,label,type,opts] of defs){
+    const l=mk('label',label);let inp;
+    if(type==='select'){inp=mk('select');for(const o of opts){const op=mk('option',o||'(any)');op.value=o;inp.append(op);}inp.value=s.values[name]||(name==='kind'&&s.capability==='personal.add'?'task':'');if(inp.value&&!s.values[name])s.values[name]=inp.value;}
+    else{inp=mk('input');inp.type=type==='int'?'number':'text';if(type==='int'){inp.min='0';inp.step='1';}inp.value=s.values[name]===undefined?'':s.values[name];}
+    inp.dataset.name=name;inp.addEventListener('input',()=>{s.values[name]=inp.value;});inp.addEventListener('change',()=>{s.values[name]=inp.value;});
+    l.append(inp);grid.append(l);
+   }
+  }else{
+   const l=mk('label','Settings for this action, as JSON');const ta=mk('textarea');ta.value=s.raw;ta.dataset.name='raw';ta.addEventListener('input',()=>{s.raw=ta.value;});l.append(ta);grid.append(l);
+  }
+  const dl=mk('label','Note for yourself (optional)');const di=mk('input');di.maxLength=200;di.value=s.description;di.dataset.name='description';di.addEventListener('input',()=>{s.description=di.value;});dl.append(di);grid.append(dl);
+  fs.append(grid);box.append(fs);
+ });
+ $('addStep').disabled=draft.length>=MAX;
+ if(focus){const t=focus.id?$(focus.id):box.querySelector('[data-idx="'+focus.i+'"] '+focus.sel);if(t&&!t.disabled)t.focus();else{const alt=focus.alt&&box.querySelector('[data-idx="'+focus.i+'"] '+focus.alt);if(alt&&!alt.disabled)alt.focus();else $('addStep').focus();}}
+}
+function buildArgs(s){
+ if(!FIELDS[s.capability]){let v;try{v=JSON.parse(s.raw||'{}');}catch(e){throw new Error('Settings must be valid JSON.');}if(v===null||typeof v!=='object'||Array.isArray(v))throw new Error('Settings must be a JSON object.');return v;}
+ const out={};
+ for(const [name,,type] of FIELDS[s.capability]){
+  const v=s.values[name];if(v===undefined||v==='')continue;
+  if(type==='int'){const n=Number(v);if(!Number.isInteger(n)||n<0)throw new Error('"'+name+'" must be a whole number.');out[name]=n;}
+  else out[name]=v;
+ }
+ return out;
+}
+$('addStep').addEventListener('click',()=>{if(draft.length>=MAX)return;draft.push(newStep());renderSteps({i:draft.length-1,sel:'select.cap'});});
+
+$('planForm').addEventListener('submit',async ev=>{
+ ev.preventDefault();
+ if(!draft.length){say('Add at least one step first.',true);$('addStep').focus();return;}
+ let steps;
+ try{steps=draft.map((s,i)=>{try{const o={capability:s.capability,args:buildArgs(s)};if(s.description.trim())o.description=s.description.trim();return o;}catch(e){throw new Error('Step '+(i+1)+': '+e.message);}});}
+ catch(e){say(e.message,true);return;}
+ const b=$('planBtn');b.disabled=true;b.textContent='Creating plan…';
+ try{
+  const r=await api('/api/workflows','POST',{title:$('wfTitle').value.trim(),steps});
+  say('Plan created. Review it below before running.');
+  draft=[];renderSteps();$('wfTitle').value='';
+  await loadList();await openWorkflow(r.workflow.task_id,true);
+ }catch(e){say('Mia could not make this plan: '+e.message,true);}
+ finally{b.disabled=false;b.textContent='Create plan and preview';}
+});
+
+/* ---- list ---- */
+function wfTag(status){const [t,k]=WF[status]||[status,''];return tag(t,k);}
+function renderList(){
+ const ul=$('list');ul.replaceChildren();
+ if(!list.length){ul.append(mk('li','No workflow yet. Build one above.','empty'));return;}
+ for(const w of list){
+  const li=mk('li');const b=mk('button',undefined,'runbtn');b.type='button';b.dataset.id=w.task_id;
+  b.append(mk('span',w.title),mk('span',(WF[w.status]||[w.status])[0]+' · '+when(w.created_at),'counts'));
+  if(current&&current.task_id===w.task_id)b.setAttribute('aria-current','true');
+  b.addEventListener('click',()=>openWorkflow(w.task_id,true));
+  li.append(b);ul.append(li);
+ }
+}
+async function loadList(){
+ try{const r=await api('/api/workflows?limit=50');list=r.items||[];renderList();}
+ catch(e){say('Could not load workflows: '+e.message,true);}
+}
+
+/* ---- detail ---- */
+async function openWorkflow(id,focus){
+ const mine=++seq;
+ try{
+  const [task,pv,ev,rep]=await Promise.all([api('/api/workflows/'+encodeURIComponent(id)),api('/api/workflows/'+encodeURIComponent(id)+'/preview'),api('/api/workflows/'+encodeURIComponent(id)+'/events'),api('/api/workflows/'+encodeURIComponent(id)+'/report')]);
+  if(mine!==seq)return;
+  current=task;renderDetail(task,pv.preview||[],ev.items||[],rep);renderList();
+  if(focus)$('detailTitle').focus();
+ }catch(e){if(mine===seq)say('Could not open this workflow: '+e.message,true);}
+}
+function renderDetail(task,preview,events,rep){
+ $('detail').hidden=false;
+ $('detailTitle').textContent=task.title;
+ const st=$('detailStatus');st.replaceChildren();st.append(wfTag(task.status));
+ const steps=task.steps||[];
+ const done=steps.filter(s=>s.status==='succeeded').length;
+ st.append(document.createTextNode(' '+done+' of '+plural(steps.length,'step','steps')+' done'));
+ if(task.outcome)st.append(document.createTextNode(' · '+task.outcome));
+ const ol=$('plan');ol.replaceChildren();
+ steps.forEach((s,i)=>{
+  const p=preview.find(x=>x.step===s.idx||x.step===i+1)||preview[i]||{};
+  const li=mk('li',undefined,'item');li.dataset.step=s.idx===undefined?i+1:s.idx;
+  li.append(mk('div',(i+1)+'. '+(p.summary||s.description||s.capability),'title'));
+  const meta=mk('div',undefined,'meta');
+  const [stext,skind]=ST[s.status]||[s.status,''];meta.append(tag(stext,skind));
+  if(p.risk)meta.append(tag(RISK[p.risk]||('Risk: '+p.risk),p.risk==='low'?'':'warn'));
+  meta.append(tag(p.needs_approval?'Needs your approval':'No approval needed',p.needs_approval?'warn':''));
+  if(s.verified===true)meta.append(tag('Checked','good'));else if(s.verified===false)meta.append(tag('Check failed','bad'));
+  if(s.attempts>1)meta.append(tag(plural(s.attempts,'attempt','attempts')));
+  li.append(meta);
+  if(s.error)li.append(mk('div','Problem: '+s.error,'note'));
+  if(s.note)li.append(mk('div',s.note,'note'));
+  if(s.status==='failed'||s.status==='interrupted'){
+   if(task.status!=='completed'&&task.status!=='cancelled'){
+    const a=mk('div',undefined,'actions');const rb=mk('button','Retry step '+(i+1),'alt');rb.type='button';rb.dataset.retry=s.idx===undefined?i+1:s.idx;
+    rb.addEventListener('click',()=>retryStep(rb.dataset.retry,rb));a.append(rb);li.append(a);
+   }
+  }
+  ol.append(li);
+ });
+ const finished=['completed','cancelled'].includes(task.status);
+ $('runBtn').disabled=busy||finished||task.status==='running';
+ $('runBtn').textContent=task.status==='paused'||task.status==='interrupted'?'Resume workflow':'Run workflow';
+ $('pauseBtn').disabled=!busy&&task.status!=='running';
+ $('cancelBtn').disabled=finished;
+ const ul=$('events');ul.replaceChildren();
+ if(!events.length)ul.append(mk('li','Nothing has happened yet.','empty'));
+ for(const e of events){const li=mk('li',undefined,'item');li.append(mk('span',when(e.at)+' · ','note'),mk('span',e.message));ul.append(li);}
+ $('report').textContent=rep.report||'';
+}
+async function act(label,fn,btn){
+ const id=current&&current.task_id;if(!id)return;
+ if(btn)btn.disabled=true;
+ try{await fn(id);}catch(e){say(label+' did not work: '+e.message,true);}
+ await loadList();await openWorkflow(id,false);
+}
+$('runBtn').addEventListener('click',async()=>{
+ const id=current&&current.task_id;if(!id||busy)return;
+ busy=true;const b=$('runBtn');b.disabled=true;b.textContent='Running…';$('pauseBtn').disabled=false;say('Running. You can pause or cancel while it works.');
+ try{const t=await api('/api/workflows/'+encodeURIComponent(id)+'/run','POST');say('Finished: '+((WF[t.status]||[t.status])[0])+'.',t.status==='failed');}
+ catch(e){say('The run did not work: '+e.message,true);}
+ finally{busy=false;}
+ await loadList();await openWorkflow(id,false);
+});
+$('pauseBtn').addEventListener('click',()=>act('Pause',async id=>{await api('/api/workflows/'+encodeURIComponent(id)+'/pause','POST');say('Pause requested. Mia stops after the current step.');},$('pauseBtn')));
+$('cancelBtn').addEventListener('click',async()=>{
+ const ok=await confirmDialog({title:'Cancel this workflow?',lines:['Steps that already ran stay done.','Steps that have not run will not run.'],yes:'Cancel workflow',no:'Keep it'},$('cancelBtn'));
+ if(!ok)return;
+ act('Cancel',async id=>{await api('/api/workflows/'+encodeURIComponent(id)+'/cancel','POST');say('Cancel requested.');},$('cancelBtn'));
+});
+$('refreshBtn').addEventListener('click',()=>{if(current)openWorkflow(current.task_id,false);loadList();});
+async function retryStep(step,btn){
+ await act('Retry',async id=>{const t=await api('/api/workflows/'+encodeURIComponent(id)+'/retry-step','POST',{step:Number(step)});say('Step retried: workflow is now '+((WF[t.status]||[t.status])[0])+'.',t.status==='failed');},btn);
+}
+
+(async()=>{
+ try{const r=await api('/api/workflows/capabilities');caps=r.items||[];}
+ catch(e){say('Could not load the available actions: '+e.message,true);}
+ $('maxSteps').textContent=String(MAX);
+ if(!caps.length){$('addStep').disabled=true;$('planBtn').disabled=true;}
+ renderSteps();await loadList();
+})();
+</script></main></body></html>
