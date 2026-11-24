@@ -750,3 +750,10 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-24T12:30Z - MIA-COMP-09 slice 2 (A4): restorable approval cards
 - Paths: src/mia/computer/approvals.py (card_json column with migration, save_card/pending_cards/expires_at), src/mia/observatory/api.py (register_tool card hook, GET /api/computer/approvals/cards), src/mia/assistant.html (renderApprovalCards effect/expiry lines, restorePendingApprovals; A6's LIFE-04 UI edits merged cleanly at pull), tests/test_approval_cards.py, tests/test_voice_browser.py (3 tests). Task stays IN_PROGRESS.
 - Tests: see STATUS.md.
+
+## 2026-11-24T06:30Z - MIA-COMP-04 slice 1 (A7), commit 354a752
+- Finding: Mia already enforces approvals per adapter (`PermissionPolicy.authorize`, `ApprovalStore.consume`), so no duplicate broker was written. Added `tests/test_broker_enforcement.py` (real app, real filesystem adapter and SQLite, only the clock mocked in the expiry test). Mutation check: forcing `_computer_permission_requires_approval` to return False made 8 of its tests fail; source restored.
+- Correction to my COMP-01 inventory: browser fill/select/check/scroll/tabs/screenshot are grant-gated (409 without an active owner grant), not preview/execute. Added approval class `grant_gated`; `browser/navigate` is now classed external-network (low-risk fetch), `browser/close` a safety control.
+- Known gap (not fixed): the approve endpoint is plain HTTP, so any local process can self-approve. The Host/Origin guard stops browsers only; per-caller authentication is COMP-02/LIFE-13.
+- Pre-existing failure, not mine: `tests/test_life_web.py::test_quiet_hours_block_background_cycles_but_not_owner_requests` fails on clean main at 06:19 UTC (it assumes the current time is outside the default quiet hours). A1 owns that area; left untouched.
+- Run: new tests pass; full suite has that one clock-dependent failure; ruff clean.
