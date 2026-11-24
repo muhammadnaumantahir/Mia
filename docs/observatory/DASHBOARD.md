@@ -14,3 +14,15 @@ Routes (all GET, no writes): `/api/experiments/{id}/evidence`, `/api/observatory
 Not covered: start/pause/resume/stop/export controls and the privacy notice (OBS-08, which acts on your real experiment), and any judgement of how the page looks. The tests use real Chromium but no human review.
 
 Pre-existing bug fixed on the way: the page used an undefined `$` helper, so a top-level call threw and the page's startup calls never ran (the experiment panel stayed on "Not prepared" until a manual refresh action). `$` is now an alias of `el`, with a regression test.
+
+## Lifecycle controls (MIA-OBS-08, dashboard half)
+
+In the "30-day experiment" panel, built on the backend routes from the OBS-08 backend slice:
+
+- **What a 30-day run records** shows the privacy notice (version, what is stored and where, what is recorded, never collected, controls, live resource caps), inserted as text.
+- **Start** stays disabled until the notice's checkbox is ticked; the click sends `{"privacy_notice_version": N}` and the server records it with the start event. (The acknowledgement is enforced in the page, not by the server: a client calling the API directly can still start without it, and the event then records `None`.)
+- **Pause/Resume auto capture** follow the scheduler's real state; both stay disabled when automatic capture is off.
+- **Stop experiment…** needs a second explicit confirmation ("Yes, stop this experiment"), explains that it is final, keeps all recorded evidence and never marks the run completed.
+- **Export evidence** verifies stored hashes first; a refusal is shown with its reason and nothing downloads. A successful export shows the offline check command `python -m mia.observatory.experiment_export verify FILE`.
+
+Nothing here starts, stops or exports on its own. The owner presses the buttons on the real experiment; the tests use temporary databases only.

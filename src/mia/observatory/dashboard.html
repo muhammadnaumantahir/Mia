@@ -49,6 +49,22 @@ footer{margin-top:24px;color:#6f8580;font-size:11px;line-height:1.6}
   <div class="experiment-field"><label for="plannedDays">Planned days</label><input id="plannedDays" type="number" min="1" max="365" value="30" required></div>
  </div>
  <div class="experiment-actions"><button class="send" id="captureBaseline" type="submit">Capture & freeze Day 0</button><button class="send" id="startExperiment" type="button" disabled style="background:#263535;color:#d8e2dd">Start experiment</button><button class="send" id="refreshExperiment" type="button" disabled style="background:#263535;color:#d8e2dd">↻ Refresh status</button><button class="send" id="captureDailySnapshot" type="button" disabled>Capture today's evidence</button></div>
+<div id="experimentLifecycle" style="margin-top:10px">
+<div class="experiment-actions">
+<button class="send" id="showPrivacyNotice" type="button" style="background:#263535;color:#d8e2dd">What a 30-day run records</button>
+<button class="send" id="pauseAutoCapture" type="button" disabled style="background:#263535;color:#d8e2dd">Pause auto capture</button>
+<button class="send" id="resumeAutoCapture" type="button" disabled style="background:#263535;color:#d8e2dd">Resume auto capture</button>
+<button class="send" id="stopExperiment" type="button" disabled style="background:#263535;color:#d8e2dd">Stop experiment…</button>
+<button class="send" id="exportExperiment" type="button" disabled style="background:#263535;color:#d8e2dd">Export evidence</button>
+</div>
+<div class="experiment-details" id="privacyNoticeBox" hidden></div>
+<div id="ackNoticeRow" hidden style="margin-top:8px"><label><input type="checkbox" id="ackNotice"> I have read the privacy notice (version <span id="ackNoticeVersion">?</span>) and want this experiment to start.</label></div>
+<div class="experiment-details" id="stopConfirm" hidden>
+<div>Stopping ends this run early. Everything recorded so far is kept, the run is never marked completed, and it cannot be restarted.</div>
+<div class="experiment-actions"><button class="send" id="confirmStop" type="button">Yes, stop this experiment</button><button class="send" id="cancelStop" type="button" style="background:#263535;color:#d8e2dd">Cancel</button></div>
+</div>
+<div class="experiment-notice" id="lifecycleMessage" role="status" aria-live="polite"></div>
+</div>
 </form>
 <div class="experiment-notice" id="experimentNotice" role="status" aria-live="polite">No Day 0 baseline has been captured on this computer.</div>
 <div class="experiment-details" id="experimentDetails"></div>
@@ -155,7 +171,7 @@ async function loadExperimentSchedulerStatus(){
   const response=await fetch('/api/experiments/scheduler/status');
   const data=await response.json();
   if(!response.ok)throw new Error(data.detail||'Scheduler status unavailable');
-  const tag=el('experimentSchedulerState');
+  const tag=el('experimentSchedulerState');lastScheduler=data;syncLifecycleControls();
   tag.textContent=data.enabled?'Auto capture on':'Auto capture off';
   tag.title=data.enabled?'Mia automatically checks for due daily snapshots while the server is running.':'Set MIA_EXPERIMENT_AUTO_CAPTURE=true in .env to enable local automatic capture.';
  }catch(error){
@@ -185,6 +201,7 @@ async function loadExperimentControl(){
    items[0]||null;
   if(!activeExperiment){
    el('experimentControlState').textContent='Not prepared';
+   syncLifecycleControls();
    capture.disabled=false;
    start.disabled=true;
    refresh.disabled=true;
@@ -217,6 +234,7 @@ async function loadExperimentControl(){
   el('experimentControlState').textContent=running?'Running':completed?'Completed':incomplete?'Incomplete':'Baseline frozen';
   capture.disabled=true;
   start.disabled=!prepared;
+  syncLifecycleControls();
   refresh.disabled=false;
   daily.disabled=true;
   el('experimentName').value=activeExperiment.name||'Mia 30-day experiment';
@@ -421,6 +439,87 @@ async function showEvidenceReport(){
  }catch(e){box.textContent=e.message;}
 }
 el('buildEvidenceReport').addEventListener('click',showEvidenceReport);
+let lastScheduler=null,privacyNotice=null;
+function lifecycleMessage(text,isError=false){const box=el('lifecycleMessage');box.textContent=text;box.classList.toggle('error',isError);}
+async function loadPrivacyNotice(){
+ if(privacyNotice)return privacyNotice;
+ const r=await fetch('/api/experiments/privacy-notice');const d=await r.json();
+ if(!r.ok)throw new Error(d.detail||'Privacy notice unavailable');
+ privacyNotice=d;el('ackNoticeVersion').textContent=String(d.version);return d;
+}
+function renderPrivacyNotice(n){
+ const box=el('privacyNoticeBox');box.replaceChildren();
+ evNode(box,'strong','Privacy notice · version '+n.version);
+ evNode(box,'div',n.summary);evNode(box,'div','Stored: '+n.stored);
+ evNode(box,'h4','What is recorded');
+ n.collected.forEach(g=>{evNode(box,'div',g.group);const ul=evNode(box,'ul');g.fields.forEach(f=>evNode(ul,'li',f.field+' — '+f.what));});
+ evNode(box,'h4','Never collected');const nc=evNode(box,'ul');n.never_collected.forEach(x=>evNode(nc,'li',String(x)));
+ evNode(box,'h4','Controls');const ct=evNode(box,'ul');Object.entries(n.controls).forEach(([k,v])=>evNode(ct,'li',k.replace(/_/g,'/')+': '+v));
+ evNode(box,'h4','Resource caps');
+ const caps=n.resource_caps||{};
+ evNode(box,'div','CPU '+(caps.max_cpu_percent??'not reported')+'% · memory '+(caps.max_memory_percent??'not reported')+'% (automatic capture waits when the machine is busier)');
+}
+async function toggleLifecycleNotice(){
+ const box=el('privacyNoticeBox');
+ if(!box.hidden){box.hidden=true;return;}
+ try{renderPrivacyNotice(await loadPrivacyNotice());box.hidden=false;}catch(e){lifecycleMessage(e.message,true);}
+}
+function syncLifecycleControls(){
+ const exp=(typeof activeExperiment!=='undefined')?activeExperiment:null;
+ const status=exp?exp.status:null;
+ const prepared=status==='prepared',running=status==='running';
+ el('ackNoticeRow').hidden=!prepared;
+ el('startExperiment').disabled=!(prepared&&el('ackNotice').checked);
+ el('stopExperiment').disabled=!running;
+ if(!running)el('stopConfirm').hidden=true;
+ el('exportExperiment').disabled=!exp;
+ const sched=lastScheduler;
+ el('pauseAutoCapture').disabled=!(sched&&sched.enabled&&!sched.paused);
+ el('resumeAutoCapture').disabled=!(sched&&sched.enabled&&sched.paused);
+ if(prepared&&!privacyNotice)loadPrivacyNotice().catch(e=>lifecycleMessage(e.message,true));
+}
+async function toggleScheduler(pause){
+ try{
+  const r=await fetch('/api/experiments/scheduler/'+(pause?'pause':'resume'),{method:'POST'});
+  const d=await r.json();if(!r.ok)throw new Error(d.detail||'Scheduler could not change');
+  lastScheduler=d;syncLifecycleControls();
+  lifecycleMessage(pause?'Automatic capture paused. Days while paused are recorded as paused, not lost.':'Automatic capture resumed.');
+  loadExperimentSchedulerStatus();
+ }catch(e){lifecycleMessage(e.message,true);}
+}
+async function confirmStopExperiment(){
+ if(!activeExperiment||activeExperiment.status!=='running')return;
+ el('confirmStop').disabled=true;
+ try{
+  const r=await fetch('/api/experiments/'+encodeURIComponent(activeExperiment.experiment_id)+'/stop',{method:'POST'});
+  const d=await r.json();if(!r.ok)throw new Error(d.detail||'Experiment could not be stopped');
+  el('stopConfirm').hidden=true;await Promise.all([loadExperimentControl(),load()]);
+  lifecycleMessage('Experiment stopped. Recorded days kept: '+(d.recorded_days||[]).join(', ')+'. It was not marked completed.');
+ }catch(e){lifecycleMessage(e.message,true);}
+ finally{el('confirmStop').disabled=false;}
+}
+async function exportExperimentEvidence(){
+ if(!activeExperiment)return;
+ const id=activeExperiment.experiment_id;lifecycleMessage('Verifying stored evidence before export…');
+ try{
+  const r=await fetch('/api/experiments/'+encodeURIComponent(id)+'/export');
+  if(!r.ok){let d={};try{d=await r.json();}catch(_){}throw new Error(d.detail||'Export refused');}
+  const blob=await r.blob();
+  const name=((r.headers.get('Content-Disposition')||'').match(/filename="([^"]+)"/)||[])[1]||'mia-experiment-export.json';
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  lifecycleMessage('Exported '+name+'. Verify it offline with: python -m mia.observatory.experiment_export verify '+name);
+ }catch(e){lifecycleMessage(e.message,true);}
+}
+el('showPrivacyNotice').addEventListener('click',toggleLifecycleNotice);
+el('ackNotice').addEventListener('change',syncLifecycleControls);
+el('pauseAutoCapture').addEventListener('click',()=>toggleScheduler(true));
+el('resumeAutoCapture').addEventListener('click',()=>toggleScheduler(false));
+el('stopExperiment').addEventListener('click',()=>{el('stopConfirm').hidden=false;});
+el('cancelStop').addEventListener('click',()=>{el('stopConfirm').hidden=true;});
+el('confirmStop').addEventListener('click',confirmStopExperiment);
+el('exportExperiment').addEventListener('click',exportExperimentEvidence);
+
 el('buildExperimentReport').addEventListener('click',showExperimentReport);
 
 el('experimentForm').addEventListener('submit',async event=>{
@@ -467,10 +566,11 @@ el('captureDailySnapshot').addEventListener('click',async()=>{
 });
 el('startExperiment').addEventListener('click',async()=>{
  if(!activeExperiment||activeExperiment.status!=='prepared')return;
+ if(!el('ackNotice').checked){lifecycleMessage('Read and acknowledge the privacy notice before starting.',true);return;}
  const button=el('startExperiment');button.disabled=true;
  setExperimentNotice('Starting the experiment…');
  try{
-  const response=await fetch('/api/experiments/'+encodeURIComponent(activeExperiment.experiment_id)+'/start',{method:'POST'});
+  const response=await fetch('/api/experiments/'+encodeURIComponent(activeExperiment.experiment_id)+'/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({privacy_notice_version:(await loadPrivacyNotice()).version})});
   const result=await response.json();if(!response.ok)throw new Error(result.detail||'Experiment could not start');
   await Promise.all([loadExperimentControl(),load()]);
   setExperimentNotice('Experiment started. Day 0 remains frozen.');
