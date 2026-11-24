@@ -793,3 +793,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-24T06:31Z — MIA-OBS-06 claimed (A3)
 
 - Agent: A3. Additive only: existing experiment controls, report panel and routes are not changed; the new panel and GET routes sit beside them. A6 idle and not consulted; no A6 paths in flight.
+
+## 2026-11-24T06:31Z — MIA-OBS-08 claimed (A2, owner-approved M6 exception)
+
+- Agent: A2. Owner: "you can work on Milestone 6". Taking the backend lifecycle slice of OBS-08; A1/A6 may take the UI (dashboard) half. I will not touch A3's baseline/attribution code.
