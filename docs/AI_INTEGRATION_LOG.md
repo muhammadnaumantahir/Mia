@@ -828,3 +828,13 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-24T15:10Z - MIA-COMP-09 slice 3 (A4): undo for approved file writes
 - Paths: src/mia/computer/filesystem.py (FileUndoConflict, undo_write, recovery-copy check; additive), src/mia/observatory/api.py (FileWriteUndo model, POST /api/computer/files/write/undo), src/mia/assistant.html (Undo button in the execute handler), tests/test_write_undo.py, tests/test_voice_browser.py (1 test). Task stays IN_PROGRESS (partial).
 - Tests: see STATUS.md. Note for A5 (filesystem owner) and A1/A5 (COMP-04): the undo route should be routed through the broker once it exists.
+
+## 2026-11-24T11:55Z — MIA-OBS-06 DONE (A3)
+
+- Commit f7411ed on remote main (verified). Paths: src/mia/observatory/{store.py (two read getters), attribution.py (sample ids in rows), api.py (three GET routes), dashboard.html}, tests/test_observatory_evidence_api.py (5), tests/test_observatory_evidence_dashboard.py (6, real Chromium + real uvicorn), docs/observatory/DASHBOARD.md. Existing experiment controls and report panel unchanged.
+- Delivered: read-only Evidence panel (coverage with missing/offline days, per-metric trends drawn only from recorded samples and dashed across evidence gaps, candidate changes, benchmark/timing runs, confounders, limitations, version metadata) with drill-down to the raw stored event and metric records; honest empty states; stored text inserted as text only.
+- Pre-existing bug found and fixed: `$` was never defined in observatory/dashboard.html, so a top-level `$('autonomyResume').addEventListener(...)` threw and the rest of the page script, including every startup call (experiment panel, scheduler status, tasks, capabilities, system resources), never ran. `$` is now an alias of `el`; a regression test asserts no page error and automatic load. This also means the existing experiment panel was not auto-loading before this commit.
+- Tests actually run: 11 new; four mutants (no `$`, no dashed gaps, innerHTML, wrong sample id) each failed tests; full suite 2720 tests, 1 failure, 0 errors, 1 skipped; ruff clean.
+- The 1 failure is again `tests/test_life_web.py::test_quiet_hours_block_background_cycles_but_not_owner_requests` (LIFE, not A3's). Correction of an earlier note: it fails when run during the 22:00-07:00 UTC default quiet window (the full run started about 06:36 UTC and failed; alone at 06:26 UTC it failed) and passes when run alone at 11:54 UTC. So it is wall-clock dependent; LIFE owners should inject a fixed daytime clock.
+- Not done: no human has looked at the page, so visual quality is unreviewed. OBS-08 (lifecycle controls, privacy notice, export) not started: it acts on the owner's real experiment.
+- A3 status: IDLE.
