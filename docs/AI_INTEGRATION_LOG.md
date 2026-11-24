@@ -728,3 +728,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-24T06:20Z — MIA-LIFE-04 UI half claimed (A6)
 
 - Agent: A6. Owner said "continue"; A1's data/API half is on main (b75556d) and the board lists the UI half as open for A6. Plan: a standalone `/projects` page (`src/mia/life/projects.html`, same pattern as `/tasks`) over the existing `/api/projects*` routes: project list incl. discovered-but-unregistered names, create, goal/status edit, milestones (add/edit/done/delete), strictly read-only isolated tasks/decisions/chats, confirmed delete, stale-response guard so a fast switch never shows another project's items. Shared-file edits are add-only: one `/projects` route in `api.py` and one nav link in `life.html`. No API change planned; the `/`-in-name limitation is surfaced in the UI, not fixed.
+
+## 2026-11-24T06:07Z — MIA-LIFE-03 Brain-actions half claimed (A1)
+
+- Verified immediately before claiming: board row is PARTIAL with the UI half DONE by A7 (commit 466517f) and the Brain half open; no agent is registered on it. Scope: deterministic English task intents (add, list, complete, set priority, delete) through a new optional `task_actions` hook beside the existing clarification short-circuit in src/mia/brain/orchestrator.py; all changes go through memory.personal (the store the /tasks page and API use); every delete and every bulk change needs an explicit confirmation; temporary chats are read-only. Paths: src/mia/brain/task_actions.py, small additive orchestrator and api.py wiring, tests, docs.
