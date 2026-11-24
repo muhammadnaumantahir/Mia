@@ -742,3 +742,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 
 ## 2026-11-24T08:30Z - MIA-COMP-09 claimed (A4, owner-approved exception)
 - Owner approved A4 taking MIA-COMP-09 by name. A1/A6 not consulted (A1 idle, A6 on LIFE-04 UI). Reproduced defect first: a failed `/api/approvals/{id}/execute` (even a payload mismatch) leaves the approval stuck in `approved`, so the owner can neither retry nor reject until it expires, and nothing is audited. Scope: fix recovery, audit failures, duplicate-submit and expiry tests, then recoverable pending approvals after a reload and an exact-action review card if time allows. Touches computer/approvals.py, the execute/reject routes in observatory/api.py, and the approval card in assistant.html (A6 is on LIFE-04 UI in the same file: edits will be minimal and re-fetched). Enforcement stays COMP-04.
+
+## 2026-11-24T10:10Z - MIA-COMP-09 slice 1 DONE (A4): approval recovery and failure audit
+- Paths: src/mia/computer/approvals.py (release, clearer state messages), src/mia/observatory/api.py (/api/approvals/{id}/execute failure handling only), tests/test_approval_recovery.py, docs/STATUS.md. assistant.html untouched in this slice.
+- Tests: see STATUS.md. Task stays IN_PROGRESS: recoverable pending cards, exact-action review and undo surface remain.

@@ -5302,8 +5302,35 @@ def create_app(
         item: ApprovalExecutionInput,
     ) -> dict[str, Any]:
         payload = item.payload
+        approved_now = False
+
+        def fail(status_code: int, detail: str, cause: BaseException) -> HTTPException:
+            """Undo a half-done approval, audit the failed attempt and build the HTTP error."""
+            released = approval_store.release(approval_id) if approved_now else False
+            state = approval_store.status(approval_id)
+            if approved_now and not released and state == "consumed":
+                detail = f"{detail}. The approval was used; ask Mia for a new preview."
+            observatory.record_event(
+                category="computer",
+                event_type="approved_action_failed" if approved_now else "approved_action_refused",
+                summary=f"Approved action did not run: {item.kind}",
+                outcome="failed" if approved_now else "refused",
+                layer_id="SPS-10",
+                payload={
+                    "approval_id": approval_id,
+                    "kind": item.kind,
+                    "reason": detail[:200],
+                    "approval_released": released,
+                    "approval_state": state,
+                },
+            )
+            error = HTTPException(status_code=status_code, detail=detail)
+            error.__cause__ = cause
+            return error
+
         try:
             approval_store.approve(approval_id)
+            approved_now = True
             if item.kind == "filesystem.write":
                 result = computer_files.execute_write(
                     approval_id=approval_id,
@@ -5347,21 +5374,23 @@ def create_app(
                 )
                 summary = f"Entered approved text in {result['window_title']}"
             else:
-                raise HTTPException(status_code=400, detail="Unsupported action kind")
+                raise fail(400, "Unsupported action kind", ValueError(item.kind))
+        except HTTPException:
+            raise
         except ApprovalError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise fail(409, str(exc), exc) from exc
         except (KeyError, TypeError, ValueError) as exc:
-            raise HTTPException(status_code=400, detail="Invalid approved action payload") from exc
+            raise fail(400, "Invalid approved action payload", exc) from exc
         except FilesystemAccessError as exc:
-            raise HTTPException(status_code=403, detail=str(exc)) from exc
+            raise fail(403, str(exc), exc) from exc
         except ApplicationLaunchError as exc:
-            raise HTTPException(status_code=403, detail=str(exc)) from exc
+            raise fail(403, str(exc), exc) from exc
         except DesktopAccessError as exc:
-            raise HTTPException(status_code=403, detail=str(exc)) from exc
+            raise fail(403, str(exc), exc) from exc
         except OSError as exc:
-            raise HTTPException(status_code=422, detail="Approved action could not be completed") from exc
+            raise fail(422, "Approved action could not be completed", exc) from exc
         except Exception as exc:
-            raise HTTPException(status_code=502, detail=f"Approved action failed: {type(exc).__name__}") from exc
+            raise fail(502, f"Approved action failed: {type(exc).__name__}", exc) from exc
 
         observatory.record_event(
             category="computer",

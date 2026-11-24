@@ -31,6 +31,15 @@ class ApprovalError(RuntimeError):
     """An approval is invalid, expired, mismatched or already consumed."""
 
 
+def _not_pending_message(status: str) -> str:
+    return {
+        "approved": "This approval was already submitted and is being processed",
+        "consumed": "This approval was already used; ask for a new preview",
+        "rejected": "This approval was rejected",
+        "expired": "This approval has expired; ask for a new preview",
+    }.get(status, f"Approval is {status}, not pending")
+
+
 class ApprovalStore:
     """Persistent approvals bound to the exact action and payload hash."""
 
@@ -125,7 +134,7 @@ class ApprovalStore:
             if not row:
                 raise ApprovalError("Approval was not found")
             if row["status"] != "pending":
-                raise ApprovalError(f"Approval is {row['status']}, not pending")
+                raise ApprovalError(_not_pending_message(row["status"]))
             summary = row["summary"]
             if datetime.fromisoformat(row["expires_at"]) <= now:
                 db.execute(
@@ -156,7 +165,7 @@ class ApprovalStore:
             if not row:
                 raise ApprovalError("Approval was not found")
             if row["status"] != "pending":
-                raise ApprovalError(f"Approval is {row['status']}, not pending")
+                raise ApprovalError(_not_pending_message(row["status"]))
             if datetime.fromisoformat(row["expires_at"]) <= _now():
                 db.execute(
                     "UPDATE action_approvals SET status = 'expired' WHERE approval_id = ?",
@@ -223,6 +232,21 @@ class ApprovalStore:
                     raise ApprovalError("Approval was already consumed")
         if expired:
             raise ApprovalError("Approval has expired")
+
+    def release(self, approval_id: str) -> bool:
+        """Return an approved-but-unused approval to ``pending`` after a failed attempt.
+
+        Only an ``approved`` (not consumed, not expired) approval can be released, so a spent
+        approval can never be revived. The owner can then retry or reject it.
+        """
+        with self._connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            updated = db.execute(
+                "UPDATE action_approvals SET status = 'pending', approved_at = NULL "
+                "WHERE approval_id = ? AND status = 'approved' AND expires_at > ?",
+                (approval_id, _now().isoformat()),
+            )
+            return updated.rowcount == 1
 
     def status(self, approval_id: str) -> str | None:
         """Current state of one approval (pending/approved/rejected/consumed/expired) or None."""
