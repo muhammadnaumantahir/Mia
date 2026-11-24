@@ -112,7 +112,7 @@ The detailed task definitions, dependencies, scope and acceptance criteria are i
 | MIA-COMP-06 | P4 | A5 | OPEN | Scoped filesystem/document adapter; traversal/symlink denial, preview, exact approval and recovery. |
 | MIA-COMP-07 | P4 | A5 + A6 | OPEN | Isolated browser automation with approval boundaries, prompt-injection defense and integration tests. |
 | MIA-COMP-08 | P4 | A5 | OPEN | Allowlisted desktop app/process operations; no arbitrary shell; sensitive termination approval. |
-| MIA-COMP-09 | P4 | A1 + A6 | OPEN | Approval UX, audit, cancellation and undo/recovery for supported actions; race/disconnect tests. |
+| MIA-COMP-09 | P4 | A1 + A6 | IN_PROGRESS (A4, claimed 2026-11-24T08:30Z; OWNER-APPROVED EXCEPTION: owner replied "approve MIA-COMP-09 for A4"; backlog dependencies COMP-04/06/07/08 are NOT done, so A4 builds on the existing ApprovalStore and /api/approvals flow and does NOT claim broker enforcement, which stays COMP-04; first slice = approval recovery/audit fixes found by a reproduced bug) | Approval UX, audit, cancellation and undo/recovery for supported actions; race/disconnect tests. |
 | MIA-COMP-10 | P4 | A4 + A6 | OPEN | Voice-driven computer actions through same Brain and broker as text; confirmation and interruption tests. |
 | MIA-COMP-11 | P4 | A5 + A3 | OPEN | Adversarial security regression and owner handoff for pairing, sandbox, permissions, secrets and audit. |
 

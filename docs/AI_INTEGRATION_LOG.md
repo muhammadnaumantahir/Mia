@@ -739,3 +739,6 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Run: full suite exit 0 and ruff clean before the rebase; after the final rebase only ruff and the two new test files were re-run (pass). The full suite was not re-run on the final tree.
 - Not verified: guard behaviour in a real browser against a hostile page; handler-level proof of each route classification; device identity (LIFE-13).
 - MIA-COMP-04 claimed by A7 after confirming it was OPEN on the freshly rebased board.
+
+## 2026-11-24T08:30Z - MIA-COMP-09 claimed (A4, owner-approved exception)
+- Owner approved A4 taking MIA-COMP-09 by name. A1/A6 not consulted (A1 idle, A6 on LIFE-04 UI). Reproduced defect first: a failed `/api/approvals/{id}/execute` (even a payload mismatch) leaves the approval stuck in `approved`, so the owner can neither retry nor reject until it expires, and nothing is audited. Scope: fix recovery, audit failures, duplicate-submit and expiry tests, then recoverable pending approvals after a reload and an exact-action review card if time allows. Touches computer/approvals.py, the execute/reject routes in observatory/api.py, and the approval card in assistant.html (A6 is on LIFE-04 UI in the same file: edits will be minimal and re-fetched). Enforcement stays COMP-04.
