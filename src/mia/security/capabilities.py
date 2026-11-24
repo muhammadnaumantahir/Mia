@@ -29,6 +29,7 @@ class SideEffect(StrEnum):
 class ApprovalClass(StrEnum):
     NONE = "none"  # direct owner action in the UI, low risk
     PREVIEW_THEN_EXECUTE = "preview_then_execute"  # execute needs a prior preview/approval record
+    GRANT_GATED = "grant_gated"  # refused (409) unless an active owner grant covers it
     OWNER_CONFIRM = "owner_confirm"  # destructive or wide; UI must confirm
     ALWAYS_ALLOWED = "always_allowed"  # safety stops must never be blocked by approval
 
@@ -69,7 +70,11 @@ _RULES: tuple[Capability, ...] = (
     Capability("POST /api/computer/*/execute", _S.DEVICE_CONTROL, _A.PREVIEW_THEN_EXECUTE, "device", "stop-all"),
     Capability("POST /api/computer/approvals/*/approve", _S.DEVICE_CONTROL, _A.OWNER_CONFIRM, "device", "revoke permissions"),
     Capability("POST /api/computer/permissions", _S.DEVICE_CONTROL, _A.OWNER_CONFIRM, "device", "DELETE grant / revoke-all"),
-    Capability("POST /api/browser/*", _S.DEVICE_CONTROL, _A.PREVIEW_THEN_EXECUTE, "browser", "POST /api/browser/close; stop-all"),
+    Capability("POST /api/browser/click/*", _S.DEVICE_CONTROL, _A.PREVIEW_THEN_EXECUTE, "browser", "POST /api/browser/close; stop-all"),
+    Capability("POST /api/browser/actions/*", _S.DEVICE_CONTROL, _A.PREVIEW_THEN_EXECUTE, "browser", "POST /api/browser/close; stop-all"),
+    Capability("POST /api/browser/close", _S.SAFETY_CONTROL, _A.ALWAYS_ALLOWED, "browser", "navigate again"),
+    Capability("POST /api/browser/navigate", _S.EXTERNAL_NETWORK, _A.NONE, "browser", "low-risk read class; policy-checked; POST /api/browser/close"),
+    Capability("POST /api/browser/*", _S.DEVICE_CONTROL, _A.GRANT_GATED, "browser", "revoke grant; POST /api/browser/close; stop-all"),
     Capability("POST /api/computer/*", _S.DEVICE_CONTROL, _A.PREVIEW_THEN_EXECUTE, "device", "stop-all"),
     Capability("POST /api/desktop/*", _S.DEVICE_CONTROL, _A.PREVIEW_THEN_EXECUTE, "desktop", "stop-all"),
     # Self-development and code.

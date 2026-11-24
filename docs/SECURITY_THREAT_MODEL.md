@@ -51,7 +51,7 @@ stop control is approval-gated. Classifications are **declared** (assigned from 
 proven by tracing each handler; the enforcement that a handler really demands the approval is COMP-04.
 
 ## Approval classes
-`none` (direct owner action), `preview_then_execute` (execute requires prior preview/approval record),
+`none` (direct owner action), `preview_then_execute` (execute requires prior preview/approval record), `grant_gated` (409 unless an active owner grant covers it; e.g. browser fill),
 `owner_confirm` (destructive or wide; UI confirms), `always_allowed` (stop controls: never blocked).
 
 ## Emergency stop and revocation

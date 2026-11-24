@@ -40,6 +40,12 @@ def test_stop_controls_are_always_allowed():
         assert classify("POST", path).approval is ApprovalClass.ALWAYS_ALLOWED
 
 
+def test_browser_fill_is_grant_gated_but_click_needs_preview():
+    assert classify("POST", "/api/browser/fill").approval is ApprovalClass.GRANT_GATED
+    assert classify("POST", "/api/browser/click/execute").approval is ApprovalClass.PREVIEW_THEN_EXECUTE
+    assert classify("POST", "/api/browser/close").approval is ApprovalClass.ALWAYS_ALLOWED
+
+
 def test_specific_rules_win_over_general():
     assert classify("POST", "/api/computer/files/ops/execute").approval is ApprovalClass.PREVIEW_THEN_EXECUTE
     assert classify("DELETE", "/api/memory/items/x").approval is ApprovalClass.OWNER_CONFIRM
