@@ -567,3 +567,7 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 - Not covered yet: terminal, processes, apps, desktop, browser click/actions, background tasks, Brain, voice. Local-process self-approval is an open gap (COMP-02/LIFE-13).
 - Known unrelated failure on main: clock-dependent quiet-hours test in `tests/test_life_web.py`.
 - **MIA-LIFE-04 UI half (A6, 2026-11-24T06:45Z):** `/projects` workspace page over the A1 project API. Open: rename, Brain context, '/' in names (A1). Time-dependent failing test noted in the integration log.
+
+## 2026-11-24T06:25Z A1 conversational task actions (MIA-LIFE-03, Brain half)
+
+- Clear English task commands in chat are answered by the Brain without a model call, on the same store as the task page and API; deletes and bulk changes need an explicit yes; private tasks are invisible to chat and temporary chats are read-only. English only. Commit `5424535`; unit and API tests only. A time-of-day-dependent life test fails on clean main inside the 22:00-07:00 UTC quiet window.
