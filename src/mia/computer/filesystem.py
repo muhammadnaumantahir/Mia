@@ -219,6 +219,8 @@ class FilesystemAdapter:
         relative_path: str,
         content: str,
     ) -> dict[str, str | int]:
+        if getattr(self, "control", None) is not None:
+            self.control.assert_active()  # a stopped system must not burn one-time approvals
         path = self._resolve(root_id, relative_path)
         self._validate_write_path(path)
         encoded = content.encode("utf-8")

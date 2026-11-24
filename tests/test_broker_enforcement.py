@@ -165,3 +165,23 @@ def test_file_op_approval_for_one_target_cannot_delete_another(env):
         json={"op": "delete", "root_id": "root_1", "relative_path": "a/y.txt", "approval_id": approval},
     )
     assert r.status_code >= 400 and (root / "a/y.txt").exists()
+
+
+def test_stop_all_blocks_writes_and_does_not_burn_the_approval(env):
+    client, root, _ = env
+    approval = preview(client)
+    client.post(f"/api/computer/approvals/{approval}/approve")
+    assert client.post("/api/computer/stop-all").status_code == 200
+    blocked = client.post("/api/computer/files/write/execute", json=write_body(approval_id=approval))
+    assert blocked.status_code == 423 and not (root / "a/note.txt").exists()
+    client.post("/api/computer/resume")
+    again = client.post("/api/computer/files/write/execute", json=write_body(approval_id=approval))
+    assert again.status_code == 200 and (root / "a/note.txt").read_text() == "hello"
+
+
+def test_stop_all_blocks_granted_writes(env):
+    client, root, _ = env
+    grant(client, root, (root / "a").resolve())
+    client.post("/api/computer/stop-all")
+    r = client.post("/api/computer/files/write/execute", json=write_body())
+    assert r.status_code == 423 and not (root / "a/note.txt").exists()

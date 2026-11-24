@@ -51,8 +51,10 @@ class ApplicationLauncher:
         approvals: ApprovalStore,
         *,
         launch_check_seconds: float = 1.0,
+        control: Any | None = None,
     ) -> None:
         self.approvals = approvals
+        self.control = control  # AutomationControl; stop-all must block launches
         self.launch_check_seconds = launch_check_seconds
         self._applications: dict[str, ApplicationDefinition] = {}
         for app in applications:
@@ -120,6 +122,8 @@ class ApplicationLauncher:
         }
 
     def execute_launch(self, app_id: str, approval_id: str) -> dict[str, str | int]:
+        if self.control is not None:
+            self.control.assert_active()  # a stopped system must not burn one-time approvals
         app = self._get_application(app_id)
         executable = self._resolve_executable(app.executable)
         payload = {

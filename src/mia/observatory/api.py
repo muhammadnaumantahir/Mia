@@ -927,6 +927,10 @@ def create_app(
         applications_file,
         approval_store,
     )
+    if getattr(app_launcher, "control", None) is None:
+        app_launcher.control = control
+    if getattr(computer_files, "control", None) is None:
+        computer_files.control = control
     app.state.application_launcher = app_launcher
     memory_store = memory or MemoryStore(data_dir / "mia-memory.sqlite3")
     app.state.memory = memory_store
@@ -3452,6 +3456,8 @@ def create_app(
                 relative_path=item.relative_path,
                 content=item.content,
             )
+        except AutomationStopped:
+            raise  # AutomationStopped is a PermissionError (an OSError); keep the app-wide 423
         except ApprovalError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except FilesystemAccessError as exc:
