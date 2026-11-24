@@ -807,3 +807,8 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Regression I caused and fixed before pushing: using `include_router` made `app.routes` contain wrapper objects (this FastAPI version), which broke `tests/test_life_ui.py::test_every_endpoint_the_page_calls_exists` (A6) and would have hidden routes from route enumeration. Routes are now registered directly on `app`. The COMP-01 coverage test also now descends into included routers so such routes cannot be skipped silently.
 - Run: full suite exit 1 with exactly one failure, the pre-existing clock-dependent `tests/test_life_web.py` quiet-hours test; ruff clean.
 - A7 is IDLE. COMP-04 stays PARTIAL (remaining adapters listed on its board row).
+
+## 2026-11-24T11:49Z — MIA-EVOL-01 claimed (A1)
+
+- Owner instruction: "start EVOL-01". Audit before claiming: real persisted signals are failed agent tasks (TaskStore, status failed + last_error) and corrections (structured records with origin corrects); there is NO persisted evaluation store (evaluations must be submitted explicitly) and a goal alone is not evidence of a gap (only an explicit owner request for a capability is). No consent model existed. A5's active EVOL-02 covers the generation/validation pipeline and is not overlapped.
+- Scope: new standalone gap store (own sqlite file) with per-source owner consent (off by default), minimum-evidence thresholds, deterministic confidence and impact, duplicate links, revocation that deletes evidence, no model or inference from code volume. Paths: src/mia/evolution/gaps.py, small API block, tests, docs.

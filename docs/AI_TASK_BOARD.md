@@ -120,7 +120,7 @@ The detailed task definitions, dependencies, scope and acceptance criteria are i
 
 | Task | Priority | Suggested owner | Status | Scope / acceptance |
 |---|---:|---|---|---|
-| MIA-EVOL-01 | P5 | A1 + A3 | OPEN | Evidence-based capability-gap discovery from consented failures, corrections, evaluations and goals. |
+| MIA-EVOL-01 | P5 | A1 + A3 | IN_PROGRESS (A1, claimed 2026-11-24T11:49Z; owner said "start EVOL-01"; A3 not consulted; A5's EVOL-02 pipeline work is not touched) | Evidence-based capability-gap discovery from consented failures, corrections, evaluations and goals. |
 | MIA-EVOL-03 | P5 | A5 | OPEN | Candidate generation in disposable workspace with bounded calls, allowlisted paths, provenance and immutable diff. |
 | MIA-EVOL-04 | P5 | A5 + A3 | OPEN | Reproducible static/unit/integration/security validation; failed checks block registration. |
 | MIA-EVOL-05 | P5 | A1 + A5 | OPEN | Versioned capability contracts, permissions, dependencies, lineage, evidence and retirement state. |
