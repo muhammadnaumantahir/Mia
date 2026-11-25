@@ -1081,3 +1081,8 @@ The coordinator completed bounded source discovery and Gateway-backed research s
 Implementation commits include `ef78540fa4a1ec02374379dbefb85aeb89b2453c`, `5d7bd5ee563983e3775e4feada1fe8656aa175c9`, `5454e3aedbbe598c5f30d391193c9d5a864f39a7`, `e58ee9d75abe28bfb40bf0e6f3857a2e90fddd91`, `42b9e6a629b321162ab1ca4ed960971f7ff247e9`, `aaa7262302fb9eb90d0f8c176368ca8803817348`; search/service and UI test commits include `e44801d41ad83fb3d886fd36171ee2ef4fba5fe1`, `242adc99a87a77b1b17f0e8b43e9d7cf60cb2ae2`, `43f42789133241116a9c14d5822a2d4f855c84e0`, `fe58b302b4956f029c84954f7cdf15a9fc7a5f40`, `55d8327db03f7a55c02615ded218f154ca147413`.
 
 **Verification:** Regression tests were authored but not executed in this session, per the owner's instruction. This task is DONE for implementation only; test execution remains `OWNER_VERIFICATION_REQUIRED`. No test pass is claimed.
+
+
+## 2026-11-25 — Coordinator claim: MIA-LIFE-07-MEMORY
+
+Claimed the project-scoped research finding memory child task while A1 retains its existing LIFE-10 claim. I will isolate the integration in a dedicated bridge module rather than modify the research service file currently owned by A7. Scope: only owner-confirmed findings may be imported as source-backed structured facts; require a registered project; preserve exact citation/source hashes; provide idempotent import, correction-by-confirmed-replacement and chain deletion; and test project isolation and lifecycle. Tests will be authored but not executed per owner instruction.
