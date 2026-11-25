@@ -356,4 +356,11 @@ def register_research_memory_routes(
             deleted = bridge.delete(record_id)
         except ResearchMemoryError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if deleted:
+            record_event(
+                event_type="research_memory_deleted",
+                summary="Project research memory and its correction chain deleted",
+                outcome="success",
+                payload={"record_id": record_id},
+            )
         return {"deleted": deleted}
