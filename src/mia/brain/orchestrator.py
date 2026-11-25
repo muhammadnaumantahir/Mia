@@ -13,16 +13,12 @@ from __future__ import annotations
 import asyncio
 import inspect
 import os
-from contextvars import ContextVar
 from collections.abc import AsyncIterator, Awaitable, Callable
+from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from typing import Any
 
 from mia.agent.tools import ToolRegistry
-CURRENT_BRAIN_USER_PROMPT: ContextVar[str] = ContextVar("mia_brain_user_prompt", default="")
-CURRENT_BRAIN_INTERFACE: ContextVar[str] = ContextVar("mia_brain_interface", default="text")
-
-
 from mia.gateway.contracts import (
     ModelCandidate,
     ModelRequest,
@@ -63,6 +59,10 @@ from .verify import (
     recovery_advice,
     verify_tool_record,
 )
+
+CURRENT_BRAIN_USER_PROMPT: ContextVar[str] = ContextVar("mia_brain_user_prompt", default="")
+CURRENT_BRAIN_INTERFACE: ContextVar[str] = ContextVar("mia_brain_interface", default="text")
+
 
 UsageRecorder = Callable[..., None]
 STREAM_UNSUPPORTED_NOTE = (
