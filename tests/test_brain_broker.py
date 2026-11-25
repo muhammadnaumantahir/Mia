@@ -106,6 +106,26 @@ async def test_non_read_preview_modes_are_never_allowed_by_default_policy():
     assert rec.status == "refused" and rec.stage == "permission"
 
 
+async def test_data_egress_blocks_indexed_file_search_for_remote_providers():
+    reg = make()
+    reg.register(
+        name="knowledge.search_files",
+        description="Search indexed files",
+        permission="filesystem.search",
+        mode="read",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}},
+                    "required": ["query"]},
+        handler=lambda _args: {"ok": True, "items": [{"content": "private"}]},
+    )
+    b = ToolBroker(reg)
+    rec = await b.call("knowledge.search_files", {"query": "notes"}, offered={"knowledge.search_files"},
+                       provider_local=False)
+    assert rec.status == "refused" and rec.stage == "egress"
+    rec = await b.call("knowledge.search_files", {"query": "notes"}, offered={"knowledge.search_files"},
+                       provider_local=True)
+    assert rec.status == "completed"
+
+
 async def test_data_egress_blocks_file_tools_for_remote_providers():
     b = broker()
     rec = await b.call("filesystem.read_text", {"path": "p"}, offered=ALL, provider_local=False)
