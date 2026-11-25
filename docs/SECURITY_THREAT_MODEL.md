@@ -69,5 +69,14 @@ Route-to-handler binding is now fail-closed at app construction; it does not rep
 
 ## Update 2026-11-25: companion identity (MIA-COMP-02)
 - **Added (tested):** `mia.security.pairing` gives a paired companion its own revocable identity: Ed25519 keys (private key stays on the device), one-time hashed pairing codes with lockout, single-use challenges, scoped 15-minute sessions, instant revocation. `DeviceConfinementGuard` confines any device token to `/api/companion/*`, so a compromised companion cannot approve its own requests, grant permissions, pair or revoke devices.
-- **Scopes a device can ever hold:** `companion.heartbeat`, `companion.observe`, `companion.act`. Approval, permission grants and pairing are not grantable by design.
-- **Still not covered (declared):** the owner's own browser is not authenticated, so a local process that presents no device token can still call owner routes; transport is loopback only (non-loopback needs encrypted transport, LIFE-13); responses do not distinguish unknown from known devices but timing is not constant-time; no real companion has been exercised (COMP-03, owner verification).
+- **Scopes a device can ever hold:** `companion.heartbeat`, `companion.observe`, `companion.act`, `companion.sync.read` and `companion.sync.write`. Approval, permission grants and pairing are not grantable by design.
+- **Still not covered (declared):** the owner's own browser is not authenticated, so a local process that presents no device token can still call owner routes; no real companion has been exercised (COMP-03, owner verification).
+
+
+## Update 2026-11-25: authenticated companion sync (MIA-LIFE-13)
+
+- **Implemented (tests authored; execution OWNER_VERIFICATION_REQUIRED):** device-scoped `companion.sync.read` and `companion.sync.write` scopes, versioned push/pull, atomic conflict rejection, tombstones, idempotent batches, payload/namespace limits and immediate revocation checks.
+- **Remote transport is opt-in and narrow:** disabled by default; exact Host allowlist, direct HTTPS scheme, bearer device token, no browser Origin/Sec-Fetch metadata, and exact companion route/method allowlist. First-time pairing and owner administration remain loopback-only. Remote session renewal requires an existing live token plus an Ed25519 signature.
+- **Data boundary:** only `companion_state` and `preferences` JSON namespaces sync. Conversations, files, personal memory, credentials and governance data are excluded. Payloads are credential-screened and bounded.
+- **Owner verification remains:** real TLS certificate, firewall/DNS, separate-network device connection, reconnect/cursor recovery and real-device revocation checks. Direct TLS is required; forwarded-proto headers are not trusted.
+- Protocol and operational instructions: `docs/architecture/COMPANION_SYNC.md`.
