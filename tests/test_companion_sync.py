@@ -255,6 +255,8 @@ def test_sync_push_is_atomic_and_replay_is_idempotent(tmp_path):
         {"namespace": "memory", "item_id": "x", "base_version": 0, "payload": {}},
         {"namespace": "preferences", "item_id": "x", "base_version": -1, "payload": {}},
         {"namespace": "preferences", "item_id": "x", "base_version": 0, "payload": {"api_key": "secret"}},
+        {"namespace": "preferences", "item_id": "x", "base_version": 0, "payload": {"privateKey": "not-stored"}},
+        {"namespace": "preferences", "item_id": "x", "base_version": 0, "payload": {"note": "Bearer abcdefghijklmnopqrstuvwxyz0123456789"}},
         {"namespace": "preferences", "item_id": "../escape", "base_version": 0, "payload": {}},
         {"namespace": "preferences", "item_id": "x", "base_version": 0, "deleted": True, "payload": {}},
     ],
@@ -263,6 +265,21 @@ def test_sync_store_rejects_unsafe_or_invalid_changes(tmp_path, change):
     store = CompanionSyncStore(tmp_path / "sync.sqlite3")
     with pytest.raises(CompanionSyncError):
         store.push("device-one", "batch-000000000001", [change])
+
+
+def test_sync_store_enforces_batch_and_payload_size_bounds(tmp_path):
+    store = CompanionSyncStore(tmp_path / "sync.sqlite3")
+    with pytest.raises(CompanionSyncError, match="1 to 50"):
+        store.push(
+            "device-one", "batch-000000000099",
+            [{"namespace": "preferences", "item_id": f"i-{n}", "base_version": 0,
+              "payload": {"value": n}} for n in range(51)],
+        )
+    with pytest.raises(CompanionSyncError, match="limited to"):
+        store.push("device-one", "batch-000000000100", [{
+            "namespace": "preferences", "item_id": "large", "base_version": 0,
+            "payload": {"value": "x" * 9000},
+        }])
 
 
 def test_sync_store_rejects_ahead_cursor_and_limits_pull(tmp_path):
