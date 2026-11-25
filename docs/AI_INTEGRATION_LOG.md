@@ -989,3 +989,16 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-25 — Coordinator claim: MIA-LIFE-08-TIMEOUT
 
 Claimed the independent workflow timeout/reconciliation child task. Scope: make timed-out worker outcomes explicitly unknown, prevent a second run while the original worker may still be executing, reconcile a completed in-process worker, and require an explicit owner decision after restart before marking an unknown step applied or retrying it. No claim of tests or runtime verification until the implementation and regression tests are reviewed and run.
+
+
+## 2026-11-25 — MIA-LIFE-08-TIMEOUT implementation checkpoint
+
+Implemented in `src/mia/life/workflows.py` (commit `238443784905aac0b14e9de8d444a1dc8feea889`) and added regression coverage in `tests/test_workflows.py` (commit `8319e06686b461497a4fd0fa1a8d572fdf2c57c2`; test-loop correction `91842ca397b9ae9dfcc063b808f3f67d4cd44b50`).
+
+- Workflow execution now keeps the underlying worker alive across an asyncio timeout and records the step as interrupted/unknown instead of treating the timeout as an ordinary failed step.
+- A second workflow run is refused while any interrupted step remains unresolved, including after restart.
+- Added `POST /api/workflows/{workflow_id}/reconcile-step`: while a live worker is running it reports waiting; after it finishes, its actual result is recorded. After restart, the owner must explicitly confirm `applied` or `not_applied`; only the latter makes an explicit retry available.
+- Later pending steps are restored after the generic task failure path so a reconciled workflow can safely continue.
+- Added regression tests for live-worker waiting/no duplicate execution, restart decision requirements, owner-confirmed applied/not-applied, and the API contract.
+
+**Verification limitation:** this session used the GitHub repository connector and could not execute the Python test suite or static checks. Do not mark this child DONE until local targeted tests and review pass. The board therefore remains PARTIAL, not DONE.
