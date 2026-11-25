@@ -31,7 +31,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from mia.computer.control import AutomationStopped
 from mia.computer.filesystem import (
@@ -550,6 +550,8 @@ class FileIndexWatcher:
 
 
 class FileIndexWatchInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     interval_seconds: int = 60
     max_selections_per_cycle: int = 2
 
