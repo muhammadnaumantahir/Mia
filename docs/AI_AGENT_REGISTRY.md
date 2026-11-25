@@ -10,7 +10,7 @@ This registry is a live-session directory, not a historical record. Previous ses
 | A3 | Reasoning quality & judge models | Anthropic Claude Sonnet 5.5 (claude.ai chat session, 2026-11-21) | — | IDLE | 2026-11-25T05:54Z |
 | A4 | Voice & wake word | Anthropic Claude Sonnet 5.5 (claude.ai chat session, fresh, 2026-11-22) | — | IDLE | 2026-11-25T05:41Z |
 | A5 | Code Graph & governed self-development | Anthropic Claude Sonnet 5.5 (claude.ai chat session, fresh, 2026-11-22) | MIA-EVOL-02 | ACTIVE | 2026-11-21T20:33Z |
-| A6 | Experience, UI & interaction | Anthropic Claude Sonnet 5.5 (claude.ai chat session, fresh, 2026-11-21) | none (last: MIA-LIFE-08 workflow UI DONE) | IDLE | 2026-11-24T17:30Z |
+| A6 | Experience, UI & interaction | Anthropic Claude Sonnet 5.5 (claude.ai chat session, fresh, 2026-11-21) | MIA-LIFE-06-UI | ACTIVE | 2026-11-25T18:10Z |
 | A7 | Multilingual language layer | Anthropic Claude Sonnet 5.5 (claude.ai chat session, fresh, 2026-11-22; owner-approved seventh role) | — | IDLE | 2026-11-25T16:55Z |
 
 ## Fresh-session registration

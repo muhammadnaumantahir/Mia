@@ -193,7 +193,7 @@ Split from the PARTIAL parent tasks above. These are independent task IDs; claim
 
 | Task | Priority | Suggested owner | Status | Scope / acceptance |
 |---|---:|---|---|---|
-| MIA-LIFE-06-UI | P3 | A6 | OPEN | Owner file-index UI; backend contract already on main. |
+| MIA-LIFE-06-UI | P3 | A6 | IN_PROGRESS (A6, claimed 2026-11-25T18:10Z) | Owner file-index UI; backend contract already on main. |
 | MIA-LIFE-06-BRAIN | P3 | A1 + A2 | OPEN | Brain file-search tool and Gateway-grounded summaries; backend contract already on main. |
 | MIA-LIFE-06-WATCH | P3 | A5 | OPEN | Bounded file refresh and optional document extraction. |
 | MIA-LIFE-07-SEARCH | P3 | A2 | OPEN | Bounded search discovery and Gateway synthesis over existing research API. |

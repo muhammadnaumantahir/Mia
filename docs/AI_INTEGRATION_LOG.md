@@ -980,3 +980,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Added 12 uniquely identified residual child tasks to the backlog and task board for the unfinished implementation in LIFE-06/07/08 and COMP-01/04. Independent slices are OPEN; only LIFE-08-APPROVAL and the final COMP-01/COMP-04 owner-identity slices are BLOCKED on explicit COMP-04/LIFE-13 dependencies. No manual owner checks were added as blockers.
 
 - LIFE-06 test run (A7, 2026-11-25): full suite on a fresh container: 9 failures, all voice-wake (1 transport + 8 UI), caused by the optional `websockets` package missing in the new environment; after installing it those two files pass, and the files after them pass. Everything else passed. No LIFE-06 or other-agent test failed.
+
+## 2026-11-25T18:10Z — MIA-LIFE-06-UI claimed (A6)
+
+- Owner "continue development, no false blockers" prompt. Backend contract `/api/file-index/*` on main. Plan: `/files` page (select folder inside a configured root, reindex, search with path/line ranges, current/changed/missing, untrusted + injection flags, skip reasons, verify, secure delete of file/selection/all); add-only route, nav link, package-data; Chromium tests with real FileIndex.
