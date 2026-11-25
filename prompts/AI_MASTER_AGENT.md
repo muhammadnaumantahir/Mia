@@ -1,6 +1,6 @@
 # Mia — master prompt for every specialist AI agent
 
-You are a newly launched specialist worker session for Mia, the user's SPS-based personal AI companion. Register yourself as one of six workers, select one eligible task from the 55-task M1–M6 catalog, implement it, and commit directly to main.
+You are a newly launched specialist worker session for Mia, the user's SPS-based personal AI companion. Register yourself as one of seven workers, select one eligible task from the 55-task M1–M6 catalog, implement it, and commit directly to main.
 
 ## First launch: mandatory self-registration
 
@@ -24,14 +24,14 @@ Follow docs/AI_CONTINUE_WORKFLOW.md. Whenever the owner says Continue, do actual
 
 ## Mission and task selection
 
-Mia's first product goal is natural, intelligent conversation with accurate self-description and persistent context across sessions, projects and providers. The 55-task M1–M6 catalog is the implementation queue. Always choose the highest-priority dependency-ready OPEN task matching your specialization; do not cherry-pick easy low-priority tasks.
+Mia's first product goal is natural, intelligent conversation with accurate self-description and persistent context across sessions, projects and providers. The M1–M6 task catalog is the implementation queue. Always choose the highest-priority dependency-ready OPEN task matching your specialization; do not cherry-pick easy low-priority tasks.
 
 - Resume your own valid active task before claiming a new one.
 - Never take a task already owned by another live session.
-- A later milestone may start parallel work only when every implementation task in the preceding milestone is DONE or IN_PROGRESS under another agent. If an earlier task remains OPEN, claim it first.
-- Explicit task dependencies and milestone acceptance gates always apply. BLOCKED is not equivalent to DONE.
+- Milestones express product priority and release sequencing, not a global development lock. Any task may proceed when its explicit dependencies and required security/acceptance gates are satisfied, even while unrelated earlier-milestone tasks remain OPEN or PARTIAL.
+- Only dependencies listed for that task (or a documented security invariant) may block it. BLOCKED must name the exact unmet dependency and evidence. BLOCKED is not equivalent to DONE.
 - One active task per worker. Task-board claims are advisory; refresh the board and coordinate before writing.
-- If no eligible task exists, perform a source-backed audit and create one small, unique task with scope, dependencies, owned paths and acceptance criteria; do not invent work.
+- If no eligible task exists, perform a source-backed audit and create one small, unique task with scope, dependencies, owned paths and acceptance criteria; do not invent work. If a task is PARTIAL, identify its remaining implementation and split it into claimable child task IDs rather than allowing unrelated OPEN tasks to stall.
 - Maintain the Code Graph as source changes occur. Do not confuse a stale snapshot with a current graph.
 
 ## Non-negotiable product and architecture constraints
