@@ -646,3 +646,6 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 ## Workflow timeout recovery implementation checkpoint (2026-11-25)
 
 MIA-LIFE-08-TIMEOUT has a first implementation on main. Workflow timeouts now preserve the underlying worker for reconciliation, expose an explicit reconciliation API, block duplicate execution while outcomes are unknown, and require an owner decision after restart before treating an interrupted step as applied or retryable. Regression tests were added for live-worker and restart paths. **Tests and static checks have not been run in this editing environment; this is an implementation checkpoint, not a verified completion claim.** See the task board and integration log for commit evidence.
+
+
+The MIA-LIFE-08-TIMEOUT checkpoint was extended with owner-facing reconciliation controls. Interrupted steps no longer expose a generic retry action; direct retry is rejected until reconciliation, and cancellation waits for the unknown outcome to be resolved. UI, retry-bypass and cancellation regression tests were added. Test execution remains pending.
