@@ -345,6 +345,11 @@ def test_voice_turn_uses_brain_to_preview_internal_workflow_without_running(tmp_
     )
     client = TestClient(app)
     broker = app.state.brain.broker
+    workflow_tool = app.state.brain.tools.definition("workflow.preview_internal")
+    allowed_steps = workflow_tool.parameters["properties"]["steps"]["items"]["properties"]["capability"]["enum"]
+    assert set(allowed_steps) == {
+        "personal.add", "personal.list", "personal.complete", "notify.submit",
+    }
     preview_prompt = "Plan a workflow to add a task called Buy milk. Do not run it."
     assert "workflow.preview_internal" in broker.select_tools(
         preview_prompt, analyze_intent(preview_prompt)
