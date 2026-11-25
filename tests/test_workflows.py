@@ -141,20 +141,97 @@ def test_progress_survives_restart_and_interrupted_step_is_not_silently_rerun(en
     assert asyncio.run(fresh.advance(wid))["status"] == "completed"
 
 
-def test_slow_step_times_out_as_failed_with_unknown_outcome(tmp_path):
+def test_slow_side_effect_waits_for_worker_then_reconciles_without_duplicate(tmp_path):
     memory = MemoryStore(tmp_path / "m.sqlite3")
-    real_list = memory.personal.list
+    real_add = memory.personal.add
+    calls = []
 
-    def slow(**kw):
-        time.sleep(0.6)
-        return real_list(**kw)
+    def slow_add(**kw):
+        calls.append("started")
+        time.sleep(0.25)
+        return real_add(**kw)
 
-    memory.personal.list = slow
-    engine = make_workflow_engine(tmp_path / "w.sqlite3", ApprovalStore(tmp_path / "a.sqlite3"), personal=memory.personal, step_timeout=0.1)
-    task = engine.create_task("slow", [{"capability": "personal.list", "args": {}}])
-    final = asyncio.run(engine.advance(task["task_id"]))
-    assert final["status"] == "failed"
-    assert "unknown" in final["steps"][0]["error"]
+    memory.personal.add = slow_add
+    engine = make_workflow_engine(
+        tmp_path / "w.sqlite3", ApprovalStore(tmp_path / "a.sqlite3"),
+        personal=memory.personal, step_timeout=0.05,
+    )
+    task = engine.create_task("slow add", [add_step("Only once")])
+    timed_out = asyncio.run(engine.advance(task["task_id"]))
+    assert timed_out["status"] == "interrupted"
+    assert timed_out["outcome"] == "unknown"
+    assert timed_out["steps"][0]["status"] == "interrupted"
+    assert memory.personal.list(limit=10) == []
+
+    waiting = engine.reconcile_timeout(task["task_id"], 1)
+    assert waiting["status"] == "waiting"
+    # A second run must not start another worker while the first is unresolved.
+    still_waiting = asyncio.run(engine.advance(task["task_id"]))
+    assert still_waiting["status"] == "interrupted"
+    time.sleep(0.3)
+
+    reconciled = engine.reconcile_timeout(task["task_id"], 1)
+    assert reconciled["status"] == "paused"
+    assert reconciled["steps"][0]["status"] == "succeeded"
+    assert len(calls) == 1
+    finished = asyncio.run(engine.advance(task["task_id"]))
+    assert finished["status"] == "completed"
+    assert [item["title"] for item in memory.personal.list(limit=10)] == ["Only once"]
+
+
+def test_restart_requires_owner_reconciliation_before_retry(tmp_path):
+    memory = MemoryStore(tmp_path / "m.sqlite3")
+    approvals = ApprovalStore(tmp_path / "a.sqlite3")
+    engine = make_workflow_engine(tmp_path / "w.sqlite3", approvals, personal=memory.personal)
+    task = engine.create_task("after restart", [add_step("Owner checked")])
+    engine._set_step(task["task_id"], 1, status="interrupted",
+                     error="Step timed out; outcome is unknown.")
+    engine._set_task(task["task_id"], status="interrupted", outcome="unknown")
+
+    fresh = make_workflow_engine(tmp_path / "w.sqlite3", approvals, personal=memory.personal)
+    refused = asyncio.run(fresh.advance(task["task_id"]))
+    assert refused["status"] == "interrupted"
+    assert memory.personal.list(limit=10) == []
+
+    with pytest.raises(Exception, match="decision must be"):
+        fresh.reconcile_timeout(task["task_id"], 1)
+    retryable = fresh.reconcile_timeout(task["task_id"], 1, decision="not_applied")
+    assert retryable["status"] == "paused"
+    assert retryable["steps"][0]["status"] == "pending"
+    completed = asyncio.run(fresh.advance(task["task_id"]))
+    assert completed["status"] == "completed"
+    assert [item["title"] for item in memory.personal.list(limit=10)] == ["Owner checked"]
+
+
+def test_restart_owner_can_confirm_applied_without_repeating_side_effect(tmp_path):
+    memory = MemoryStore(tmp_path / "m.sqlite3")
+    approvals = ApprovalStore(tmp_path / "a.sqlite3")
+    memory.personal.add(kind="task", title="Already applied", actor="workflow")
+    engine = make_workflow_engine(tmp_path / "w.sqlite3", approvals, personal=memory.personal)
+    task = engine.create_task("after restart", [add_step("Already applied")])
+    engine._set_step(task["task_id"], 1, status="interrupted",
+                     error="Step timed out; outcome is unknown.")
+    engine._set_task(task["task_id"], status="interrupted", outcome="unknown")
+
+    fresh = make_workflow_engine(tmp_path / "w.sqlite3", approvals, personal=memory.personal)
+    reconciled = fresh.reconcile_timeout(task["task_id"], 1, decision="applied")
+    assert reconciled["steps"][0]["status"] == "succeeded"
+    assert asyncio.run(fresh.advance(task["task_id"]))["status"] == "completed"
+    assert len(memory.personal.list(limit=10)) == 1
+
+
+def test_reconcile_step_api_requires_explicit_post_restart_decision(env):
+    client, *_ = env
+    wid = create(client, [add_step("Reconcile me")]).json()["workflow"]["task_id"]
+    engine = client.app.state.workflow_engine
+    engine._set_step(wid, 1, status="interrupted", error="unknown")
+    engine._set_task(wid, status="interrupted", outcome="unknown")
+    missing = client.post(f"/api/workflows/{wid}/reconcile-step", json={"step": 1})
+    assert missing.status_code == 422
+    applied = client.post(f"/api/workflows/{wid}/reconcile-step",
+                          json={"step": 1, "decision": "not_applied"})
+    assert applied.status_code == 200
+    assert applied.json()["steps"][0]["status"] == "pending"
 
 
 def test_notify_step_queues_a_notification_with_its_source(env):
