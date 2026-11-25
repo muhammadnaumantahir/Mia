@@ -279,7 +279,7 @@ def test_http_flow_select_index_search_verify_delete(api):
 
 def test_brain_search_returns_only_live_verified_chunks_with_exact_citations(world):
     root, _, index, _ = world
-    selection = sel(index)
+    sel(index)
     hits = index.search_verified("basil morning")
     assert len(hits) == 1
     hit = hits[0]
