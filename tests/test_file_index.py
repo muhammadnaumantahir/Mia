@@ -354,7 +354,7 @@ def test_watch_refresh_picks_up_changes_and_removes_deleted_files(api):
     sid = client.post(
         "/api/file-index/selections", json={"root_id": "root_1", "path": "notes"}
     ).json()["id"]
-    source.write_text("Updated watchable pineapple content.\\n", encoding="utf-8")
+    source.write_text("Updated watchable pineapple content.\n", encoding="utf-8")
     watcher = app.state.file_index_watcher
     assert watcher._refresh_once() == 1
     assert app.state.file_index.search("pineapple")
