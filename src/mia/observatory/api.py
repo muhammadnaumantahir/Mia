@@ -42,7 +42,12 @@ from mia.agent.tools import ToolRegistry, ToolResult
 from mia.brain.broker import OwnerPermissionEvaluator, ToolBroker
 from mia.brain.capabilities import CapabilityRegistry
 from mia.brain.judges import policy_snapshot as judge_policy_snapshot
-from mia.brain.orchestrator import Brain, TurnRequest
+from mia.brain.orchestrator import (
+    CURRENT_BRAIN_INTERFACE,
+    CURRENT_BRAIN_USER_PROMPT,
+    Brain,
+    TurnRequest,
+)
 from mia.brain.plan import PlanStore
 from mia.brain.self_description import (
     build_runtime_manifest,
@@ -121,7 +126,11 @@ from mia.life.store import ITEM_STATES, LifeStore
 from mia.life.suggestions import run_suggestions as run_stalled_suggestions
 from mia.life.task_notifications import sync_due_tasks
 from mia.life.web import ResearchExplorer, normalise_research_url
-from mia.life.workflows import make_workflow_engine, register_workflow_routes
+from mia.life.workflows import (
+    explicit_workflow_execution_requested,
+    make_workflow_engine,
+    register_workflow_routes,
+)
 from mia.memory import projects as project_workspaces
 from mia.memory.briefing import generate_briefing
 from mia.memory.capture import CaptureService
@@ -1428,6 +1437,75 @@ def create_app(
             ]
         })
 
+    workflow_brain_capabilities = frozenset({
+        "personal.add", "personal.list", "personal.complete", "notify.submit",
+    }) & frozenset(workflow_engine.handlers)
+
+    def tool_workflow_preview(args: dict[str, Any]) -> ToolResult:
+        steps = args["steps"]
+        if any(step.get("capability") not in workflow_brain_capabilities for step in steps):
+            return ToolResult({
+                "ok": False, "error": "Brain can plan only the approved internal workflow handlers.",
+                "error_type": "PermissionError",
+            })
+        source = "voice" if CURRENT_BRAIN_INTERFACE.get() == "voice" else "brain"
+        try:
+            task = workflow_engine.create_task(args["title"], steps, source=source)
+            preview = workflow_engine.plan_summary(task["task_id"])
+        except TaskPlanError as exc:
+            return ToolResult({"ok": False, "error": str(exc), "error_type": "ValueError"})
+        return ToolResult({
+            "workflow_id": task["task_id"],
+            "status": task["status"],
+            "source": task["source"],
+            "preview": preview,
+            "executed": False,
+            "note": "This is a plan only. No workflow step has run.",
+        })
+
+    async def tool_workflow_run(args: dict[str, Any]) -> ToolResult:
+        if not explicit_workflow_execution_requested(CURRENT_BRAIN_USER_PROMPT.get()):
+            return ToolResult({
+                "workflow_id": args["workflow_id"],
+                "status": "not_executed",
+                "executed": False,
+                "reason": (
+                    "The current user message does not explicitly request execution. "
+                    "Show the preview and ask the owner before running."
+                ),
+            })
+        try:
+            task = workflow_engine.get_task(args["workflow_id"])
+        except KeyError:
+            return ToolResult({
+                "ok": False, "error": "Unknown workflow ID.", "error_type": "KeyError",
+            })
+        if any(step["status"] == "interrupted" for step in task["steps"]):
+            return ToolResult({
+                "workflow_id": args["workflow_id"],
+                "status": "interrupted",
+                "outcome": "unknown",
+                "executed": False,
+                "reason": "An interrupted step must be reconciled before the workflow can run again.",
+            })
+        result = await workflow_engine.advance(args["workflow_id"])
+        return ToolResult({
+            "workflow_id": args["workflow_id"],
+            "status": result["status"],
+            "outcome": result.get("outcome"),
+            "executed": True,
+            "steps": [
+                {
+                    "idx": step["idx"],
+                    "capability": step["capability"],
+                    "status": step["status"],
+                    "error": step.get("error"),
+                }
+                for step in result["steps"]
+            ],
+            "report": workflow_engine.report(args["workflow_id"])[:4000],
+        })
+
     def tool_desktop_list_windows(args: dict[str, Any]) -> ToolResult:
         return ToolResult({
             "items": desktop_adapter.list_windows(limit=args.get("limit", 50))
@@ -1624,6 +1702,39 @@ def create_app(
         "memory.read",
         "read",
         tool_memory_search,
+    )
+    register_tool(
+        "workflow.preview_internal",
+        "Create a preview-only plan using Mia's safe internal workflow handlers (personal.add, personal.list, personal.complete, notify.submit). This tool never executes steps.",
+        {
+            "title": {"type": "string", "minLength": 1, "maxLength": 200},
+            "steps": {
+                "type": "array", "minItems": 1, "maxItems": 20,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "capability": {"type": "string", "enum": sorted(workflow_brain_capabilities)},
+                        "args": {"type": "object"},
+                        "description": {"type": "string", "maxLength": 200},
+                    },
+                    "required": ["capability"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        ["title", "steps"],
+        "workflow.preview",
+        "read",
+        tool_workflow_preview,
+    )
+    register_tool(
+        "workflow.run_internal",
+        "Run a previously previewed internal workflow only when the current user message explicitly asks to run/execute it. Requires the owner's workflow.run_internal capability grant. Never use for external, browser, shell, filesystem or destructive actions.",
+        {"workflow_id": {"type": "string", "minLength": 1, "maxLength": 64}},
+        ["workflow_id"],
+        "workflow.run_internal",
+        "write",
+        tool_workflow_run,
     )
     register_tool(
         "desktop.list_windows",
