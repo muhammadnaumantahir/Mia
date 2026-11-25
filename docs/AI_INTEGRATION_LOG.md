@@ -956,7 +956,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - COMP-03 (Windows companion lifecycle, A5) now has its dependency on main. A7 idle.
 
 
-## 2026-11-25T — MIA-LIFE-03 moved to DONE (owner verification deferred)
+## 2026-11-25 — MIA-LIFE-03 moved to DONE (owner verification deferred)
 - Both implementation halves are already on remote main: task workspace UI (466517f) and Brain/conversational task actions (5424535).
 - Remaining items are owner-only accessibility checks and a browser check of the chat surface. Per owner instruction, these manual verification items will be completed by the owner after development is complete; they do not block implementation status.
 - No source code or tests changed in this status reconciliation.
