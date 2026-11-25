@@ -131,6 +131,12 @@ class WorkflowEngine(TaskEngine):
             return task
         return await super().advance(task_id)
 
+    def retry_step(self, task_id: str, idx: int) -> None:
+        step = next((s for s in self.get_task(task_id)["steps"] if s["idx"] == idx), None)
+        if step is not None and step["status"] == "interrupted":
+            raise TaskPlanError("Interrupted workflow steps must be reconciled before retry")
+        super().retry_step(task_id, idx)
+
     def reconcile_timeout(
         self, task_id: str, idx: int, *, decision: Literal["applied", "not_applied"] | None = None
     ) -> dict[str, Any]:
@@ -196,7 +202,8 @@ class WorkflowEngine(TaskEngine):
             self._event(task_id, "step_reconciled_owner_applied",
                         f"Owner confirmed step {idx} was applied after restart", idx)
         elif decision == "not_applied":
-            self.retry_step(task_id, idx)
+            # This is the sole path allowed to re-arm an interrupted workflow step.
+            super().retry_step(task_id, idx)
             self._event(task_id, "step_reconciled_owner_retry",
                         f"Owner confirmed step {idx} was not applied; explicit retry is now available", idx)
         else:
