@@ -149,6 +149,7 @@ from mia.observatory.activity import ExperimentActivityCollector
 from mia.observatory.runtime_state import register_runtime_routes
 from mia.observatory.trend_view import build_trend_view
 from mia.security.companion_api import register_companion_routes
+from mia.security.capabilities import bind_route_capabilities
 from mia.security.local_guard import LoopbackGuard
 from mia.security.pairing import DeviceConfinementGuard, PairingService
 from mia.voice.action_readback import describe_action
@@ -6624,6 +6625,9 @@ def create_app(
             raise HTTPException(status_code=404, detail="Code Graph interface is not installed")
         return FileResponse(page, media_type="text/html")
 
+    # Fail closed during app construction: every state-changing route must be
+    # classified and bound to its actual callable Mia handler.
+    app.state.route_capability_bindings = bind_route_capabilities(app.routes)
     return app
 
 
