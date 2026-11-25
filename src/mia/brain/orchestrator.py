@@ -13,11 +13,16 @@ from __future__ import annotations
 import asyncio
 import inspect
 import os
+from contextvars import ContextVar
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from typing import Any
 
 from mia.agent.tools import ToolRegistry
+CURRENT_BRAIN_USER_PROMPT: ContextVar[str] = ContextVar("mia_brain_user_prompt", default="")
+CURRENT_BRAIN_INTERFACE: ContextVar[str] = ContextVar("mia_brain_interface", default="text")
+
+
 from mia.gateway.contracts import (
     ModelCandidate,
     ModelRequest,
@@ -129,6 +134,7 @@ class Brain:
         diagnostics: DiagnosticsLog | None = None,
         preferences: Callable[[], RoutingPreferences] = preferences_from_env,
         allow_remote_file_context: Callable[[], bool] | None = None,
+        allow_remote_workflow_tools: Callable[[], bool] | None = None,
         max_tool_rounds: int = 4,
         run_policy: RunPolicy = RunPolicy(),
         capture: Callable[[str, str, str], dict[str, Any] | None | Awaitable[dict[str, Any] | None]] | None = None,
@@ -157,6 +163,8 @@ class Brain:
         self.preferences = preferences
         self.allow_remote = allow_remote_file_context or (
             lambda: os.getenv("MIA_ALLOW_REMOTE_FILE_CONTEXT", "false").strip().lower() == "true")
+        self.allow_remote_workflows = allow_remote_workflow_tools or (
+            lambda: os.getenv("MIA_ALLOW_REMOTE_WORKFLOW_TOOLS", "false").strip().lower() == "true")
         self.max_tool_rounds = max_tool_rounds
         self.run_policy = run_policy
         self.capture = capture
@@ -554,10 +562,18 @@ class Brain:
                 call_id = str(call.get("id") or f"mia_tool_{round_index}_{call_index}")
                 op = ledger.add(f"tool call {str(name)[:60]}")
                 ledger.set(op, "attempted")
-                record = await self.broker.call(
-                    name, function.get("arguments") or "{}", offered=offered,
-                    provider_local=result.data_local,
-                    allow_remote_file_context=self.allow_remote())
+                prompt_token = CURRENT_BRAIN_USER_PROMPT.set(p.request.prompt)
+                interface_token = CURRENT_BRAIN_INTERFACE.set(p.request.interface)
+                try:
+                    record = await self.broker.call(
+                        name, function.get("arguments") or "{}", offered=offered,
+                        provider_local=result.data_local,
+                        allow_remote_file_context=self.allow_remote(),
+                        allow_remote_workflow_tools=self.allow_remote_workflows(),
+                    )
+                finally:
+                    CURRENT_BRAIN_INTERFACE.reset(interface_token)
+                    CURRENT_BRAIN_USER_PROMPT.reset(prompt_token)
                 if record.status in {"completed", "approval_required"}:
                     ok, why = verify_tool_record(record)
                     ledger.set(op, "verified" if ok else "completed", why)
