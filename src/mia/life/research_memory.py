@@ -64,6 +64,8 @@ class ResearchMemoryBridge:
             raise ResearchMemoryError(
                 "Create this project on Mia's Projects page before importing findings"
             )
+        if project["status"] == "archived":
+            raise ResearchMemoryError("Archived projects cannot receive new research findings")
         return project
 
     def _confirmed_claim(self, claim_id: str) -> dict[str, Any]:
@@ -185,7 +187,7 @@ class ResearchMemoryBridge:
         with self._db() as db:
             links = db.execute(
                 "SELECT claim_id, record_id FROM research_memory_links "
-                "WHERE project_key=? ORDER BY created_at DESC",
+                "WHERE project_key=? ORDER BY created_at DESC LIMIT 200",
                 (project["project_key"],),
             ).fetchall()
         records: dict[str, dict[str, Any]] = {}
