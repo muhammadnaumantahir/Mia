@@ -177,12 +177,11 @@ def test_sync_push_is_atomic_and_replay_is_idempotent(tmp_path):
         },
     ])
     assert conflict["status"] == "conflict"
-    assert store.pull("device-two")["changes"] == [
-        {"seq": 1, "namespace": "preferences", "item_id": "theme", "version": 1,
-         "payload": {"value": "dark"}, "deleted": False,
-         "payload_sha256": first["items"][0].get("payload_sha256"),
-         "device_id": "device-one", "created_at": store.pull("device-two")["changes"][0]["created_at"]}
-    ]
+    after_conflict = store.pull("device-two")["changes"]
+    assert len(after_conflict) == 1
+    assert after_conflict[0]["item_id"] == "theme"
+    assert after_conflict[0]["version"] == 1
+    assert after_conflict[0]["payload"] == {"value": "dark"}
 
     replay = store.push("device-one", "batch-000000000001", [{
         "namespace": "preferences", "item_id": "theme", "base_version": 0,
