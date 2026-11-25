@@ -203,5 +203,5 @@ Split from the PARTIAL parent tasks above. These are independent task IDs; claim
 | MIA-LIFE-08-APPROVAL | P3 | A1 + A5 | BLOCKED (COMP-04 owner-approval enforcement) | Approval-gated external/destructive workflow steps; no implementation before final-boundary approval is enforced. |
 | MIA-LIFE-08-TIMEOUT | P3 | A5 | OPEN | Unknown-outcome timeout semantics and safe reconciliation/retry. |
 | MIA-COMP-01-HANDLERS | P4 | A5 | OPEN | Exhaustive route/handler capability proof and fail-closed coverage. |
-| MIA-COMP-01-IDENTITY | P4 | A1 + A5 | OPEN | Finalize device identity and remote trust model using existing COMP-02 plus LIFE-13. |
-| MIA-COMP-04-OWNER | P4 | A1 + A5 | OPEN | Authenticated owner approval; dependency is device/owner trust contract, not milestone order. |
+| MIA-COMP-01-IDENTITY | P4 | A1 + A5 | BLOCKED (LIFE-13 transport/sync trust contract) | Finalize device identity and remote trust model using existing COMP-02 plus LIFE-13. |
+| MIA-COMP-04-OWNER | P4 | A1 + A5 | BLOCKED (LIFE-13 owner/device trust contract) | Authenticated owner approval; dependency is device/owner trust contract, not milestone order. |
