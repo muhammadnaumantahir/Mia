@@ -1017,3 +1017,8 @@ Implemented in `src/mia/life/workflows.py` (commit `238443784905aac0b14e9de8d444
 ### Final timeout-recovery refinement
 
 Queued cancellation now remains pending while an unknown step exists and is finalized immediately after reconciliation, without requiring the owner to press Run. Regression coverage asserts that the interrupted action is not executed. Commits: `b731fd0033c00a3ad15682538b48d5826955d839` (engine) and `f754395d08ef82e54ffded3342b646311a70d57d` (test).
+
+
+## 2026-11-25 — Coordinator claim: MIA-LIFE-06-WATCH
+
+Claimed the bounded file-index refresh/watch child task as coordinator; A5 remains assigned to MIA-EVOL-02. Scope is owner-controlled, bounded refresh lifecycle with stop-all integration and deterministic tests, plus safe optional document extraction behavior. I will inspect existing APIs and implement only missing pieces; no test execution or completion claim until verified.
