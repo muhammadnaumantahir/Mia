@@ -158,6 +158,64 @@ def test_scoped_sync_push_pull_conflict_tombstone_and_revocation(sync_api):
     assert revoked.status_code == 401
 
 
+def test_remote_https_sync_and_signed_session_renewal(tmp_path, monkeypatch):
+    monkeypatch.setenv("MIA_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("MIA_REMOTE_ACCESS_ENABLED", "true")
+    monkeypatch.setenv("MIA_REMOTE_ALLOWED_HOSTS", "mia.example.test")
+    app = create_app(
+        store=ObservatoryStore(tmp_path / "remote-observatory.sqlite3"),
+        local_guard=True,
+    )
+    client = TestClient(app, base_url="https://mia.example.test")
+    device = Device()
+    token = device.pair(
+        app.state.pairing, ["companion.sync.read", "companion.sync.write"]
+    )
+
+    pull = client.get("/api/companion/sync/pull", headers=headers(token))
+    assert pull.status_code == 200
+
+    challenge = client.post(
+        "/api/companion/challenge",
+        json={"device_id": device.device_id},
+        headers=headers(token),
+    )
+    assert challenge.status_code == 200
+    renewed = client.post(
+        "/api/companion/session",
+        json={
+            "device_id": device.device_id,
+            "challenge_id": challenge.json()["challenge_id"],
+            "signature": device.sign(auth_statement(
+                device.device_id, challenge.json()["challenge_id"], challenge.json()["nonce"]
+            )),
+        },
+        headers=headers(token),
+    )
+    assert renewed.status_code == 200
+    new_token = renewed.json()["token"]
+    assert new_token.startswith("mia-dev_")
+
+    pushed = client.post(
+        "/api/companion/sync/push",
+        headers=headers(new_token),
+        json={
+            "batch_id": "remote-batch-000001",
+            "changes": [{
+                "namespace": "companion_state",
+                "item_id": "last_seen_screen",
+                "base_version": 0,
+                "payload": {"screen": "home"},
+            }],
+        },
+    )
+    assert pushed.status_code == 200
+
+    # Device credentials still cannot reach owner administration, even over HTTPS.
+    assert client.get("/api/companion-admin/devices", headers=headers(new_token)).status_code == 403
+    assert client.post("/api/companion/pair", json={}, headers=headers(new_token)).status_code == 400
+
+
 def test_sync_push_is_atomic_and_replay_is_idempotent(tmp_path):
     store = CompanionSyncStore(tmp_path / "sync.sqlite3")
     first = store.push("device-one", "batch-000000000001", [{
