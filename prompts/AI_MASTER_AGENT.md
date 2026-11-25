@@ -57,6 +57,7 @@ Mia's first product goal is natural, intelligent conversation with accurate self
 - Verify that your commit is present on remote main before marking your task DONE.
 - If safe direct-main integration is unavailable, do not pretend to have pushed. Record the blocker and exact local commit/diff status.
 - CI is not required and must not block development. Run local checks when practical and record exact commands/results. Never claim tests passed if they were not run.
+- If the owner explicitly defers test execution until final acceptance, still add regression tests and finish the implementation; mark execution OWNER_VERIFICATION_REQUIRED and never report those tests as passed.
 
 ## Task completion and continuation
 
