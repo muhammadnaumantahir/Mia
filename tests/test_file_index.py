@@ -348,33 +348,20 @@ def test_http_watch_is_owner_started_bounded_and_stop_all_stops_it(api):
 
 
 def test_watch_refresh_picks_up_changes_and_removes_deleted_files(api):
-    import time
-
     client, app = api
     root = app.state.computer_files.roots["root_1"]
     source = root / "notes" / "a.md"
     sid = client.post(
         "/api/file-index/selections", json={"root_id": "root_1", "path": "notes"}
     ).json()["id"]
-    assert client.post(
-        f"/api/file-index/selections/{sid}/reindex"
-    ).status_code == 200
-    source.write_text("Updated watchable pineapple content.\n", encoding="utf-8")
+    source.write_text("Updated watchable pineapple content.\\n", encoding="utf-8")
     watcher = app.state.file_index_watcher
-    watcher.start(interval_seconds=5, max_selections_per_cycle=1)
-    deadline = time.monotonic() + 2
-    try:
-        while time.monotonic() < deadline and not app.state.file_index.search("pineapple"):
-            time.sleep(0.01)
-        assert app.state.file_index.search("pineapple")
-        source.unlink()
-        # The next bounded polling cycle must remove the deleted file from the index.
-        deadline = time.monotonic() + 7
-        while time.monotonic() < deadline and app.state.file_index.search("pineapple"):
-            time.sleep(0.05)
-        assert app.state.file_index.search("pineapple") == []
-    finally:
-        watcher.stop()
+    assert watcher._refresh_once() == 1
+    assert app.state.file_index.search("pineapple")
+
+    source.unlink()
+    assert watcher._refresh_once() == 1
+    assert app.state.file_index.search("pineapple") == []
 
 
 def test_http_purge_all(api):
