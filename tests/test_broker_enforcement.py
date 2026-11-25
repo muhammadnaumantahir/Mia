@@ -185,3 +185,43 @@ def test_stop_all_blocks_granted_writes(env):
     client.post("/api/computer/stop-all")
     r = client.post("/api/computer/files/write/execute", json=write_body())
     assert r.status_code == 423 and not (root / "a/note.txt").exists()
+
+
+def test_concurrent_executes_with_one_approval_succeed_exactly_once(env):
+    """Race: many callers present the same one-time approval at the same instant."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    client, root, _ = env
+    approval = preview(client)
+    client.post(f"/api/computer/approvals/{approval}/approve")
+
+    def attempt(_):
+        return client.post("/api/computer/files/write/execute", json=write_body(approval_id=approval)).status_code
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        codes = list(pool.map(attempt, range(8)))
+    assert codes.count(200) == 1, codes
+    assert all(code >= 400 for code in codes if code != 200)
+    assert (root / "a/note.txt").read_text() == "hello"
+
+
+def test_concurrent_terminal_style_double_spend_is_impossible_at_the_store(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    from mia.computer.approvals import ApprovalError
+
+    store = ApprovalStore(tmp_path / "race.sqlite3")
+    payload = {"k": "v"}
+    created = store.request(action_id="filesystem.write", summary="s", payload=payload)
+    store.approve(created["approval_id"])
+
+    def spend(_):
+        try:
+            store.consume(approval_id=created["approval_id"], action_id="filesystem.write", payload=payload)
+            return True
+        except ApprovalError:
+            return False
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(spend, range(16)))
+    assert results.count(True) == 1
