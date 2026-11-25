@@ -638,3 +638,6 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 ## 2026-11-25 Companion pairing and device identity (MIA-COMP-02, agent A7)
 - Commit c955516. A companion pairs with a one-time code, proves it holds its private key, logs in with a replay-proof challenge and receives a short scoped token. Owner can revoke one device or all at once, and sessions stop immediately. A device token can only call `/api/companion/*`.
 - Not done: the companion itself (COMP-03), encrypted non-loopback transport (LIFE-13), owner authentication (a tokenless local process can still call owner routes), pairing UI. Real-device pairing is OWNER_VERIFICATION_REQUIRED.
+
+## 2026-11-25 Selected-folder file index (MIA-LIFE-06 backend, agent A7)
+- Owner-selected folders only; keyword search with line-range citations, staleness and live verification; untrusted/injection-flagged; real deletion; stop-all honoured. Owner check: index a real folder, search, delete, confirm nothing else was read. No UI yet.

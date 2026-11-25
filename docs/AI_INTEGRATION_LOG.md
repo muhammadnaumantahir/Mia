@@ -960,3 +960,9 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Both implementation halves are already on remote main: task workspace UI (466517f) and Brain/conversational task actions (5424535).
 - Remaining items are owner-only accessibility checks and a browser check of the chat surface. Per owner instruction, these manual verification items will be completed by the owner after development is complete; they do not block implementation status.
 - No source code or tests changed in this status reconciliation.
+
+## 2026-11-25T16:55Z - MIA-LIFE-06 backend (A7)
+- New: `src/mia/knowledge/file_index.py`, `tests/test_file_index.py` (32 tests, real adapter, real SQLite FTS5, real app), wiring in `create_app(file_index=...)`, COMP-01 inventory rules for `/api/file-index*`.
+- Mutation checks killed: symlink skip, private-key skip, compaction/vacuum (deleted text stayed in DB file), FTS quoting, verify always-true.
+- One of my own bugs: pydantic model inside the register function broke under postponed annotations (422); moved to module level.
+- Container had been reset; re-cloned and reinstalled deps. Full suite run in the background, result recorded below when done.

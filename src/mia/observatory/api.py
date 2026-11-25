@@ -104,6 +104,7 @@ from mia.life.capture import capture_from_message as capture_curiosity_from_mess
 from mia.life.notification_api import register_notification_routes
 from mia.life.notifications import NotificationCenter
 from mia.life.reflect import Reflector
+from mia.knowledge.file_index import FileIndex, register_file_index_routes
 from mia.life.research import ResearchService, register_research_routes
 from mia.life.runner import LifeRunner, LifeScheduler
 from mia.life.store import ITEM_STATES, LifeStore
@@ -841,6 +842,7 @@ def create_app(
     local_guard: bool = False,
     workflows: Any | None = None,
     research: Any | None = None,
+    file_index: Any | None = None,
     pairing: Any | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
@@ -3046,6 +3048,18 @@ def create_app(
         should_stop=lambda: control.stop_requested or life_store.get_settings().emergency_stop,
     )
     app.state.research = research_service
+
+    # MIA-LIFE-06: owner-selected folder index with source locations; reads only via the filesystem adapter.
+    file_index_service = file_index or FileIndex(
+        data_dir / "mia-file-index.sqlite3", computer_files, document_ingestor,
+        should_stop=lambda: control.stop_requested or life_store.get_settings().emergency_stop,
+    )
+    app.state.file_index = file_index_service
+    register_file_index_routes(
+        app, file_index_service,
+        lambda **kw: observatory.record_event(category="file_index", layer_id="SPS-04", **kw),
+        lambda description: control.activity("file-index", description, mode="observing"),
+    )
 
     # MIA-COMP-02: companion pairing; device tokens are confined to /api/companion/*.
     pairing_service = pairing or PairingService(data_dir / "mia-companion.sqlite3")
