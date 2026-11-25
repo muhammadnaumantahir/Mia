@@ -113,7 +113,7 @@ The detailed task definitions, dependencies, scope and acceptance criteria are i
 | MIA-COMP-07 | P4 | A5 + A6 | OPEN | Isolated browser automation with approval boundaries, prompt-injection defense and integration tests. |
 | MIA-COMP-08 | P4 | A5 | OPEN | Allowlisted desktop app/process operations; no arbitrary shell; sensitive termination approval. |
 | MIA-COMP-09 | P4 | A1 + A6 | DONE except owner-only checks (A4, owner-approved exception; slices 30dcb68, f7ab808, 5a0538a; terminal/process/fileops approvals are API-only and have no cards; central enforcement is COMP-04) | Approval UX, audit, cancellation and undo/recovery for supported actions; race/disconnect tests. |
-| MIA-COMP-10 | P4 | A4 + A6 | DONE except owner-only checks (A4, owner-approved exception; commit pending-sha; voice never approves, structured read-back, cancel-on-stop, doubtful-transcript gate; broker enforcement stays COMP-04) | Voice-driven computer actions through same Brain and broker as text; confirmation and interruption tests. |
+| MIA-COMP-10 | P4 | A4 + A6 | DONE except owner-only checks (A4, owner-approved exception; commit 99df9a0; voice never approves, structured read-back, cancel-on-stop, doubtful-transcript gate; broker enforcement stays COMP-04) | Voice-driven computer actions through same Brain and broker as text; confirmation and interruption tests. |
 | MIA-COMP-11 | P4 | A5 + A3 | OPEN | Adversarial security regression and owner handoff for pairing, sandbox, permissions, secrets and audit. |
 
 ### M5 — Self-programming and custom models
