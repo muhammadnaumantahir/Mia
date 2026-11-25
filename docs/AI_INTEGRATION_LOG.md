@@ -1168,3 +1168,8 @@ Key implementation commits: `a0d9449167` (sync store), `de0ea05148` / `ce925fa96
 **Verification:** Tests were authored but not executed per owner instruction. Real TLS certificate, DNS/firewall, separate-network sync, offline recovery and physical-device revocation remain `OWNER_VERIFICATION_REQUIRED`. No automated test pass or real-device success is claimed.
 
 **Dependency release:** LIFE-13's trust/transport contract is now on main. `MIA-COMP-01-IDENTITY` and `MIA-COMP-04-OWNER` are unblocked and returned to OPEN; LIFE-08-APPROVAL remains blocked on COMP-04 enforcement.
+
+
+## 2026-11-25 — MIA-COMP-01-IDENTITY complete
+
+Created `docs/architecture/IDENTITY_TRUST_MODEL.md` as the source-backed trust contract. It distinguishes local owner authority from Ed25519 paired-device identity, documents short-lived sessions, device scopes, revocation, replay/conflict protections, optional HTTPS exact-host remote companion access and the no-public-unauthenticated boundary. It explicitly records the remaining gap: local processes are not yet cryptographically distinguished as owner; COMP-04-OWNER must close that gap. No code behavior or test status was changed by this documentation task.
