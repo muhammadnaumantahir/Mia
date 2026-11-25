@@ -984,3 +984,8 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-25T18:10Z — MIA-LIFE-06-UI claimed (A6)
 
 - Owner "continue development, no false blockers" prompt. Backend contract `/api/file-index/*` on main. Plan: `/files` page (select folder inside a configured root, reindex, search with path/line ranges, current/changed/missing, untrusted + injection flags, skip reasons, verify, secure delete of file/selection/all); add-only route, nav link, package-data; Chromium tests with real FileIndex.
+
+
+## 2026-11-25 — Coordinator claim: MIA-LIFE-08-TIMEOUT
+
+Claimed the independent workflow timeout/reconciliation child task. Scope: make timed-out worker outcomes explicitly unknown, prevent a second run while the original worker may still be executing, reconcile a completed in-process worker, and require an explicit owner decision after restart before marking an unknown step applied or retrying it. No claim of tests or runtime verification until the implementation and regression tests are reviewed and run.
