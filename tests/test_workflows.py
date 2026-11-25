@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from mia.computer.approvals import ApprovalStore
-from mia.life.workflows import make_workflow_engine
+from mia.life.workflows import explicit_workflow_execution_requested, make_workflow_engine
 from mia.memory.store import MemoryStore
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
@@ -29,6 +29,27 @@ def create(client, steps, title="Plan my week"):
 
 def add_step(title, **extra):
     return {"capability": "personal.add", "args": {"kind": "task", "title": title, **extra}}
+
+
+@pytest.mark.parametrize(
+    ("prompt", "expected"),
+    [
+        ("Plan a workflow to add a task.", False),
+        ("Preview only: add a task for tomorrow.", False),
+        ("Don't run the workflow.", False),
+        ("Do not add a task.", False),
+        ("Don't do it.", False),
+        ("Run the workflow after I approve.", False),
+        ("How do I run the workflow?", False),
+        ("What if I add a task?", False),
+        ("Can you run the workflow now?", True),
+        ("Run it.", True),
+        ("Add a task to my list.", True),
+        ("Chala do workflow.", True),
+    ],
+)
+def test_workflow_execution_intent_fails_closed(prompt, expected):
+    assert explicit_workflow_execution_requested(prompt) is expected
 
 
 def test_capabilities_are_only_the_internal_ones(env):
