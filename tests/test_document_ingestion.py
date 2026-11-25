@@ -100,3 +100,16 @@ def test_office_archive_accepts_small_valid_zip_container(tmp_path):
     )
 
     ingestor._validate_office_archive(archive_bytes.getvalue())
+
+
+
+def test_extraction_budget_stops_accumulating_document_text(monkeypatch):
+    monkeypatch.setattr(DocumentIngestor, "MAX_EXTRACTED_CHARS", 12)
+    parts = []
+    total = DocumentIngestor._append_bounded(parts, "first paragraph", 0)
+    total = DocumentIngestor._append_bounded(parts, "second paragraph", total)
+    assert total == 12
+    assert "".join(parts) == "first paragra"
+    total = DocumentIngestor._append_bounded(parts, "must not append", total)
+    assert total == 12
+    assert "".join(parts) == "first paragra"
