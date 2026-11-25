@@ -34,6 +34,7 @@ LOCAL_ONLY_TOOLS = frozenset({
     "memory.search_knowledge",
     "knowledge.search_files",
 })
+WORKFLOW_TOOLS = frozenset({"workflow.preview_internal", "workflow.run_internal"})
 _TRANSIENT_ERRORS = {"TimeoutError", "ConnectionError", "BlockingIOError", "ConnectionResetError"}
 
 
@@ -78,6 +79,8 @@ class OwnerPermissionEvaluator(DefaultPermissionEvaluator):
         "filesystem.list_directory": "filesystem.list",
         "filesystem.search_filenames": "filesystem.search",
         "knowledge.search_files": "filesystem.search",
+        "workflow.preview_internal": "workflow.preview",
+        "workflow.run_internal": "workflow.run_internal",
         "filesystem.read_text": "filesystem.read",
         "desktop.list_windows": "desktop.observe",
         "desktop.inspect_window": "desktop.observe",
@@ -99,7 +102,10 @@ class OwnerPermissionEvaluator(DefaultPermissionEvaluator):
         path_resolver: Any | None = None,
         deny_permissions: Iterable[str] = (),
     ) -> None:
-        super().__init__(deny_permissions=deny_permissions)
+        super().__init__(
+            deny_permissions=deny_permissions,
+            allowed_modes=("read", "preview", "write"),
+        )
         self.permission_policy = permission_policy
         self.capability_registry = capability_registry
         self.path_resolver = path_resolver
@@ -143,7 +149,7 @@ class OwnerPermissionEvaluator(DefaultPermissionEvaluator):
             return GateDecision(
                 False,
                 "permission",
-                "this read tool requires an owner grant under the capability policy",
+                "this tool requires an owner grant under the capability policy",
             )
         return GateDecision(True, "ok")
 
@@ -206,6 +212,7 @@ class ToolBroker:
     def evaluate_call(self, name: Any, raw_arguments: Any, *, offered: set[str] | frozenset[str],
                       provider_local: bool = True,
                       allow_remote_file_context: bool = False,
+                      allow_remote_workflow_tools: bool = False,
                       ) -> tuple[GateDecision, dict[str, Any] | None]:
         if not isinstance(name, str) or not name:
             return GateDecision(False, "parse", "missing tool name", model_fault=True), None
@@ -225,6 +232,12 @@ class ToolBroker:
         verdict = self.evaluator.evaluate(tool, arguments)
         if not verdict.allowed:
             return verdict, None
+        if name in WORKFLOW_TOOLS and not provider_local and not allow_remote_workflow_tools:
+            return GateDecision(
+                False, "egress",
+                "workflow plans and personal actions are blocked from non-local providers "
+                "unless MIA_ALLOW_REMOTE_WORKFLOW_TOOLS is explicitly enabled",
+            ), None
         if name in self.local_only_tools and not provider_local and not allow_remote_file_context:
             return GateDecision(False, "egress",
                                 "file and knowledge contents are blocked from non-local providers "
@@ -272,10 +285,12 @@ class ToolBroker:
 
     async def call(self, name: Any, raw_arguments: Any, *, offered: set[str] | frozenset[str],
                    provider_local: bool = True, allow_remote_file_context: bool = False,
+                   allow_remote_workflow_tools: bool = False,
                    ) -> ToolCallRecord:
         decision, arguments = self.evaluate_call(
             name, raw_arguments, offered=offered, provider_local=provider_local,
-            allow_remote_file_context=allow_remote_file_context)
+            allow_remote_file_context=allow_remote_file_context,
+            allow_remote_workflow_tools=allow_remote_workflow_tools)
         if not decision.allowed or arguments is None:
             return ToolCallRecord(
                 name=str(name)[:80] if name else "", status="refused", stage=decision.stage,
