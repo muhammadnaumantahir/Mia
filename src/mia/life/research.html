@@ -102,7 +102,8 @@ dialog::backdrop{background:#000a}
 </section>
 
 <section class="panel" aria-labelledby="findHeading"><h2 id="findHeading">Saved findings</h2>
-<p class="note">Claims you confirmed, with the exact quotes and where they came from.</p>
+<p class="note">Claims you confirmed, with the exact quotes and where they came from. Only confirmed findings can be imported into a registered project's structured memory.</p>
+<label>Project for memory import<select id="memoryProject" aria-label="Project for memory import"></select></label>
 <ul id="findings" class="items"></ul></section>
 
 <dialog id="confirm" aria-labelledby="confirmTitle" aria-describedby="confirmBody">
@@ -185,6 +186,26 @@ $('useSearchResults').addEventListener('click',()=>{
  $('question').focus();say('Added '+plural(selected.length,'page','pages')+' to the research form. Review the URLs, then start the run.');
 });
 async function loadRuns(){try{runs=(await api('/api/research/runs')).items;renderRuns();}catch(e){say('Could not load earlier runs: '+e.message,true);}}
+async function loadMemoryProjects(){
+ const select=$('memoryProject');select.replaceChildren();
+ try{
+  const data=await api('/api/projects');const items=(data.projects||[]).filter(p=>p.registered);
+  if(!items.length){select.append(new Option('Create a project first…',''));return;}
+  select.append(new Option('Choose a project…',''));
+  for(const p of items)select.append(new Option(p.name,p.name));
+ }catch(e){select.append(new Option('Could not load projects',''));say('Could not load projects for memory import: '+e.message,true);}
+}
+async function importFinding(claim,button){
+ const project=$('memoryProject').value;
+ if(!project){say('Choose a registered project first, or create one on the Projects page.',true);$('memoryProject').focus();return;}
+ button.disabled=true;
+ try{
+  const record=await api('/api/research/claims/'+encodeURIComponent(claim.claim_id)+'/memory','POST',{project});
+  button.textContent='Added to '+project+' memory';
+  say('Confirmed finding added to '+project+' structured memory ('+record.record_id.slice(0,8)+').');
+ }catch(e){say('Could not add this finding to project memory: '+e.message,true);}
+ finally{button.disabled=false;}
+}
 async function loadFindings(){
  const ul=$('findings');
  let items;try{items=(await api('/api/research/findings')).items;}catch(e){say('Could not load saved findings: '+e.message,true);return;}
@@ -272,6 +293,13 @@ function claimItem(c,withActions){
   const no=mk('button','Reject','alt');no.type='button';no.setAttribute('aria-label','Reject: '+c.text);no.addEventListener('click',()=>review(c,'reject'));
   a.append(yes,no);li.append(a);
  }
+ if(c.status==='confirmed'){
+  const a=mk('div',undefined,'actions');
+  const save=mk('button','Add to project memory','alt');save.type='button';
+  save.setAttribute('aria-label','Add confirmed finding to project memory: '+c.text);
+  save.addEventListener('click',()=>importFinding(c,save));
+  a.append(save);li.append(a);
+ }
  return li;
 }
 function renderClaims(){
@@ -351,5 +379,5 @@ $('deleteRun').addEventListener('click',async e=>{
  run=null;current=null;seq+=1;$('detail').hidden=true;await Promise.all([loadRuns(),loadFindings()]);say('Run deleted.');$('runsHeading').focus();
 });
 
-(async()=>{await Promise.all([loadRuns(),loadFindings()]);})();
+(async()=>{await Promise.all([loadRuns(),loadFindings(),loadMemoryProjects()]);})();
 </script></main></body></html>
