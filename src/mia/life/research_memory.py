@@ -58,13 +58,13 @@ class ResearchMemoryBridge:
         finally:
             db.close()
 
-    def _project(self, name: str) -> dict[str, Any]:
+    def _project(self, name: str, *, allow_archived: bool = False) -> dict[str, Any]:
         project = self.memory.projects.get(name)
         if project is None:
             raise ResearchMemoryError(
                 "Create this project on Mia's Projects page before importing findings"
             )
-        if project["status"] == "archived":
+        if project["status"] == "archived" and not allow_archived:
             raise ResearchMemoryError("Archived projects cannot receive new research findings")
         return project
 
@@ -187,7 +187,7 @@ class ResearchMemoryBridge:
             return record
 
     def list_for_project(self, project_name: str) -> list[dict[str, Any]]:
-        project = self._project(project_name)
+        project = self._project(project_name, allow_archived=True)
         with self._db() as db:
             links = db.execute(
                 "SELECT claim_id, record_id FROM research_memory_links "
