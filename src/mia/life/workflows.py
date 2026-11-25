@@ -48,6 +48,8 @@ def explicit_workflow_execution_requested(prompt: str) -> bool:
     deferred = (
         r"\b(?:don't|do not|dont|never|no need to)\s+(?:run|execute|start|perform|carry out)\b",
         r"\b(?:don't|do not|dont|never|no need to)\s+(?:do it|add|create|save|complete|mark|set)\b",
+        r"\b(?:don't|do not|dont)\s+(?:want|need) to\s+(?:run|execute|start|add|create|save|complete|mark|set)\b",
+        r"\b(?:maybe|might|may be|considering|thinking about)\b.{0,60}\b(?:run|execute|start|add|create|save|complete|mark|set)\b",
         r"\b(?:run|execute|start|perform|carry out)\b.{0,60}\b(?:after|once|when)\b.{0,60}\b(?:approve|approval|confirm|confirmation|say go)\b",
         r"\b(?:plan|preview|draft)\s+only\b",
         r"\bnot yet\b",
