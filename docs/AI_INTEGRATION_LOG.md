@@ -1002,3 +1002,13 @@ Implemented in `src/mia/life/workflows.py` (commit `238443784905aac0b14e9de8d444
 - Added regression tests for live-worker waiting/no duplicate execution, restart decision requirements, owner-confirmed applied/not-applied, and the API contract.
 
 **Verification limitation:** this session used the GitHub repository connector and could not execute the Python test suite or static checks. Do not mark this child DONE until local targeted tests and review pass. The board therefore remains PARTIAL, not DONE.
+
+
+### Follow-up: owner UI and retry/cancellation hardening
+
+- Added workflow-page controls for an interrupted step: the owner must explicitly confirm that the action happened or did not happen after inspecting the target. The page no longer offers a generic Retry button for interrupted steps.
+- The ordinary retry endpoint and engine method now refuse interrupted steps; only the explicit reconciliation path can re-arm one after the owner confirms it was not applied.
+- Cancellation is queued while an interrupted/unknown step remains unresolved, rather than falsely reporting cancellation while a worker may still complete.
+- Added a Chromium regression test for the owner reconciliation flow and engine/API tests for retry-bypass refusal and cancellation ordering.
+- Commits: source hardening `447d31a82ece61eeea6a13a7ee93773d042bedcd`; UI `1463a8a5dcaa2444ecec0837b6101c82a43bba61`; UI test `10cc4ca2871880a83e28d0b3e696dd929fb25810`; engine cancellation `8a39cce9a5f1a8bef3e06ff83daf8e50a3588680`; cancellation/retry tests `10774cb7e308ef4dc51f3a8cbf8c25c3c8f9c7e2`; additional engine test correction `4ab87c93525b11f20ed46be9e494908e83938958`.
+- Verification remains pending: no Python or Chromium tests were executed in this session.
