@@ -4,6 +4,7 @@ import json
 from fastapi.testclient import TestClient
 
 from mia.agent.tools import ToolRegistry
+from mia.brain.intent import analyze_intent
 from mia.brain.orchestrator import CURRENT_BRAIN_USER_PROMPT, Brain, TurnRequest
 from mia.computer.approvals import ApprovalStore
 from mia.computer.filesystem import FilesystemAdapter
@@ -343,9 +344,15 @@ def test_voice_turn_uses_brain_to_preview_internal_workflow_without_running(tmp_
         memory=memory,
     )
     client = TestClient(app)
+    broker = app.state.brain.broker
+    preview_prompt = "Plan a workflow to add a task called Buy milk. Do not run it."
+    assert "workflow.preview_internal" in broker.select_tools(
+        preview_prompt, analyze_intent(preview_prompt)
+    )
+    assert "workflow.run_internal" in broker.select_tools("Run it.", analyze_intent("Run it."))
     response = chat(
         client,
-        "Plan a workflow to add a task called Buy milk. Do not run it.",
+        preview_prompt,
         conversation_id="voice-workflow-preview",
         use_tools=True,
         interface="voice",
