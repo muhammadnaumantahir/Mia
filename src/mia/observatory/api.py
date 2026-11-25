@@ -866,6 +866,14 @@ def create_app(
     file_index: Any | None = None,
     pairing: Any | None = None,
 ) -> FastAPI:
+    remote_access_enabled = os.getenv("MIA_REMOTE_ACCESS_ENABLED", "false").strip().lower() == "true"
+    remote_allowed_hosts = [
+        host.strip() for host in os.getenv("MIA_REMOTE_ALLOWED_HOSTS", "").split(",") if host.strip()
+    ]
+    if remote_access_enabled and not local_guard:
+        raise ValueError("MIA_REMOTE_ACCESS_ENABLED requires local_guard=True")
+    if remote_access_enabled and not remote_allowed_hosts:
+        raise ValueError("MIA_REMOTE_ACCESS_ENABLED requires exact MIA_REMOTE_ALLOWED_HOSTS entries")
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
     model_gateway = gateway or ModelGateway(
