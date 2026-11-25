@@ -138,6 +138,29 @@ def test_gateway_synthesis_control_is_visible_only_for_runs_with_readable_source
     assert "nothing becomes a saved finding until you confirm it" in page.inner_text("#detail").lower()
 
 
+def test_confirmed_research_finding_can_be_imported_into_project_memory(page):
+    page.memory.projects.create("Imaanly", goal="Quran and prayer app")
+    run = page.research.start_run("What is the feature?", [DOC])
+    claim = page.research.add_claim(
+        run["run_id"],
+        "The feature is optional and enabled at build time.",
+        [{
+            "source_id": run["sources"][0]["source_id"],
+            "quote": "The feature is optional and must be enabled when the interpreter is built",
+        }],
+    )
+    page.research.review_claim(claim["claim_id"], "confirm")
+    visit(page)
+    page.select_option("#memoryProject", label="Imaanly")
+    button = page.locator("#findings button").filter(has_text="Add to project memory")
+    assert button.count() == 1
+    button.click()
+    page.wait_for_selector("#findings button:text('Added to Imaanly memory')")
+    records = page.app.state.research_memory_bridge.list_for_project("Imaanly")
+    assert len(records) == 1
+    assert records[0]["details"]["research_claim_id"] == claim["claim_id"]
+
+
 def test_empty_state_and_the_untrusted_pages_warning(page):
     visit(page)
     assert "No research run yet" in page.inner_text("#runs")
