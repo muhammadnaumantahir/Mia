@@ -634,3 +634,7 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 ## 2026-11-25 Model-tool surface and approval race tests (MIA-COMP-04 slice 4, agent A7)
 - Commit 6b3f5f8. The model and voice can reach only read tools and approval-creating previews; previews leave files and processes untouched; one approval cannot be spent twice even under 8-way concurrency.
 - Still open: local-process self-approval (needs caller identity, COMP-02/LIFE-13); owner drill of stop-all on real hardware.
+
+## 2026-11-25 Companion pairing and device identity (MIA-COMP-02, agent A7)
+- Commit c955516. A companion pairs with a one-time code, proves it holds its private key, logs in with a replay-proof challenge and receives a short scoped token. Owner can revoke one device or all at once, and sessions stop immediately. A device token can only call `/api/companion/*`.
+- Not done: the companion itself (COMP-03), encrypted non-loopback transport (LIFE-13), owner authentication (a tokenless local process can still call owner routes), pairing UI. Real-device pairing is OWNER_VERIFICATION_REQUIRED.

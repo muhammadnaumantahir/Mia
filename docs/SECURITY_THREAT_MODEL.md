@@ -62,3 +62,8 @@ the end-to-end "stop everything" drill is OWNER_VERIFICATION_REQUIRED.
 ## Open items
 Per-caller auth / device identity (LIFE-13), enforcement broker (COMP-04), optional extra allowed
 hosts for remote access (intentionally not supported), handler-level proof of each classification.
+
+## Update 2026-11-25: companion identity (MIA-COMP-02)
+- **Added (tested):** `mia.security.pairing` gives a paired companion its own revocable identity: Ed25519 keys (private key stays on the device), one-time hashed pairing codes with lockout, single-use challenges, scoped 15-minute sessions, instant revocation. `DeviceConfinementGuard` confines any device token to `/api/companion/*`, so a compromised companion cannot approve its own requests, grant permissions, pair or revoke devices.
+- **Scopes a device can ever hold:** `companion.heartbeat`, `companion.observe`, `companion.act`. Approval, permission grants and pairing are not grantable by design.
+- **Still not covered (declared):** the owner's own browser is not authenticated, so a local process that presents no device token can still call owner routes; transport is loopback only (non-loopback needs encrypted transport, LIFE-13); responses do not distinguish unknown from known devices but timing is not constant-time; no real companion has been exercised (COMP-03, owner verification).

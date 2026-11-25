@@ -947,3 +947,10 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - A first draft of one test wrongly expected an exception; the read tool returns a structured refusal (`ok: False`, FilesystemAccessError). Test corrected, not the code.
 - Run: full suite exit 0 (about 17 minutes now, run in the background) and ruff clean on the tree before the final rebase; after it the broker and route-capability tests were re-run (pass).
 - A7 idle. COMP-04 stays PARTIAL for the reason on its board row (caller identity, COMP-02/LIFE-13).
+
+## 2026-11-25T08:10Z - MIA-COMP-02 pushed and closed for its scope (A7), commit c955516
+- New: `src/mia/security/pairing.py`, `src/mia/security/companion_api.py`, `tests/test_companion_pairing.py` (31 tests, real Ed25519 keys, real SQLite/app), COMP-01 inventory rules for the new routes, `companion` optional-dependency extra in `pyproject.toml` (cryptography; was already a dev/backup extra and is imported lazily).
+- Mutation checks: challenge single-use removed -> 2 failures; revocation re-check removed -> survived at first because `revoke()` also deletes sessions, so I added a test that revokes via the database only; confinement guard removed -> 1 failure. All now killed; sources restored.
+- Two of my own test mistakes were fixed in the tests, not the code (lockout test used an expired code).
+- Run: full suite exit 0 on the tree before the final rebase; after it the pairing, route-capability, local-guard and life-ui tests were re-run (pass).
+- COMP-03 (Windows companion lifecycle, A5) now has its dependency on main. A7 idle.
