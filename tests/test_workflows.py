@@ -45,6 +45,8 @@ def add_step(title, **extra):
         ("How do I run the workflow?", False),
         ("Could I add a task?", False),
         ("Run me through the workflow.", False),
+        ("Explain how to run the workflow.", False),
+        ("What does run it mean?", False),
         ("What if I add a task?", False),
         ("Can you run the workflow now?", True),
         ("Run it.", True),
