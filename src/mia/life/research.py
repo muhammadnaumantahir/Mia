@@ -537,6 +537,13 @@ class ResearchService:
 
 
 
+class SearchInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(min_length=3, max_length=300)
+    limit: int = Field(default=MAX_SEARCH_RESULTS, ge=1, le=MAX_SEARCH_RESULTS)
+
+
 class RunInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -564,8 +571,13 @@ class ReviewInput(BaseModel):
     decision: str = Field(pattern="^(confirm|reject)$")
 
 
-def register_research_routes(app: Any, service: ResearchService, record: Callable[..., Any],
-                             activity: Callable[[str], Any] | None = None) -> None:
+def register_research_routes(
+    app: Any,
+    service: ResearchService,
+    record: Callable[..., Any],
+    activity: Callable[[str], Any] | None = None,
+    synthesizer: Callable[[str], Any] | None = None,
+) -> None:
     """Routes on the app itself (not include_router) so route enumeration stays flat."""
     def fail(exc: Exception) -> HTTPException:
         if isinstance(exc, KeyError):
@@ -577,6 +589,42 @@ def register_research_routes(app: Any, service: ResearchService, record: Callabl
             return service.start_run(question, urls)
         with activity(f"Reading {len(urls)} allowed source(s) for: {question[:60]}"):
             return service.start_run(question, urls)
+
+    @app.post("/api/research/search")
+    async def search(item: SearchInput) -> dict[str, Any]:
+        def do_search() -> dict[str, Any]:
+            if activity is None:
+                return service.search(item.query, item.limit)
+            with activity(f"Discovering allowed sources for: {item.query[:60]}"):
+                return service.search(item.query, item.limit)
+        try:
+            return await run_in_threadpool(do_search)
+        except AutomationStopped as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ResearchError as exc:
+            raise fail(exc) from exc
+
+    @app.post("/api/research/runs/{run_id}/synthesize")
+    async def synthesize(run_id: str) -> dict[str, Any]:
+        if synthesizer is None:
+            raise HTTPException(status_code=503, detail="Research synthesis is not configured")
+        try:
+            if activity is None:
+                return await synthesizer(run_id)
+            with activity("Synthesizing verified research sources"):
+                return await synthesizer(run_id)
+        except AutomationStopped as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except KeyError as exc:
+            raise fail(exc) from exc
+        except ResearchError as exc:
+            raise fail(exc) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502, detail=f"Research synthesis failed ({type(exc).__name__})"
+            ) from exc
 
     @app.post("/api/research/runs", status_code=201)
     async def start(item: RunInput) -> dict[str, Any]:
