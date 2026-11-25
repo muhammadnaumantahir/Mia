@@ -46,7 +46,7 @@ def page(tmp_path, browser, monkeypatch):
     assert server.started
     context = browser.new_context(viewport={"width": 1100, "height": 900})
     p = context.new_page()
-    p.base, p.memory = f"http://127.0.0.1:{port}", memory
+    p.base, p.memory, p.app = f"http://127.0.0.1:{port}", memory, app
     p.posts = []
     p.on("request", lambda r: p.posts.append(r.url) if r.method == "POST" else None)
     yield p
@@ -207,6 +207,33 @@ def test_invalid_number_is_caught_before_sending(page):
 
 
 # ------------------------------------------------------------------------------ failure and retry
+
+
+def test_interrupted_step_requires_owner_reconciliation_before_retry(page):
+    visit(page)
+    add_step(page, "personal.add", title="Do not duplicate")
+    plan(page, "Unknown outcome")
+    wait_detail(page, "Unknown outcome")
+    wid = page.locator("#list button").get_attribute("data-id")
+    engine = page.app.state.workflow_engine
+    engine._set_step(wid, 1, status="interrupted", error="Step timed out; outcome unknown.")
+    engine._set_task(wid, status="interrupted", outcome="unknown")
+    page.click("#refreshBtn")
+    page.wait_for_selector("#plan button[data-reconcile='applied']")
+    assert page.locator("#plan button[data-reconcile='not_applied']").count() == 1
+    assert page.locator("#plan button[data-retry]").count() == 0
+
+    page.locator("#plan button[data-reconcile='not_applied']").click()
+    assert page.locator("#confirm").evaluate("e => e.open")
+    assert "did not happen" in page.locator("#confirmTitle").inner_text()
+    page.click("#confirmYes")
+    wait_status(page, "Paused")
+    assert page.locator("#plan button[data-reconcile]").count() == 0
+    assert page.locator("#plan button[data-retry]").count() == 0
+    assert page.locator("#plan >> text=Not run yet").count() == 1
+    page.click("#runBtn")
+    wait_status(page, "Completed")
+    assert [item["title"] for item in page.memory.personal.list(limit=10)] == ["Do not duplicate"]
 
 
 def test_failed_step_is_explained_and_retry_is_offered(page):
