@@ -242,7 +242,10 @@ class FileIndex:
             stats["skipped"] = len(skipped)
             self.db.execute("UPDATE selections SET last_indexed_at=? WHERE id=?", (_now(), selection_id))
             self.db.commit()
-            self._compact()
+            # A watch cycle often finds no changes; avoid an expensive FTS optimize/VACUUM
+            # on every poll and compact only after an actual index mutation.
+            if stats["indexed"] or stats["removed"] or stats["skipped"]:
+                self._compact()
         return {"selection_id": selection_id, **stats}
 
     def _finish(self, selection_id: str, skipped: list[tuple[str, str]], *, seen: set[str] | None) -> int:
