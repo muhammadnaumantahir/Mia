@@ -1486,6 +1486,13 @@ def create_app(
                 "error": "This workflow contains a capability that Brain is not allowed to execute.",
                 "error_type": "PermissionError",
             })
+        if task["source"] not in {"brain", "voice"}:
+            return ToolResult({
+                "workflow_id": args["workflow_id"],
+                "status": "not_executed",
+                "executed": False,
+                "reason": "Brain can run only workflows it previewed in this conversation or a prior Brain/voice turn.",
+            })
         if any(step["status"] == "interrupted" for step in task["steps"]):
             return ToolResult({
                 "workflow_id": args["workflow_id"],
