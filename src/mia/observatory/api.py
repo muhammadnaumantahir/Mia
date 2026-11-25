@@ -3119,6 +3119,8 @@ def create_app(
         sources: list[dict[str, Any]] = []
         remaining = MAX_SYNTHESIS_INPUT_CHARS
         for source in run["sources"]:
+            if control.stop_requested or life_store.get_settings().emergency_stop:
+                raise AutomationStopped("Research synthesis stopped by owner")
             if source["failure"] or remaining <= 0:
                 continue
             detail = research_service.source_text(run_id, source["source_id"])
@@ -3236,14 +3238,14 @@ def create_app(
                 await asyncio.gather(task, return_exceptions=True)
             raise
 
+        record_usage(
+            result, "research", request.estimated_input_tokens, request.max_output_tokens
+        )
         if control.stop_requested or life_store.get_settings().emergency_stop:
             raise AutomationStopped("Research synthesis stopped by owner")
         structured = result.structured
         if not isinstance(structured, dict) or not isinstance(structured.get("claims"), list):
             raise RuntimeError("Gateway did not return a valid structured claims object")
-        record_usage(
-            result, "research", request.estimated_input_tokens, request.max_output_tokens
-        )
 
         proposed: list[dict[str, Any]] = []
         rejected = 0
