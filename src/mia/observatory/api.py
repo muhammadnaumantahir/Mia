@@ -3124,7 +3124,8 @@ def create_app(
             if source["failure"] or remaining <= 0:
                 continue
             detail = research_service.source_text(run_id, source["source_id"])
-            text = detail["text"][:remaining]
+            full_text = detail["text"]
+            text = full_text[:remaining]
             if not text.strip():
                 continue
             remaining -= len(text)
@@ -3134,6 +3135,7 @@ def create_app(
                 "title": detail["title"],
                 "sha256": detail["sha256"],
                 "injection_flags": detail["injection_flags"],
+                "truncated_for_synthesis": len(text) < len(full_text),
                 "text": text,
             })
         if not sources:
