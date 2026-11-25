@@ -1086,3 +1086,21 @@ Implementation commits include `ef78540fa4a1ec02374379dbefb85aeb89b2453c`, `5d7b
 ## 2026-11-25 — Coordinator claim: MIA-LIFE-07-MEMORY
 
 Claimed the project-scoped research finding memory child task while A1 retains its existing LIFE-10 claim. I will isolate the integration in a dedicated bridge module rather than modify the research service file currently owned by A7. Scope: only owner-confirmed findings may be imported as source-backed structured facts; require a registered project; preserve exact citation/source hashes; provide idempotent import, correction-by-confirmed-replacement and chain deletion; and test project isolation and lifecycle. Tests will be authored but not executed per owner instruction.
+
+
+## 2026-11-25 — MIA-LIFE-07-MEMORY implementation complete
+
+The coordinator completed the project-scoped research memory bridge and pushed it directly to `main`.
+
+- Added `ResearchMemoryBridge` in `src/mia/life/research_memory.py`. It accepts only claims whose ResearchService status is `confirmed` and which carry verified source citations. Proposed or rejected claims cannot enter memory.
+- Imported findings become structured `fact` records with `source_backed` provenance, owner-confirmation metadata, source URLs, exact quotes, source IDs, fetched timestamps, SHA-256 hashes and research run/claim IDs.
+- Imports require an existing, non-archived project and are idempotent per (claim, project). A dedicated SQLite link table maintains the relationship between research claims and structured-memory records.
+- Project assignment is preserved in structured memory so the existing project-context filter excludes findings from other projects.
+- Corrections require a second owner-confirmed research claim and supersede the existing record, preserving its correction history and project scope. Deletion removes the complete correction chain and all associated link rows.
+- Added API routes to import, list, correct and delete research-backed project memory. The Research page now offers project selection and an import action for confirmed findings only. Existing Memory UI remains available for general structured-memory lifecycle management.
+- Archived projects are read-only for research-memory imports/corrections. Project listing is bounded to 200 records.
+- Added tests for unconfirmed-claim rejection, provenance, idempotency, project isolation, correction, full-chain deletion, archived-project restrictions, API lifecycle and UI import.
+
+Implementation commits include `63d58f1cf15908a0f524ccde184b7a4d1ebc012c`, `44433bd33403d9b1bb372d7230ff5df099f9fec2`, `dd72594626674aa9ad55f79cf595a44addc03c72`, `3842e7cc71ca1a48ffb5c87230b29beb66e45b04`, `48a3cd16b23e60e695ca9eac51ddae1bed0100cd`, `8adfd5162011198a6b47dc6418e7e72411dff33d`, `4a3dcb16039ea37aa8e7f9e57be7a208e1c949ef`; test commits include `6b0c5dd4fc8eb87fea92a360a6f52054466fe454`, `1cdaff7d9e6824a73c7bd81cb840be499f71f336`, `1771f27742ea2585de10b7fd7999a1780d42896f`, `a205875eb448c53f9929fddee784b4be657122f2`, `c216c3a255cbadfa84db26af85e86fa91e505091`.
+
+**Verification:** Regression tests were authored but not executed in this session, per owner instruction. The task is DONE for implementation only; test execution remains `OWNER_VERIFICATION_REQUIRED`. No test pass is claimed.
