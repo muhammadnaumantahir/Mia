@@ -1133,3 +1133,16 @@ Implementation commits include `72361b5e19bd0fb4c09841b6c8d04418e2ac4865` (API t
 ## 2026-11-25 — Coordinator claim: MIA-COMP-01-HANDLERS
 
 Claimed the independent route/handler capability proof task while A5 retains EVOL-02. Scope: inventory every mutating FastAPI route and Brain tool handler, map it to a registered capability/permission gate, prove unknown or unclassified mutations fail closed, and add regression tests for the route inventory. I will not weaken existing owner/device or approval gates.
+
+
+## 2026-11-25 — MIA-COMP-01-HANDLERS implementation complete
+
+- Added `HandlerBinding` and `bind_route_capabilities` in `src/mia/security/capabilities.py`. Each mutating route is bound to method, full path, live handler module/qualified name and declared capability.
+- `create_app` runs the binder after route registration and stores the inventory in `app.state.route_capability_bindings`. App construction fails closed when a mutating route is unclassified, the endpoint is missing/non-callable/non-Mia, or the binding cannot be stored.
+- Added `bound_route_capability` for tests and runtime inspection.
+- Expanded `tests/test_route_capabilities.py` to check every mutating route's actual handler identity and capability binding, and to verify unclassified routes and non-Mia handlers fail closed.
+- Updated `SECURITY_THREAT_MODEL.md` and `architecture/CAPABILITY_CONTRACT.md` to distinguish route-to-handler binding from COMP-04's actual approval enforcement.
+
+Key commits: `ced0a91aa2` and `cfd6cf1050` (binder), `85cec824b0` and `61aa745e39` (app startup binding/import), `8fae11bcb8` (route-handler regression tests), `8fc16eb158` and `ff2a474da1` (security documentation).
+
+**Verification:** Regression tests were added but not executed in this session, per owner instruction. Task DONE means route-handler inventory/binding implementation is complete; COMP-04 remains responsible for enforcing approval classes inside handlers. Test execution remains `OWNER_VERIFICATION_REQUIRED`; no test pass is claimed.
