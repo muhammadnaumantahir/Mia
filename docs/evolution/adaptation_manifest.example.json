@@ -1,0 +1,10 @@
+{
+  "dataset": {"items": 0, "items_without_provenance": 0, "items_without_owner_consent": 0,
+              "unapproved_third_party_items": 0, "owner_may_delete": false},
+  "held_out": {"items": 0, "items_overlapping_training": 0, "baseline_measured": false},
+  "base_model": {"model_id": "", "repository_url": "", "licence_name": "", "licence_checked_on": "",
+                 "licence_permits_fine_tuning": false},
+  "owner": {"gpu_memory_gb": 0, "budget_cap_usd": 0, "approved_training_run": false},
+  "rollback": {"base_model_untouched": false, "adapter_is_separate_versioned_file": false,
+               "switch_is_configuration": false, "safety_regression_comparison_planned": false}
+}
