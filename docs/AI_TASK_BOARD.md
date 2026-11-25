@@ -198,7 +198,7 @@ Split from the PARTIAL parent tasks above. These are independent task IDs; claim
 | MIA-LIFE-06-WATCH | P3 | A5 | OPEN | Bounded file refresh and optional document extraction. |
 | MIA-LIFE-07-SEARCH | P3 | A2 | OPEN | Bounded search discovery and Gateway synthesis over existing research API. |
 | MIA-LIFE-07-MEMORY | P3 | A1 | OPEN | Owner-confirmed research findings into project-scoped structured memory. |
-| MIA-LIFE-07-INJECTION | P3 | A5 + A3 | OPEN | Harden research prompt-injection isolation with adversarial tests. |
+| MIA-LIFE-07-INJECTION | P3 | A5 + A3 | IN_PROGRESS (A7, claimed 2026-11-25T18:10Z; verified OPEN on main 1772e78; I wrote src/mia/life/research.py; A5/A3 idle, no overlap) | Harden research prompt-injection isolation with adversarial tests. |
 | MIA-LIFE-08-BRAIN | P3 | A1 + A4 | OPEN | Brain/voice entry for safe internal workflows. |
 | MIA-LIFE-08-APPROVAL | P3 | A1 + A5 | BLOCKED (COMP-04 owner-approval enforcement) | Approval-gated external/destructive workflow steps; no implementation before final-boundary approval is enforced. |
 | MIA-LIFE-08-TIMEOUT | P3 | A5 | OPEN | Unknown-outcome timeout semantics and safe reconciliation/retry. |
