@@ -143,6 +143,10 @@ class ResearchMemoryBridge:
                 if link:
                     existing = self._current_record(link["record_id"])
                     if existing:
+                        if str(existing.get("project") or "").casefold() != project["name"].casefold():
+                            raise ResearchMemoryError(
+                                "This research memory record was moved to a different project"
+                            )
                         return existing
                     db.execute(
                         "DELETE FROM research_memory_links WHERE claim_id=? AND project_key=?",
@@ -225,6 +229,11 @@ class ResearchMemoryBridge:
                     ).fetchone()
                 if linked is None:
                     raise ResearchMemoryError("This memory record is not linked to a research finding")
+                current_project = self.memory.projects.get(current.get("project") or "")
+                if current_project is None or current_project["project_key"] != linked["project_key"]:
+                    raise ResearchMemoryError(
+                        "This research memory record was moved outside its original project"
+                    )
                 duplicate = db.execute(
                     "SELECT record_id FROM research_memory_links WHERE claim_id=? AND project_key=?",
                     (replacement_claim_id, linked["project_key"]),
