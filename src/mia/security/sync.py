@@ -155,7 +155,7 @@ class CompanionSyncStore:
             raise CompanionSyncError("sync change contains unsupported fields")
         item_id = _clean_id(change.get("item_id"), field="item_id", maximum=80)
         namespace = change.get("namespace")
-        if namespace not in SYNC_NAMESPACES:
+        if not isinstance(namespace, str) or namespace not in SYNC_NAMESPACES:
             raise CompanionSyncError("namespace is not enabled for companion sync")
         base_version = change.get("base_version")
         if isinstance(base_version, bool) or not isinstance(base_version, int) or base_version < 0:
@@ -183,6 +183,8 @@ class CompanionSyncStore:
     def push(self, device_id: str, batch_id: str, changes: list[dict[str, Any]]) -> dict[str, Any]:
         device = _clean_id(device_id, field="device_id", maximum=64)
         batch = _clean_id(batch_id, field="batch_id", maximum=64)
+        if len(batch) < 16:
+            raise CompanionSyncError("batch_id must contain at least 16 characters")
         if not isinstance(changes, list) or not 1 <= len(changes) <= MAX_BATCH_ITEMS:
             raise CompanionSyncError(f"a sync batch must contain 1 to {MAX_BATCH_ITEMS} changes")
         cleaned = [self._clean_change(change) for change in changes]
@@ -216,8 +218,6 @@ class CompanionSyncStore:
                         "item_id": change["item_id"],
                         "expected_base_version": change["base_version"],
                         "current_version": current_version,
-                        "current_payload": json.loads(row["payload_json"])
-                            if row and row["payload_json"] else None,
                         "current_deleted": bool(row["deleted"]) if row else False,
                     })
             if conflicts:
