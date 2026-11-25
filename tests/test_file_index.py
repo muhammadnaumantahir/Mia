@@ -323,6 +323,8 @@ def test_http_watch_is_owner_started_bounded_and_stop_all_stops_it(api):
     stopped = client.post("/api/computer/stop-all")
     assert stopped.status_code == 200
     assert client.get("/api/file-index/watch").json()["enabled"] is False
+    refused = client.post("/api/file-index/watch/start", json={})
+    assert refused.status_code == 423
     assert client.post("/api/computer/resume").status_code == 200
     assert client.post("/api/file-index/watch/stop").status_code == 200
 
