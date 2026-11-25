@@ -230,7 +230,8 @@ class ResearchMemoryBridge:
                 if linked is None:
                     raise ResearchMemoryError("This memory record is not linked to a research finding")
                 current_project = self.memory.projects.get(current.get("project") or "")
-                if current_project is None or current_project["project_key"] != linked["project_key"]:
+                if (current_project is None or current_project["status"] == "archived"
+                        or current_project["project_key"] != linked["project_key"]):
                     raise ResearchMemoryError(
                         "This research memory record was moved outside its original project"
                     )
