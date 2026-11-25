@@ -22,9 +22,10 @@ Governance, by construction:
 from __future__ import annotations
 
 import asyncio
+import contextvars
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -40,17 +41,23 @@ from mia.computer.tasks import (
 )
 
 STEP_TIMEOUT_SECONDS = 20.0
+_ACTIVE_WORKFLOW_STEP: contextvars.ContextVar[int | None] = contextvars.ContextVar(
+    "mia_active_workflow_step", default=None
+)
 _EXTERNAL_PREFIXES = ("computer.", "browser.", "terminal.", "filesystem.", "desktop.", "apps.", "process.")
 _ADD_KEYS = {"kind", "title", "details", "due_at", "project", "priority"}
 _LIST_KEYS = {"kind", "status", "project", "limit"}
 
 
 class WorkflowEngine(TaskEngine):
-    """TaskEngine restricted to internal handlers, with per-step time limits."""
+    """TaskEngine restricted to internal handlers, with recoverable per-step time limits."""
 
     def __init__(self, *args: Any, step_timeout: float = STEP_TIMEOUT_SECONDS, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.step_timeout = step_timeout
+        # A timed-out asyncio wait does not stop a worker thread. Keep its task alive so
+        # reconciliation can observe the real result instead of accidentally running twice.
+        self._timed_out_workers: dict[tuple[str, int], asyncio.Task[Any]] = {}
 
     def create_task(self, title: str, steps: list[dict[str, Any]], *, source: str = "text") -> dict[str, Any]:
         if isinstance(steps, list):
@@ -65,12 +72,137 @@ class WorkflowEngine(TaskEngine):
         return super().create_task(title, steps, source=source)
 
     async def _call(self, handler: StepHandler, fn: Callable, *args: Any) -> Any:
+        # Inspection is read-only; the timeout/reconciliation contract applies to the
+        # execution call, where a synchronous worker thread may outlive its awaiter.
+        if fn != handler.run:
+            return await super()._call(handler, fn, *args)
+        task_id = CURRENT_TASK_ID.get()
+        step = _ACTIVE_WORKFLOW_STEP.get()
+        if not task_id or step is None:
+            return await super()._call(handler, fn, *args)
+        worker = asyncio.create_task(fn(*args) if handler.is_async else asyncio.to_thread(fn, *args))
         try:
-            return await asyncio.wait_for(super()._call(handler, fn, *args), timeout=self.step_timeout)
+            return await asyncio.wait_for(asyncio.shield(worker), timeout=self.step_timeout)
         except TimeoutError as exc:
+            self._timed_out_workers[(task_id, step)] = worker
             raise TimeoutError(
-                f"step exceeded {self.step_timeout:g}s; its outcome is unknown, check it before retrying"
+                f"step exceeded {self.step_timeout:g}s; outcome unknown; reconcile before retrying"
             ) from exc
+
+    async def _run_step(self, task_id: str, idx: int, *, allow_reapproval: bool = True) -> bool:
+        token = _ACTIVE_WORKFLOW_STEP.set(idx)
+        try:
+            proceed = await super()._run_step(task_id, idx, allow_reapproval=allow_reapproval)
+        finally:
+            _ACTIVE_WORKFLOW_STEP.reset(token)
+
+        key = (task_id, idx)
+        if key not in self._timed_out_workers:
+            return proceed
+
+        # TaskEngine records raised exceptions as failed. Override that generic state:
+        # the side effect may still be running, so the only truthful state is interrupted.
+        self._set_step(
+            task_id, idx, status="interrupted",
+            error="Step timed out; outcome is unknown until reconciliation.",
+            note="The worker may still be running. Do not retry while its outcome is unresolved.",
+        )
+        with self._db() as db:
+            db.execute(
+                "UPDATE computer_task_steps SET status='pending', note=NULL "
+                "WHERE task_id=? AND idx>? AND status='skipped'",
+                (task_id, idx),
+            )
+        self._set_task(task_id, status="interrupted", outcome="unknown", final_report=None)
+        self._event(task_id, "step_outcome_unknown",
+                    f"Step {idx} timed out; waiting for worker reconciliation", idx)
+        self._set_task(task_id, final_report=self.report(task_id))
+        return False
+
+    async def advance(self, task_id: str) -> dict[str, Any]:
+        task = self.get_task(task_id)
+        # Workflow retries are never automatic after an interrupted/unknown step,
+        # including read-only steps: reconciliation must happen first.
+        interrupted = next((s for s in task["steps"] if s["status"] == "interrupted"), None)
+        if interrupted is not None:
+            self._event(task_id, "needs_reconciliation",
+                        f"Step {interrupted['idx']} has an unresolved outcome; reconcile it before continuing",
+                        interrupted["idx"])
+            return task
+        return await super().advance(task_id)
+
+    def reconcile_timeout(
+        self, task_id: str, idx: int, *, decision: Literal["applied", "not_applied"] | None = None
+    ) -> dict[str, Any]:
+        """Reconcile an unknown step; never retries while its original worker is still alive."""
+        task = self.get_task(task_id)
+        step = next((s for s in task["steps"] if s["idx"] == idx), None)
+        if step is None or step["status"] != "interrupted":
+            raise TaskPlanError("Only an interrupted workflow step can be reconciled")
+
+        key = (task_id, idx)
+        worker = self._timed_out_workers.get(key)
+        if worker is not None:
+            if not worker.done():
+                return {"status": "waiting", "message": "The original worker is still running; retry is refused."}
+            try:
+                outcome = worker.result()
+            except Exception as exc:
+                self._set_step(task_id, idx, status="failed",
+                               error=f"Worker finished with {type(exc).__name__}: {exc}"[:300],
+                               note="Inspect the target state before choosing an explicit retry.",
+                               finished_at=_now())
+                self._set_task(task_id, status="failed", outcome="unknown", final_report=None)
+                self._event(task_id, "step_reconciliation_error",
+                            f"Step {idx} worker ended with an exception; owner inspection is required", idx)
+            else:
+                if not isinstance(outcome, Outcome):
+                    self._set_step(task_id, idx, status="failed",
+                                   error="Worker returned an invalid outcome.",
+                                   note="Inspect the target state before choosing an explicit retry.",
+                                   finished_at=_now())
+                    self._set_task(task_id, status="failed", outcome="unknown", final_report=None)
+                elif outcome.ok:
+                    self._set_step(
+                        task_id, idx, status="succeeded",
+                        result_json=json.dumps(outcome.data, default=str)[:20000],
+                        verified=None if outcome.verified is None else int(outcome.verified),
+                        note=outcome.note, error=None, finished_at=_now(),
+                    )
+                    self._set_task(task_id, status="paused", outcome=None, final_report=None)
+                    self._event(task_id, "step_reconciled_applied",
+                                f"Step {idx} completed after its timeout; recorded worker result", idx)
+                else:
+                    self._set_step(task_id, idx, status="failed",
+                                   result_json=json.dumps(outcome.data, default=str)[:20000],
+                                   verified=None if outcome.verified is None else int(outcome.verified),
+                                   error=outcome.error or "Worker reported an unsuccessful outcome.",
+                                   note=outcome.note or "Inspect the target state before choosing an explicit retry.",
+                                   finished_at=_now())
+                    self._set_task(task_id, status="failed", outcome="unknown", final_report=None)
+                    self._event(task_id, "step_reconciled_failed",
+                                f"Step {idx} worker finished unsuccessfully; owner review is required", idx)
+            self._timed_out_workers.pop(key, None)
+            self._set_task(task_id, final_report=self.report(task_id))
+            return self.get_task(task_id)
+
+        # After process restart the worker result is unavailable. The owner must inspect
+        # the target and explicitly confirm whether the action happened before proceeding.
+        if decision == "applied":
+            self._set_step(task_id, idx, status="succeeded", result_json="{}", verified=None,
+                           error=None, note="Owner confirmed the action was applied after restart; output data is unavailable.",
+                           finished_at=_now())
+            self._set_task(task_id, status="paused", outcome=None, final_report=None)
+            self._event(task_id, "step_reconciled_owner_applied",
+                        f"Owner confirmed step {idx} was applied after restart", idx)
+        elif decision == "not_applied":
+            self.retry_step(task_id, idx)
+            self._event(task_id, "step_reconciled_owner_retry",
+                        f"Owner confirmed step {idx} was not applied; explicit retry is now available", idx)
+        else:
+            raise TaskPlanError("After restart, decision must be 'applied' or 'not_applied'")
+        self._set_task(task_id, final_report=self.report(task_id))
+        return self.get_task(task_id)
 
 
 def _text(args: dict[str, Any], key: str, limit: int) -> str:
@@ -187,6 +319,13 @@ class WorkflowRetry(BaseModel):
     step: int = Field(ge=1, le=20)
 
 
+class WorkflowReconcile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    step: int = Field(ge=1, le=20)
+    decision: Literal["applied", "not_applied"] | None = None
+
+
 def register_workflow_routes(app: FastAPI, engine: WorkflowEngine, record: Callable[..., Any]) -> None:
     """Register on the app itself (not include_router) so route enumeration stays flat."""
     base = "/api/workflows"
@@ -279,6 +418,13 @@ def register_workflow_routes(app: FastAPI, engine: WorkflowEngine, record: Calla
         except (KeyError, TaskPlanError) as exc:
             raise error(exc) from exc
         return engine.get_task(workflow_id)
+
+    @app.post(base + "/{workflow_id}/reconcile-step")
+    def reconcile(workflow_id: str, item: WorkflowReconcile) -> dict[str, Any]:
+        try:
+            return engine.reconcile_timeout(workflow_id, item.step, decision=item.decision)
+        except (KeyError, TaskPlanError) as exc:
+            raise error(exc) from exc
 
 
 
