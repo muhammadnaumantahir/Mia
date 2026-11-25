@@ -101,7 +101,7 @@ class LoopbackGuard:
         if (scope.get("path", ""), method) not in self.REMOTE_COMPANION_ROUTES:
             return False
         # Browser-originated requests are deliberately not part of this device protocol.
-        if headers.get("origin") is not None or headers.get("sec-fetch-site", "").lower() == "cross-site":
+        if headers.get("origin") is not None or headers.get("sec-fetch-site") is not None:
             return False
         authorization = headers.get("authorization", "").strip().lower()
         return authorization.startswith("bearer mia-dev_")
