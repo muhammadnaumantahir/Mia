@@ -29,7 +29,11 @@ from mia.agent.tools import ToolDefinition, ToolRegistry, ToolResult
 from .intent import IntentAnalysis
 from .plan import Plan, PlanStep, StepOutcome
 
-LOCAL_ONLY_TOOLS = frozenset({"filesystem.read_text", "memory.search_knowledge"})
+LOCAL_ONLY_TOOLS = frozenset({
+    "filesystem.read_text",
+    "memory.search_knowledge",
+    "knowledge.search_files",
+})
 _TRANSIENT_ERRORS = {"TimeoutError", "ConnectionError", "BlockingIOError", "ConnectionResetError"}
 
 
@@ -73,6 +77,7 @@ class OwnerPermissionEvaluator(DefaultPermissionEvaluator):
     _CAPABILITIES = {
         "filesystem.list_directory": "filesystem.list",
         "filesystem.search_filenames": "filesystem.search",
+        "knowledge.search_files": "filesystem.search",
         "filesystem.read_text": "filesystem.read",
         "desktop.list_windows": "desktop.observe",
         "desktop.inspect_window": "desktop.observe",
