@@ -1480,6 +1480,12 @@ def create_app(
             return ToolResult({
                 "ok": False, "error": "Unknown workflow ID.", "error_type": "KeyError",
             })
+        if any(step["capability"] not in workflow_brain_capabilities for step in task["steps"]):
+            return ToolResult({
+                "ok": False,
+                "error": "This workflow contains a capability that Brain is not allowed to execute.",
+                "error_type": "PermissionError",
+            })
         if any(step["status"] == "interrupted" for step in task["steps"]):
             return ToolResult({
                 "workflow_id": args["workflow_id"],
@@ -1487,6 +1493,13 @@ def create_app(
                 "outcome": "unknown",
                 "executed": False,
                 "reason": "An interrupted step must be reconciled before the workflow can run again.",
+            })
+        if task["status"] not in {"planned", "paused"}:
+            return ToolResult({
+                "workflow_id": args["workflow_id"],
+                "status": task["status"],
+                "executed": False,
+                "reason": "Only planned or paused internal workflows can be run.",
             })
         result = await workflow_engine.advance(args["workflow_id"])
         return ToolResult({
