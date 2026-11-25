@@ -664,3 +664,8 @@ Brain can now search the owner's selected file index through a read-only local-o
 ## MIA-LIFE-07-SEARCH — implementation complete (2026-11-25)
 
 Mia now supports bounded owner-allowlisted search discovery and Gateway-backed research synthesis. Search results are untrusted suggestions filtered to allowed hosts; the owner selects pages before fetching. Synthesis uses a local structured-output model by default, with strict input/output/time budgets and explicit opt-in for remote models. It generates proposed claims only; every citation is checked against the same run's source text, and instruction-like passages cannot be cited. Stop-all and emergency-stop controls are honored. Regression tests were added; **test execution remains OWNER_VERIFICATION_REQUIRED**.
+
+
+## MIA-LIFE-07-MEMORY — implementation complete (2026-11-25)
+
+Owner-confirmed, source-cited research findings can now be imported into registered project-scoped structured memory. The bridge preserves source quotes, URLs, hashes and run/claim provenance; imports are idempotent; corrections require another confirmed claim and preserve the supersession chain; deletion removes the full chain. Cross-project retrieval is isolated by the existing project-context filter. Research UI and API controls are available. Regression tests were added; **test execution remains OWNER_VERIFICATION_REQUIRED**.
