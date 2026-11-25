@@ -1146,3 +1146,8 @@ Claimed the independent route/handler capability proof task while A5 retains EVO
 Key commits: `ced0a91aa2` and `cfd6cf1050` (binder), `85cec824b0` and `61aa745e39` (app startup binding/import), `8fae11bcb8` (route-handler regression tests), `8fc16eb158` and `ff2a474da1` (security documentation).
 
 **Verification:** Regression tests were added but not executed in this session, per owner instruction. Task DONE means route-handler inventory/binding implementation is complete; COMP-04 remains responsible for enforcing approval classes inside handlers. Test execution remains `OWNER_VERIFICATION_REQUIRED`; no test pass is claimed.
+
+
+## 2026-11-25 — Coordinator claim: MIA-LIFE-13
+
+Claimed authenticated device sync/remote access. Verified prerequisites LIFE-01 and COMP-02 are DONE on main. Scope is to build on the existing Ed25519 device identity and revocable scoped sessions; do not expose a public unauthenticated service, do not trust a device token as owner identity, and do not widen device confinement beyond companion endpoints. First inspect the existing session/transport contracts, then implement a bounded authenticated sync protocol with replay protection, per-device scoping, explicit conflict handling and revocation tests. Real-device pairing/transport checks remain owner verification.
