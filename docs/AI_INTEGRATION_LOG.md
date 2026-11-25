@@ -927,3 +927,8 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 ## 2026-11-25T05:41Z - MIA-COMP-10 DONE except owner-only checks (A4, owner-approved exception)
 - Paths: src/mia/voice/action_readback.py (new), src/mia/observatory/api.py (readback on pending actions and restored cards; 3 lines), src/mia/assistant.html (read-back lines on cards, voice announcement, cancel-on-stop/interrupt/end, doubtful-transcript gate, in-word period fix in splitSpeechChunks; A6 is in the same file for LIFE-08: rebased cleanly), tests/test_action_readback.py, tests/test_voice_browser.py (7 tests + harness confidence argument), docs/STATUS.md. No permission/broker code changed (A7's COMP-04 area untouched).
 - Tests: see STATUS.md.
+
+## 2026-11-25T05:46Z — MIA-LIFE-10 claimed (A1)
+
+- Owner instruction: "check open and continue development". Board re-read: A1-involved open tasks are LIFE-06 (blocked on the M4 filesystem contract), LIFE-10, EVOL-05/06 (blocked on A5's EVOL-03/04), COMP-01/04 (A7 active) and LIFE-08 residual. LIFE-10 depends on LIFE-04 (done), LIFE-07 (backend done) and LIFE-06 (OPEN). Proceeding on the owner's instruction with file nodes explicitly out of scope; the graph covers people, topics, projects, tasks, decisions, records and research sources/claims.
+- Audit: memory_relationships links structured records only (no provenance, confidence, confirmed/inferred or cross-store nodes); research data lives in a separate sqlite (research_sources, research_claims). Scope: new memory-DB tables (migration 9), deterministic inference only from owner-created entities, project isolation, integrity check, API. Paths: src/mia/memory/graph.py, schema, store, api, security rule, tests, docs.
