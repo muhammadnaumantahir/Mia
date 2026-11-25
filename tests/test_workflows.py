@@ -39,6 +39,8 @@ def add_step(title, **extra):
         ("Don't run the workflow.", False),
         ("Do not add a task.", False),
         ("Don't do it.", False),
+        ("I don't want to add a task.", False),
+        ("I might run it.", False),
         ("Run the workflow after I approve.", False),
         ("How do I run the workflow?", False),
         ("Could I add a task?", False),
