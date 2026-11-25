@@ -932,3 +932,12 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 
 - Owner instruction: "check open and continue development". Board re-read: A1-involved open tasks are LIFE-06 (blocked on the M4 filesystem contract), LIFE-10, EVOL-05/06 (blocked on A5's EVOL-03/04), COMP-01/04 (A7 active) and LIFE-08 residual. LIFE-10 depends on LIFE-04 (done), LIFE-07 (backend done) and LIFE-06 (OPEN). Proceeding on the owner's instruction with file nodes explicitly out of scope; the graph covers people, topics, projects, tasks, decisions, records and research sources/claims.
 - Audit: memory_relationships links structured records only (no provenance, confidence, confirmed/inferred or cross-store nodes); research data lives in a separate sqlite (research_sources, research_claims). Scope: new memory-DB tables (migration 9), deterministic inference only from owner-created entities, project isolation, integrity check, API. Paths: src/mia/memory/graph.py, schema, store, api, security rule, tests, docs.
+
+## 2026-11-25T05:54Z — MIA-EVOL-08 and MIA-EVOL-09 DONE (A3)
+
+- Commit 2c5c743 on remote main (verified). Paths (new files only): docs/evolution/FOUNDATION_MODEL_FEASIBILITY.md, docs/evolution/SMALL_MODEL_ADAPTATION.md, docs/evolution/adaptation_manifest.example.json, src/mia/evolution/adaptation_gates.py, tests/test_adaptation_gates.py. Nothing under A1's EVOL-01 or A5's EVOL-02 paths was changed.
+- EVOL-08: option-by-option go/no-go with dated sources, explicit arithmetic and the repo evidence it rests on (no training pipeline, policy or consent flow exists; training terms appear only in roadmap/backlog; 5 live probes cannot detect an effect: about 118 items per condition are needed to tell 70% from 85%). Outside figures come from 2026 web pages, many blogs or vendor pages, and are labelled as ranges to re-check before any spending.
+- EVOL-09: justified no-go; no experiment, download or spend. The five gates are executable and tested (25 tests; five mutants each failed tests); a blank template run is recorded verbatim in the doc.
+- Tests actually run: full suite 2995 tests, 0 failed, 0 errors, 1 skipped; ruff clean. The LIFE quiet-hours test passed in this run (05:35-05:55 UTC) because A2 made it clock-independent in 8edb6c0; this confirms the earlier diagnosis that it depended on the wall clock.
+- OWNER-REQUIRED: which models and GPU you run, what text you permit for training, a held-out set, any spending cap and approval; run the study's section 6 list before reopening EVOL-09.
+- A3 status: IDLE.
