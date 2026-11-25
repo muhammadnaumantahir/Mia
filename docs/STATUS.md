@@ -679,3 +679,8 @@ Brain and voice can now preview safe internal workflows through the same Brain t
 ## MIA-COMP-01-HANDLERS — implementation complete (2026-11-25)
 
 Every mutating route is now bound at app construction to its live Mia handler identity and declared capability. Unclassified routes, missing/non-Mia handlers, and failed bindings stop app construction. Route-handler tests cover the full inventory and negative cases. This proves registration/binding, not execution-time approval enforcement; COMP-04 remains responsible for that. **Test execution remains OWNER_VERIFICATION_REQUIRED.**
+
+
+## MIA-LIFE-13 — implementation complete (2026-11-25)
+
+Authenticated companion sync is implemented with separate read/write device scopes, atomic versioned batches, conflict responses, tombstones, replay protection, payload limits and immediate revocation checks. Remote access is disabled by default and, when enabled, is limited to direct HTTPS on exact allowlisted hosts with a live device token. Pairing and owner APIs remain loopback-only. Only non-secret companion_state/preferences are synchronized. Regression tests were added but not executed; real TLS/device checks remain OWNER_VERIFICATION_REQUIRED. LIFE-13 now unblocks MIA-COMP-01-IDENTITY and MIA-COMP-04-OWNER.
