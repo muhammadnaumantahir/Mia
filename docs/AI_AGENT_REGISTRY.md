@@ -1,6 +1,6 @@
 # Mia AI agent registry
 
-Six specialist worker slots are available: A1–A6. The coordinator is not a worker.
+Seven specialist worker slots are available: A1–A7 (A7 is the owner-approved multilingual language role). The coordinator is not a worker.
 This registry is a live-session directory, not a historical record. Previous session registrations have been reset. Each newly launched agent must register itself before claiming a task.
 
 | Agent ID | Specialization | Session / model label | Current task | Status | Last heartbeat (UTC) |
