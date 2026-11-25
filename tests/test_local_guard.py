@@ -92,6 +92,10 @@ def test_remote_access_configuration_requires_guard_and_exact_host_allowlist(tmp
     with pytest.raises(ValueError, match="requires exact MIA_REMOTE_ALLOWED_HOSTS"):
         create_app(store=ObservatoryStore(tmp_path / "no-hosts.sqlite3"), local_guard=True)
 
+    monkeypatch.setenv("MIA_REMOTE_ALLOWED_HOSTS", "*.example.test")
+    with pytest.raises(ValueError, match="exact host values only"):
+        create_app(store=ObservatoryStore(tmp_path / "wildcard.sqlite3"), local_guard=True)
+
 
 def test_remote_companion_access_is_disabled_by_default(tmp_path, monkeypatch):
     monkeypatch.delenv("MIA_REMOTE_ACCESS_ENABLED", raising=False)
