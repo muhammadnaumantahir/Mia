@@ -74,7 +74,7 @@ def test_remote_companion_sync_is_tls_allowlist_and_device_token_gated(tmp_path,
         headers={**token, "Origin": "https://mia.example.test"},
     ).status_code == 400
     assert client.post("/api/companion/pair", json={}, headers=token).status_code == 400
-    assert client.get("/api/companion-admin/devices", headers=token).status_code == 400
+    assert client.get("/api/companion-admin/devices", headers=token).status_code == 403
 
     insecure = TestClient(app, base_url="http://mia.example.test")
     assert insecure.get("/api/companion/sync/pull", headers=token).status_code == 400
