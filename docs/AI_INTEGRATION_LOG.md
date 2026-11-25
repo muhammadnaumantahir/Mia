@@ -1104,3 +1104,8 @@ The coordinator completed the project-scoped research memory bridge and pushed i
 Implementation commits include `63d58f1cf15908a0f524ccde184b7a4d1ebc012c`, `44433bd33403d9b1bb372d7230ff5df099f9fec2`, `dd72594626674aa9ad55f79cf595a44addc03c72`, `3842e7cc71ca1a48ffb5c87230b29beb66e45b04`, `48a3cd16b23e60e695ca9eac51ddae1bed0100cd`, `8adfd5162011198a6b47dc6418e7e72411dff33d`, `4a3dcb16039ea37aa8e7f9e57be7a208e1c949ef`; test commits include `6b0c5dd4fc8eb87fea92a360a6f52054466fe454`, `1cdaff7d9e6824a73c7bd81cb840be499f71f336`, `1771f27742ea2585de10b7fd7999a1780d42896f`, `a205875eb448c53f9929fddee784b4be657122f2`, `c216c3a255cbadfa84db26af85e86fa91e505091`.
 
 **Verification:** Regression tests were authored but not executed in this session, per owner instruction. The task is DONE for implementation only; test execution remains `OWNER_VERIFICATION_REQUIRED`. No test pass is claimed.
+
+
+## 2026-11-25 — Coordinator claim: MIA-LIFE-08-BRAIN
+
+Claimed Brain/voice entry for safe internal workflows while A1/A4 retain their existing task assignments. Scope: expose the existing internal-only workflow engine through Brain's tool planner, keep preview separate from execution, ensure voice uses the same Brain workflow path, preserve stop/approval/audit boundaries, and test refusal of external/destructive actions. No external/destructive step is enabled by this task.
