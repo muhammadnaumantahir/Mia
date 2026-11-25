@@ -1109,3 +1109,22 @@ Implementation commits include `63d58f1cf15908a0f524ccde184b7a4d1ebc012c`, `4443
 ## 2026-11-25 — Coordinator claim: MIA-LIFE-08-BRAIN
 
 Claimed Brain/voice entry for safe internal workflows while A1/A4 retain their existing task assignments. Scope: expose the existing internal-only workflow engine through Brain's tool planner, keep preview separate from execution, ensure voice uses the same Brain workflow path, preserve stop/approval/audit boundaries, and test refusal of external/destructive actions. No external/destructive step is enabled by this task.
+
+
+## 2026-11-25 — MIA-LIFE-08-BRAIN implementation complete
+
+Brain and voice now use the same tool-planning path to preview and, when explicitly requested and owner-authorized, run safe internal workflows.
+
+- Registered `workflow.preview_internal` as a preview-mode tool. It creates a durable plan but never executes steps.
+- Registered `workflow.run_internal` as a write-mode tool. It requires the current user turn to clearly request execution, an existing workflow preview created by Brain/voice, a planned/paused status, and an owner grant for the `workflow.run_internal` capability.
+- Server-side intent detection fails closed for negated, tentative, hypothetical, tutorial, plan-only and ambiguous affirmative prompts. A plain “yes” or “go ahead” is not treated as execution permission; the owner must say e.g. “Run it”.
+- Brain can expose only `personal.add`, `personal.list`, `personal.complete` and `notify.submit`. External, browser, shell, filesystem and destructive actions are excluded from the Brain workflow schema and rechecked at execution time.
+- Workflow preview/run tools have a separate remote-egress opt-in (`MIA_ALLOW_REMOTE_WORKFLOW_TOOLS=false` by default). Enabling remote file context does not enable workflow egress. Local provider is the default.
+- Added owner capability specs for preview and execution. Execution is an EXECUTE-level capability and requires an owner grant. ToolRegistry supports write-mode definitions, but the default broker still denies write tools; the owner permission evaluator permits only mapped, granted capabilities.
+- The Brain orchestrator propagates the trusted current user prompt and interface to tool handlers. Voice turns use the same Brain planner and create workflow records with source `voice`.
+- Workflow run is limited to previously previewed Brain/voice tasks with only the allowed internal handlers. Existing stop-all, timeout/unknown-outcome and reconciliation protections remain active.
+- Added tests for voice preview without execution, explicit execution intent and negation, owner-grant requirements, safe-handler allowlists, remote workflow egress separation, and read-only contract exclusion.
+
+Implementation commits include `72361b5e19bd0fb4c09841b6c8d04418e2ac4865` (API tool integration), `5ba5bb2501` (trusted prompt/interface context), `d8fbcdd61e` (owner permission and remote egress gates), `3de353bcb3` (capability specs), `70672a471d` (write-mode tool registration), `41d91d69e7` (intent routing), and `da5ce77a85` (fail-closed execution intent). Test commits include `4c8844adb4`, `bfd9da221e`, `2afc784045`, `9c8b67e7c4`, `33e937e6ea`, `f37e144ca1`, and `aa042dd835`.
+
+**Verification:** Regression tests were authored but not executed in this session, per owner instruction. This task is DONE for implementation only; test execution remains `OWNER_VERIFICATION_REQUIRED`. No test pass is claimed.
