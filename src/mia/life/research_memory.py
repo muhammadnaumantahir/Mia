@@ -172,6 +172,9 @@ class ResearchMemoryBridge:
                 if existing:
                     return existing
                 raise ResearchMemoryError("The existing project memory link is unavailable")
+            except Exception:
+                self.memory.structured.delete(record_id, chain=True)
+                raise
             record = self.memory.structured.get(record_id)
             if record is None:
                 raise ResearchMemoryError("The imported structured memory record could not be read")
@@ -268,13 +271,14 @@ class ResearchMemoryBridge:
                 previous = current.get("supersedes_id")
                 current = self.memory.structured.get(previous) if previous else None
             current = record
-            while current and current["record_id"] not in chain_ids - {record_id}:
+            while current:
                 next_id = current.get("superseded_by")
                 if not next_id:
                     break
                 current = self.memory.structured.get(next_id)
-                if current:
-                    chain_ids.add(current["record_id"])
+                if current is None or current["record_id"] in chain_ids:
+                    break
+                chain_ids.add(current["record_id"])
             deleted = self.memory.structured.delete(record_id, chain=True, actor="owner")
             with self._db() as db:
                 db.executemany(
