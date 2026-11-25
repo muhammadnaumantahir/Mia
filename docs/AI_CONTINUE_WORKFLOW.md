@@ -6,7 +6,7 @@ This document defines how every specialist session registers, selects work and r
 
 1. Refresh remote main; read AGENTS.md, roadmap, status, development system, this workflow, task board, 55-task catalog, registry, integration log and specialization prompts.
 2. A newly launched session must register itself in an available A1–A6 slot. Do not inherit an old session identity or heartbeat. Update only your own registry row after fetching its latest SHA.
-3. Select exactly one highest-priority dependency-ready OPEN task matching your specialization. Check task ownership, integration-log checkpoints and owned paths before claiming. Update the task board and registry using fresh content/SHA.
+3. Select exactly one highest-priority dependency-ready OPEN task matching your specialization. Check task ownership, integration-log checkpoints and owned paths before claiming. Milestone number alone is not a dependency. Update the task board and registry using fresh content/SHA.
 4. Never claim work already owned by another live session. A stale heartbeat alone does not establish that a session is live; inspect its checkpoint and recent repository evidence. If uncertain, avoid duplicate claims and report the conflict.
 
 ## Continue behavior
@@ -40,8 +40,8 @@ Documentation-only progress, a plan, a generated patch, an attempted push or a c
 - The task board is the single source of truth for task ownership and status; the roadmap determines priority; the 55-task catalog defines scope and acceptance.
 - Keep one active task per agent. Do not create duplicate task IDs. If new work is discovered, create a unique ID with priority, dependencies, owned paths, acceptance criteria and test expectations.
 - Choose the highest-priority eligible OPEN task. Do not cherry-pick lower-priority work.
-- Follow the milestone handoff rule in the task board: adjacent milestone work may proceed in parallel only when all implementation tasks in the preceding milestone are DONE or IN_PROGRESS under another agent. Explicit dependencies and final acceptance gates remain mandatory.
-- A task blocked by another agent must state the exact dependency and may be split at a stable interface. Do independent work that does not touch blocked files.
+- Milestones are roadmap/release ordering, not a global development lock. Work across milestones may proceed in parallel whenever the task's explicit dependencies, security invariants and required interfaces are satisfied. Do not block an independent task because an unrelated earlier-milestone task is OPEN, PARTIAL or awaiting owner-only checks. Explicit dependencies and final acceptance gates remain mandatory.
+- A task may be marked BLOCKED only when a named, explicit dependency or security invariant prevents all meaningful progress. State the exact dependency, its current status, evidence and next unblock condition. If only one slice is blocked, split it and continue independent slices.
 - Keep tasks small enough to finish in one or a few Continue cycles. Split broad tasks into ordered tasks with explicit dependencies.
 - A session at its provider usage limit cannot run in the background. Repository checkpoints preserve work but do not launch agents.
 
