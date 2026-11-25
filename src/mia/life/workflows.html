@@ -242,11 +242,16 @@ function renderDetail(task,preview,events,rep){
   li.append(meta);
   if(s.error)li.append(mk('div','Problem: '+s.error,'note'));
   if(s.note)li.append(mk('div',s.note,'note'));
-  if(s.status==='failed'||s.status==='interrupted'){
-   if(task.status!=='completed'&&task.status!=='cancelled'){
-    const a=mk('div',undefined,'actions');const rb=mk('button','Retry step '+(i+1),'alt');rb.type='button';rb.dataset.retry=s.idx===undefined?i+1:s.idx;
-    rb.addEventListener('click',()=>retryStep(rb.dataset.retry,rb));a.append(rb);li.append(a);
-   }
+  if(s.status==='interrupted'&&task.status!=='completed'&&task.status!=='cancelled'){
+   const a=mk('div',undefined,'actions');
+   const applied=mk('button','Confirm action happened','alt');applied.type='button';applied.dataset.reconcile='applied';
+   applied.addEventListener('click',()=>reconcileStep(s.idx,'applied',applied));
+   const notApplied=mk('button','Confirm action did not happen','alt');notApplied.type='button';notApplied.dataset.reconcile='not_applied';
+   notApplied.addEventListener('click',()=>reconcileStep(s.idx,'not_applied',notApplied));
+   a.append(applied,notApplied);li.append(a);
+  }else if(s.status==='failed'&&task.status!=='completed'&&task.status!=='cancelled'){
+   const a=mk('div',undefined,'actions');const rb=mk('button','Retry step '+(i+1),'alt');rb.type='button';rb.dataset.retry=s.idx===undefined?i+1:s.idx;
+   rb.addEventListener('click',()=>retryStep(rb.dataset.retry,rb));a.append(rb);li.append(a);
   }
   ol.append(li);
  });
@@ -283,6 +288,24 @@ $('cancelBtn').addEventListener('click',async()=>{
 $('refreshBtn').addEventListener('click',()=>{if(current)openWorkflow(current.task_id,false);loadList();});
 async function retryStep(step,btn){
  await act('Retry',async id=>{const t=await api('/api/workflows/'+encodeURIComponent(id)+'/retry-step','POST',{step:Number(step)});say('Step retried: workflow is now '+((WF[t.status]||[t.status])[0])+'.',t.status==='failed');},btn);
+}
+async function reconcileStep(step,decision,btn){
+ const applied=decision==='applied';
+ const ok=await confirmDialog({
+  title:applied?'Confirm this action already happened?':'Confirm this action did not happen?',
+  lines:applied
+   ?['Inspect the target state before confirming.','Mia will mark this step as applied and will not run it again.']
+   :['Inspect the target state before confirming.','Mia will only re-arm this step; it will not run until you press Run workflow.'],
+  yes:applied?'Confirm applied':'Allow retry',
+  no:'Keep unresolved'
+ },btn);
+ if(!ok)return;
+ await act('Reconcile',async id=>{
+  const result=await api('/api/workflows/'+encodeURIComponent(id)+'/reconcile-step','POST',
+   {step:Number(step),decision});
+  if(result.status==='waiting')say('The original worker is still running. Retry remains blocked until it finishes.');
+  else say(applied?'Step marked as applied.':'Step re-armed after your confirmation. Run the workflow when ready.');
+ },btn);
 }
 
 (async()=>{
