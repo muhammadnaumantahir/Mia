@@ -674,3 +674,8 @@ Owner-confirmed, source-cited research findings can now be imported into registe
 ## MIA-LIFE-08-BRAIN — implementation complete (2026-11-25)
 
 Brain and voice can now preview safe internal workflows through the same Brain tool planner. Execution requires a prior Brain/voice preview, a clear execution request in the current user turn, and an owner grant for the EXECUTE-level `workflow.run_internal` capability. Only personal task/list/complete and notification-queue handlers are exposed; external, browser, shell, filesystem and destructive actions are excluded. Workflow tool egress is local-only unless its separate explicit opt-in is enabled. Existing stop and timeout reconciliation protections remain active. Regression tests were added; **test execution remains OWNER_VERIFICATION_REQUIRED**.
+
+
+## MIA-COMP-01-HANDLERS — implementation complete (2026-11-25)
+
+Every mutating route is now bound at app construction to its live Mia handler identity and declared capability. Unclassified routes, missing/non-Mia handlers, and failed bindings stop app construction. Route-handler tests cover the full inventory and negative cases. This proves registration/binding, not execution-time approval enforcement; COMP-04 remains responsible for that. **Test execution remains OWNER_VERIFICATION_REQUIRED.**
