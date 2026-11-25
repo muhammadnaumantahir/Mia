@@ -1064,3 +1064,20 @@ Implementation commits include `462bb0692653eb2592e5274b1d948ca1e5ece856`, `9dbb
 ## 2026-11-25 — Coordinator claim: MIA-LIFE-07-SEARCH
 
 Claimed the bounded research search child task while A2 retains its existing task claim. Scope: inspect the existing LIFE-07 research store/fetch/citation boundary, add bounded owner-allowlisted search discovery and Gateway-backed synthesis with exact source-linked claims, preserve budgets and stop controls, and add deterministic fake-provider/search tests. No external content may become instructions and no tests will be reported as passed unless executed.
+
+
+## 2026-11-25 — MIA-LIFE-07-SEARCH implementation complete
+
+The coordinator completed bounded source discovery and Gateway-backed research synthesis and pushed the implementation directly to `main`.
+
+- Added an injectable search-provider boundary and a default read-only DuckDuckGo HTML adapter. The search endpoint requires the search provider host (`html.duckduckgo.com`) to be on the owner's allowlist; result URLs are HTTPS-normalized, deduplicated and filtered to owner-allowed hosts. Search HTML is parsed only for result anchor titles/URLs; no result page is fetched automatically.
+- Added `POST /api/research/search` with a 3–300 character query and a hard maximum of 10 results. The Research page now supports discovery, selecting up to five results, and adding those URLs to a run. The owner still starts the fetch run explicitly.
+- Added `POST /api/research/runs/{run_id}/synthesize`. The Gateway receives at most 20,000 source-text characters, returns a strict JSON schema with at most 10 proposed claims, and is limited to 1,200 output tokens and 25 seconds. Paid routes remain disabled.
+- Synthesis uses an eligible local structured-output model by default. Remote synthesis is disabled unless the owner explicitly sets `MIA_RESEARCH_ALLOW_REMOTE_SYNTHESIS=true`; the default is documented in `.env.example` and in the Research UI.
+- All source text and search results are treated as untrusted. The synthesis system prompt explicitly rejects embedded instructions. Each generated claim is inserted only through the existing same-run, exact-quote validator; quotes overlapping instruction-like passages are rejected. Generated claims remain `proposed` and require owner confirmation before becoming findings.
+- Stop-all/emergency-stop checks apply to search and synthesis. Usage is recorded, and search/fetch/synthesis budgets remain bounded.
+- Added tests for search result filtering/deduplication, DuckDuckGo result parsing, stop handling, API discovery, Gateway structured synthesis, exact-quote and prompt-injection rejection, local-only default routing, and Research page controls.
+
+Implementation commits include `ef78540fa4a1ec02374379dbefb85aeb89b2453c`, `5d7bd5ee563983e3775e4feada1fe8656aa175c9`, `5454e3aedbbe598c5f30d391193c9d5a864f39a7`, `e58ee9d75abe28bfb40bf0e6f3857a2e90fddd91`, `42b9e6a629b321162ab1ca4ed960971f7ff247e9`, `aaa7262302fb9eb90d0f8c176368ca8803817348`; search/service and UI test commits include `e44801d41ad83fb3d886fd36171ee2ef4fba5fe1`, `242adc99a87a77b1b17f0e8b43e9d7cf60cb2ae2`, `43f42789133241116a9c14d5822a2d4f855c84e0`, `fe58b302b4956f029c84954f7cdf15a9fc7a5f40`, `55d8327db03f7a55c02615ded218f154ca147413`.
+
+**Verification:** Regression tests were authored but not executed in this session, per the owner's instruction. This task is DONE for implementation only; test execution remains `OWNER_VERIFICATION_REQUIRED`. No test pass is claimed.
