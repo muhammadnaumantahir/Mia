@@ -152,6 +152,7 @@ from mia.security.capabilities import bind_route_capabilities
 from mia.security.companion_api import register_companion_routes
 from mia.security.local_guard import LoopbackGuard
 from mia.security.pairing import DeviceConfinementGuard, PairingService
+from mia.security.sync import CompanionSyncStore
 from mia.voice.action_readback import describe_action
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider, normalize_stt_language
 from mia.voice.tts import Pyttsx3SpeechSynthesizer, SpeechSynthesisError, SpeechSynthesizer
@@ -3242,10 +3243,13 @@ def create_app(
 
     # MIA-COMP-02: companion pairing; device tokens are confined to /api/companion/*.
     pairing_service = pairing or PairingService(data_dir / "mia-companion.sqlite3")
+    companion_sync = CompanionSyncStore(data_dir / "mia-companion-sync.sqlite3")
     app.state.pairing = pairing_service
+    app.state.companion_sync = companion_sync
     register_companion_routes(
         app, pairing_service,
         lambda **kw: observatory.record_event(category="companion", layer_id="SPS-10", **kw),
+        sync=companion_sync,
     )
     async def synthesize_research_run(run_id: str) -> dict[str, Any]:
         control.assert_active()
