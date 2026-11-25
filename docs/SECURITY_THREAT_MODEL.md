@@ -45,11 +45,14 @@ default in `create_app` so existing in-process tests are unchanged):
 
 ## Capability inventory
 `mia.security.capabilities` classifies every mutating route by side effect, approval class, scope
-and recovery path. **tested**: `tests/test_route_capabilities.py` enumerates the real routes and fails if
-a mutating route is unclassified, a rule matches nothing, device control has no approval class, or a
-stop control is approval-gated. Classifications are **declared** (assigned from route names), not
-proven by tracing each handler; the enforcement that a handler really demands the approval is COMP-04.
-
+and recovery path. At app construction, `bind_route_capabilities` binds each mutating route to its
+actual callable Mia handler identity and declared capability. App construction fails closed if a
+mutating route has no matching rule, a non-Mia/missing handler, or cannot store its binding.
+`tests/test_route_capabilities.py` covers route classification, live handler identity bindings,
+dead rules, device-control approval classes and always-available stop controls. **Test execution for
+the new handler-binding coverage remains OWNER_VERIFICATION_REQUIRED.** The classification is still
+a declaration derived from route/method patterns; binding proves which handler is registered, not
+that the handler enforces the approval class. That enforcement remains COMP-04.
 ## Approval classes
 `none` (direct owner action), `preview_then_execute` (execute requires prior preview/approval record), `grant_gated` (409 unless an active owner grant covers it; e.g. browser fill),
 `owner_confirm` (destructive or wide; UI confirms), `always_allowed` (stop controls: never blocked).
@@ -60,8 +63,9 @@ Stop-all, emergency-stop, wake-word stop, autonomy pause and permission revoke-a
 the end-to-end "stop everything" drill is OWNER_VERIFICATION_REQUIRED.
 
 ## Open items
-Per-caller auth / device identity (LIFE-13), enforcement broker (COMP-04), optional extra allowed
-hosts for remote access (intentionally not supported), handler-level proof of each classification.
+Per-caller auth / device identity (LIFE-13), enforcement of declared approval classes inside handlers
+(COMP-04), and optional extra allowed hosts for remote access (intentionally not supported).
+Route-to-handler binding is now fail-closed at app construction; it does not replace COMP-04 enforcement.
 
 ## Update 2026-11-25: companion identity (MIA-COMP-02)
 - **Added (tested):** `mia.security.pairing` gives a paired companion its own revocable identity: Ed25519 keys (private key stays on the device), one-time hashed pairing codes with lockout, single-use challenges, scoped 15-minute sessions, instant revocation. `DeviceConfinementGuard` confines any device token to `/api/companion/*`, so a compromised companion cannot approve its own requests, grant permissions, pair or revoke devices.
