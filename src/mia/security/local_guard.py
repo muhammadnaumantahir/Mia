@@ -11,6 +11,9 @@ reach it over loopback. Without this guard that assumption fails in two well-kno
 Rules (HTTP and WebSocket):
 
 * ``Host`` must name loopback (``127.0.0.1``, ``localhost`` or ``::1``), else 400 / close 1008.
+* Optional remote companion sync is disabled by default. When explicitly enabled, only exact allowlisted
+  HTTPS hosts may reach a tiny set of companion routes, and every such request needs a device bearer
+  token. Pairing and owner routes remain loopback-only.
 * For state-changing methods and WebSockets: ``Origin``, when present, must be exactly the
   same origin as the request (same loopback host and port); ``null`` and foreign origins get 403.
   ``Sec-Fetch-Site: cross-site`` is also refused. Requests without ``Origin`` (curl, scripts, the
@@ -23,6 +26,7 @@ approve what is the permission broker's job (MIA-COMP-04).
 from __future__ import annotations
 
 import json
+import os
 from urllib.parse import urlsplit
 
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
@@ -69,8 +73,38 @@ def origin_is_same_origin(origin: str, host: str) -> bool:
 class LoopbackGuard:
     """Pure ASGI middleware so it covers HTTP and WebSocket scopes alike."""
 
+    REMOTE_COMPANION_ROUTES = frozenset({
+        ("/api/companion/challenge", "POST"),
+        ("/api/companion/session", "POST"),
+        ("/api/companion/whoami", "GET"),
+        ("/api/companion/heartbeat", "POST"),
+        ("/api/companion/sync/pull", "GET"),
+        ("/api/companion/sync/push", "POST"),
+    })
+
     def __init__(self, app) -> None:  # noqa: ANN001 - ASGI app
         self.app = app
+        self.remote_enabled = os.getenv("MIA_REMOTE_ACCESS_ENABLED", "false").strip().lower() == "true"
+        self.remote_allowed_hosts = frozenset(
+            host.strip().lower().rstrip(".")
+            for host in os.getenv("MIA_REMOTE_ALLOWED_HOSTS", "").split(",")
+            if host.strip()
+        )
+
+    def _remote_companion_allowed(self, scope, headers: dict[str, str]) -> bool:  # noqa: ANN001
+        if not self.remote_enabled or scope.get("scheme") != "https":
+            return False
+        host = headers.get("host", "").strip().lower().rstrip(".")
+        if not host or host not in self.remote_allowed_hosts:
+            return False
+        method = scope.get("method", "GET").upper()
+        if (scope.get("path", ""), method) not in self.REMOTE_COMPANION_ROUTES:
+            return False
+        # Browser-originated requests are deliberately not part of this device protocol.
+        if headers.get("origin") is not None or headers.get("sec-fetch-site", "").lower() == "cross-site":
+            return False
+        authorization = headers.get("authorization", "").strip().lower()
+        return authorization.startswith("bearer mia-dev_")
 
     async def __call__(self, scope, receive, send) -> None:  # noqa: ANN001
         if scope["type"] not in {"http", "websocket"}:
@@ -79,6 +113,9 @@ class LoopbackGuard:
         headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", [])}
         host = headers.get("host")
         if not host_is_loopback(host):
+            if self._remote_companion_allowed(scope, headers):
+                await self.app(scope, receive, send)
+                return
             await self._reject(scope, send, 400, "Invalid host header")
             return
         unsafe = scope["type"] == "websocket" or scope.get("method", "GET").upper() not in _SAFE_METHODS
