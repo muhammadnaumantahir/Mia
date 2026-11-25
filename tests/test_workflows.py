@@ -199,6 +199,9 @@ def test_restart_requires_owner_reconciliation_before_retry(tmp_path):
     assert refused["status"] == "interrupted"
     assert memory.personal.list(limit=10) == []
 
+    # The ordinary retry endpoint must not bypass reconciliation for an interrupted step.
+    direct_retry = client.post(f"/api/workflows/{task['task_id']}/retry-step", json={"step": 1})
+    assert direct_retry.status_code == 422
     with pytest.raises(Exception, match="decision must be"):
         fresh.reconcile_timeout(task["task_id"], 1)
     retryable = fresh.reconcile_timeout(task["task_id"], 1, decision="not_applied")
