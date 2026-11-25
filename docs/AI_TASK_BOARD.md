@@ -62,7 +62,7 @@ This is the shared queue. Always refresh it from `main` before claiming or chang
 - `IN_PROGRESS`: implementation is actively owned; independent tasks may proceed in parallel.
 - `PARTIAL`: implementation remains. It does not block unrelated tasks. Split each residual into a uniquely identified OPEN child task with owner, dependencies, owned paths and acceptance criteria; keep the parent PARTIAL until its implementation children are DONE.
 - `BLOCKED`: only when a named explicit dependency or security invariant prevents all meaningful progress. Record dependency ID, status, evidence and unblock condition. Split off any independent slice and continue it.
-- `DONE`: implementation and regression evidence are complete and the remote-main commit is verified. Track manual checks separately as `OWNER_VERIFICATION_REQUIRED`; they do not hold implementation open.
+- `DONE`: implementation is complete, regression tests are added, and the remote-main commit is verified. If the owner explicitly defers test execution to final acceptance, record it as `OWNER_VERIFICATION_REQUIRED` and never report it as passed; otherwise run the tests and record results. Manual checks are also tracked separately and do not hold implementation open.
 - Milestones express roadmap/release order, not a global development lock. A dependency-ready task may proceed even while unrelated earlier-milestone tasks are OPEN, PARTIAL or awaiting owner checks.
 - Choose by priority among eligible tasks; never use milestone number alone to mark a task blocked.
 
