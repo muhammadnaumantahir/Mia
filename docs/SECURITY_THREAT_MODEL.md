@@ -16,12 +16,14 @@ microphone access; the self-development pipeline (capabilities, experiments); pa
    permission broker and device identity (MIA-COMP-04, MIA-LIFE-13). Declared gap.
 3. **Generated or self-developed code** acting beyond its grant. Covered by the sandbox and
    governance layers, not by this document.
-4. **Network attacker.** Mia binds to loopback only (`mia.__main__` host check, declared). The
-   guard below re-checks the Host header, so a changed bind does not by itself expose it to named hosts.
+4. **Network attacker.** Mia binds to loopback by default. The only opt-in remote surface is
+   the exact companion route/method allowlist, protected by direct HTTPS, exact Host allowlisting,
+   a live device bearer token and device scopes. Pairing and owner routes remain loopback-only.
 
 ## Trust boundaries
-Browser page → loopback HTTP/WebSocket API → stores and device adapters. The first boundary had no
-defence before this task.
+Browser page → loopback HTTP/WebSocket API → stores and device adapters. A paired non-browser
+companion may reach only the narrow HTTPS sync/session routes when the owner explicitly enables
+remote access; it cannot reach owner administration or general APIs.
 
 ## Findings (before this task)
 - **verified**: the API answered requests carrying `Host: evil.example` (DNS-rebinding precondition).
