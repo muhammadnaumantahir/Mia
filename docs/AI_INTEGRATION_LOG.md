@@ -1038,3 +1038,8 @@ The coordinator completed the bounded file-index refresh child task and pushed a
 Implementation commits include `1f74c997f61d225cbd6f567f10d639ba5bbcb71a`, `697709c59e731c9b9e1f131ab7f19d28da0e908e`, `1200100567b23389197bd075b58c67b2f6eb6c13`, `2ccee5925acfc8d53360985ff99bef34ece1f6f4`, `beac7579254eb74bb5c863d94a3dde51b5b01f8b`; regression tests include `1454710a7b856193dee5b125cdd5ca567f4c9eef`, `247f0b251434dc83d7e3173a0e4750b707f29e33`, `c782a68b9707bc41a4e53d66ed6f55e343054dc3`, `4e2885902d143ebebf73c24b6fdae117abd344bf`.
 
 **Verification:** Tests were authored but not executed in this session, per the owner's instruction to perform testing at the final acceptance stage. The task is marked DONE for implementation only; test execution remains `OWNER_VERIFICATION_REQUIRED`. No test pass is claimed.
+
+
+## 2026-11-25 — Coordinator claim: MIA-LIFE-06-BRAIN
+
+Claimed the Brain file-search integration child task while A1/A2 retain their existing task claims. The LIFE-06 file-index backend is now on main. Scope: add a verified-chunk retrieval method, expose it as a read-only Brain tool, keep file contents local-only by default, and require source-linked citations in model synthesis. Treat every file chunk as untrusted data, enforce owner-selected index scope and source re-verification, and add fake-provider/isolation tests. No test execution claim until final owner verification.
