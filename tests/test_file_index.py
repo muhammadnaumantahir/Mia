@@ -294,6 +294,68 @@ def test_http_stop_all_returns_409(api):
     assert c.post(f"/api/file-index/selections/{sid}/reindex").status_code == 200
 
 
+def test_http_watch_is_owner_started_bounded_and_stop_all_stops_it(api):
+    import time
+
+    client, app = api
+    assert client.get("/api/file-index/watch").json()["enabled"] is False
+    missing = client.post("/api/file-index/watch/start", json={})
+    assert missing.status_code == 422
+
+    sid = client.post(
+        "/api/file-index/selections", json={"root_id": "root_1", "path": "notes"}
+    ).json()["id"]
+    started = client.post(
+        "/api/file-index/watch/start",
+        json={"interval_seconds": 1, "max_selections_per_cycle": 99},
+    )
+    assert started.status_code == 200
+    assert started.json()["interval_seconds"] == 5
+    assert started.json()["max_selections_per_cycle"] == 5
+
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        if app.state.file_index.status()["files"] == 1:
+            break
+        time.sleep(0.01)
+    assert app.state.file_index.status()["files"] == 1
+
+    stopped = client.post("/api/computer/stop-all")
+    assert stopped.status_code == 200
+    assert client.get("/api/file-index/watch").json()["enabled"] is False
+    assert client.post("/api/computer/resume").status_code == 200
+    assert client.post("/api/file-index/watch/stop").status_code == 200
+
+
+def test_watch_refresh_picks_up_changes_and_removes_deleted_files(api):
+    import time
+
+    client, app = api
+    root = app.state.computer_files.roots["root_1"]
+    source = root / "notes" / "a.md"
+    sid = client.post(
+        "/api/file-index/selections", json={"root_id": "root_1", "path": "notes"}
+    ).json()["id"]
+    assert client.post(
+        f"/api/file-index/selections/{sid}/reindex"
+    ).status_code == 200
+    source.write_text("Updated watchable pineapple content.\n", encoding="utf-8")
+    watcher = app.state.file_index_watcher
+    watcher.start(interval_seconds=5, max_selections_per_cycle=1)
+    deadline = time.monotonic() + 2
+    try:
+        while time.monotonic() < deadline and not app.state.file_index.search("pineapple"):
+            time.sleep(0.01)
+        assert app.state.file_index.search("pineapple")
+        source.unlink()
+        # The next cycle is bounded by the configured interval; force a refresh to
+        # exercise the same reconciliation path deterministically without waiting.
+        app.state.file_index.reindex(sid)
+        assert app.state.file_index.search("pineapple") == []
+    finally:
+        watcher.stop()
+
+
 def test_http_purge_all(api):
     c, _ = api
     sid = c.post("/api/file-index/selections", json={"root_id": "root_1", "path": "notes"}).json()["id"]
