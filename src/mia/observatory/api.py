@@ -75,6 +75,7 @@ from mia.evolution.capabilities import (
     CapabilityLifecycleError,
     CapabilityStore,
 )
+from mia.evolution.gaps import GapStore
 from mia.evolution.sandbox import (
     DockerSandboxRunner,
     SandboxExecutionError,
@@ -559,6 +560,45 @@ class LifeSettingsInput(BaseModel):
     suggestion_min_relevance_pct: int | None = None
     suggestion_idle_task_days: int | None = None
     conversation_capture_enabled: bool | None = None
+
+
+class GapConsentInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source: str = Field(min_length=1, max_length=20)
+    granted: bool
+
+
+class GapScanInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dry_run: bool = True
+
+
+class GapOwnerRequestInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=120)
+    rationale: str = Field(default="", max_length=1_000)
+    impact: str = Field(default="medium", max_length=8)
+    project: str | None = Field(default=None, max_length=64)
+
+
+class GapEvaluationInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    suite: str = Field(min_length=1, max_length=80)
+    case_id: str = Field(min_length=1, max_length=80)
+    run_id: str = Field(min_length=1, max_length=80)
+    detail: str = Field(default="", max_length=1_000)
+    observed_at: str | None = Field(default=None, max_length=40)
+
+
+class GapStatusInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: str = Field(min_length=1, max_length=12)
+    reason: str = Field(default="", max_length=200)
 
 
 class SuggestionRunInput(BaseModel):
@@ -3910,6 +3950,80 @@ def create_app(
                 "run_endpoint": f"/api/computer/tasks/{task['task_id']}/run",
             })
         return plans
+
+    gap_store = GapStore(data_dir / "mia-gaps.sqlite3")
+
+    @app.get("/api/evolution/gaps/consent")
+    def gap_consent() -> dict[str, Any]:
+        return {"consent": gap_store.consent(), "note": "A source is not read at all until it is granted."}
+
+    @app.put("/api/evolution/gaps/consent")
+    def set_gap_consent(item: GapConsentInput) -> dict[str, Any]:
+        """Grant or revoke one signal source. Revoking deletes that source's evidence."""
+        try:
+            return gap_store.set_consent(item.source, item.granted)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/evolution/gaps/scan")
+    def scan_gaps(item: GapScanInput) -> dict[str, Any]:
+        """Look for repeated, consented signals; a dry run (the default) writes nothing."""
+        return gap_store.scan(durable_tasks, memory_store, dry_run=item.dry_run)
+
+    @app.post("/api/evolution/gaps/owner-request", status_code=201)
+    def gap_owner_request(item: GapOwnerRequestInput) -> dict[str, Any]:
+        try:
+            gap_id, created = gap_store.add_owner_request(
+                item.title, item.rationale, item.impact, item.project
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"gap_id": gap_id, "created": created}
+
+    @app.post("/api/evolution/gaps/evaluation-failure", status_code=201)
+    def gap_evaluation_failure(item: GapEvaluationInput) -> dict[str, Any]:
+        try:
+            recorded = gap_store.record_evaluation_failure(
+                item.suite, item.case_id, item.run_id, item.detail, item.observed_at
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"recorded": recorded}
+
+    @app.get("/api/evolution/gaps")
+    def list_gaps(
+        status: str | None = None, include_duplicates: bool = False, limit: int = 100
+    ) -> dict[str, Any]:
+        try:
+            return {"gaps": gap_store.list(
+                status=status, include_duplicates=include_duplicates, limit=limit)}
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/evolution/gaps/{gap_id}")
+    def get_gap(gap_id: str) -> dict[str, Any]:
+        gap = gap_store.get(gap_id)
+        if gap is None:
+            raise HTTPException(status_code=404, detail="Gap not found")
+        return {**gap, "events": gap_store.events(gap_id)}
+
+    @app.post("/api/evolution/gaps/{gap_id}/status")
+    def set_gap_status(gap_id: str, item: GapStatusInput) -> dict[str, Any]:
+        try:
+            changed = gap_store.set_status(gap_id, item.status, item.reason)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Gap not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"gap_id": gap_id, "status": item.status, "changed": changed}
+
+    @app.delete("/api/evolution/gaps/{gap_id}")
+    def delete_gap(gap_id: str) -> dict[str, Any]:
+        if not gap_store.delete(gap_id):
+            raise HTTPException(status_code=404, detail="Gap not found")
+        return {"deleted": gap_id}
 
     @app.post("/api/capabilities/draft", status_code=200)
     async def draft_capability(item: CapabilityDraftInput) -> dict[str, Any]:

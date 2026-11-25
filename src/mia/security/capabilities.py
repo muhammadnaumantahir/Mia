@@ -107,6 +107,8 @@ _RULES: tuple[Capability, ...] = (
     Capability("*/api/projects*", _S.OWNER_DATA, _A.NONE, "projects", "edit"),
     Capability("*/api/conversations/*", _S.OWNER_DATA, _A.NONE, "conversations", "edit"),
     # Mia's own state.
+    Capability("*/api/evolution/gaps*", _S.INTERNAL_STATE, _A.NONE, "capability gaps",
+               "records and ranks consented signals only, nothing runs; revoking a source deletes its evidence; dismiss or delete a gap"),
     Capability("*/api/notifications/*", _S.INTERNAL_STATE, _A.NONE, "notifications", "settings"),
     Capability("*/api/life/*", _S.INTERNAL_STATE, _A.NONE, "life", "settings"),
     Capability("POST /api/observatory/*", _S.INTERNAL_STATE, _A.NONE, "telemetry", "append-only"),
