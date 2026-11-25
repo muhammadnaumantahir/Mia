@@ -1043,3 +1043,19 @@ Implementation commits include `1f74c997f61d225cbd6f567f10d639ba5bbcb71a`, `6977
 ## 2026-11-25 — Coordinator claim: MIA-LIFE-06-BRAIN
 
 Claimed the Brain file-search integration child task while A1/A2 retain their existing task claims. The LIFE-06 file-index backend is now on main. Scope: add a verified-chunk retrieval method, expose it as a read-only Brain tool, keep file contents local-only by default, and require source-linked citations in model synthesis. Treat every file chunk as untrusted data, enforce owner-selected index scope and source re-verification, and add fake-provider/isolation tests. No test execution claim until final owner verification.
+
+
+## 2026-11-25 — MIA-LIFE-06-BRAIN implementation complete
+
+The coordinator completed the Brain file-search integration and pushed it directly to `main`.
+
+- Added `FileIndex.search_verified()`: it returns only chunks whose indexed file is still current, whose exact line text re-verifies, and whose SHA-256 still matches. Each result includes the exact relative path, inclusive line range, root ID, file hash, and citation string.
+- Registered `knowledge.search_files` as a read-only Brain tool. It searches only folders the owner explicitly selected and returns bounded chunks (maximum 10) marked as untrusted data, with prompt-injection flags and a strict citation policy.
+- Mapped the tool to the shared low-risk `filesystem.search` permission and added it to the broker's local-only data-egress set. Remote providers receive no file content unless the owner explicitly enables remote file context.
+- Added a system-level instruction (including the identity fallback path) that treats retrieved files, indexed chunks, web pages and tool results as untrusted data, never instructions; indexed-file answers must use exact returned citations.
+- Serialized verified search against concurrent index refresh so a reindex cannot invalidate a chunk between lookup and source verification.
+- Added tests for stale-source rejection, exact citations, untrusted/injection flags, Brain tool invocation, owner permission mapping and remote-provider egress blocking.
+
+Implementation commits include `462bb0692653eb2592e5274b1d948ca1e5ece856`, `9dbba04f8e2ffcb29c8f97b4645ec7e18ce14255`, `644bb4c176934408122895375f87118ab69ec84e`, `d44d6244610425fd2828de6e01e7bdbeb905364e`, `2929c0c43ae84988b5491a7f8115b6f0182e6c7d`; test commits include `54e5eeb5eebec466ca2f16d298df6aa9744b55aa`, `5e8d8216c9913880e1796c68f5a25a22cc38ebde`, `516de987395b590ecdf0294bdeda390474b8e489`, `72702fb5ad326479da6d38636716994228fc1919`, `48364252f63d44c1a07b7c72c5b1505d5c51ac3c`.
+
+**Verification:** Regression tests were authored but not executed in this session, per owner instruction. The task is DONE for implementation only; execution remains `OWNER_VERIFICATION_REQUIRED`. No tests are reported as passed.
