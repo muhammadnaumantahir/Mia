@@ -4,9 +4,10 @@ import json
 from fastapi.testclient import TestClient
 
 from mia.agent.tools import ToolRegistry
-from mia.brain.orchestrator import Brain, TurnRequest
+from mia.brain.orchestrator import CURRENT_BRAIN_USER_PROMPT, Brain, TurnRequest
 from mia.computer.approvals import ApprovalStore
 from mia.computer.filesystem import FilesystemAdapter
+from mia.computer.permissions import PermissionLevel, PermissionPolicy
 from mia.gateway.contracts import (
     ModelCandidate,
     ProviderResponse,
@@ -311,6 +312,103 @@ def test_capability_evidence_survives_restart(tmp_path):
     assert "tools" in again.view(cand).refuted
     again.record(cand, "tools", True)
     assert "tools" not in CapabilityRegistry(db_path=db).view(cand).refuted
+
+
+def test_voice_turn_uses_brain_to_preview_internal_workflow_without_running(tmp_path, monkeypatch):
+    monkeypatch.setenv("MIA_DATA_DIR", str(tmp_path / "data"))
+    tool_call = {
+        "id": "workflow-preview-1",
+        "type": "function",
+        "function": {
+            "name": "workflow.preview_internal",
+            "arguments": json.dumps({
+                "title": "Buy milk",
+                "steps": [{
+                    "capability": "personal.add",
+                    "args": {"kind": "task", "title": "Buy milk"},
+                }],
+            }),
+        },
+    }
+    provider = Scripted(
+        "local-workflows", "workflow-model", caps=("chat", "tools"),
+        tool_calls=[tool_call], reply="I prepared the workflow preview. Nothing has run.",
+    )
+    registry = ProviderRegistry()
+    registry.register(provider)
+    memory = MemoryStore(tmp_path / "memory.sqlite3")
+    app = create_app(
+        store=ObservatoryStore(tmp_path / "obs.sqlite3"),
+        gateway=ModelGateway(registry),
+        memory=memory,
+    )
+    client = TestClient(app)
+    response = chat(
+        client,
+        "Plan a workflow to add a task called Buy milk. Do not run it.",
+        conversation_id="voice-workflow-preview",
+        use_tools=True,
+        interface="voice",
+    )
+    assert response.status_code == 200, response.text
+    tool_message = next(
+        message for message in provider.seen[-1].messages if message.get("role") == "tool"
+    )
+    result = json.loads(tool_message["content"])
+    assert result["status"] == "planned"
+    assert result["source"] == "voice"
+    assert result["executed"] is False
+    assert app.state.workflow_engine.get_task(result["workflow_id"])["status"] == "planned"
+    assert memory.personal.list(limit=10) == []
+
+
+def test_brain_workflow_run_requires_owner_grant_and_current_turn_execution_intent(tmp_path, monkeypatch):
+    monkeypatch.setenv("MIA_DATA_DIR", str(tmp_path / "data"))
+    memory = MemoryStore(tmp_path / "memory.sqlite3")
+    policy = PermissionPolicy(tmp_path / "permissions.sqlite3")
+    app = create_app(
+        store=ObservatoryStore(tmp_path / "obs.sqlite3"),
+        memory=memory,
+        permission_policy=policy,
+    )
+    workflow = app.state.workflow_engine.create_task(
+        "Buy milk",
+        [{"capability": "personal.add", "args": {"kind": "task", "title": "Buy milk"}}],
+        source="brain",
+    )
+    broker = app.state.brain.broker
+
+    async def invoke(prompt):
+        token = CURRENT_BRAIN_USER_PROMPT.set(prompt)
+        try:
+            return await broker.call(
+                "workflow.run_internal",
+                {"workflow_id": workflow["task_id"]},
+                offered={"workflow.run_internal"},
+                provider_local=True,
+            )
+        finally:
+            CURRENT_BRAIN_USER_PROMPT.reset(token)
+
+    no_grant = asyncio.run(invoke("Run the workflow now."))
+    assert no_grant.status == "refused" and no_grant.stage == "permission"
+    assert memory.personal.list(limit=10) == []
+
+    policy.grant(
+        granted_by="owner",
+        capabilities=["workflow.run_internal"],
+        level=PermissionLevel.EXECUTE,
+        kind="session",
+    )
+    preview_only = asyncio.run(invoke("Plan only; do not run it."))
+    assert preview_only.status == "completed"
+    assert preview_only.output["status"] == "not_executed"
+    assert memory.personal.list(limit=10) == []
+
+    executed = asyncio.run(invoke("Run the workflow now."))
+    assert executed.status == "completed"
+    assert executed.output["status"] == "completed"
+    assert [item["title"] for item in memory.personal.list(limit=10)] == ["Buy milk"]
 
 
 def test_brain_searches_verified_indexed_files_with_local_only_citations(tmp_path, monkeypatch):
