@@ -159,7 +159,7 @@ class DuckDuckGoSearchProvider:
         page = self.fetcher.fetch(
             url, host_allowed=host_allowed, timeout=FETCH_TIMEOUT, should_stop=should_stop
         )
-        charset = re.search(r"charset=([\\w-]+)", page.content_type)
+        charset = re.search(r"charset=([\w-]+)", page.content_type)
         try:
             raw = page.body.decode(charset.group(1) if charset else "utf-8", errors="replace")
         except LookupError:
