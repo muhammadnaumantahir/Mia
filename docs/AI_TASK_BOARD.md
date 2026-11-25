@@ -1,6 +1,6 @@
 # Mia multi-agent task board
 
-**Worker slots:** A1–A6  
+**Worker slots:** A1–A7  
 **Coordinator:** master-prompt role (not a worker slot)  
 **Branch policy:** direct commits to `main` only  
 **Last reconciled:** 2026-11-25
@@ -49,12 +49,23 @@ This is the shared queue. Always refresh it from `main` before claiming or chang
 | MIA-UX-05 | P1 | A6 | DONE (commit 14d748b) | Microphone visibility and stop safety for the one-shot Record button in `assistant.html` (A6 audit): the always-visible mic badge stays "Mic off" while recording; mic tracks are released only after transcription finishes; Esc does not stop recording; `pagehide` does not release an active recording. Fix with tests; no backend or voice-session changes; does not touch wake-word code (MIA-UX-04). |
 | MIA-BASE-04 | P1 | A5 | DONE (A5, commit ef935a2 on main, 2026-11-21) | Audit Code Graph freshness and impact analysis against current main after the recent multi-agent changes. Verify graph/test provenance, stale detection and source-to-test impact; fix one concrete gap with deterministic tests. Record indexed commit and local refresh limitations. Paths: `src/mia/codegraph/**`, `scripts/update_code_graph.py`, graph tests/docs. Code Graph maintenance remains cross-cutting. |
 | MIA-BASE-05 | P1 | A5 | DONE (A5, commit 4bedddd on main, 2026-11-21) | Report stored-graph staleness in `GET /api/code-graph/status` (graph commit/tree state, HEAD, source-digest match) and show it in the Code Graph explorer; include old-path dependents for renamed/deleted files by consulting the previously stored graph. Paths: `src/mia/codegraph/**`, status route only in `observatory/api.py`, graph tests/docs. |
-| MIA-EVOL-02 | P2 | A5 | IN_PROGRESS (A5 fresh Claude Sonnet 5.5 session resumed the 2026-11-21T17:00Z claim at 2026-11-21T20:33Z; no implementation existed from the previous session) | OWNER-APPROVED EXCEPTION to the M2-M6 gate (owner replied "approve" in chat to A5's proposal of MIA-EVOL-02). Audit the existing `src/mia/evolution/**` pipeline against docs/DEFERRED_MILESTONE_BACKLOG.md MIA-EVOL-02 and the Priority 5 exit criteria, then implement the single highest-impact missing safeguard with tests. No generated code may run in the privileged host process; failed validation must block activation. Paths: `src/mia/evolution/**`, matching tests/docs. MIA-EVOL-01 is DONE (commit 02c96d1); scope stays to the validation pipeline. Do not treat EVOL-01 as a blocker. |
+| MIA-EVOL-02 | P2 | A5 | IN_PROGRESS (A5 fresh Claude Sonnet 5.5 session resumed the 2026-11-21T17:00Z claim at 2026-11-21T20:33Z; no implementation existed from the previous session) | Historical owner-approved exception under the previous milestone-gate policy; the global gate has since been removed. Audit the existing `src/mia/evolution/**` pipeline against docs/DEFERRED_MILESTONE_BACKLOG.md MIA-EVOL-02 and the Priority 5 exit criteria, then implement the single highest-impact missing safeguard with tests. No generated code may run in the privileged host process; failed validation must block activation. Paths: `src/mia/evolution/**`, matching tests/docs. MIA-EVOL-01 is DONE (commit 02c96d1); scope stays to the validation pipeline. Do not treat EVOL-01 as a blocker. |
 | MIA-FIX-01 | P1 | A5 | DONE (duplicate of MIA-BASE-03; commit ffef797) | Duplicate browser permission test report; resolved by MIA-BASE-03. |
 | MIA-LANG-01 | P1 | A7 | DONE (A7, commit 61be039 on main, 2026-11-22; backend only, UI wiring is MIA-LANG-02) | Language-aware local TTS voice selection: `POST /api/voice/speak` accepts optional `language` (`auto`/`en`/`ur`); an explicit `voice_id` always wins; Urdu script prefers an installed Urdu voice, English and Roman Urdu prefer an English voice; no matching voice -> default voice with an honest `X-Mia-Voice-Selection` header/event field; `GET /api/voice/status` reports which languages have a local voice. Paths: new `src/mia/voice/voice_select.py`, small hunks in `src/mia/observatory/api.py` (speak route, status), `tests/test_voice_language_selection.py`, docs. UI wiring (`assistant.html`) is a separate later task. |
 | MIA-LANG-02 | P1 | A7 | DONE (A7, commit 81ee534 on main, 2026-11-22) | Wire the Assistant voice dropdown: an "Auto (match language)" local option that sends `language: "auto"` and no `voice_id`, shows when no matching voice is installed (use `local_tts_languages` from `/api/voice/status`), and never claims a language match from `X-Mia-Voice-Selection: no_matching_voice`. Paths: `src/mia/assistant.html` (coordinate with A6/A4; re-fetch first), Chromium tests in `tests/test_voice_browser.py`. |
  
 ## Milestone task queue (M1–M6)
+
+### Queue rules (authoritative)
+
+- `OPEN`: unclaimed; eligible when all explicitly listed dependencies are DONE or an explicitly documented interface contract is already available.
+- `IN_PROGRESS`: implementation is actively owned; independent tasks may proceed in parallel.
+- `PARTIAL`: implementation remains. It does not block unrelated tasks. Split each residual into a uniquely identified OPEN child task with owner, dependencies, owned paths and acceptance criteria; keep the parent PARTIAL until its implementation children are DONE.
+- `BLOCKED`: only when a named explicit dependency or security invariant prevents all meaningful progress. Record dependency ID, status, evidence and unblock condition. Split off any independent slice and continue it.
+- `DONE`: implementation and regression evidence are complete and the remote-main commit is verified. Track manual checks separately as `OWNER_VERIFICATION_REQUIRED`; they do not hold implementation open.
+- Milestones express roadmap/release order, not a global development lock. A dependency-ready task may proceed even while unrelated earlier-milestone tasks are OPEN, PARTIAL or awaiting owner checks.
+- Choose by priority among eligible tasks; never use milestone number alone to mark a task blocked.
+
 
 The detailed task definitions, dependencies, scope and acceptance criteria are in [the milestone task catalog](DEFERRED_MILESTONE_BACKLOG.md). The rows below make those tasks discoverable and claimable. `OPEN` means unclaimed; eligibility is determined by explicit task dependencies and security/acceptance gates only. Milestone number alone never blocks implementation.
 
