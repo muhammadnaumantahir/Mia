@@ -196,10 +196,10 @@ def register_companion_routes(
         )
         return result
 
-    @app.post("/api/companion/sync/push")
+    @app.post("/api/companion/sync/push", response_model=None)
     def sync_push(
         item: SyncPushInput, authorization: str | None = Header(default=None)
-    ) -> dict[str, Any] | JSONResponse:
+    ) -> Any:
         if sync is None:
             raise HTTPException(status_code=503, detail="Companion sync is not configured")
         try:
