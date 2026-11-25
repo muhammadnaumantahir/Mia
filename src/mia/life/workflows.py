@@ -199,7 +199,10 @@ class WorkflowEngine(TaskEngine):
                     self._event(task_id, "step_reconciled_failed",
                                 f"Step {idx} worker finished unsuccessfully; owner review is required", idx)
             self._timed_out_workers.pop(key, None)
-            self._set_task(task_id, final_report=self.report(task_id))
+            if self.get_task(task_id)["cancel_requested"]:
+                self._finish_cancelled(task_id)
+            else:
+                self._set_task(task_id, final_report=self.report(task_id))
             return self.get_task(task_id)
 
         # After process restart the worker result is unavailable. The owner must inspect
@@ -218,7 +221,10 @@ class WorkflowEngine(TaskEngine):
                         f"Owner confirmed step {idx} was not applied; explicit retry is now available", idx)
         else:
             raise TaskPlanError("After restart, decision must be 'applied' or 'not_applied'")
-        self._set_task(task_id, final_report=self.report(task_id))
+        if self.get_task(task_id)["cancel_requested"]:
+            self._finish_cancelled(task_id)
+        else:
+            self._set_task(task_id, final_report=self.report(task_id))
         return self.get_task(task_id)
 
 
