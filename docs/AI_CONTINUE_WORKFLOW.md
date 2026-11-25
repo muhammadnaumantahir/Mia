@@ -21,7 +21,7 @@ A Continue request is a development instruction, not a status-only report.
 6. Run relevant local checks where available. Record exact commands and outcomes. CI is optional and never a development gate.
 7. Commit directly to main, verify the remote commit, then update task board, registry, integration log and status.
 8. After completing a task, immediately claim the next highest-priority eligible task in the same specialization and continue if the turn budget permits.
-9. Before stopping for a context/usage limit, save a durable checkpoint in the integration log: current task, completed work, changed paths, latest commit, tests run/not run, remaining acceptance criteria, blockers and exact next action. Leave the task IN_PROGRESS; set the registry row OFFLINE with task retained. Never mark partial work DONE.
+9. Before stopping for a context/usage limit, save a durable checkpoint in the integration log: current task, completed work, changed paths, latest commit, tests run/not run, remaining acceptance criteria, blockers and exact next action. Leave incomplete implementation IN_PROGRESS; set the registry row OFFLINE with task retained. Never mark partial implementation DONE. If the owner explicitly defers test execution, completed implementation with regression tests added may be marked DONE while test execution is separately recorded as OWNER_VERIFICATION_REQUIRED; never claim those tests passed.
 
 ## Task completion definition
 
