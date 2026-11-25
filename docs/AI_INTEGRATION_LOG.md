@@ -1012,3 +1012,8 @@ Implemented in `src/mia/life/workflows.py` (commit `238443784905aac0b14e9de8d444
 - Added a Chromium regression test for the owner reconciliation flow and engine/API tests for retry-bypass refusal and cancellation ordering.
 - Commits: source hardening `447d31a82ece61eeea6a13a7ee93773d042bedcd`; UI `1463a8a5dcaa2444ecec0837b6101c82a43bba61`; UI test `10cc4ca2871880a83e28d0b3e696dd929fb25810`; engine cancellation `8a39cce9a5f1a8bef3e06ff83daf8e50a3588680`; cancellation/retry tests `10774cb7e308ef4dc51f3a8cbf8c25c3c8f9c7e2`; additional engine test correction `4ab87c93525b11f20ed46be9e494908e83938958`.
 - Verification remains pending: no Python or Chromium tests were executed in this session.
+
+
+### Final timeout-recovery refinement
+
+Queued cancellation now remains pending while an unknown step exists and is finalized immediately after reconciliation, without requiring the owner to press Run. Regression coverage asserts that the interrupted action is not executed. Commits: `b731fd0033c00a3ad15682538b48d5826955d839` (engine) and `f754395d08ef82e54ffded3342b646311a70d57d` (test).
