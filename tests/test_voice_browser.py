@@ -51,10 +51,10 @@ FAKES = r"""
     window.webkitSpeechRecognition = FakeRecognition;
   }
   rec.live = () => rec.instances.filter(i => i.active);
-  rec.emit = (text, isFinal) => {
+  rec.emit = (text, isFinal, confidence) => {
     const target = rec.live().reverse().find(i => i.onresult);
     if (!target) return false;
-    const result = [{transcript: text}]; result.isFinal = isFinal;
+    const result = [{transcript: text, confidence: confidence === undefined ? 0 : confidence}]; result.isFinal = isFinal;
     target.onresult({resultIndex: 0, results: [result]});
     return true;
   };
@@ -225,8 +225,9 @@ class Ctx:
         self.wait("window.__rec.live().length>0")
         self.wait("document.getElementById('voiceOrb').dataset.state==='listening'")
 
-    def say(self, text):
-        assert self.js(f"window.__rec.emit({text!r}, true)")
+    def say(self, text, confidence=None):
+        arg = "undefined" if confidence is None else repr(confidence)
+        assert self.js(f"window.__rec.emit({text!r}, true, {arg})")
 
     def turns(self, n, timeout=10000):
         deadline = time.time() + timeout / 1000
@@ -1219,3 +1220,139 @@ def test_completed_file_write_offers_undo_that_sends_the_exact_hash_and_backup(c
     assert ctx.js("document.querySelectorAll('.undo-action').length") == 0
     assert sent[0] == {"root_id": "root_1", "relative_path": "notes/a.txt", "expected_sha256": sha,
                        "backup": ".mia-recovery/backups/x-a.txt"}
+
+
+def _voice_action_env(ctx, replies=None):
+    """Stub the chat endpoint to return one pending action; record every approval/chat call."""
+    import json as _json
+
+    from mia.voice.action_readback import describe_action
+
+    action = {"kind": "filesystem.write", "approval_id": "appr-v1", "summary": "Write notes/a.txt (5 bytes)",
+              "display": {"target": "notes/a.txt", "size_bytes": 5, "current_sha256": None},
+              "payload": {"root_id": "root_1", "relative_path": "notes/a.txt", "content": "hello"}}
+    action["readback"] = describe_action(action)
+    calls = []
+    sent_prompts = []
+    ctx.page.on("request", lambda r: calls.append((r.method, r.url.split("/api/", 1)[-1])) if "/api/" in r.url else None)
+
+    def chat(route):
+        body = _json.loads(route.request.post_data or "{}")
+        sent_prompts.append(body.get("prompt"))
+        first = len(sent_prompts) == 1
+        route.fulfill(status=200, content_type="application/json", body=_json.dumps({
+            "content": "I prepared that.", "conversation_id": "conv-v", "provider_id": "p", "model_id": "m",
+            "context_references": [], "pending_actions": [action] if first else []}))
+
+    ctx.page.route("**/api/gateway/chat", chat)
+    ctx.page.route("**/api/approvals/appr-v1/reject", lambda route: route.fulfill(
+        status=200, content_type="application/json", body="{}"))
+    ctx.page.route("**/api/approvals/appr-v1/execute", lambda route: route.fulfill(
+        status=200, content_type="application/json",
+        body=_json.dumps({"status": "completed", "result": {"relative_path": "notes/a.txt", "sha256": "a" * 64}})))
+    return action, calls, sent_prompts
+
+
+def test_voice_turn_reads_back_the_structured_action_and_never_approves_by_voice(ctx):
+    """MIA-COMP-10: Mia reads back what will happen; a spoken 'yes' is just another turn."""
+    action, calls, prompts = _voice_action_env(ctx)
+    ctx.start()
+    ctx.listening()
+    ctx.say("Please create the note file")
+    ctx.wait("window.__tts.spoken.length>=2")
+    announcement = _spoken(ctx)[-1]
+    sentence = action["readback"]["sentence"]
+    assert announcement.startswith("I prepared one action. Card ")
+    assert sentence in announcement and "Nothing has happened yet. Approve it on screen, or say stop to cancel." in announcement
+    on_screen = ctx.js("document.querySelector('.approval-card [data-readback]').textContent")
+    assert sentence in on_screen and action["readback"]["code"] in on_screen  # same facts spoken and shown
+    ctx.listening()
+    ctx.say("yes approve it go ahead")
+    ctx.wait("window.__tts.spoken.length>=3")
+    assert prompts[-1] == "yes approve it go ahead"  # handled as an ordinary turn
+    assert not [c for c in calls if "approvals/" in c[1] and c[1].endswith("/execute")]
+    assert ctx.js("document.querySelectorAll('.approval-card .approve-action').length") == 1  # still waiting
+
+
+def test_stop_command_cancels_actions_prepared_by_voice(ctx):
+    action, calls, _ = _voice_action_env(ctx)
+    ctx.start()
+    ctx.listening()
+    ctx.say("Please create the note file")
+    ctx.wait("window.__tts.spoken.length>=2")
+    ctx.listening()
+    ctx.say("stop")
+    ctx.wait("document.querySelector('.approval-state').textContent.includes('Cancelled by voice')")
+    assert ("POST", "approvals/appr-v1/reject") in calls
+    assert ctx.js("document.querySelectorAll('.approval-card .approve-action').length") == 0
+    assert "Cancelled. Nothing was done." in ctx.js("document.getElementById('messages').textContent")
+    assert not [c for c in calls if c[1].endswith("/execute")]
+
+
+def test_interrupt_while_the_readback_is_spoken_cancels_the_pending_action(ctx):
+    action, calls, _ = _voice_action_env(ctx)
+    ctx.js("window.__tts.duration=10000")
+    ctx.start()
+    ctx.listening()
+    ctx.say("Please create the note file")
+    ctx.wait("document.querySelector('.approval-card')!==null")
+    ctx.wait("window.__tts.spoken.length>=1")
+    ctx.page.click("#voiceInterrupt")
+    ctx.wait("document.querySelector('.approval-state').textContent.includes('Cancelled by voice')")
+    assert ("POST", "approvals/appr-v1/reject") in calls
+
+
+def test_an_approval_decided_on_screen_is_not_cancelled_by_a_later_stop(ctx):
+    action, calls, _ = _voice_action_env(ctx)
+    ctx.start()
+    ctx.listening()
+    ctx.say("Please create the note file")
+    ctx.wait("window.__tts.spoken.length>=2")
+    ctx.page.click(".approval-card .approve-action")
+    ctx.wait("document.querySelector('.approval-state').textContent.startsWith('Completed')")
+    ctx.listening()
+    ctx.say("stop")
+    ctx.sleep(0.5)
+    assert not [c for c in calls if c[1].endswith("/reject")]
+
+
+def test_doubtful_transcript_is_shown_for_checking_instead_of_driving_tools(ctx):
+    action, calls, prompts = _voice_action_env(ctx)
+    ctx.start()
+    ctx.listening()
+    ctx.say("delete everything in documents", 0.3)
+    ctx.wait("window.__tts.spoken.length>=1")
+    assert "not sure I heard that correctly" in _spoken(ctx)[0]
+    assert prompts == [] and ctx.js("document.getElementById('prompt').value") == "delete everything in documents"
+    ctx.listening()
+    ctx.say("create the note file", 0.9)
+    ctx.wait("window.__tts.spoken.length>=3")
+    assert prompts == ["create the note file"]
+
+
+def test_doubtful_transcript_is_still_sent_when_tools_are_off(ctx):
+    _action, _calls, prompts = _voice_action_env(ctx)
+    ctx.js("document.getElementById('useTools').checked=false")
+    ctx.start()
+    ctx.listening()
+    ctx.say("what is the weather like", 0.3)
+    ctx.sleep(0.6)
+    assert not any("not sure I heard" in t for t in _spoken(ctx))
+
+
+def test_bare_stop_cancels_nothing_when_no_action_is_waiting_and_long_sentences_never_cancel(ctx):
+    action, calls, prompts = _voice_action_env(ctx)
+    ctx.start()
+    ctx.listening()
+    ctx.say("stop")  # nothing prepared by voice yet: an ordinary turn
+    ctx.wait("window.__tts.spoken.length>=1")
+    assert prompts[0] == "stop" and not [c for c in calls if c[1].endswith("/reject")]
+    ctx.listening()
+    ctx.say("please create the note file")  # now one action is waiting
+    ctx.wait("document.querySelector('.approval-card')!==null")
+    ctx.wait("window.__tts.spoken.length>=3")
+    ctx.listening()
+    ctx.say("do not stop the music and then tell me a long story")  # long: never a cancel command
+    ctx.wait("window.__tts.spoken.length>=4")
+    assert not [c for c in calls if c[1].endswith("/reject")]
+    assert ctx.js("document.querySelectorAll('.approval-card .approve-action').length") == 1

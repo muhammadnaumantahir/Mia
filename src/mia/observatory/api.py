@@ -129,6 +129,7 @@ from mia.observatory.activity import ExperimentActivityCollector
 from mia.observatory.runtime_state import register_runtime_routes
 from mia.observatory.trend_view import build_trend_view
 from mia.security.local_guard import LoopbackGuard
+from mia.voice.action_readback import describe_action
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider, normalize_stt_language
 from mia.voice.tts import Pyttsx3SpeechSynthesizer, SpeechSynthesisError, SpeechSynthesizer
 from mia.voice.voice_select import available_tts_languages, choose_voice, normalize_tts_language
@@ -1312,6 +1313,7 @@ def create_app(
             try:
                 approval_store.save_card(str(pending["approval_id"]), pending)
                 pending.setdefault("expires_at", approval_store.expires_at(str(pending["approval_id"])))
+                pending["readback"] = describe_action(pending)
             except Exception:  # remembering a card must never break the tool call itself
                 pass
 
@@ -3452,7 +3454,8 @@ def create_app(
     @app.get("/api/computer/approvals/cards")
     def computer_pending_approval_cards() -> dict[str, Any]:
         """Exact actions still waiting for the owner, so a reloaded page can show them again."""
-        return {"items": approval_store.pending_cards()}
+        return {"items": [{**card, "readback": describe_action({**card, "approval_id": card["approval_id"]})}
+                          for card in approval_store.pending_cards()]}
 
     @app.post("/api/computer/approvals/{approval_id}/approve")
     def computer_approve(approval_id: str) -> dict[str, str]:
