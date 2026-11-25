@@ -1059,3 +1059,8 @@ The coordinator completed the Brain file-search integration and pushed it direct
 Implementation commits include `462bb0692653eb2592e5274b1d948ca1e5ece856`, `9dbba04f8e2ffcb29c8f97b4645ec7e18ce14255`, `644bb4c176934408122895375f87118ab69ec84e`, `d44d6244610425fd2828de6e01e7bdbeb905364e`, `2929c0c43ae84988b5491a7f8115b6f0182e6c7d`; test commits include `54e5eeb5eebec466ca2f16d298df6aa9744b55aa`, `5e8d8216c9913880e1796c68f5a25a22cc38ebde`, `516de987395b590ecdf0294bdeda390474b8e489`, `72702fb5ad326479da6d38636716994228fc1919`, `48364252f63d44c1a07b7c72c5b1505d5c51ac3c`.
 
 **Verification:** Regression tests were authored but not executed in this session, per owner instruction. The task is DONE for implementation only; execution remains `OWNER_VERIFICATION_REQUIRED`. No tests are reported as passed.
+
+
+## 2026-11-25 — Coordinator claim: MIA-LIFE-07-SEARCH
+
+Claimed the bounded research search child task while A2 retains its existing task claim. Scope: inspect the existing LIFE-07 research store/fetch/citation boundary, add bounded owner-allowlisted search discovery and Gateway-backed synthesis with exact source-linked claims, preserve budgets and stop controls, and add deterministic fake-provider/search tests. No external content may become instructions and no tests will be reported as passed unless executed.
