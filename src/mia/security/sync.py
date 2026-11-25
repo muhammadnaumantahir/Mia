@@ -11,7 +11,7 @@ import json
 import re
 import sqlite3
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -199,7 +199,7 @@ class CompanionSyncStore:
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
             now = _now()
-            cutoff = (datetime.now(UTC) - __import__("datetime").timedelta(days=BATCH_RETENTION_DAYS)).isoformat()
+            cutoff = (datetime.now(UTC) - timedelta(days=BATCH_RETENTION_DAYS)).isoformat()
             db.execute("DELETE FROM sync_batches WHERE created_at < ?", (cutoff,))
             prior = db.execute(
                 "SELECT result_json FROM sync_batches WHERE device_id=? AND batch_id=?",
@@ -222,12 +222,6 @@ class CompanionSyncStore:
 
             conflicts: list[dict[str, Any]] = []
             current_rows: dict[tuple[str, str], sqlite3.Row | None] = {}
-            current_count = int(db.execute("SELECT COUNT(*) AS n FROM sync_items").fetchone()["n"])
-            new_items = sum(1 for change in cleaned
-                            if current_rows.get((change["namespace"], change["item_id"])) is None)
-            if current_count + new_items > MAX_SYNC_ITEMS:
-                raise CompanionSyncError("sync item limit reached; owner maintenance is required")
-
             for change in cleaned:
                 key = (change["namespace"], change["item_id"])
                 row = db.execute(
@@ -250,6 +244,11 @@ class CompanionSyncStore:
                     (device, batch, json.dumps(result, separators=(",", ":")), _now()),
                 )
                 return result
+
+            current_count = int(db.execute("SELECT COUNT(*) AS n FROM sync_items").fetchone()["n"])
+            new_items = sum(1 for row in current_rows.values() if row is None)
+            if current_count + new_items > MAX_SYNC_ITEMS:
+                raise CompanionSyncError("sync item limit reached; owner maintenance is required")
 
             applied: list[dict[str, Any]] = []
             next_cursor = 0
