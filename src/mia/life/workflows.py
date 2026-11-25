@@ -131,6 +131,16 @@ class WorkflowEngine(TaskEngine):
             return task
         return await super().advance(task_id)
 
+    def cancel(self, task_id: str) -> None:
+        task = self._require_open(task_id)
+        if any(step["status"] == "interrupted" for step in task["steps"]):
+            # Do not report cancellation while a timed-out worker may still complete.
+            self._set_task(task_id, cancel_requested=1)
+            self._event(task_id, "cancel_requested",
+                        "Cancellation queued until the unknown step is reconciled")
+            return
+        super().cancel(task_id)
+
     def retry_step(self, task_id: str, idx: int) -> None:
         step = next((s for s in self.get_task(task_id)["steps"] if s["idx"] == idx), None)
         if step is not None and step["status"] == "interrupted":
