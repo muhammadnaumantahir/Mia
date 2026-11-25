@@ -448,6 +448,8 @@ class FileIndexWatcher:
         max_selections_per_cycle = max(1, min(int(max_selections_per_cycle), 5))
         if not self.index.list_selections():
             raise FileIndexError("Select at least one folder before enabling refresh")
+        if self.index.should_stop():
+            raise AutomationStopped("Resume automation before enabling file refresh")
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 return self.status()
