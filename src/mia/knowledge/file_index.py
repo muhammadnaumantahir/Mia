@@ -506,27 +506,33 @@ class FileIndexWatcher:
             thread.join(timeout=5)
         return self.status()
 
+    def _refresh_once(self) -> int:
+        """Refresh one bounded, round-robin batch; exposed internally for deterministic tests."""
+        selections = self.index.list_selections()
+        if not selections:
+            return 0
+        start = self._cursor % len(selections)
+        ordered = selections[start:] + selections[:start]
+        batch = ordered[: self._max_selections_per_cycle]
+        for selection in batch:
+            if self._stop.is_set() or self.index.should_stop():
+                raise AutomationStopped("File refresh stopped by owner")
+            context = (
+                self.activity("Refreshing an owner-selected folder")
+                if self.activity is not None
+                else _null_activity()
+            )
+            with context:
+                self.index.reindex(selection["id"])
+        self._cursor = (start + len(batch)) % max(1, len(selections))
+        with self._lock:
+            self._selections_refreshed += len(batch)
+        return len(batch)
+
     def _run(self) -> None:
         while not self._stop.is_set():
             try:
-                selections = self.index.list_selections()
-                if selections:
-                    start = self._cursor % len(selections)
-                    ordered = selections[start:] + selections[:start]
-                    batch = ordered[: self._max_selections_per_cycle]
-                    for selection in batch:
-                        if self._stop.is_set() or self.index.should_stop():
-                            raise AutomationStopped("File refresh stopped by owner")
-                        context = (
-                            self.activity("Refreshing an owner-selected folder")
-                            if self.activity is not None
-                            else _null_activity()
-                        )
-                        with context:
-                            self.index.reindex(selection["id"])
-                    self._cursor = (start + len(batch)) % max(1, len(selections))
-                    with self._lock:
-                        self._selections_refreshed += len(batch)
+                self._refresh_once()
                 with self._lock:
                     self._cycles += 1
                     self._last_run_at = _now()
