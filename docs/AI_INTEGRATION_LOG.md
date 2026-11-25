@@ -1151,3 +1151,20 @@ Key commits: `ced0a91aa2` and `cfd6cf1050` (binder), `85cec824b0` and `61aa745e3
 ## 2026-11-25 — Coordinator claim: MIA-LIFE-13
 
 Claimed authenticated device sync/remote access. Verified prerequisites LIFE-01 and COMP-02 are DONE on main. Scope is to build on the existing Ed25519 device identity and revocable scoped sessions; do not expose a public unauthenticated service, do not trust a device token as owner identity, and do not widen device confinement beyond companion endpoints. First inspect the existing session/transport contracts, then implement a bounded authenticated sync protocol with replay protection, per-device scoping, explicit conflict handling and revocation tests. Real-device pairing/transport checks remain owner verification.
+
+
+## 2026-11-25 — MIA-LIFE-13 implementation complete
+
+- Extended paired-device scopes with `companion.sync.read` and `companion.sync.write`; every sync request verifies the live device session and exact scope. Existing pairing and revocation remain owner-controlled.
+- Added `CompanionSyncStore`: two allowlisted namespaces (`companion_state`, `preferences`), 8 KiB payloads, 50-change atomic batches, optimistic item versions, HTTP 409 conflicts, tombstones, global pull cursors and idempotent batch replay.
+- Added credential-field/value rejection, structure and size limits, 2,000 current-item cap, 20,000 event cap, 500 batch records/device with 30-day idempotency retention. Write-only conflict responses expose version metadata but not current payload.
+- Added companion sync pull/push routes and audit metadata. Device revocation is checked on every request.
+- Added optional remote transport: disabled by default; exact Host allowlist, direct HTTPS ASGI scheme, bearer device token, no Origin/Sec-Fetch browser metadata, exact route/method allowlist. First pairing and owner administration remain loopback-only. Remote session renewal requires an existing live token and Ed25519 signature. App startup refuses remote mode without `local_guard=True`, exact hosts, or with wildcard/URL entries.
+- Added `docs/architecture/COMPANION_SYNC.md` with transport setup, endpoint/scope contract, limits and owner verification.
+- Added regression tests for scope separation, conflicts, atomic batches, idempotency, tombstones, secret rejection, bounds, revocation, remote TLS gating, signed renewal and owner-route confinement.
+
+Key implementation commits: `a0d9449167` (sync store), `de0ea05148` / `ce925fa96b` (sync API), `10bb4646a7` / `e0732554e0` (device scopes), `7cefc6ca62` / `a36d3e5739` (remote transport guard), `478a9885f4` / `03bc930a5d` / `88704a3670` (API wiring and fail-closed remote configuration). Test files: `8e9350aa64` (`test_companion_sync.py`) and `1f75c86fa5` / `63ea5a291e` (`test_local_guard.py`). Documentation: `fe9c970bb3`, `0741f92064`, `18ab44b068`, `f599c40adb`.
+
+**Verification:** Tests were authored but not executed per owner instruction. Real TLS certificate, DNS/firewall, separate-network sync, offline recovery and physical-device revocation remain `OWNER_VERIFICATION_REQUIRED`. No automated test pass or real-device success is claimed.
+
+**Dependency release:** LIFE-13's trust/transport contract is now on main. `MIA-COMP-01-IDENTITY` and `MIA-COMP-04-OWNER` are unblocked and returned to OPEN; LIFE-08-APPROVAL remains blocked on COMP-04 enforcement.
