@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from mia.life.research import (
+    DuckDuckGoSearchProvider,
     ResearchError,
     ResearchService,
     detect_injection,
@@ -14,6 +15,9 @@ from mia.life.research import (
     score_source,
 )
 from mia.life.web import FetchedPage, FetchError, HttpxFetcher
+from mia.gateway.contracts import ModelCandidate, ProviderResponse
+from mia.gateway.registry import ProviderRegistry
+from mia.gateway.service import ModelGateway
 from mia.memory.store import MemoryStore
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
@@ -45,15 +49,79 @@ class FakeFetcher:
         return page
 
 
-def service(tmp_path, pages, allowed=("docs.example.org", "news.example.org"), stop=lambda: False):
-    return ResearchService(tmp_path / "r.sqlite3", source_allowed=lambda h: h in allowed,
-                           fetcher=FakeFetcher(pages), should_stop=stop, clock=lambda: NOW)
+def service(tmp_path, pages, allowed=("docs.example.org", "news.example.org"), stop=lambda: False,
+           searcher=None):
+    return ResearchService(
+        tmp_path / "r.sqlite3", source_allowed=lambda h: h in allowed,
+        fetcher=FakeFetcher(pages), searcher=searcher, should_stop=stop, clock=lambda: NOW,
+    )
+
+
+class FakeSearchProvider:
+    def __init__(self, items):
+        self.items, self.calls = items, []
+
+    def search(self, query, *, limit, host_allowed, should_stop):
+        self.calls.append((query, limit))
+        if should_stop():
+            raise FetchError("stopped")
+        return self.items[:limit]
 
 
 PAGES = {
     "https://docs.example.org/page": html(BODY, head='<meta property="article:published_time" content="2026-05-01T10:00:00Z">'),
     "https://news.example.org/old": html(BODY + " Older write-up.", head='<meta name="date" content="2018-03-02">'),
 }
+
+
+def test_search_discovery_is_bounded_deduplicated_and_allowlist_filtered(tmp_path):
+    searcher = FakeSearchProvider([
+        {"url": "https://docs.example.org/page", "title": "Documentation"},
+        {"url": "https://evil.example.net/steal", "title": "Untrusted host"},
+        {"url": "http://docs.example.org/insecure", "title": "HTTP"},
+        {"url": "https://docs.example.org/page", "title": "Duplicate"},
+        {"url": "https://news.example.org/old", "title": "News"},
+    ])
+    s = service(tmp_path, PAGES, searcher=searcher)
+    result = s.search("python 3.13 research", limit=99)
+    assert searcher.calls == [("python 3.13 research", 10)]
+    assert [item["url"] for item in result["items"]] == [
+        "https://docs.example.org/page", "https://news.example.org/old"
+    ]
+    assert result["items"][0]["title"] == "Documentation"
+    assert result["items"][0]["trust"] == "untrusted_search_result"
+
+
+def test_search_discovery_obeys_stop_all(tmp_path):
+    searcher = FakeSearchProvider([])
+    s = service(tmp_path, PAGES, stop=lambda: True, searcher=searcher)
+    with pytest.raises(Exception, match="stopped"):
+        s.search("find something useful")
+    assert searcher.calls == []
+
+
+def test_duckduckgo_parser_extracts_only_result_links(tmp_path):
+    query = "python docs"
+    search_url = "https://html.duckduckgo.com/html/?q=python+docs"
+    page = html(
+        "Search results",
+        url=search_url,
+    )
+    body = (
+        '<a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fdocs.example.org%2Fpage">'
+        "Python docs</a>"
+        '<a class="result__a" href="https://evil.example.net/steal">Evil</a>'
+    )
+    page = FetchedPage(search_url, "text/html; charset=utf-8", body.encode(), False)
+    fetcher = FakeFetcher({search_url: page})
+    provider = DuckDuckGoSearchProvider(fetcher)
+    result = provider.search(
+        query, limit=5,
+        host_allowed=lambda host: host in {"html.duckduckgo.com", "docs.example.org"},
+        should_stop=lambda: False,
+    )
+    assert result == [{"url": "https://docs.example.org/page",
+                       "host": "docs.example.org", "title": "Python docs"}]
 
 
 def test_run_records_provenance_dates_and_ranks_sources(tmp_path):
