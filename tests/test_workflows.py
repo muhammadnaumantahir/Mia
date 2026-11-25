@@ -157,26 +157,32 @@ def test_slow_side_effect_waits_for_worker_then_reconciles_without_duplicate(tmp
         personal=memory.personal, step_timeout=0.05,
     )
     task = engine.create_task("slow add", [add_step("Only once")])
-    timed_out = asyncio.run(engine.advance(task["task_id"]))
-    assert timed_out["status"] == "interrupted"
-    assert timed_out["outcome"] == "unknown"
-    assert timed_out["steps"][0]["status"] == "interrupted"
-    assert memory.personal.list(limit=10) == []
+    # Keep one event loop alive: asyncio.run() waits for its default executor at
+    # shutdown, which would hide the still-running worker this test needs to observe.
+    loop = asyncio.new_event_loop()
+    try:
+        timed_out = loop.run_until_complete(engine.advance(task["task_id"]))
+        assert timed_out["status"] == "interrupted"
+        assert timed_out["outcome"] == "unknown"
+        assert timed_out["steps"][0]["status"] == "interrupted"
+        assert memory.personal.list(limit=10) == []
 
-    waiting = engine.reconcile_timeout(task["task_id"], 1)
-    assert waiting["status"] == "waiting"
-    # A second run must not start another worker while the first is unresolved.
-    still_waiting = asyncio.run(engine.advance(task["task_id"]))
-    assert still_waiting["status"] == "interrupted"
-    time.sleep(0.3)
+        waiting = engine.reconcile_timeout(task["task_id"], 1)
+        assert waiting["status"] == "waiting"
+        # A second run must not start another worker while the first is unresolved.
+        still_waiting = loop.run_until_complete(engine.advance(task["task_id"]))
+        assert still_waiting["status"] == "interrupted"
+        loop.run_until_complete(asyncio.sleep(0.3))
 
-    reconciled = engine.reconcile_timeout(task["task_id"], 1)
-    assert reconciled["status"] == "paused"
-    assert reconciled["steps"][0]["status"] == "succeeded"
-    assert len(calls) == 1
-    finished = asyncio.run(engine.advance(task["task_id"]))
-    assert finished["status"] == "completed"
-    assert [item["title"] for item in memory.personal.list(limit=10)] == ["Only once"]
+        reconciled = engine.reconcile_timeout(task["task_id"], 1)
+        assert reconciled["status"] == "paused"
+        assert reconciled["steps"][0]["status"] == "succeeded"
+        assert len(calls) == 1
+        finished = loop.run_until_complete(engine.advance(task["task_id"]))
+        assert finished["status"] == "completed"
+        assert [item["title"] for item in memory.personal.list(limit=10)] == ["Only once"]
+    finally:
+        loop.close()
 
 
 def test_restart_requires_owner_reconciliation_before_retry(tmp_path):
