@@ -320,9 +320,9 @@ def test_http_watch_is_owner_started_bounded_and_stop_all_stops_it(api):
     missing = client.post("/api/file-index/watch/start", json={})
     assert missing.status_code == 422
 
-    sid = client.post(
+    client.post(
         "/api/file-index/selections", json={"root_id": "root_1", "path": "notes"}
-    ).json()["id"]
+    )
     started = client.post(
         "/api/file-index/watch/start",
         json={"interval_seconds": 1, "max_selections_per_cycle": 99},
@@ -351,9 +351,9 @@ def test_watch_refresh_picks_up_changes_and_removes_deleted_files(api):
     client, app = api
     root = app.state.computer_files.roots["root_1"]
     source = root / "notes" / "a.md"
-    sid = client.post(
+    client.post(
         "/api/file-index/selections", json={"root_id": "root_1", "path": "notes"}
-    ).json()["id"]
+    )
     source.write_text("Updated watchable pineapple content.\n", encoding="utf-8")
     watcher = app.state.file_index_watcher
     assert watcher._refresh_once() == 1
