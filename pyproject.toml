@@ -35,6 +35,9 @@ credentials = [
 backup = [
   "cryptography>=43,<51",
 ]
+companion = [
+  "cryptography>=43,<51",  # Ed25519 device identity (MIA-COMP-02)
+]
 voice = [
   "faster-whisper>=1.1,<2",
 ]

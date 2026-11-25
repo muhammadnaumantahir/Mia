@@ -128,7 +128,9 @@ from mia.memory.structured import RECORD_TYPES, RecordNotFoundError, RecordState
 from mia.observatory.activity import ExperimentActivityCollector
 from mia.observatory.runtime_state import register_runtime_routes
 from mia.observatory.trend_view import build_trend_view
+from mia.security.companion_api import register_companion_routes
 from mia.security.local_guard import LoopbackGuard
+from mia.security.pairing import DeviceConfinementGuard, PairingService
 from mia.voice.action_readback import describe_action
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider, normalize_stt_language
 from mia.voice.tts import Pyttsx3SpeechSynthesizer, SpeechSynthesisError, SpeechSynthesizer
@@ -839,6 +841,7 @@ def create_app(
     local_guard: bool = False,
     workflows: Any | None = None,
     research: Any | None = None,
+    pairing: Any | None = None,
 ) -> FastAPI:
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
@@ -899,6 +902,7 @@ def create_app(
     if local_guard:
         # MIA-COMP-01: refuse foreign Host/Origin (DNS rebinding, cross-site POST/WebSocket).
         app.add_middleware(LoopbackGuard)
+    app.add_middleware(DeviceConfinementGuard)
     app.state.observatory = observatory
     app.state.code_graph_watcher = code_graph_watcher
     baseline_capture_service = baseline_capture or capture_baseline_manifest
@@ -3042,6 +3046,14 @@ def create_app(
         should_stop=lambda: control.stop_requested or life_store.get_settings().emergency_stop,
     )
     app.state.research = research_service
+
+    # MIA-COMP-02: companion pairing; device tokens are confined to /api/companion/*.
+    pairing_service = pairing or PairingService(data_dir / "mia-companion.sqlite3")
+    app.state.pairing = pairing_service
+    register_companion_routes(
+        app, pairing_service,
+        lambda **kw: observatory.record_event(category="companion", layer_id="SPS-10", **kw),
+    )
     register_research_routes(
         app, research_service,
         lambda **kw: observatory.record_event(category="research", layer_id="SPS-04", **kw),
