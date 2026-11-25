@@ -1,13 +1,16 @@
 """MIA-LIFE-07: scoped research with provenance, verified citations, injection handling, owner review."""
 
-from datetime import UTC, date, datetime
 import json
+from datetime import UTC, date, datetime
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 from mia.computer.control import AutomationStopped
+from mia.gateway.contracts import ModelCandidate, ProviderResponse
+from mia.gateway.registry import ProviderRegistry
+from mia.gateway.service import ModelGateway
 from mia.life.research import (
     DuckDuckGoSearchProvider,
     ResearchError,
@@ -17,9 +20,6 @@ from mia.life.research import (
     score_source,
 )
 from mia.life.web import FetchedPage, FetchError, HttpxFetcher
-from mia.gateway.contracts import ModelCandidate, ProviderResponse
-from mia.gateway.registry import ProviderRegistry
-from mia.gateway.service import ModelGateway
 from mia.memory.store import MemoryStore
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
