@@ -28,7 +28,7 @@ from datetime import UTC, date, datetime
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, unquote, urlencode, urljoin, urlsplit
 
 from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
@@ -42,6 +42,9 @@ MAX_QUOTE = 500
 MIN_QUOTE = 12
 MAX_CITATIONS = 5
 MAX_CLAIMS_PER_RUN = 50
+MAX_SEARCH_RESULTS = 10
+MAX_SYNTHESIS_INPUT_CHARS = 20_000
+MAX_SYNTHESIS_CLAIMS = 10
 FETCH_TIMEOUT = 10.0
 
 # Phrases that address an AI reader or try to steer one. A hit never blocks reading the page;
@@ -107,6 +110,86 @@ class _MetaDates(HTMLParser):
     def handle_data(self, data: str) -> None:
         if self._script:
             self._buffer.append(data)
+
+
+class _SearchResultParser(HTMLParser):
+    """Extract result anchor titles and hrefs; snippets/page instructions are ignored."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.results: list[dict[str, str]] = []
+        self._current: dict[str, str] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag != "a" or self._current is not None:
+            return
+        values = {key.lower(): value or "" for key, value in attrs}
+        classes = set(values.get("class", "").split())
+        if "result__a" in classes and values.get("href"):
+            self._current = {"url": values["href"], "title": ""}
+
+    def handle_data(self, data: str) -> None:
+        if self._current is not None:
+            self._current["title"] += data
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "a" and self._current is not None:
+            self._current["title"] = _norm(self._current["title"])[:200]
+            self.results.append(self._current)
+            self._current = None
+
+
+class DuckDuckGoSearchProvider:
+    """Small, read-only HTML search adapter; the search host itself must be owner-allowed."""
+
+    search_url = "https://html.duckduckgo.com/html/"
+
+    def __init__(self, fetcher: Any) -> None:
+        self.fetcher = fetcher
+
+    def search(
+        self,
+        query: str,
+        *,
+        limit: int,
+        host_allowed: Callable[[str], bool],
+        should_stop: Callable[[], bool],
+    ) -> list[dict[str, str]]:
+        url = self.search_url + "?" + urlencode({"q": query})
+        page = self.fetcher.fetch(
+            url, host_allowed=host_allowed, timeout=FETCH_TIMEOUT, should_stop=should_stop
+        )
+        charset = re.search(r"charset=([\\w-]+)", page.content_type)
+        try:
+            raw = page.body.decode(charset.group(1) if charset else "utf-8", errors="replace")
+        except LookupError:
+            raw = page.body.decode("utf-8", errors="replace")
+        parser = _SearchResultParser()
+        parser.feed(raw)
+        parser.close()
+
+        found: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for item in parser.results:
+            target = urljoin(page.url, item["url"])
+            parsed = urlsplit(target)
+            if parsed.hostname in {"duckduckgo.com", "www.duckduckgo.com"}:
+                wrapped = parse_qs(parsed.query).get("uddg", [])
+                if not wrapped:
+                    continue
+                target = unquote(wrapped[0])
+            try:
+                target = normalise_research_url(target)
+            except ValueError:
+                continue
+            host = urlsplit(target).hostname or ""
+            if host == "html.duckduckgo.com" or not host_allowed(host) or target in seen:
+                continue
+            seen.add(target)
+            found.append({"url": target, "host": host, "title": item["title"]})
+            if len(found) >= limit:
+                break
+        return found
 
 
 def _parse_date(raw: str) -> date | None:
@@ -185,12 +268,14 @@ class ResearchError(ValueError):
 
 class ResearchService:
     def __init__(self, database_path: str | Path, *, source_allowed: Callable[[str], bool],
-                 fetcher: Any | None = None, should_stop: Callable[[], bool] = lambda: False,
+                 fetcher: Any | None = None, searcher: Any | None = None,
+                 should_stop: Callable[[], bool] = lambda: False,
                  clock: Callable[[], datetime] = _now) -> None:
         self.path = Path(database_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.source_allowed = source_allowed
         self.fetcher = fetcher or HttpxFetcher()
+        self.searcher = searcher or DuckDuckGoSearchProvider(self.fetcher)
         self.should_stop = should_stop
         self.clock = clock
         with self._db() as db:
@@ -220,6 +305,51 @@ class ResearchService:
                 yield db
         finally:
             db.close()
+
+    # ---- bounded search discovery ----------------------------------------------------------
+    def search(self, query: str, limit: int = MAX_SEARCH_RESULTS) -> dict[str, Any]:
+        query = _norm(query or "")
+        if not 3 <= len(query) <= 300:
+            raise ResearchError("search query must be 3-300 characters")
+        limit = max(1, min(int(limit), MAX_SEARCH_RESULTS))
+        if self.should_stop():
+            raise AutomationStopped("Research search stopped by owner")
+        try:
+            candidates = self.searcher.search(
+                query, limit=limit, host_allowed=self.source_allowed,
+                should_stop=self.should_stop,
+            )
+        except FetchError as exc:
+            if exc.reason == "stopped":
+                raise AutomationStopped("Research search stopped by owner") from exc
+            raise ResearchError(f"search provider unavailable ({exc.reason})") from exc
+        except Exception as exc:
+            raise ResearchError(f"search provider unavailable ({type(exc).__name__})") from exc
+
+        items: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for candidate in candidates[: MAX_SEARCH_RESULTS * 3]:
+            raw_url = candidate.get("url") if isinstance(candidate, dict) else candidate
+            title = candidate.get("title", "") if isinstance(candidate, dict) else ""
+            if not isinstance(raw_url, str):
+                continue
+            try:
+                url = normalise_research_url(raw_url)
+            except ValueError:
+                continue
+            host = urlsplit(url).hostname or ""
+            if not self.source_allowed(host) or url in seen:
+                continue
+            seen.add(url)
+            items.append({
+                "url": url, "host": host, "title": _norm(str(title))[:200],
+                "trust": "untrusted_search_result",
+            })
+            if len(items) >= limit:
+                break
+        return {"query": query, "items": items, "limit": limit,
+                "provider": "duckduckgo_html" if isinstance(self.searcher, DuckDuckGoSearchProvider)
+                else "configured_search_provider"}
 
     # ---- runs and sources ------------------------------------------------------------------
     def start_run(self, question: str, urls: list[str]) -> dict[str, Any]:
