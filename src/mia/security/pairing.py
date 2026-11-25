@@ -39,7 +39,10 @@ from pathlib import Path
 from typing import Any
 
 # Scopes a device may ever hold. Approving, granting permissions or pairing are not here on purpose.
-ALLOWED_SCOPES = frozenset({"companion.heartbeat", "companion.observe", "companion.act"})
+ALLOWED_SCOPES = frozenset({
+    "companion.heartbeat", "companion.observe", "companion.act",
+    "companion.sync.read", "companion.sync.write",
+})
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I
 CODE_LENGTH = 10  # about 50 bits
 CODE_TTL_SECONDS = 300
