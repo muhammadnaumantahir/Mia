@@ -966,3 +966,13 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Mutation checks killed: symlink skip, private-key skip, compaction/vacuum (deleted text stayed in DB file), FTS quoting, verify always-true.
 - One of my own bugs: pydantic model inside the register function broke under postponed annotations (422); moved to module level.
 - Container had been reset; re-cloned and reinstalled deps. Full suite run in the background, result recorded below when done.
+
+
+## 2026-11-25 — Multi-agent queue policy correction (coordinator)
+
+- Owner approved correcting agents' repeated false BLOCKED reports. Root cause: the master prompt and Continue workflow treated milestone handoff as a global gate, even where task-level dependencies were satisfied; registry documentation also described six slots while A7 was active.
+- Updated `prompts/AI_MASTER_AGENT.md`, `docs/AI_CONTINUE_WORKFLOW.md`, `docs/AI_TASK_BOARD.md`, `docs/DEFERRED_MILESTONE_BACKLOG.md` and `docs/AI_AGENT_REGISTRY.md`.
+- Milestones now express roadmap/release order only. Agents may work across milestones when explicit dependencies, security invariants and interfaces are satisfied. `BLOCKED` requires a named dependency, evidence and an unblock condition; independent slices must continue.
+- `PARTIAL` no longer blocks unrelated tasks. Remaining implementation must be split into uniquely identified claimable child tasks; owner-only manual checks are tracked separately and do not hold implementation open.
+- Corrected the LIFE-13 / COMP-01 / COMP-02 dependency wording to remove the circular identity-model wait. Corrected the stale EVOL-02 note: EVOL-01 is DONE (02c96d1).
+- Documentation-only change. No source code or tests changed or run. Existing implementation/security dependencies remain in force.
