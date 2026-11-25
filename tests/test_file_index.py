@@ -277,6 +277,24 @@ def test_http_flow_select_index_search_verify_delete(api):
     assert c.delete(f"/api/file-index/selections/{sid}").status_code == 404
 
 
+def test_brain_search_returns_only_live_verified_chunks_with_exact_citations(world):
+    root, _, index, _ = world
+    selection = sel(index)
+    hits = index.search_verified("basil morning")
+    assert len(hits) == 1
+    hit = hits[0]
+    assert hit["verified"] is True
+    assert hit["trust"] == "untrusted"
+    assert hit["instructions_trusted"] is False
+    assert hit["citation"] == os.path.join("notes", "garden.md") + ":L1-L5"
+    assert "Water the basil in the morning." in hit["content"]
+    assert hit["source"]["sha256"]
+
+    source = root / "notes" / "garden.md"
+    source.write_text("The basil was moved to another garden.\\n", encoding="utf-8")
+    assert index.search_verified("basil morning") == []
+
+
 def test_http_rejects_escape_and_empty_query(api):
     c, _ = api
     assert c.post("/api/file-index/selections", json={"root_id": "root_1", "path": "../"}).status_code == 422
