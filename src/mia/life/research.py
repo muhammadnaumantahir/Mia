@@ -121,7 +121,7 @@ class _SearchResultParser(HTMLParser):
         self._current: dict[str, str] | None = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag != "a" or self._current is not None:
+        if tag != "a" or self._current is not None or len(self.results) >= MAX_SEARCH_RESULTS * 3:
             return
         values = {key.lower(): value or "" for key, value in attrs}
         classes = set(values.get("class", "").split())
@@ -183,7 +183,9 @@ class DuckDuckGoSearchProvider:
             except ValueError:
                 continue
             host = urlsplit(target).hostname or ""
-            if host == "html.duckduckgo.com" or not host_allowed(host) or target in seen:
+            if host in {"html.duckduckgo.com", "duckduckgo.com", "www.duckduckgo.com"}:
+                continue
+            if not host_allowed(host) or target in seen:
                 continue
             seen.add(target)
             found.append({"url": target, "host": host, "title": item["title"]})
