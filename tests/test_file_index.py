@@ -291,7 +291,7 @@ def test_brain_search_returns_only_live_verified_chunks_with_exact_citations(wor
     assert hit["source"]["sha256"]
 
     source = root / "notes" / "garden.md"
-    source.write_text("The basil was moved to another garden.\\n", encoding="utf-8")
+    source.write_text("The basil was moved to another garden.\n", encoding="utf-8")
     assert index.search_verified("basil morning") == []
 
 
