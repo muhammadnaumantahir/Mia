@@ -142,6 +142,29 @@ class AllowAll:
         return GateDecision(True, "ok")
 
 
+async def test_workflow_tools_need_their_own_remote_egress_opt_in():
+    reg = ToolRegistry()
+    reg.register(
+        name="workflow.preview_internal",
+        description="Preview internal workflow",
+        permission="workflow.preview",
+        mode="read",
+        parameters={"type": "object", "properties": {}, "additionalProperties": False},
+        handler=lambda _args: {"ok": True},
+    )
+    b = broker(reg, evaluator=AllowAll())
+    refused = await b.call(
+        "workflow.preview_internal", {}, offered={"workflow.preview_internal"},
+        provider_local=False, allow_remote_file_context=True,
+    )
+    assert refused.status == "refused" and refused.stage == "egress"
+    allowed = await b.call(
+        "workflow.preview_internal", {}, offered={"workflow.preview_internal"},
+        provider_local=False, allow_remote_workflow_tools=True,
+    )
+    assert allowed.status == "completed"
+
+
 async def test_custom_evaluator_is_consulted_for_every_call():
     seen = []
 
