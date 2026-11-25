@@ -196,7 +196,7 @@ Split from the PARTIAL parent tasks above. These are independent task IDs; claim
 | MIA-LIFE-06-UI | P3 | A6 | IN_PROGRESS (A6, claimed 2026-11-25T18:10Z) | Owner file-index UI; backend contract already on main. |
 | MIA-LIFE-06-BRAIN | P3 | A1 + A2 | DONE (Coordinator, 2026-11-25; regression tests authored; execution OWNER_VERIFICATION_REQUIRED per owner instruction) | Brain now has local-only verified indexed-file search with exact path/line/hash citations, shared filesystem-search permission, untrusted-content/injection flags and system-level instruction isolation. Gateway synthesizes from returned chunks. Tests added but not executed here. |
 | MIA-LIFE-06-WATCH | P3 | A5 | DONE (Coordinator, 2026-11-25; regression tests authored; execution OWNER_VERIFICATION_REQUIRED per owner instruction) | Owner-started bounded refresh, fair selection rotation, status/start/stop API, stop-all and shutdown handling, bounded PDF/Office extraction, unchanged-cycle compaction avoidance. Tests added but not executed here. |
-| MIA-LIFE-07-SEARCH | P3 | A2 | OPEN | Bounded search discovery and Gateway synthesis over existing research API. |
+| MIA-LIFE-07-SEARCH | P3 | A2 | IN_PROGRESS (Coordinator, 2026-11-25; A2 retains existing claim) | Bounded search discovery and Gateway synthesis over existing research API. |
 | MIA-LIFE-07-MEMORY | P3 | A1 | OPEN | Owner-confirmed research findings into project-scoped structured memory. |
 | MIA-LIFE-07-INJECTION | P3 | A5 + A3 | IN_PROGRESS (A7, claimed 2026-11-25T18:10Z; verified OPEN on main 1772e78; I wrote src/mia/life/research.py; A5/A3 idle, no overlap) | Harden research prompt-injection isolation with adversarial tests. |
 | MIA-LIFE-08-BRAIN | P3 | A1 + A4 | OPEN | Brain/voice entry for safe internal workflows. |
