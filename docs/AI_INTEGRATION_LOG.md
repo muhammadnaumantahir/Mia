@@ -941,3 +941,9 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - Tests actually run: full suite 2995 tests, 0 failed, 0 errors, 1 skipped; ruff clean. The LIFE quiet-hours test passed in this run (05:35-05:55 UTC) because A2 made it clock-independent in 8edb6c0; this confirms the earlier diagnosis that it depended on the wall clock.
 - OWNER-REQUIRED: which models and GPU you run, what text you permit for training, a held-out set, any spending cap and approval; run the study's section 6 list before reopening EVOL-09.
 - A3 status: IDLE.
+
+## 2026-11-25T06:20Z - MIA-COMP-04 slice 4 (A7), commit 6b3f5f8
+- `tests/test_broker_model_tools.py` (5 tests over the tools the real app registers) and 2 race tests in `tests/test_broker_enforcement.py` (8 threads on one approval: exactly one 200; 16 threads on the store: exactly one consume). Race tests were run 3 times, stable. These new tests were not mutation-checked.
+- A first draft of one test wrongly expected an exception; the read tool returns a structured refusal (`ok: False`, FilesystemAccessError). Test corrected, not the code.
+- Run: full suite exit 0 (about 17 minutes now, run in the background) and ruff clean on the tree before the final rebase; after it the broker and route-capability tests were re-run (pass).
+- A7 idle. COMP-04 stays PARTIAL for the reason on its board row (caller identity, COMP-02/LIFE-13).

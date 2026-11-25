@@ -630,3 +630,7 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 ## 2026-11-25T05:33Z A1 capability-gap discovery (MIA-EVOL-01)
 
 - /api/evolution/gaps records and ranks repeated, consented signals (failed tasks, memory corrections, submitted evaluation failures, explicit owner requests); consent is off by default and revoking deletes evidence; one failure is never a gap. Records only: nothing runs, no UI, not wired to the evolution pipeline. Commit `02c96d1`; unit/API tests only. Known failing on clean main: A6's /projects delete-notice browser test.
+
+## 2026-11-25 Model-tool surface and approval race tests (MIA-COMP-04 slice 4, agent A7)
+- Commit 6b3f5f8. The model and voice can reach only read tools and approval-creating previews; previews leave files and processes untouched; one approval cannot be spent twice even under 8-way concurrency.
+- Still open: local-process self-approval (needs caller identity, COMP-02/LIFE-13); owner drill of stop-all on real hardware.
