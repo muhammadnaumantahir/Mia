@@ -189,7 +189,7 @@ async function loadRuns(){try{runs=(await api('/api/research/runs')).items;rende
 async function loadMemoryProjects(){
  const select=$('memoryProject');select.replaceChildren();
  try{
-  const data=await api('/api/projects');const items=(data.projects||[]).filter(p=>p.registered);
+  const data=await api('/api/projects');const items=(data.projects||[]).filter(p=>p.registered&&p.status!=='archived');
   if(!items.length){select.append(new Option('Create a project first…',''));return;}
   select.append(new Option('Choose a project…',''));
   for(const p of items)select.append(new Option(p.name,p.name));
