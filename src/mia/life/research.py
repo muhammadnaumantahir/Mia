@@ -319,16 +319,18 @@ class ResearchService:
                 query, limit=limit, host_allowed=self.source_allowed,
                 should_stop=self.should_stop,
             )
-            if self.should_stop():
-                raise AutomationStopped("Research search stopped by owner")
-            if not isinstance(candidates, list):
-                raise ResearchError("search provider returned an invalid result list")
+        except AutomationStopped:
+            raise
         except FetchError as exc:
             if exc.reason == "stopped":
                 raise AutomationStopped("Research search stopped by owner") from exc
             raise ResearchError(f"search provider unavailable ({exc.reason})") from exc
         except Exception as exc:
             raise ResearchError(f"search provider unavailable ({type(exc).__name__})") from exc
+        if self.should_stop():
+            raise AutomationStopped("Research search stopped by owner")
+        if not isinstance(candidates, list):
+            raise ResearchError("search provider returned an invalid result list")
 
         items: list[dict[str, str]] = []
         seen: set[str] = set()
