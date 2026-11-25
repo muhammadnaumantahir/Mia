@@ -167,6 +167,7 @@ function renderSearchResults(){
 $('discoverForm').addEventListener('submit',async e=>{
  e.preventDefault();const query=$('searchQuery').value.trim();const btn=$('searchBtn');
  if(query.length<3){say('Enter at least 3 characters to search.',true);return;}
+ searchResults=[];renderSearchResults();
  btn.disabled=true;$('discoverForm').setAttribute('aria-busy','true');say('Searching for allowlisted sources…');
  try{
   const data=await api('/api/research/search','POST',{query,limit:10});
