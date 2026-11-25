@@ -62,7 +62,12 @@ def _clean_payload(value: Any) -> str:
             for key, child in item.items():
                 if not isinstance(key, str) or not key or len(key) > 80:
                     raise CompanionSyncError("payload keys must be short strings")
-                if key.strip().casefold() in _FORBIDDEN_KEYS:
+                normalized_key = re.sub(r"[^a-z0-9]", "", key.casefold())
+                if normalized_key in {
+                    "password", "passwd", "secret", "token", "accesstoken",
+                    "refreshtoken", "apikey", "privatekey", "clientsecret",
+                    "authorization", "cookie",
+                }:
                     raise CompanionSyncError("payload contains a credential-like field")
                 walk(child, depth + 1)
         elif isinstance(item, list):
