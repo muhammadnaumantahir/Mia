@@ -228,6 +228,25 @@ def test_restart_owner_can_confirm_applied_without_repeating_side_effect(tmp_pat
     assert len(memory.personal.list(limit=10)) == 1
 
 
+def test_cancel_waits_for_unknown_step_reconciliation(env):
+    client, memory, *_ = env
+    wid = create(client, [add_step("Must not run")]).json()["workflow"]["task_id"]
+    engine = client.app.state.workflow_engine
+    engine._set_step(wid, 1, status="interrupted", error="unknown")
+    engine._set_task(wid, status="interrupted", outcome="unknown")
+
+    cancelled = client.post(f"/api/workflows/{wid}/cancel")
+    assert cancelled.status_code == 200
+    current = client.get(f"/api/workflows/{wid}").json()
+    assert current["status"] == "interrupted" and current["cancel_requested"] == 1
+    assert memory.personal.list(limit=10) == []
+
+    engine.reconcile_timeout(wid, 1, decision="not_applied")
+    final = client.post(f"/api/workflows/{wid}/run").json()
+    assert final["status"] == "cancelled"
+    assert memory.personal.list(limit=10) == []
+
+
 def test_reconcile_step_api_requires_explicit_post_restart_decision(env):
     client, *_ = env
     wid = create(client, [add_step("Reconcile me")]).json()["workflow"]["task_id"]
