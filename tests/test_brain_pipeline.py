@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 
 from mia.agent.tools import ToolRegistry
 from mia.brain.orchestrator import Brain, TurnRequest
+from mia.computer.approvals import ApprovalStore
+from mia.computer.filesystem import FilesystemAdapter
 from mia.gateway.contracts import (
     ModelCandidate,
     ProviderResponse,
@@ -13,8 +15,6 @@ from mia.gateway.contracts import (
 )
 from mia.gateway.registry import ProviderRegistry
 from mia.gateway.service import ModelGateway
-from mia.computer.approvals import ApprovalStore
-from mia.computer.filesystem import FilesystemAdapter
 from mia.memory.store import MemoryStore
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
