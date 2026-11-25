@@ -8,12 +8,14 @@ so a paired (or compromised) companion can never create codes or revoke devices.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from mia.security.pairing import ALLOWED_SCOPES, PairingError, PairingService, ScopeError
+from mia.security.sync import CompanionSyncError, CompanionSyncStore
 
 
 class CodeInput(BaseModel):
@@ -47,13 +49,35 @@ class SessionInput(BaseModel):
     signature: str = Field(min_length=1, max_length=128)
 
 
+class SyncChangeInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_id: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$")
+    namespace: Literal["companion_state", "preferences"]
+    base_version: int = Field(ge=0)
+    payload: dict[str, Any] | None = None
+    deleted: bool = False
+
+
+class SyncPushInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    batch_id: str = Field(min_length=16, max_length=64, pattern=r"^[A-Za-z0-9_-]{16,64}$")
+    changes: list[SyncChangeInput] = Field(min_length=1, max_length=50)
+
+
 def _bearer(authorization: str | None) -> str:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Authentication required")
     return authorization.split(" ", 1)[1].strip()
 
 
-def register_companion_routes(app: FastAPI, service: PairingService, record: Callable[..., Any]) -> None:
+def register_companion_routes(
+    app: FastAPI,
+    service: PairingService,
+    record: Callable[..., Any],
+    sync: CompanionSyncStore | None = None,
+) -> None:
     def refuse(exc: PairingError) -> HTTPException:
         if isinstance(exc, ScopeError):
             return HTTPException(status_code=403, detail=str(exc))
@@ -105,12 +129,25 @@ def register_companion_routes(app: FastAPI, service: PairingService, record: Cal
         return device
 
     @app.post("/api/companion/challenge")
-    def challenge(item: ChallengeInput) -> dict[str, Any]:
-        return service.challenge(item.device_id)
+    def challenge(
+        item: ChallengeInput, authorization: str | None = Header(default=None)
+    ) -> dict[str, Any]:
+        try:
+            # Remote session renewal must prove possession of a still-live token before
+            # requesting a fresh Ed25519 challenge. Local first-time pairing may omit it.
+            if authorization:
+                service.verify_token(_bearer(authorization), touch=True)
+            return service.challenge(item.device_id)
+        except PairingError as exc:
+            raise refuse(exc) from exc
 
     @app.post("/api/companion/session")
-    def session(item: SessionInput) -> dict[str, Any]:
+    def session(
+        item: SessionInput, authorization: str | None = Header(default=None)
+    ) -> dict[str, Any]:
         try:
+            if authorization:
+                service.verify_token(_bearer(authorization), touch=True)
             return service.open_session(item.device_id, item.challenge_id, item.signature)
         except PairingError as exc:
             record(event_type="companion_auth_failed", summary="A companion authentication failed",
@@ -132,3 +169,64 @@ def register_companion_routes(app: FastAPI, service: PairingService, record: Cal
         except PairingError as exc:
             raise refuse(exc) from exc
         return {"status": "ok"}
+
+
+    @app.get("/api/companion/sync/pull")
+    def sync_pull(
+        since: int = Query(default=0, ge=0),
+        limit: int = Query(default=100, ge=1, le=100),
+        authorization: str | None = Header(default=None),
+    ) -> dict[str, Any]:
+        if sync is None:
+            raise HTTPException(status_code=503, detail="Companion sync is not configured")
+        try:
+            caller = service.verify_token(
+                _bearer(authorization), scope="companion.sync.read", touch=True
+            )
+            result = sync.pull(caller.device_id, since=since, limit=limit)
+        except PairingError as exc:
+            raise refuse(exc) from exc
+        except CompanionSyncError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        record(
+            event_type="companion_sync_pulled",
+            summary=f"Companion sync pull returned {len(result['changes'])} changes",
+            outcome="success",
+            payload={"device_id": caller.device_id, "since": since, "next_cursor": result["next_cursor"]},
+        )
+        return result
+
+    @app.post("/api/companion/sync/push")
+    def sync_push(
+        item: SyncPushInput, authorization: str | None = Header(default=None)
+    ) -> dict[str, Any] | JSONResponse:
+        if sync is None:
+            raise HTTPException(status_code=503, detail="Companion sync is not configured")
+        try:
+            caller = service.verify_token(
+                _bearer(authorization), scope="companion.sync.write", touch=True
+            )
+            result = sync.push(
+                caller.device_id, item.batch_id, [change.model_dump() for change in item.changes]
+            )
+        except PairingError as exc:
+            raise refuse(exc) from exc
+        except CompanionSyncError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if result["status"] == "conflict":
+            record(
+                event_type="companion_sync_conflict",
+                summary="Companion sync batch rejected due to version conflicts",
+                outcome="failure",
+                payload={"device_id": caller.device_id, "batch_id": item.batch_id,
+                         "conflict_count": len(result["conflicts"])},
+            )
+            return JSONResponse(status_code=409, content=result)
+        record(
+            event_type="companion_sync_pushed",
+            summary=f"Companion sync batch applied ({len(result['items'])} items)",
+            outcome="success",
+            payload={"device_id": caller.device_id, "batch_id": item.batch_id,
+                     "item_count": len(result["items"])},
+        )
+        return result
