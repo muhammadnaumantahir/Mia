@@ -976,3 +976,5 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 - `PARTIAL` no longer blocks unrelated tasks. Remaining implementation must be split into uniquely identified claimable child tasks; owner-only manual checks are tracked separately and do not hold implementation open.
 - Corrected the LIFE-13 / COMP-01 / COMP-02 dependency wording to remove the circular identity-model wait. Corrected the stale EVOL-02 note: EVOL-01 is DONE (02c96d1).
 - Documentation-only change. No source code or tests changed or run. Existing implementation/security dependencies remain in force.
+
+- Added 12 uniquely identified residual child tasks to the backlog and task board for the unfinished implementation in LIFE-06/07/08 and COMP-01/04. Independent slices are OPEN; only LIFE-08-APPROVAL and the final COMP-01/COMP-04 owner-identity slices are BLOCKED on explicit COMP-04/LIFE-13 dependencies. No manual owner checks were added as blockers.
