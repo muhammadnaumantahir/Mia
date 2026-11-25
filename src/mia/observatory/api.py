@@ -3060,6 +3060,10 @@ def create_app(
         lambda **kw: observatory.record_event(category="file_index", layer_id="SPS-04", **kw),
         lambda description: control.activity("file-index", description, mode="observing"),
     )
+    # Watch mode is opt-in, but stop-all and application shutdown always stop its worker.
+    file_index_watcher = app.state.file_index_watcher
+    control.on_stop(lambda: (file_index_watcher.stop(), 1)[1])
+    shutdown_handlers.append(file_index_watcher.stop)
 
     # MIA-COMP-02: companion pairing; device tokens are confined to /api/companion/*.
     pairing_service = pairing or PairingService(data_dir / "mia-companion.sqlite3")
