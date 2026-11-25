@@ -654,3 +654,8 @@ The MIA-LIFE-08-TIMEOUT checkpoint was extended with owner-facing reconciliation
 ## MIA-LIFE-06-WATCH — implementation complete (2026-11-25)
 
 An opt-in, owner-controlled file-index watcher now refreshes selected folders in bounded round-robin batches. It exposes start/stop/status endpoints, stops with stop-all and application shutdown, and refuses to start while automation is stopped. PDF and Office extraction now enforce the shared output-character budget while retaining optional dependency behavior and archive safeguards. Regression tests were added for watcher lifecycle, changed/deleted files, stop-all and extraction limits. **Tests were not executed here; execution remains OWNER_VERIFICATION_REQUIRED.**
+
+
+## MIA-LIFE-06-BRAIN — implementation complete (2026-11-25)
+
+Brain can now search the owner's selected file index through a read-only local-only tool. Results are live-verified against source text and file SHA, include exact path/line citations, and remain explicitly untrusted with injection flags. The Gateway receives those chunks for synthesis; system instructions prohibit following embedded file instructions and require exact citations. Remote-provider egress is blocked unless the owner explicitly enables remote file context. Regression tests were added; **test execution remains OWNER_VERIFICATION_REQUIRED**.
