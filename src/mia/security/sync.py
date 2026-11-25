@@ -23,6 +23,10 @@ MAX_PULL_ITEMS = 100
 MAX_PAYLOAD_BYTES = 16_384
 MAX_PAYLOAD_DEPTH = 8
 MAX_PAYLOAD_NODES = 500
+MAX_SYNC_ITEMS = 5_000
+MAX_SYNC_CHANGES = 100_000
+MAX_BATCHES_PER_DEVICE = 1_000
+BATCH_RETENTION_DAYS = 30
 _FORBIDDEN_KEYS = frozenset({
     "password", "passwd", "secret", "token", "access_token", "refresh_token",
     "api_key", "private_key", "client_secret", "authorization", "cookie",
@@ -194,6 +198,9 @@ class CompanionSyncStore:
 
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
+            now = _now()
+            cutoff = (datetime.now(UTC) - __import__("datetime").timedelta(days=BATCH_RETENTION_DAYS)).isoformat()
+            db.execute("DELETE FROM sync_batches WHERE created_at < ?", (cutoff,))
             prior = db.execute(
                 "SELECT result_json FROM sync_batches WHERE device_id=? AND batch_id=?",
                 (device, batch),
@@ -202,9 +209,25 @@ class CompanionSyncStore:
                 result = json.loads(prior["result_json"])
                 result["replayed"] = True
                 return result
+            batch_count = int(db.execute(
+                "SELECT COUNT(*) AS n FROM sync_batches WHERE device_id=?", (device,)
+            ).fetchone()["n"])
+            if batch_count >= MAX_BATCHES_PER_DEVICE:
+                raise CompanionSyncError("device sync batch retention limit reached")
+            change_count = int(db.execute(
+                "SELECT COUNT(*) AS n FROM sync_changes"
+            ).fetchone()["n"])
+            if change_count + len(cleaned) > MAX_SYNC_CHANGES:
+                raise CompanionSyncError("sync history limit reached; owner maintenance is required")
 
             conflicts: list[dict[str, Any]] = []
             current_rows: dict[tuple[str, str], sqlite3.Row | None] = {}
+            current_count = int(db.execute("SELECT COUNT(*) AS n FROM sync_items").fetchone()["n"])
+            new_items = sum(1 for change in cleaned
+                            if current_rows.get((change["namespace"], change["item_id"])) is None)
+            if current_count + new_items > MAX_SYNC_ITEMS:
+                raise CompanionSyncError("sync item limit reached; owner maintenance is required")
+
             for change in cleaned:
                 key = (change["namespace"], change["item_id"])
                 row = db.execute(
@@ -230,7 +253,6 @@ class CompanionSyncStore:
 
             applied: list[dict[str, Any]] = []
             next_cursor = 0
-            now = _now()
             for change in cleaned:
                 key = (change["namespace"], change["item_id"])
                 previous = current_rows[key]
