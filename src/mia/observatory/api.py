@@ -105,6 +105,10 @@ from mia.life.notification_api import register_notification_routes
 from mia.life.notifications import NotificationCenter
 from mia.life.reflect import Reflector
 from mia.knowledge.file_index import FileIndex, register_file_index_routes
+from mia.life.research_memory import (
+    ResearchMemoryBridge,
+    register_research_memory_routes,
+)
 from mia.life.research import (
     MAX_SYNTHESIS_CLAIMS,
     MAX_SYNTHESIS_INPUT_CHARS,
@@ -3292,6 +3296,14 @@ def create_app(
         lambda **kw: observatory.record_event(category="research", layer_id="SPS-04", **kw),
         lambda description: control.activity("research", description, mode="observing"),
         synthesize_research_run,
+    )
+    research_memory_bridge = ResearchMemoryBridge(
+        data_dir / "mia-research-memory-links.sqlite3", research_service, memory_store
+    )
+    app.state.research_memory_bridge = research_memory_bridge
+    register_research_memory_routes(
+        app, research_memory_bridge,
+        lambda **kw: observatory.record_event(category="research", layer_id="SPS-05", **kw),
     )
     register_workflow_routes(
         app, workflow_engine,
