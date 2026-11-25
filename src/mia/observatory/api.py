@@ -1744,7 +1744,7 @@ def create_app(
         },
         ["title", "steps"],
         "workflow.preview",
-        "read",
+        "preview",
         tool_workflow_preview,
     )
     register_tool(
