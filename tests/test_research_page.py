@@ -14,7 +14,7 @@ import uvicorn
 from mia.life.research import ResearchService
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
-from tests.test_research import BODY, NOW, FakeFetcher, html
+from tests.test_research import BODY, NOW, FakeFetcher, FakeSearchProvider, html
 
 playwright_sync = pytest.importorskip("playwright.sync_api")
 
@@ -112,6 +112,30 @@ def test_page_is_served_linked_and_packaged(page):
     assert page.locator("nav a[href='/research']").count() == 1
     text = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
     assert "research.html" in text
+
+
+def test_source_discovery_shows_only_allowlisted_results_and_populates_run_form(page):
+    page.research.searcher = FakeSearchProvider([
+        {"url": DOC, "title": "Python documentation"},
+        {"url": "https://evil.example.net/steal", "title": "Untrusted host"},
+    ])
+    visit(page)
+    page.fill("#searchQuery", "free threaded python")
+    page.click("#searchBtn")
+    page.wait_for_selector("#searchResults input[type=checkbox]")
+    assert page.locator("#searchResults > li").count() == 1
+    assert "Python documentation" in page.inner_text("#searchResults")
+    page.check("#searchResults input[type=checkbox]")
+    page.click("#useSearchResults")
+    assert page.input_value("#urls") == DOC
+    assert page.input_value("#question") == "free threaded python"
+
+
+def test_gateway_synthesis_control_is_visible_only_for_runs_with_readable_sources(page):
+    visit(page)
+    start(page, [DOC])
+    assert page.is_visible("#synthesizeBtn")
+    assert "nothing becomes a saved finding until you confirm it" in page.inner_text("#detail").lower()
 
 
 def test_empty_state_and_the_untrusted_pages_warning(page):
