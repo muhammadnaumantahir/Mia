@@ -641,3 +641,8 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 
 ## 2026-11-25 Selected-folder file index (MIA-LIFE-06 backend, agent A7)
 - Owner-selected folders only; keyword search with line-range citations, staleness and live verification; untrusted/injection-flagged; real deletion; stop-all honoured. Owner check: index a real folder, search, delete, confirm nothing else was read. No UI yet.
+
+
+## Workflow timeout recovery implementation checkpoint (2026-11-25)
+
+MIA-LIFE-08-TIMEOUT has a first implementation on main. Workflow timeouts now preserve the underlying worker for reconciliation, expose an explicit reconciliation API, block duplicate execution while outcomes are unknown, and require an owner decision after restart before treating an interrupted step as applied or retryable. Regression tests were added for live-worker and restart paths. **Tests and static checks have not been run in this editing environment; this is an implementation checkpoint, not a verified completion claim.** See the task board and integration log for commit evidence.
