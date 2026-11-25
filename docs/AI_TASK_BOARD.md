@@ -201,7 +201,7 @@ Split from the PARTIAL parent tasks above. These are independent task IDs; claim
 | MIA-LIFE-07-INJECTION | P3 | A5 + A3 | IN_PROGRESS (A7, claimed 2026-11-25T18:10Z; verified OPEN on main 1772e78; I wrote src/mia/life/research.py; A5/A3 idle, no overlap) | Harden research prompt-injection isolation with adversarial tests. |
 | MIA-LIFE-08-BRAIN | P3 | A1 + A4 | OPEN | Brain/voice entry for safe internal workflows. |
 | MIA-LIFE-08-APPROVAL | P3 | A1 + A5 | BLOCKED (COMP-04 owner-approval enforcement) | Approval-gated external/destructive workflow steps; no implementation before final-boundary approval is enforced. |
-| MIA-LIFE-08-TIMEOUT | P3 | A5 | IN_PROGRESS (Coordinator, 2026-11-25; independent of A5's MIA-EVOL-02 claim) | Implement explicit timeout/unknown-outcome state, wait-for-worker reconciliation, restart reconciliation and owner-confirmed retry. |
+| MIA-LIFE-08-TIMEOUT | P3 | A5 | PARTIAL (Coordinator implementation committed 2026-11-25; regression tests authored, not run here) | Timeout now records unknown/interrupted state, blocks repeat execution while worker may still run, reconciles live worker results, and requires owner decision after restart; still needs local test execution/review. |
 | MIA-COMP-01-HANDLERS | P4 | A5 | OPEN | Exhaustive route/handler capability proof and fail-closed coverage. |
 | MIA-COMP-01-IDENTITY | P4 | A1 + A5 | BLOCKED (LIFE-13 transport/sync trust contract) | Finalize device identity and remote trust model using existing COMP-02 plus LIFE-13. |
 | MIA-COMP-04-OWNER | P4 | A1 + A5 | BLOCKED (LIFE-13 owner/device trust contract) | Authenticated owner approval; dependency is device/owner trust contract, not milestone order. |
