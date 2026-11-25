@@ -1128,3 +1128,8 @@ Brain and voice now use the same tool-planning path to preview and, when explici
 Implementation commits include `72361b5e19bd0fb4c09841b6c8d04418e2ac4865` (API tool integration), `5ba5bb2501` (trusted prompt/interface context), `d8fbcdd61e` (owner permission and remote egress gates), `3de353bcb3` (capability specs), `70672a471d` (write-mode tool registration), `41d91d69e7` (intent routing), and `da5ce77a85` (fail-closed execution intent). Test commits include `4c8844adb4`, `bfd9da221e`, `2afc784045`, `9c8b67e7c4`, `33e937e6ea`, `f37e144ca1`, and `aa042dd835`.
 
 **Verification:** Regression tests were authored but not executed in this session, per owner instruction. This task is DONE for implementation only; test execution remains `OWNER_VERIFICATION_REQUIRED`. No test pass is claimed.
+
+
+## 2026-11-25 — Coordinator claim: MIA-COMP-01-HANDLERS
+
+Claimed the independent route/handler capability proof task while A5 retains EVOL-02. Scope: inventory every mutating FastAPI route and Brain tool handler, map it to a registered capability/permission gate, prove unknown or unclassified mutations fail closed, and add regression tests for the route inventory. I will not weaken existing owner/device or approval gates.
