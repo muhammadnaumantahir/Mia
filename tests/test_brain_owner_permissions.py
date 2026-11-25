@@ -33,6 +33,19 @@ def test_brain_read_tools_are_checked_against_shared_capability_registry(tmp_pat
     assert desktop.allowed is True
 
 
+def test_brain_indexed_file_search_uses_shared_filesystem_search_capability(tmp_path):
+    evaluator = OwnerPermissionEvaluator(
+        PermissionPolicy(tmp_path / "permissions.sqlite3"),
+        default_registry(),
+    )
+    allowed = evaluator.evaluate(
+        definition("knowledge.search_files", "filesystem.search", "read"),
+        {"query": "garden"},
+    )
+    assert allowed.allowed is True
+    assert allowed.stage == "ok"
+
+
 def test_brain_preview_tools_prepare_owner_approval_without_executing(tmp_path):
     policy = PermissionPolicy(tmp_path / "permissions.sqlite3")
     evaluator = OwnerPermissionEvaluator(policy, default_registry())
