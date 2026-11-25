@@ -348,9 +348,10 @@ def test_watch_refresh_picks_up_changes_and_removes_deleted_files(api):
             time.sleep(0.01)
         assert app.state.file_index.search("pineapple")
         source.unlink()
-        # The next cycle is bounded by the configured interval; force a refresh to
-        # exercise the same reconciliation path deterministically without waiting.
-        app.state.file_index.reindex(sid)
+        # The next bounded polling cycle must remove the deleted file from the index.
+        deadline = time.monotonic() + 7
+        while time.monotonic() < deadline and app.state.file_index.search("pineapple"):
+            time.sleep(0.05)
         assert app.state.file_index.search("pineapple") == []
     finally:
         watcher.stop()
