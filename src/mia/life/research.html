@@ -58,6 +58,15 @@ dialog::backdrop{background:#000a}
 <p class="safety" role="note"><strong>Web pages are untrusted.</strong> Mia treats everything on a page as data and never follows instructions found there. A page that talks to an AI reader is marked below, and its text cannot be used as evidence. Nothing becomes a saved finding until you confirm it, and every citation must be an exact quote from a page that was read in the same run.</p>
 <div id="notice" role="status" aria-live="polite"></div>
 
+<section class="panel" aria-labelledby="discoverHeading"><h2 id="discoverHeading">Discover allowed sources</h2>
+<p class="note">Search results are untrusted suggestions. Mia shows only result hosts already on your source allowlist. Add <code>html.duckduckgo.com</code> to that list to enable DuckDuckGo discovery.</p>
+<form id="discoverForm" autocomplete="off">
+<label>What do you want to research?<input id="searchQuery" required minlength="3" maxlength="300"></label>
+<div class="row"><button id="searchBtn" type="submit">Find allowed sources</button><button id="useSearchResults" class="alt" type="button" disabled>Use selected pages</button></div>
+</form>
+<ul id="searchResults" class="items"></ul>
+</section>
+
 <section class="panel" aria-labelledby="newHeading"><h2 id="newHeading">New research run</h2>
 <form id="runForm" autocomplete="off">
 <label>Question<input id="question" required minlength="3" maxlength="300"></label>
@@ -73,6 +82,8 @@ dialog::backdrop{background:#000a}
 <p id="comparison" class="note"></p>
 <h3 id="srcHeading">Sources read</h3>
 <ul id="sources" class="items" aria-labelledby="srcHeading"></ul>
+<div class="actions"><button id="synthesizeBtn" type="button">Draft claims with Mia</button></div>
+<p class="note">Mia uses the Gateway to propose claims from these sources. Exact quotes are checked again; nothing becomes a saved finding until you confirm it.</p>
 <div id="viewerBox" hidden>
 <h3 id="viewerHeading"></h3>
 <div id="viewer" tabindex="0" role="region" aria-labelledby="viewerHeading"></div>
@@ -108,7 +119,7 @@ const FAIL={source_not_permitted:'This site is not on your allowed list, so it w
 function failText(code){if(FAIL[code])return FAIL[code];const m=/^http_(\d+)$/.exec(code||'');if(m)return 'The site answered with error '+m[1]+'.';return 'Could not be read ('+code+').';}
 const PATTERN={override_instructions:'tries to override instructions',role_reassignment:'tries to give the AI a new role',prompt_exfiltration:'asks to reveal secrets or prompts',chat_markup:'imitates chat markup',run_command:'asks to run a command',send_data:'asks to send data somewhere',conceal_from_user:'asks to hide something from you',address_to_ai:'is addressed to an AI reader'};
 const STATUS={proposed:['Proposed: waiting for your decision','warn'],confirmed:['Saved as a finding','good'],rejected:['Rejected','bad']};
-let runs=[],current=null,run=null,seq=0,viewed=null,lastQuote=null;
+let runs=[],current=null,run=null,seq=0,viewed=null,lastQuote=null,searchResults=[];
 
 const mk=(t,text,cls)=>{const e=document.createElement(t);if(text!==undefined&&text!==null)e.textContent=text;if(cls)e.className=cls;return e;};
 const tag=(text,kind)=>mk('span',text,'tag'+(kind?' '+kind:''));
@@ -142,6 +153,36 @@ function renderRuns(){
   b.addEventListener('click',()=>openRun(r.run_id,{focus:true}));li.append(b);ul.append(li);
  }
 }
+function renderSearchResults(){
+ const ul=$('searchResults');ul.replaceChildren();
+ if(!searchResults.length){ul.append(mk('li','No allowed search results yet. Search above or add a source host to your allowlist.','empty'));$('useSearchResults').disabled=true;return;}
+ for(const item of searchResults){
+  const li=mk('li',undefined,'item');const label=mk('label');label.style.display='flex';label.style.flexDirection='row';label.style.alignItems='flex-start';label.style.gap='10px';
+  const check=mk('input');check.type='checkbox';check.value=item.url;check.setAttribute('aria-label','Select '+(item.title||item.url));check.style.width='auto';check.style.minHeight='0';
+  const detail=mk('span');detail.append(mk('strong',item.title||item.host),mk('div',item.url,'srcurl'),mk('div','Allowlisted host · untrusted search result','note'));
+  label.append(check,detail);li.append(label);ul.append(li);
+ }
+ $('useSearchResults').disabled=false;
+}
+$('discoverForm').addEventListener('submit',async e=>{
+ e.preventDefault();const query=$('searchQuery').value.trim();const btn=$('searchBtn');
+ if(query.length<3){say('Enter at least 3 characters to search.',true);return;}
+ btn.disabled=true;$('discoverForm').setAttribute('aria-busy','true');say('Searching for allowlisted sources…');
+ try{
+  const data=await api('/api/research/search','POST',{query,limit:10});
+  searchResults=data.items||[];renderSearchResults();
+  say(searchResults.length?'Found '+plural(searchResults.length,'allowed source','allowed sources')+'. Select pages to add them to a research run.':'No results from hosts on your allowlist.');
+ }catch(err){say(err.status===409?'Search stopped by Stop all: '+err.message:'Search failed: '+err.message,true);}
+ finally{btn.disabled=false;$('discoverForm').removeAttribute('aria-busy');}
+});
+$('useSearchResults').addEventListener('click',()=>{
+ const selected=[...$('searchResults').querySelectorAll('input[type=checkbox]:checked')].map(x=>x.value);
+ if(!selected.length){say('Select at least one search result first.',true);return;}
+ if(selected.length>5){say('A research run can read at most five pages.',true);return;}
+ $('urls').value=selected.join('\n');
+ if(!$('question').value.trim())$('question').value=$('searchQuery').value.trim();
+ $('question').focus();say('Added '+plural(selected.length,'page','pages')+' to the research form. Review the URLs, then start the run.');
+});
 async function loadRuns(){try{runs=(await api('/api/research/runs')).items;renderRuns();}catch(e){say('Could not load earlier runs: '+e.message,true);}}
 async function loadFindings(){
  const ul=$('findings');
@@ -160,6 +201,7 @@ async function openRun(id,{focus=false,quiet=false}={}){
 }
 function renderRun(){
  $('detail').hidden=false;$('detailTitle').textContent=run.question;$('comparison').textContent=run.comparison_note;
+ $('synthesizeBtn').hidden=!run.sources.some(s=>!s.failure);
  const ul=$('sources');ul.replaceChildren();
  if(!run.sources.length)ul.append(mk('li','No page was recorded for this run.','empty'));
  for(const s of run.sources)ul.append(sourceItem(s));
@@ -274,6 +316,16 @@ $('claimForm').addEventListener('submit',async e=>{
  await openRun(run.run_id,{quiet:true});await loadRuns();$('claimHeading').scrollIntoView({block:'nearest'});
 });
 
+$('synthesizeBtn').addEventListener('click',async()=>{
+ if(!run)return;const id=run.run_id,btn=$('synthesizeBtn');btn.disabled=true;
+ say('Mia is checking the sources and drafting claims…');
+ try{
+  const result=await api('/api/research/runs/'+encodeURIComponent(id)+'/synthesize','POST');
+  await openRun(id,{quiet:true});await Promise.all([loadRuns(),loadFindings()]);
+  say('Drafted '+plural(result.proposed_claims.length,'claim','claims')+'. '+result.rejected_claims+' unsupported or unsafe proposal(s) were rejected. Review before saving.');
+ }catch(err){say(err.status===409?'Synthesis stopped by Stop all: '+err.message:'Could not synthesize this run: '+err.message,true);}
+ finally{btn.disabled=false;}
+});
 /* ---- start / delete ---- */
 $('runForm').addEventListener('submit',async e=>{
  e.preventDefault();
