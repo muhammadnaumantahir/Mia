@@ -148,8 +148,8 @@ from mia.memory.structured import RECORD_TYPES, RecordNotFoundError, RecordState
 from mia.observatory.activity import ExperimentActivityCollector
 from mia.observatory.runtime_state import register_runtime_routes
 from mia.observatory.trend_view import build_trend_view
-from mia.security.companion_api import register_companion_routes
 from mia.security.capabilities import bind_route_capabilities
+from mia.security.companion_api import register_companion_routes
 from mia.security.local_guard import LoopbackGuard
 from mia.security.pairing import DeviceConfinementGuard, PairingService
 from mia.voice.action_readback import describe_action
