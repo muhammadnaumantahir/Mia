@@ -74,6 +74,16 @@ class DocumentIngestor:
             "trust_level": "untrusted",
         }
 
+    @classmethod
+    def _append_bounded(cls, parts: list[str], value: str, total: int) -> int:
+        """Append only the remaining extraction budget; parsers cannot grow unbounded lists."""
+        remaining = cls.MAX_EXTRACTED_CHARS - total
+        if remaining <= 0:
+            return total
+        clipped = str(value)[:remaining]
+        parts.append(clipped)
+        return total + len(clipped)
+
     def _validate_office_archive(self, raw: bytes) -> None:
         """Reject malformed or expansion-heavy Office ZIP containers before parsing."""
         try:
@@ -130,13 +140,12 @@ class DocumentIngestor:
                 if reader.is_encrypted:
                     raise DocumentIngestionError("Encrypted PDFs are not supported")
                 parts = []
+                total = 0
                 for index, page in enumerate(reader.pages):
-                    if index >= self.MAX_PDF_PAGES:
+                    if index >= self.MAX_PDF_PAGES or total >= self.MAX_EXTRACTED_CHARS:
                         break
-                    parts.append(page.extract_text() or "")
-                    if sum(len(part) for part in parts) > self.MAX_EXTRACTED_CHARS:
-                        break
-                return "\n".join(parts), f"pypdf/{self._package_version('pypdf')}"
+                    total = self._append_bounded(parts, page.extract_text() or "", total)
+                return "\n".join(parts)[: self.MAX_EXTRACTED_CHARS], f"pypdf/{self._package_version('pypdf')}"
             except DocumentIngestionError:
                 raise
             except Exception as exc:
@@ -154,11 +163,23 @@ class DocumentIngestor:
                 ) from exc
             try:
                 document = Document(io.BytesIO(raw))
-                parts = [paragraph.text for paragraph in document.paragraphs]
-                for table in document.tables:
-                    for row in table.rows:
-                        parts.append(" | ".join(cell.text for cell in row.cells))
-                return "\n".join(parts), f"python-docx/{self._package_version('python-docx')}"
+                parts = []
+                total = 0
+                for paragraph in document.paragraphs:
+                    total = self._append_bounded(parts, paragraph.text, total)
+                    if total >= self.MAX_EXTRACTED_CHARS:
+                        break
+                if total < self.MAX_EXTRACTED_CHARS:
+                    for table in document.tables:
+                        for row in table.rows:
+                            total = self._append_bounded(
+                                parts, " | ".join(cell.text for cell in row.cells), total
+                            )
+                            if total >= self.MAX_EXTRACTED_CHARS:
+                                break
+                        if total >= self.MAX_EXTRACTED_CHARS:
+                            break
+                return "\n".join(parts)[: self.MAX_EXTRACTED_CHARS], f"python-docx/{self._package_version('python-docx')}"
             except Exception as exc:
                 raise DocumentIngestionError("DOCX extraction failed") from exc
 
@@ -176,16 +197,21 @@ class DocumentIngestor:
                     data_only=True,
                 )
                 parts = []
+                total = 0
                 for sheet in workbook.worksheets:
-                    parts.append(f"Sheet: {sheet.title}")
+                    total = self._append_bounded(parts, f"Sheet: {sheet.title}", total)
+                    if total >= self.MAX_EXTRACTED_CHARS:
+                        break
                     for row in sheet.iter_rows(values_only=True):
                         values = [str(value) for value in row if value is not None]
                         if values:
-                            parts.append(" | ".join(values))
-                        if sum(len(part) for part in parts) > self.MAX_EXTRACTED_CHARS:
+                            total = self._append_bounded(parts, " | ".join(values), total)
+                        if total >= self.MAX_EXTRACTED_CHARS:
                             break
+                    if total >= self.MAX_EXTRACTED_CHARS:
+                        break
                 workbook.close()
-                return "\n".join(parts), f"openpyxl/{self._package_version('openpyxl')}"
+                return "\n".join(parts)[: self.MAX_EXTRACTED_CHARS], f"openpyxl/{self._package_version('openpyxl')}"
             except Exception as exc:
                 raise DocumentIngestionError("XLSX extraction failed") from exc
 
@@ -199,19 +225,24 @@ class DocumentIngestor:
             try:
                 presentation = Presentation(io.BytesIO(raw))
                 parts = []
+                total = 0
                 for index, slide in enumerate(presentation.slides, start=1):
-                    parts.append(f"Slide {index}")
+                    total = self._append_bounded(parts, f"Slide {index}", total)
+                    if total >= self.MAX_EXTRACTED_CHARS:
+                        break
                     for shape in slide.shapes:
                         if getattr(shape, "has_text_frame", False):
-                            parts.append(shape.text)
-                        if getattr(shape, "has_table", False):
+                            total = self._append_bounded(parts, shape.text, total)
+                        if total < self.MAX_EXTRACTED_CHARS and getattr(shape, "has_table", False):
                             for row in shape.table.rows:
-                                parts.append(
-                                    " | ".join(cell.text for cell in row.cells)
+                                total = self._append_bounded(
+                                    parts, " | ".join(cell.text for cell in row.cells), total
                                 )
-                        if sum(len(part) for part in parts) > self.MAX_EXTRACTED_CHARS:
+                                if total >= self.MAX_EXTRACTED_CHARS:
+                                    break
+                        if total >= self.MAX_EXTRACTED_CHARS:
                             break
-                return "\n".join(parts), f"python-pptx/{self._package_version('python-pptx')}"
+                return "\n".join(parts)[: self.MAX_EXTRACTED_CHARS], f"python-pptx/{self._package_version('python-pptx')}"
             except Exception as exc:
                 raise DocumentIngestionError("PPTX extraction failed") from exc
 
