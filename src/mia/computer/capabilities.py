@@ -511,6 +511,29 @@ def default_registry() -> CapabilityRegistry:
             "Values are read from the OS counters at call time.",
             _obj(), _obj(cpu_percent={"type": "number"}), requires_modules=("psutil",),
         ),
+        CapabilitySpec(
+            "workflow.preview", "Create a non-executing plan using Mia's internal workflow handlers.",
+            R, low, 10,
+            "A durable plan and step summary are returned; no handler is executed.",
+            _obj(title=_S, steps={"type": "array", "items": {"type": "object"}}),
+            _obj(workflow_id=_S, steps={"type": "array"}),
+            constraints=(
+                "Only personal.add, personal.list, personal.complete and notify.submit are exposed to Brain.",
+                "A plan contains at most 20 steps and has no external, browser, shell or filesystem actions.",
+            ),
+        ),
+        CapabilitySpec(
+            "workflow.run_internal", "Execute an explicitly requested, owner-granted internal workflow.",
+            X, low, 120,
+            "Every step status and final workflow state are recorded by WorkflowEngine.",
+            _obj(workflow_id=_S), _obj(status=_S, steps={"type": "array"}),
+            constraints=(
+                "Requires an explicit execution request in the current user turn and an owner capability grant.",
+                "Only pre-previewed internal workflow plans can run; no browser, shell, filesystem or destructive actions.",
+                "Stop-all and unknown-outcome reconciliation remain enforced by WorkflowEngine.",
+            ),
+            side_effects=("personal_store_write", "notification_queue"),
+        ),
     ]
     for spec in specs:
         reg.register(spec)
