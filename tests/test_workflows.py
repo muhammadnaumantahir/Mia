@@ -241,8 +241,7 @@ def test_cancel_waits_for_unknown_step_reconciliation(env):
     assert current["status"] == "interrupted" and current["cancel_requested"] == 1
     assert memory.personal.list(limit=10) == []
 
-    engine.reconcile_timeout(wid, 1, decision="not_applied")
-    final = client.post(f"/api/workflows/{wid}/run").json()
+    final = engine.reconcile_timeout(wid, 1, decision="not_applied")
     assert final["status"] == "cancelled"
     assert memory.personal.list(limit=10) == []
 
