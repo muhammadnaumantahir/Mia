@@ -163,6 +163,16 @@ def bind_route_capabilities(routes) -> tuple[HandlerBinding, ...]:
             method = method.upper()
             if method in SAFE_METHODS:
                 continue
+            capability = classify(method, path)
+            if capability is None:
+                endpoint = getattr(route, "endpoint", None)
+                identity = (
+                    f"{getattr(endpoint, '__module__', '')}."
+                    f"{getattr(endpoint, '__qualname__', getattr(endpoint, '__name__', ''))}"
+                )
+                raise CapabilityInventoryError(
+                    f"unclassified mutating route: {method} {path} -> {identity}"
+                )
             endpoint = getattr(route, "endpoint", None)
             identity = (
                 f"{getattr(endpoint, '__module__', '')}."
@@ -171,11 +181,6 @@ def bind_route_capabilities(routes) -> tuple[HandlerBinding, ...]:
             if not callable(endpoint) or not identity.startswith("mia."):
                 raise CapabilityInventoryError(
                     f"mutating route has no Mia handler: {method} {path} -> {identity or '<missing>'}"
-                )
-            capability = classify(method, path)
-            if capability is None:
-                raise CapabilityInventoryError(
-                    f"unclassified mutating route: {method} {path} -> {identity}"
                 )
             binding = HandlerBinding(method, path, identity, capability)
             existing = dict(getattr(route, "__mia_capability_bindings__", {}))
