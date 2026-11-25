@@ -373,6 +373,40 @@ class FileIndex:
             for r in rows
         ]
 
+    def search_verified(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
+        """Return only live-verified chunks with exact source coordinates for Brain synthesis."""
+        hits = self.search(query, max(1, min(limit, 10)))
+        grounded: list[dict[str, Any]] = []
+        for hit in hits:
+            row = self.db.execute(
+                "SELECT c.text, f.root_id, f.rel_path, f.sha256 "
+                "FROM chunks c JOIN files f ON f.id=c.file_id WHERE c.id=?",
+                (hit["chunk_id"],),
+            ).fetchone()
+            if row is None or hit["status"] != "current":
+                continue
+            verification = self.verify(hit["chunk_id"])
+            if not verification.get("verified") or not verification.get("file_unchanged"):
+                continue
+            grounded.append({
+                "content": row["text"][:CHUNK_CHARS],
+                "citation": (
+                    f"{row['rel_path']}:L{hit['line_start']}-L{hit['line_end']}"
+                ),
+                "source": {
+                    "root_id": row["root_id"],
+                    "path": row["rel_path"],
+                    "line_start": hit["line_start"],
+                    "line_end": hit["line_end"],
+                    "sha256": row["sha256"],
+                },
+                "verified": True,
+                "trust": "untrusted",
+                "instructions_trusted": False,
+                "injection_flagged": hit["injection_flagged"],
+            })
+        return grounded
+
     def verify(self, chunk_id: int) -> dict[str, Any]:
         """Re-read the live file and prove (or disprove) that the cited text is still there."""
         row = self.db.execute(
