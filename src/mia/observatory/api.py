@@ -874,6 +874,11 @@ def create_app(
         raise ValueError("MIA_REMOTE_ACCESS_ENABLED requires local_guard=True")
     if remote_access_enabled and not remote_allowed_hosts:
         raise ValueError("MIA_REMOTE_ACCESS_ENABLED requires exact MIA_REMOTE_ALLOWED_HOSTS entries")
+    if remote_access_enabled and any(
+        "*" in host or "/" in host or "://" in host or "@" in host
+        for host in remote_allowed_hosts
+    ):
+        raise ValueError("MIA_REMOTE_ALLOWED_HOSTS accepts exact host values only; wildcards and URLs are forbidden")
     data_dir = Path(os.getenv("MIA_DATA_DIR", "./data"))
     observatory = store or ObservatoryStore(data_dir / "mia-observatory.sqlite3")
     model_gateway = gateway or ModelGateway(
