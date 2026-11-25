@@ -105,7 +105,7 @@ def test_delete_removes_full_correction_chain_and_project_links(tmp_path):
 
 
 def test_import_requires_registered_project_and_confirmed_citation(tmp_path):
-    memory, research, bridge, _run, claim = build(tmp_path)
+    _, research, bridge, _run, claim = build(tmp_path)
     with pytest.raises(ResearchMemoryError, match="owner-confirmed"):
         bridge.import_finding(claim["claim_id"], "Unregistered")
     confirmed(research, claim)
