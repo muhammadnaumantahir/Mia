@@ -52,8 +52,8 @@ class ToolRegistry:
     ) -> None:
         if not name or name in self._tools:
             raise ValueError(f"tool name is blank or already registered: {name}")
-        if mode not in {"read", "preview"}:
-            raise ValueError("tool mode must be read or preview")
+        if mode not in {"read", "preview", "write"}:
+            raise ValueError("tool mode must be read, preview or write")
         if not permission:
             raise ValueError("tool permission is required")
         if parameters.get("type") != "object":
