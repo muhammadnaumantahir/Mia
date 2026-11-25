@@ -122,6 +122,79 @@ _RULES: tuple[Capability, ...] = (
 )
 
 
+class CapabilityInventoryError(RuntimeError):
+    """Raised when a mutating route has no declared capability or handler binding."""
+
+
+@dataclass(frozen=True)
+class HandlerBinding:
+    method: str
+    path: str
+    handler_identity: str
+    capability: Capability
+
+
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+def _registered_routes(routes, prefix: str = ""):
+    """Flatten FastAPI router wrappers without silently dropping included routes."""
+    for route in routes:
+        inner = getattr(route, "original_router", None)
+        if inner is not None:
+            context = getattr(route, "include_context", None)
+            yield from _registered_routes(
+                inner.routes, prefix + getattr(context, "prefix", "")
+            )
+        else:
+            yield route, prefix + getattr(route, "path", "")
+
+
+def bind_route_capabilities(routes) -> tuple[HandlerBinding, ...]:
+    """Bind every mutating route to its live handler and declared capability.
+
+    App construction fails closed if a route is unclassified, its endpoint is not
+    callable, or the handler does not originate from Mia's code.
+    """
+    bindings: list[HandlerBinding] = []
+    for route, path in _registered_routes(routes):
+        methods = getattr(route, "methods", None) or {"WS"}
+        for method in methods:
+            method = method.upper()
+            if method in SAFE_METHODS:
+                continue
+            endpoint = getattr(route, "endpoint", None)
+            identity = (
+                f"{getattr(endpoint, '__module__', '')}."
+                f"{getattr(endpoint, '__qualname__', getattr(endpoint, '__name__', ''))}"
+            )
+            if not callable(endpoint) or not identity.startswith("mia."):
+                raise CapabilityInventoryError(
+                    f"mutating route has no Mia handler: {method} {path} -> {identity or '<missing>'}"
+                )
+            capability = classify(method, path)
+            if capability is None:
+                raise CapabilityInventoryError(
+                    f"unclassified mutating route: {method} {path} -> {identity}"
+                )
+            binding = HandlerBinding(method, path, identity, capability)
+            existing = dict(getattr(route, "__mia_capability_bindings__", {}))
+            existing[method] = binding
+            try:
+                setattr(route, "__mia_capability_bindings__", existing)
+            except (AttributeError, TypeError) as exc:
+                raise CapabilityInventoryError(
+                    f"cannot bind capability to route handler: {method} {path} -> {identity}"
+                ) from exc
+            bindings.append(binding)
+    return tuple(bindings)
+
+
+def bound_route_capability(route, method: str) -> HandlerBinding | None:
+    """Return the capability bound to this actual FastAPI route/handler pair."""
+    return getattr(route, "__mia_capability_bindings__", {}).get(method.upper())
+
+
 def classify(method: str, path: str) -> Capability | None:
     key = f"{method.upper()} {path}"
     for rule in _RULES:
