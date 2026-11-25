@@ -684,3 +684,8 @@ Every mutating route is now bound at app construction to its live Mia handler id
 ## MIA-LIFE-13 — implementation complete (2026-11-25)
 
 Authenticated companion sync is implemented with separate read/write device scopes, atomic versioned batches, conflict responses, tombstones, replay protection, payload limits and immediate revocation checks. Remote access is disabled by default and, when enabled, is limited to direct HTTPS on exact allowlisted hosts with a live device token. Pairing and owner APIs remain loopback-only. Only non-secret companion_state/preferences are synchronized. Regression tests were added but not executed; real TLS/device checks remain OWNER_VERIFICATION_REQUIRED. LIFE-13 now unblocks MIA-COMP-01-IDENTITY and MIA-COMP-04-OWNER.
+
+
+## MIA-COMP-01-IDENTITY — complete (2026-11-25)
+
+Added a source-backed owner/device identity and remote trust model. It documents Ed25519 pairing, device-scoped sessions, scopes, revocation, replay/conflict controls, optional HTTPS-only remote companion access and the no-public-unauthenticated boundary. It clearly states that local owner authentication is not yet implemented and remains COMP-04-OWNER work.
