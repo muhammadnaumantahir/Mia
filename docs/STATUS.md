@@ -612,3 +612,7 @@ Branch: `feature/full-history-semantic-memory` (based on current `main`).
 ## 2026-11-24 — Workflow UI (MIA-LIFE-08, agent A6)
 - Commit c0311f2. `/workflows` lets the owner build a plan from the safe internal actions, preview risk and approval, run, pause, cancel (with confirmation) and retry failed steps, and read events and the report.
 - Verified: 17 Chromium tests over the real workflow engine, mutation checks, full suite, ruff. Not verified: real screen readers, non-Chromium browsers.
+
+## 2026-11-25T05:33Z A1 capability-gap discovery (MIA-EVOL-01)
+
+- /api/evolution/gaps records and ranks repeated, consented signals (failed tasks, memory corrections, submitted evaluation failures, explicit owner requests); consent is off by default and revoking deletes evidence; one failure is never a gap. Records only: nothing runs, no UI, not wired to the evolution pipeline. Commit `02c96d1`; unit/API tests only. Known failing on clean main: A6's /projects delete-notice browser test.
