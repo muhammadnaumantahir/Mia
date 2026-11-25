@@ -404,18 +404,157 @@ class FileIndex:
             "ORDER BY rel_path LIMIT ?", (max(1, min(limit, 500)),))]
 
 
+class FileIndexWatcher:
+    """Owner-started, bounded refresh loop for explicitly selected folders."""
+
+    def __init__(
+        self,
+        index: FileIndex,
+        *,
+        activity: Callable[[str], Any] | None = None,
+    ) -> None:
+        self.index = index
+        self.activity = activity
+        self._lock = threading.RLock()
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._interval_seconds = 60
+        self._max_selections_per_cycle = 2
+        self._cursor = 0
+        self._last_run_at: str | None = None
+        self._last_error: str | None = None
+        self._cycles = 0
+        self._selections_refreshed = 0
+
+    def status(self) -> dict[str, Any]:
+        with self._lock:
+            active = self._thread is not None and self._thread.is_alive()
+            return {
+                "enabled": active,
+                "state": "running" if active else "stopped",
+                "interval_seconds": self._interval_seconds,
+                "max_selections_per_cycle": self._max_selections_per_cycle,
+                "cycles": self._cycles,
+                "selections_refreshed": self._selections_refreshed,
+                "last_run_at": self._last_run_at,
+                "last_error": self._last_error,
+            }
+
+    def start(self, *, interval_seconds: int = 60, max_selections_per_cycle: int = 2) -> dict[str, Any]:
+        interval_seconds = max(5, min(int(interval_seconds), 3600))
+        max_selections_per_cycle = max(1, min(int(max_selections_per_cycle), 5))
+        if not self.index.list_selections():
+            raise FileIndexError("Select at least one folder before enabling refresh")
+        with self._lock:
+            if self._thread is not None and self._thread.is_alive():
+                return self.status()
+            self._interval_seconds = interval_seconds
+            self._max_selections_per_cycle = max_selections_per_cycle
+            self._last_error = None
+            self._stop.clear()
+            self._thread = threading.Thread(
+                target=self._run, name="mia-file-index-watcher", daemon=True
+            )
+            self._thread.start()
+        return self.status()
+
+    def stop(self) -> dict[str, Any]:
+        self._stop.set()
+        with self._lock:
+            thread = self._thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=5)
+        return self.status()
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            try:
+                selections = self.index.list_selections()
+                if selections:
+                    start = self._cursor % len(selections)
+                    ordered = selections[start:] + selections[:start]
+                    batch = ordered[: self._max_selections_per_cycle]
+                    for selection in batch:
+                        if self._stop.is_set() or self.index.should_stop():
+                            raise AutomationStopped("File refresh stopped by owner")
+                        context = (
+                            self.activity("Refreshing an owner-selected folder")
+                            if self.activity is not None
+                            else _null_activity()
+                        )
+                        with context:
+                            self.index.reindex(selection["id"])
+                    self._cursor = (start + len(batch)) % max(1, len(selections))
+                    with self._lock:
+                        self._selections_refreshed += len(batch)
+                with self._lock:
+                    self._cycles += 1
+                    self._last_run_at = _now()
+                    self._last_error = None
+            except AutomationStopped as exc:
+                with self._lock:
+                    self._last_error = str(exc)
+                break
+            except Exception as exc:
+                with self._lock:
+                    self._last_error = f"{type(exc).__name__}: {exc}"[:300]
+            self._stop.wait(self._interval_seconds)
+        with self._lock:
+            self._thread = None
+
+
+class FileIndexWatchInput(BaseModel):
+    interval_seconds: int = 60
+    max_selections_per_cycle: int = 2
+
+
+class _null_activity:
+    def __enter__(self) -> None:
+        return None
+
+    def __exit__(self, *_args: Any) -> None:
+        return None
+
+
 def register_file_index_routes(app: Any, index: FileIndex, record: Callable[..., Any],
                                activity: Callable[[str], Any] | None = None) -> None:
     """Routes on the app itself (not include_router) so route enumeration stays flat."""
     from fastapi import HTTPException
     from fastapi.concurrency import run_in_threadpool
 
+    watcher = FileIndexWatcher(index, activity=activity)
+    app.state.file_index_watcher = watcher
+
     def unknown() -> HTTPException:
         return HTTPException(status_code=404, detail="Unknown index item")
 
     @app.get("/api/file-index/status")
     def fi_status() -> dict[str, Any]:
-        return index.status()
+        return {**index.status(), "watcher": watcher.status()}
+
+    @app.get("/api/file-index/watch")
+    def fi_watch_status() -> dict[str, Any]:
+        return watcher.status()
+
+    @app.post("/api/file-index/watch/start")
+    def fi_watch_start(item: FileIndexWatchInput) -> dict[str, Any]:
+        try:
+            result = watcher.start(
+                interval_seconds=item.interval_seconds,
+                max_selections_per_cycle=item.max_selections_per_cycle,
+            )
+        except FileIndexError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        record(event_type="file_index_watch_started", summary="Owner enabled bounded file refresh",
+               outcome="success", payload=result)
+        return result
+
+    @app.post("/api/file-index/watch/stop")
+    def fi_watch_stop() -> dict[str, Any]:
+        result = watcher.stop()
+        record(event_type="file_index_watch_stopped", summary="Owner stopped file refresh",
+               outcome="success", payload=result)
+        return result
 
     @app.get("/api/file-index/selections")
     def fi_selections() -> dict[str, Any]:
