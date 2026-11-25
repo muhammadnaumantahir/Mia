@@ -105,16 +105,16 @@ from mia.life.notification_api import register_notification_routes
 from mia.life.notifications import NotificationCenter
 from mia.life.reflect import Reflector
 from mia.knowledge.file_index import FileIndex, register_file_index_routes
-from mia.life.research_memory import (
-    ResearchMemoryBridge,
-    register_research_memory_routes,
-)
 from mia.life.research import (
     MAX_SYNTHESIS_CLAIMS,
     MAX_SYNTHESIS_INPUT_CHARS,
     ResearchError,
     ResearchService,
     register_research_routes,
+)
+from mia.life.research_memory import (
+    ResearchMemoryBridge,
+    register_research_memory_routes,
 )
 from mia.life.runner import LifeRunner, LifeScheduler
 from mia.life.store import ITEM_STATES, LifeStore
