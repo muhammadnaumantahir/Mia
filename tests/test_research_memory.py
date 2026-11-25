@@ -9,7 +9,7 @@ from mia.memory.context import record_in_scope
 from mia.memory.store import MemoryStore, project_key
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
-from tests.test_research import BODY, NOW, FakeFetcher, PAGES
+from tests.test_research import NOW, FakeFetcher, PAGES
 
 QUOTE = "The feature is optional and must be enabled when the interpreter is built"
 
@@ -106,7 +106,7 @@ def test_delete_removes_full_correction_chain_and_project_links(tmp_path):
 
 def test_import_requires_registered_project_and_confirmed_citation(tmp_path):
     memory, research, bridge, _run, claim = build(tmp_path)
-    with pytest.raises(ResearchMemoryError, match="Create this project"):
+    with pytest.raises(ResearchMemoryError, match="owner-confirmed"):
         bridge.import_finding(claim["claim_id"], "Unregistered")
     confirmed(research, claim)
     with pytest.raises(ResearchMemoryError, match="Create this project"):
