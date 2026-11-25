@@ -185,3 +185,23 @@ Append a concise UTC entry to `docs/AI_INTEGRATION_LOG.md` for every claim, chec
 ## Adding tasks
 
 Use unique IDs `MIA-[AREA]-NN`. Every task must state priority, dependencies, allowed paths/ownership boundary, acceptance criteria, test expectations and security/privacy constraints. Avoid vague tasks such as “improve AI”.
+
+
+## Claimable residual implementation queue
+
+Split from the PARTIAL parent tasks above. These are independent task IDs; claim only when their listed dependencies are satisfied. Parent tasks remain PARTIAL until their implementation children are DONE.
+
+| Task | Priority | Suggested owner | Status | Scope / acceptance |
+|---|---:|---|---|---|
+| MIA-LIFE-06-UI | P3 | A6 | OPEN | Owner file-index UI; backend contract already on main. |
+| MIA-LIFE-06-BRAIN | P3 | A1 + A2 | OPEN | Brain file-search tool and Gateway-grounded summaries; backend contract already on main. |
+| MIA-LIFE-06-WATCH | P3 | A5 | OPEN | Bounded file refresh and optional document extraction. |
+| MIA-LIFE-07-SEARCH | P3 | A2 | OPEN | Bounded search discovery and Gateway synthesis over existing research API. |
+| MIA-LIFE-07-MEMORY | P3 | A1 | OPEN | Owner-confirmed research findings into project-scoped structured memory. |
+| MIA-LIFE-07-INJECTION | P3 | A5 + A3 | OPEN | Harden research prompt-injection isolation with adversarial tests. |
+| MIA-LIFE-08-BRAIN | P3 | A1 + A4 | OPEN | Brain/voice entry for safe internal workflows. |
+| MIA-LIFE-08-APPROVAL | P3 | A1 + A5 | BLOCKED (COMP-04 owner-approval enforcement) | Approval-gated external/destructive workflow steps; no implementation before final-boundary approval is enforced. |
+| MIA-LIFE-08-TIMEOUT | P3 | A5 | OPEN | Unknown-outcome timeout semantics and safe reconciliation/retry. |
+| MIA-COMP-01-HANDLERS | P4 | A5 | OPEN | Exhaustive route/handler capability proof and fail-closed coverage. |
+| MIA-COMP-01-IDENTITY | P4 | A1 + A5 | OPEN | Finalize device identity and remote trust model using existing COMP-02 plus LIFE-13. |
+| MIA-COMP-04-OWNER | P4 | A1 + A5 | OPEN | Authenticated owner approval; dependency is device/owner trust contract, not milestone order. |
