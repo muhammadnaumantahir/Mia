@@ -659,3 +659,8 @@ An opt-in, owner-controlled file-index watcher now refreshes selected folders in
 ## MIA-LIFE-06-BRAIN — implementation complete (2026-11-25)
 
 Brain can now search the owner's selected file index through a read-only local-only tool. Results are live-verified against source text and file SHA, include exact path/line citations, and remain explicitly untrusted with injection flags. The Gateway receives those chunks for synthesis; system instructions prohibit following embedded file instructions and require exact citations. Remote-provider egress is blocked unless the owner explicitly enables remote file context. Regression tests were added; **test execution remains OWNER_VERIFICATION_REQUIRED**.
+
+
+## MIA-LIFE-07-SEARCH — implementation complete (2026-11-25)
+
+Mia now supports bounded owner-allowlisted search discovery and Gateway-backed research synthesis. Search results are untrusted suggestions filtered to allowed hosts; the owner selects pages before fetching. Synthesis uses a local structured-output model by default, with strict input/output/time budgets and explicit opt-in for remote models. It generates proposed claims only; every citation is checked against the same run's source text, and instruction-like passages cannot be cited. Stop-all and emergency-stop controls are honored. Regression tests were added; **test execution remains OWNER_VERIFICATION_REQUIRED**.
