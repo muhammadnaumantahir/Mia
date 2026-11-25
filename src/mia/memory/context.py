@@ -316,6 +316,75 @@ def _add_linked_records(
         scored.sort(key=lambda entry: entry[0], reverse=True)
 
 
+MAX_PROJECT_MILESTONES = 5
+PROJECT_GOAL_CHARS = 400
+PROJECT_MILESTONE_CHARS = 100
+
+
+def _project_workspace_item(
+    store: MemoryStore, conversation: dict[str, Any], now: datetime
+) -> tuple[str, MemoryReference] | None:
+    """The owner's goal, status and open milestones for the conversation's own project.
+
+    Only the project the conversation is assigned to is ever read, so another project's
+    goal cannot reach this prompt. Nothing is added for a conversation without a project, for a
+    project label that has no registered workspace, or when the label is unusable. Owner text is
+    neutralised and bounded like every other item in the memory block.
+    """
+    label = conversation.get("project")
+    if not label:
+        return None
+    try:
+        registry = store.projects.get(str(label))
+    except ValueError:
+        return None
+    if registry is None:
+        return None
+    milestones = store.projects.milestones(registry["name"])
+    open_items = sorted(
+        (m for m in milestones if m["status"] == "open"),
+        key=lambda m: (m["due_at"] is None, m["due_at"] or "", m["created_at"]),
+    )
+    done_count = sum(1 for m in milestones if m["status"] == "done")
+    name = _neutralise(_one_line(registry["name"], 120))
+    goal = _neutralise(_one_line(registry["goal"], PROJECT_GOAL_CHARS)) if registry["goal"] else ""
+    lines = [f'Project "{name}" is {registry["status"]}.', f"Goal: {goal or 'not set'}."]
+    if open_items:
+        shown = []
+        for index, milestone in enumerate(open_items[:MAX_PROJECT_MILESTONES], start=1):
+            entry = f"{index}. {_neutralise(_one_line(milestone['title'], PROJECT_MILESTONE_CHARS))}"
+            due = milestone["due_at"]
+            if due:
+                overdue = _age_days(due, now) > 0
+                entry += f" (due {due[:10]}{', overdue' if overdue else ''})"
+            shown.append(entry)
+        extra = len(open_items) - len(shown)
+        lines.append(
+            f"Open milestones ({len(open_items)}): " + "; ".join(shown)
+            + (f"; and {extra} more" if extra > 0 else "") + "."
+        )
+    else:
+        lines.append("Open milestones: none.")
+    lines.append(f"Completed milestones: {done_count}.")
+    reference = MemoryReference(
+        label="M1",
+        ref_type="project",
+        ref_id=str(registry["project_key"]),
+        kind="workspace",
+        provenance=_TRUST_LABEL["user"],
+        trust="user",
+        title=name,
+        source=None,
+        timestamp=str(registry["updated_at"]),
+        score=1.0,
+    )
+    header = (
+        f'[M1] project workspace · {_TRUST_LABEL["user"]} · '
+        f'{str(registry["updated_at"])[:10]} · "{name}"'
+    )
+    return f"{header}\n" + " ".join(lines), reference
+
+
 def assemble_memory_context(
     store: MemoryStore,
     prompt: str,
@@ -336,12 +405,20 @@ def assemble_memory_context(
         return EMPTY_PACKET
     terms = extract_query_terms(prompt)
     intent_types = detect_context_intent(prompt)
-    if not terms and not intent_types:
-        return EMPTY_PACKET
     now = now or datetime.now(UTC)
 
     current_convo = store.get_conversation(conversation_id) or {}
     wanted_project = project_key(current_convo.get("project"))
+    project_item = _project_workspace_item(store, current_convo, now)
+    if not terms and not intent_types:
+        if project_item is None:
+            return EMPTY_PACKET
+        text, reference = project_item
+        return ContextPacket(
+            message={"role": "system",
+                     "content": f"{_PREAMBLE}\n<memory_data>\n{text}\n</memory_data>"},
+            references=(reference,),
+        )
 
     recent_ids = store.recent_message_ids(conversation_id, budget.recent_window)
     items = store.retrieve_items(prompt, limit=budget.candidate_pool)
@@ -455,6 +532,10 @@ def assemble_memory_context(
     seen: set[str] = set()
     knowledge_count = message_count = record_count = 0
     used_chars = 0
+    if project_item is not None:  # the owner's project frame comes first and is labelled [M1]
+        references.append(project_item[1])
+        blocks.append(project_item[0])
+        used_chars += len(project_item[0])
 
     for score, ref_type, record in scored:
         if ref_type == "knowledge":

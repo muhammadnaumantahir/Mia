@@ -312,3 +312,16 @@ nothing. Sent suggestions go to the in-app outreach inbox only (pull, never push
 - **Not done.** No scheduler: it runs when called (owner request), and the autonomous runner does
   not call it yet. Suppressed candidates are returned in the run report but not stored.
   No notification-center delivery, UI, calendar, model-written text or live evidence.
+
+## Project frame in the prompt (MIA-LIFE-04)
+
+When a conversation belongs to a registered project workspace, the first item of the retrieved-memory block (`[M1]`,
+reference type `project`) is the owner's own frame for that project: its status, goal, up to five open milestones (due date,
+flagged `overdue` when past) and the number completed, in at most about 900 characters. Only the conversation's own project
+is ever read, so another project's goal cannot reach the prompt. The block is built from owner-authored text, neutralised and
+bounded like every other memory item, and it is memory: the Brain's privacy routing keeps a prompt that contains it on local
+models unless the owner allowed remote context, and the owner's `memory_enabled` / `retrieval_enabled` switches turn it off.
+It appears on every non-trivial turn (greetings and acknowledgements are still skipped by the Brain), even when no stored
+record matches the question, and later retrieved items are labelled `[M2]`, `[M3]` and so on. Nothing is added for a
+conversation without a project, for a project label with no registered workspace, or after the workspace is deleted.
+
