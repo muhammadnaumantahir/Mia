@@ -910,3 +910,7 @@ Append-only coordination history. Use UTC timestamps. Do not rewrite or delete e
 
 ## 2026-11-25T05:31Z - MIA-COMP-10 claimed (A4, owner-approved exception)
 - Owner approved A4 taking MIA-COMP-10 by name. Plan (from the voice design note): structured spoken read-back generated server-side from the pending action (not model prose); voice turns never approve (approval stays an on-screen action; a spoken "yes" is just a turn); spoken stop / Interrupt / Esc / ending the conversation rejects the approvals created by that voice turn; uncertain local transcripts are not auto-sent. Touches src/mia/observatory/api.py (_remember_card: one field), a new src/mia/voice/action_readback.py, src/mia/assistant.html (voice flow, A6 is on LIFE-08 workflow UI in the same file: minimal edits, re-fetch before commit). A7 owns COMP-04 broker work: nothing here changes permission checks.
+
+## 2026-11-25T05:32Z — MIA-EVOL-08 claimed (A3, owner exception)
+
+- Agent: A3. Owner exception for EVOL-08 and EVOL-09 given in chat. Deliverable: docs/evolution/FOUNDATION_MODEL_FEASIBILITY.md with a go/no-go per option, grounded in repo evidence (data Mia actually has, consent rules, evaluation strength) and dated external sources. No training, downloads of models, or spending. Hardware and budget facts only the owner has are listed as owner-required inputs, not assumed. A1 (EVOL-01) and A5 (EVOL-02) paths are not touched.

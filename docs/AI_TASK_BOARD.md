@@ -126,8 +126,8 @@ The detailed task definitions, dependencies, scope and acceptance criteria are i
 | MIA-EVOL-05 | P5 | A1 + A5 | OPEN | Versioned capability contracts, permissions, dependencies, lineage, evidence and retirement state. |
 | MIA-EVOL-06 | P5 | A1 + A5 | OPEN | Owner-approved staged activation, monitoring, immutable decisions and tested rollback; governance immutable. |
 | MIA-EVOL-07 | P5 | A5 + A3 | OPEN | Disposable autonomous evolution research only; no production secrets/data/privileges/side effects; containment tests. |
-| MIA-EVOL-08 | P5 | A3 + A2 | OPEN | Custom foundation-model feasibility study: data rights, compute, cost, benchmark and evidence-based go/no-go. |
-| MIA-EVOL-09 | P5 | A3 + A2 | OPEN | Optional small-model adaptation experiment only after lawful data and feasible go decision; reproducible held-out comparison. |
+| MIA-EVOL-08 | P5 | A3 + A2 | IN_PROGRESS (A3, claimed 2026-11-25T05:32Z; OWNER-APPROVED EXCEPTION to the M4->M5 gate: owner said "start EVOL-08 (a feasibility study) and EVOL-09 under an owner exception"; analysis and documents only, no training and no spending; A2 not consulted) | Custom foundation-model feasibility study: data rights, compute, cost, benchmark and evidence-based go/no-go. |
+| MIA-EVOL-09 | P5 | A3 + A2 | OPEN (owner exception granted; blocked until EVOL-08 delivers a go decision AND a lawful dataset exists; a no-go is documented instead of an experiment) | Optional small-model adaptation experiment only after lawful data and feasible go decision; reproducible held-out comparison. |
 
 **Existing MIA-EVOL-02 remains IN_PROGRESS under A5** and is not duplicated here.
 
