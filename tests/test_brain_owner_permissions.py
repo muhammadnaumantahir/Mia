@@ -1,7 +1,7 @@
 from mia.agent.tools import ToolDefinition
 from mia.brain.broker import OwnerPermissionEvaluator
 from mia.computer.capabilities import default_registry
-from mia.computer.permissions import PermissionPolicy
+from mia.computer.permissions import PermissionLevel, PermissionPolicy
 
 
 def definition(name, permission, mode):
@@ -91,3 +91,37 @@ def test_application_inventory_tool_has_a_registered_owner_capability():
     assert spec.permission.name.lower() == "observe"
     assert spec.risk.name.lower() == "low"
     assert spec.requires_approval_by_default is False
+
+
+
+def test_brain_workflow_preview_is_a_registered_read_capability(tmp_path):
+    policy = PermissionPolicy(tmp_path / "permissions.sqlite3")
+    evaluator = OwnerPermissionEvaluator(policy, default_registry())
+    result = evaluator.evaluate(
+        definition("workflow.preview_internal", "workflow.preview", "read"),
+        {"title": "Plan", "steps": []},
+    )
+    assert result.allowed is True
+    spec = default_registry().get("workflow.preview")
+    assert spec.permission == PermissionLevel.READ
+    assert spec.risk.name.lower() == "low"
+
+
+def test_brain_workflow_execution_requires_an_explicit_owner_capability_grant(tmp_path):
+    policy = PermissionPolicy(tmp_path / "permissions.sqlite3")
+    evaluator = OwnerPermissionEvaluator(policy, default_registry())
+    tool = definition("workflow.run_internal", "workflow.run_internal", "write")
+    refused = evaluator.evaluate(tool, {"workflow_id": "workflow-1"})
+    assert refused.allowed is False
+    assert refused.stage == "permission"
+
+    policy.grant(
+        granted_by="owner",
+        capabilities=["workflow.run_internal"],
+        level=PermissionLevel.EXECUTE,
+        kind="session",
+        note="Allow explicitly requested internal Brain workflows",
+    )
+    allowed = evaluator.evaluate(tool, {"workflow_id": "workflow-1"})
+    assert allowed.allowed is True
+    assert default_registry().get("workflow.run_internal").requires_approval_by_default is True
