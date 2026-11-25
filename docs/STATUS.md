@@ -649,3 +649,8 @@ MIA-LIFE-08-TIMEOUT has a first implementation on main. Workflow timeouts now pr
 
 
 The MIA-LIFE-08-TIMEOUT checkpoint was extended with owner-facing reconciliation controls. Interrupted steps no longer expose a generic retry action; direct retry is rejected until reconciliation, and cancellation waits for the unknown outcome to be resolved. UI, retry-bypass and cancellation regression tests were added. Test execution remains pending.
+
+
+## MIA-LIFE-06-WATCH — implementation complete (2026-11-25)
+
+An opt-in, owner-controlled file-index watcher now refreshes selected folders in bounded round-robin batches. It exposes start/stop/status endpoints, stops with stop-all and application shutdown, and refuses to start while automation is stopped. PDF and Office extraction now enforce the shared output-character budget while retaining optional dependency behavior and archive safeguards. Regression tests were added for watcher lifecycle, changed/deleted files, stop-all and extraction limits. **Tests were not executed here; execution remains OWNER_VERIFICATION_REQUIRED.**
