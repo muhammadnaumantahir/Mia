@@ -74,7 +74,10 @@ def _clean_payload(value: Any) -> str:
         elif isinstance(item, str):
             if len(item) > 4096:
                 raise CompanionSyncError("payload strings are limited to 4096 characters")
-            reject_secret(item, field="sync payload")
+            try:
+                reject_secret(item, field="sync payload")
+            except ValueError as exc:
+                raise CompanionSyncError(str(exc)) from exc
         elif item is not None and not isinstance(item, (bool, int, float)):
             raise CompanionSyncError("payload contains an unsupported value")
         elif isinstance(item, float) and (item != item or abs(item) == float("inf")):
@@ -87,7 +90,10 @@ def _clean_payload(value: Any) -> str:
         raise CompanionSyncError("payload must be valid JSON") from exc
     if len(encoded.encode("utf-8")) > MAX_PAYLOAD_BYTES:
         raise CompanionSyncError(f"payload is limited to {MAX_PAYLOAD_BYTES} bytes")
-    reject_secret(encoded, field="sync payload")
+    try:
+        reject_secret(encoded, field="sync payload")
+    except ValueError as exc:
+        raise CompanionSyncError(str(exc)) from exc
     return encoded
 
 
