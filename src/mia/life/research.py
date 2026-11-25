@@ -28,7 +28,7 @@ from datetime import UTC, date, datetime
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, unquote, urljoin, urlencode, urlsplit
+from urllib.parse import parse_qs, unquote, urlencode, urljoin, urlsplit
 
 from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
