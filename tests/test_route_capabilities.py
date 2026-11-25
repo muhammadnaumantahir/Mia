@@ -1,8 +1,18 @@
 """MIA-COMP-01: every state-changing API route must be classified; safety stops stay un-gated."""
 
+import pytest
+
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
-from mia.security.capabilities import ApprovalClass, SideEffect, all_rules, classify
+from mia.security.capabilities import (
+    ApprovalClass,
+    CapabilityInventoryError,
+    SideEffect,
+    all_rules,
+    bind_route_capabilities,
+    bound_route_capability,
+    classify,
+)
 
 SAFE = {"GET", "HEAD", "OPTIONS"}
 
@@ -29,6 +39,47 @@ def test_every_mutating_route_is_classified(tmp_path):
     missing = [f"{m} {p}" for m, p in _mutating(tmp_path) if classify(m, p) is None]
     assert missing == [], f"classify these in mia/security/capabilities.py: {missing}"
     assert len(list(_mutating(tmp_path))) > 100
+
+
+def test_every_mutating_route_is_bound_to_its_live_handler(tmp_path):
+    app = create_app(store=ObservatoryStore(tmp_path / "handlers.sqlite3"))
+    seen = 0
+    for route, path in _flatten(app.routes):
+        endpoint = getattr(route, "endpoint", None)
+        for method in getattr(route, "methods", None) or {"WS"}:
+            if method in SAFE:
+                continue
+            binding = bound_route_capability(route, method)
+            assert binding is not None, f"unbound handler: {method} {path}"
+            assert binding.method == method
+            assert binding.path == path
+            assert binding.capability == classify(method, path)
+            assert binding.handler_identity == (
+                f"{endpoint.__module__}.{endpoint.__qualname__}"
+            )
+            assert callable(endpoint)
+            seen += 1
+    assert seen == len(app.state.route_capability_bindings)
+
+
+def test_unclassified_mutating_handler_fails_closed():
+    class Route:
+        path = "/api/unclassified/write"
+        methods = {"POST"}
+        endpoint = lambda _request: {"ok": True}
+
+    with pytest.raises(CapabilityInventoryError, match="unclassified mutating route"):
+        bind_route_capabilities([Route()])
+
+
+def test_non_mia_handler_cannot_be_bound_to_a_mutating_capability():
+    class Route:
+        path = "/api/computer/stop-all"
+        methods = {"POST"}
+        endpoint = lambda _request: {"ok": True}
+
+    with pytest.raises(CapabilityInventoryError, match="no Mia handler"):
+        bind_route_capabilities([Route()])
 
 
 def test_no_dead_rules(tmp_path):
