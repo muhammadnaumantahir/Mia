@@ -28,7 +28,7 @@ from datetime import UTC, date, datetime
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, unquote, urlencode, urljoin, urlsplit
+from urllib.parse import parse_qs, unquote, urljoin, urlencode, urlsplit
 
 from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
@@ -173,7 +173,7 @@ class DuckDuckGoSearchProvider:
         for item in parser.results:
             target = urljoin(page.url, item["url"])
             parsed = urlsplit(target)
-            if parsed.hostname in {"duckduckgo.com", "www.duckduckgo.com"}:
+            if parsed.hostname in {"duckduckgo.com", "www.duckduckgo.com", "html.duckduckgo.com"}:
                 wrapped = parse_qs(parsed.query).get("uddg", [])
                 if not wrapped:
                     continue
@@ -319,6 +319,10 @@ class ResearchService:
                 query, limit=limit, host_allowed=self.source_allowed,
                 should_stop=self.should_stop,
             )
+            if self.should_stop():
+                raise AutomationStopped("Research search stopped by owner")
+            if not isinstance(candidates, list):
+                raise ResearchError("search provider returned an invalid result list")
         except FetchError as exc:
             if exc.reason == "stopped":
                 raise AutomationStopped("Research search stopped by owner") from exc
