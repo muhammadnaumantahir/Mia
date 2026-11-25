@@ -51,7 +51,8 @@ def explicit_workflow_execution_requested(prompt: str) -> bool:
         r"\b(?:run|execute|start|perform|carry out)\b.{0,60}\b(?:after|once|when)\b.{0,60}\b(?:approve|approval|confirm|confirmation|say go)\b",
         r"\b(?:plan|preview|draft)\s+only\b",
         r"\bnot yet\b",
-        r"\b(?:what if|how do i|can i|should i)\b.{0,60}\b(?:run|execute|start|add|create)\b",
+        r"\b(?:what if|how do i|how can i|can i|could i|should i)\b.{0,60}\b(?:run|execute|start|add|create)\b",
+        r"\brun me through\b|\brun through (?:the )?(?:plan|workflow)\b",
         r"\b(?:mat chalao|abhi mat|abhi na chalao|sirf plan|sirf preview)\b",
     )
     if any(re.search(pattern, text) for pattern in deferred):
