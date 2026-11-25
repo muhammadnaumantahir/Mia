@@ -27,10 +27,6 @@ MAX_SYNC_ITEMS = 5_000
 MAX_SYNC_CHANGES = 100_000
 MAX_BATCHES_PER_DEVICE = 1_000
 BATCH_RETENTION_DAYS = 30
-_FORBIDDEN_KEYS = frozenset({
-    "password", "passwd", "secret", "token", "access_token", "refresh_token",
-    "api_key", "private_key", "client_secret", "authorization", "cookie",
-})
 
 
 class CompanionSyncError(ValueError):
