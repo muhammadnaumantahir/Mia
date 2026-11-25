@@ -1022,3 +1022,19 @@ Queued cancellation now remains pending while an unknown step exists and is fina
 ## 2026-11-25 — Coordinator claim: MIA-LIFE-06-WATCH
 
 Claimed the bounded file-index refresh/watch child task as coordinator; A5 remains assigned to MIA-EVOL-02. Scope is owner-controlled, bounded refresh lifecycle with stop-all integration and deterministic tests, plus safe optional document extraction behavior. I will inspect existing APIs and implement only missing pieces; no test execution or completion claim until verified.
+
+
+## 2026-11-25 — MIA-LIFE-06-WATCH implementation complete
+
+The coordinator completed the bounded file-index refresh child task and pushed all changes directly to `main`.
+
+- Added an owner-started background watcher for explicitly selected folders. It rotates fairly through selections, refreshes at a bounded 5–3600 second interval, and processes at most five selections per cycle.
+- Added `GET /api/file-index/watch`, `POST /api/file-index/watch/start`, and `POST /api/file-index/watch/stop`. Start requires at least one selected folder and refuses while stop-all is active.
+- Wired stop-all and application shutdown to stop the watcher. Indexing continues to use the existing filesystem adapter, root confinement, secret exclusions, source hashes, line provenance, injection flags and deletion behavior.
+- Avoided expensive FTS optimize/VACUUM work on unchanged polling cycles.
+- Bounded PDF, DOCX, XLSX and PPTX extraction accumulation to the configured maximum extracted-character budget; retained the optional `documents` extra and archive safety checks.
+- Added regression tests for owner start/stop, bounds, stop-all refusal, periodic changed/deleted file refresh, and extraction-budget enforcement.
+
+Implementation commits include `1f74c997f61d225cbd6f567f10d639ba5bbcb71a`, `697709c59e731c9b9e1f131ab7f19d28da0e908e`, `1200100567b23389197bd075b58c67b2f6eb6c13`, `2ccee5925acfc8d53360985ff99bef34ece1f6f4`, `beac7579254eb74bb5c863d94a3dde51b5b01f8b`; regression tests include `1454710a7b856193dee5b125cdd5ca567f4c9eef`, `247f0b251434dc83d7e3173a0e4750b707f29e33`, `c782a68b9707bc41a4e53d66ed6f55e343054dc3`, `4e2885902d143ebebf73c24b6fdae117abd344bf`.
+
+**Verification:** Tests were authored but not executed in this session, per the owner's instruction to perform testing at the final acceptance stage. The task is marked DONE for implementation only; test execution remains `OWNER_VERIFICATION_REQUIRED`. No test pass is claimed.
