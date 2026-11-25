@@ -60,8 +60,10 @@ def _clean_payload(value: Any) -> str:
                     raise CompanionSyncError("payload keys must be short strings")
                 normalized_key = re.sub(r"[^a-z0-9]", "", key.casefold())
                 if normalized_key in {
-                    "password", "passwd", "secret", "token", "accesstoken",
-                    "refreshtoken", "apikey", "privatekey", "clientsecret",
+                    "password", "passwd", "secret", "secretkey", "token",
+                    "accesstoken", "refreshtoken", "sessiontoken", "authtoken",
+                    "bearertoken", "apikey", "privatekey", "clientsecret",
+                    "encryptionkey", "signingkey", "credential", "credentials",
                     "authorization", "cookie",
                 }:
                     raise CompanionSyncError("payload contains a credential-like field")
