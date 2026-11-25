@@ -35,6 +35,8 @@ def add_step(title, **extra):
     ("prompt", "expected"),
     [
         ("Plan a workflow to add a task.", False),
+        ("Yes.", False),
+        ("Go ahead.", False),
         ("Preview only: add a task for tomorrow.", False),
         ("Don't run the workflow.", False),
         ("Do not add a task.", False),
