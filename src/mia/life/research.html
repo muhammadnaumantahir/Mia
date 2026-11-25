@@ -83,7 +83,7 @@ dialog::backdrop{background:#000a}
 <h3 id="srcHeading">Sources read</h3>
 <ul id="sources" class="items" aria-labelledby="srcHeading"></ul>
 <div class="actions"><button id="synthesizeBtn" type="button">Draft claims with Mia</button></div>
-<p class="note">Mia uses the Gateway to propose claims from these sources. Exact quotes are checked again; nothing becomes a saved finding until you confirm it.</p>
+<p class="note">Mia uses the Gateway to propose claims from these sources. A local structured-output model is used by default; remote synthesis requires explicit opt-in. Exact quotes are checked again; nothing becomes a saved finding until you confirm it.</p>
 <div id="viewerBox" hidden>
 <h3 id="viewerHeading"></h3>
 <div id="viewer" tabindex="0" role="region" aria-labelledby="viewerHeading"></div>
@@ -159,7 +159,7 @@ function renderSearchResults(){
  for(const item of searchResults){
   const li=mk('li',undefined,'item');const label=mk('label');label.style.display='flex';label.style.flexDirection='row';label.style.alignItems='flex-start';label.style.gap='10px';
   const check=mk('input');check.type='checkbox';check.value=item.url;check.setAttribute('aria-label','Select '+(item.title||item.url));check.style.width='auto';check.style.minHeight='0';
-  const detail=mk('span');detail.append(mk('strong',item.title||item.host),mk('div',item.url,'srcurl'),mk('div','Allowlisted host · untrusted search result','note'));
+  const detail=mk('div');detail.append(mk('strong',item.title||item.host),mk('div',item.url,'srcurl'),mk('div','Allowlisted host · untrusted search result','note'));
   label.append(check,detail);li.append(label);ul.append(li);
  }
  $('useSearchResults').disabled=false;
