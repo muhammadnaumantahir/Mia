@@ -42,36 +42,36 @@ from mia.computer.tasks import (
 
 def explicit_workflow_execution_requested(prompt: str) -> bool:
     """Fail closed unless the current user turn clearly asks to execute an action."""
-    text = re.sub(r"\\s+", " ", str(prompt or "").strip().lower())[:3000]
+    text = re.sub(r"\s+", " ", str(prompt or "").strip().lower())[:3000]
     if not text:
         return False
     deferred = (
-        r"\\b(?:don't|do not|dont|never|no need to)\\s+(?:run|execute|start|perform|carry out)\\b",
-        r"\\b(?:run|execute|start|perform|carry out)\\b.{0,60}\\b(?:after|once|when)\\b.{0,60}\\b(?:approve|approval|confirm|confirmation|say go)\\b",
-        r"\\b(?:plan|preview|draft)\\s+only\\b",
-        r"\\bnot yet\\b",
-        r"\\b(?:what if|how do i|can i|should i)\\b.{0,60}\\b(?:run|execute|start|add|create)\\b",
-        r"\\b(?:mat chalao|abhi mat|abhi na chalao|sirf plan|sirf preview)\\b",
+        r"\b(?:don't|do not|dont|never|no need to)\s+(?:run|execute|start|perform|carry out)\b",
+        r"\b(?:run|execute|start|perform|carry out)\b.{0,60}\b(?:after|once|when)\b.{0,60}\b(?:approve|approval|confirm|confirmation|say go)\b",
+        r"\b(?:plan|preview|draft)\s+only\b",
+        r"\bnot yet\b",
+        r"\b(?:what if|how do i|can i|should i)\b.{0,60}\b(?:run|execute|start|add|create)\b",
+        r"\b(?:mat chalao|abhi mat|abhi na chalao|sirf plan|sirf preview)\b",
     )
     if any(re.search(pattern, text) for pattern in deferred):
         return False
     explicit_run = (
-        r"\\b(?:run|execute|start|perform|carry out)\\b.{0,60}\\b(?:workflow|plan|task|steps|it|this|that)\\b",
-        r"\\b(?:run|execute|start|perform)\\s+(?:it|this|that)\\b",
-        r"\\bgo ahead and\\s+(?:run|execute|start|perform)\\b",
-        r"\\bdo it\\b",
-        r"\\b(?:chalao|chala do|chala dein|run kar do|execute kar do)\\b",
+        r"\b(?:run|execute|start|perform|carry out)\b.{0,60}\b(?:workflow|plan|task|steps|it|this|that)\b",
+        r"\b(?:run|execute|start|perform)\s+(?:it|this|that)\b",
+        r"\bgo ahead and\s+(?:run|execute|start|perform)\b",
+        r"\bdo it\b",
+        r"\b(?:chalao|chala do|chala dein|run kar do|execute kar do)\b",
     )
     if any(re.search(pattern, text) for pattern in explicit_run):
         return True
     # Direct internal actions (e.g. "add a task") count as execution requests, but
     # requests to plan/design/preview remain non-executing unless they also say run.
-    if re.search(r"\\b(?:plan|preview|draft|design)\\b", text):
+    if re.search(r"\b(?:plan|preview|draft|design)\b", text):
         return False
     direct_action = (
-        r"\\b(?:add|create|save|complete|mark)\\b.{0,50}\\b(?:task|reminder|note|notification|item)\\b",
-        r"\\bset\\s+(?:a\\s+)?reminder\\b",
-        r"\\bremind me\\b",
+        r"\b(?:add|create|save|complete|mark)\b.{0,50}\b(?:task|reminder|note|notification|item)\b",
+        r"\bset\s+(?:a\s+)?reminder\b",
+        r"\bremind me\b",
     )
     return any(re.search(pattern, text) for pattern in direct_action)
 
