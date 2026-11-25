@@ -31,3 +31,13 @@ Failure states include rejected, validation_failed, activation_failed and rolled
 - Do not give generated code the assistant's credentials or full host access.
 - Treat network, shell, registry, startup persistence, system settings and file deletion as separate permissions.
 - Require explicit approval for destructive or externally visible effects unless a narrow owner-defined policy exists.
+
+
+## Runtime route-to-handler binding
+
+Every mutating FastAPI route is bound at app construction to its live callable handler identity
+(module and qualified name) plus the declared capability classification. If a route has no
+classification, its handler is missing/non-Mia, or the binding cannot be recorded, app construction
+fails closed. `tests/test_route_capabilities.py` checks the binding for every mutating route and
+covers unclassified/non-Mia handlers. This inventory proves registration and classification only;
+the separate COMP-04 enforcement layer must still enforce the declared approval class at execution.
