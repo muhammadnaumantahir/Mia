@@ -113,6 +113,15 @@ def test_import_requires_registered_project_and_confirmed_citation(tmp_path):
         bridge.import_finding(claim["claim_id"], "Unregistered")
 
 
+def test_archived_projects_are_readable_but_reject_new_research_memory(tmp_path):
+    memory, research, bridge, _run, claim = build(tmp_path)
+    confirmed(research, claim)
+    memory.projects.update("EV360", status="archived")
+    with pytest.raises(ResearchMemoryError, match="Archived projects"):
+        bridge.import_finding(claim["claim_id"], "EV360")
+    assert bridge.list_for_project("EV360") == []
+
+
 def test_research_memory_http_lifecycle(tmp_path, monkeypatch):
     monkeypatch.setenv("MIA_DATA_DIR", str(tmp_path / "data"))
     memory = MemoryStore(tmp_path / "memory.sqlite3")
