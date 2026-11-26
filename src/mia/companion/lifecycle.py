@@ -83,6 +83,7 @@ class WindowsCompanionLifecycle:
         popen: Callable[..., Any] = subprocess.Popen,
         sleep: Callable[[float], None] = time.sleep,
         monotonic: Callable[[], float] = time.monotonic,
+        process_alive: Callable[[int], bool] = _process_is_alive,
     ) -> None:
         self.identity = identity
         self.home = Path(identity.home)
@@ -93,6 +94,7 @@ class WindowsCompanionLifecycle:
         self.spawn_process = popen
         self.sleep = sleep
         self.monotonic = monotonic
+        self.process_alive = process_alive
         self.runtime_dir = self.home / "runtime"
         self.stop_path = self.runtime_dir / "stop.request"
         self.status_path = self.runtime_dir / "status.json"
@@ -131,10 +133,13 @@ class WindowsCompanionLifecycle:
 
     def _task_exists(self) -> bool:
         self._require_windows()
-        result = self.run_process(
-            ["schtasks.exe", "/Query", "/TN", self.task_name],
-            capture_output=True, text=True, check=False, timeout=15, shell=False,
-        )
+        try:
+            result = self.run_process(
+                ["schtasks.exe", "/Query", "/TN", self.task_name],
+                capture_output=True, text=True, check=False, timeout=15, shell=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
         return result.returncode == 0
 
     def install(self, *, confirmed: bool = False) -> dict[str, Any]:
@@ -246,7 +251,7 @@ class WindowsCompanionLifecycle:
         self._require_windows()
         data = self._read_status()
         pid = int(data.get("pid") or self._read_process_pid() or 0)
-        running = _process_is_alive(pid)
+        running = self.process_alive(pid)
         installed = self._task_exists()
         if not running and data.get("state") not in {"unpaired", "error"}:
             state = "stopped"
