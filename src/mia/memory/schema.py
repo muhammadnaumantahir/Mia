@@ -177,6 +177,58 @@ def _migration_8_project_workspace(db: sqlite3.Connection) -> None:
     ProjectStore.initialize(db)
 
 
+def _migration_9_knowledge_graph(db: sqlite3.Connection) -> None:
+    """Typed, evidence-backed edges across records, tasks and project workspaces (MIA-LIFE-10)."""
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS knowledge_graph_edges (
+            edge_id TEXT PRIMARY KEY,
+            from_type TEXT NOT NULL,
+            from_id TEXT NOT NULL,
+            to_type TEXT NOT NULL,
+            to_id TEXT NOT NULL,
+            relation TEXT NOT NULL,
+            provenance TEXT NOT NULL,
+            confidence REAL NOT NULL,
+            state TEXT NOT NULL,
+            visibility TEXT NOT NULL DEFAULT 'normal',
+            evidence_json TEXT NOT NULL DEFAULT '[]',
+            project_key TEXT,
+            note TEXT NOT NULL DEFAULT '',
+            actor TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            reviewed_at TEXT,
+            UNIQUE(from_type, from_id, to_type, to_id, relation)
+        )
+    """)
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_knowledge_graph_project_state "
+        "ON knowledge_graph_edges(project_key, state, created_at)"
+    )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_knowledge_graph_from "
+        "ON knowledge_graph_edges(from_type, from_id)"
+    )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_knowledge_graph_to "
+        "ON knowledge_graph_edges(to_type, to_id)"
+    )
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS knowledge_graph_edge_history (
+            history_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            edge_id TEXT NOT NULL,
+            changed_at TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            change_type TEXT NOT NULL,
+            snapshot_json TEXT NOT NULL
+        )
+    """)
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_knowledge_graph_history_edge "
+        "ON knowledge_graph_edge_history(edge_id, history_id)"
+    )
+
+
 # (version, description, function). Append new migrations; never edit applied ones.
 MIGRATIONS: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (2, "identity versions and memory audit log", _migration_2_identity_and_audit),
@@ -186,6 +238,7 @@ MIGRATIONS: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (6, "owner-scoped personal items", _migration_6_personal_items),
     (7, "task priority, recurrence, duplicates and history", _migration_7_task_manager),
     (8, "project workspace and milestones", _migration_8_project_workspace),
+    (9, "personal knowledge graph with typed evidence-backed edges", _migration_9_knowledge_graph),
 ]
 
 LATEST_VERSION = max([BASELINE_VERSION, *[version for version, _, _ in MIGRATIONS]])
