@@ -190,7 +190,7 @@ def test_registration_challenge_is_single_use_and_bound_to_exact_origin(owner_se
     service, _fake, _clock = owner_service
     code = service.create_bootstrap_code()["code"]
     options = service.begin_registration(origin="http://localhost:8765", bootstrap_code=code)
-    with pytest.raises(OwnerAuthError, match="origin"):
+    with pytest.raises(OwnerAuthError, match="mismatched"):
         service.finish_registration(
             challenge_id=options["challenge_id"],
             credential={"id": "credential-id-1", "response": {}},
