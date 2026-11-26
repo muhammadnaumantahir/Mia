@@ -242,7 +242,10 @@ def test_guard_requires_owner_auth_but_preserves_safety_controls():
     assert not OwnerAuthGuard.requires_owner("POST", "/api/computer/stop-all")
     assert not OwnerAuthGuard.requires_owner("POST", "/api/computer/permissions/revoke-all")
     assert not OwnerAuthGuard.requires_owner("POST", "/api/approvals/abc/reject")
-    assert not OwnerAuthGuard.requires_owner("GET", "/api/computer/approvals")
+    assert OwnerAuthGuard.requires_owner("GET", "/api/computer/approvals")
+    assert OwnerAuthGuard.requires_owner("GET", "/api/computer/approvals/cards")
+    assert OwnerAuthGuard.requires_owner("GET", "/api/companion-admin/devices")
+    assert not OwnerAuthGuard.requires_owner("GET", "/api/owner-auth/status")
 
 
 def test_live_app_fails_closed_until_owner_passkey_is_enrolled(tmp_path, monkeypatch):
@@ -268,5 +271,19 @@ def test_live_app_fails_closed_until_owner_passkey_is_enrolled(tmp_path, monkeyp
         headers={"Origin": "http://localhost:8765"},
     )
     assert safety.status_code != 428
+
+    approval_cards = client.get("/api/computer/approvals/cards")
+    assert approval_cards.status_code == 428
+    assert approval_cards.json()["code"] == "owner_auth_setup_required"
+
+    device_admin = client.get("/api/companion-admin/devices")
+    assert device_admin.status_code == 428
+    assert device_admin.json()["code"] == "owner_auth_setup_required"
+
+    ip_origin = client.post(
+        "/api/computer/approvals/not-real/approve",
+        headers={"Host": "127.0.0.1:8765", "Origin": "http://127.0.0.1:8765"},
+    )
+    assert ip_origin.status_code == 400
     page = client.get("/owner-auth")
     assert page.status_code == 200 and "Owner passkey" in page.text
