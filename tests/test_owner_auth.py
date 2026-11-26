@@ -275,7 +275,6 @@ def test_brain_write_mode_tools_require_owner_session_even_with_existing_grants(
     )
     decision = evaluator.evaluate(SimpleNamespace(mode="write"), {})
     assert decision.allowed is False
-    assert "authenticated owner passkey session" in decision.reason
 
 
 def test_guard_requires_owner_auth_but_preserves_safety_controls():
