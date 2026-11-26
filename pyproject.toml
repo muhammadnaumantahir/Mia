@@ -39,6 +39,9 @@ companion = [
   "cryptography>=43,<51",  # Ed25519 device identity (MIA-COMP-02)
   "httpx>=0.27,<1",        # outbound-only companion API client (MIA-COMP-03)
 ]
+owner-auth = [
+  "webauthn>=3.0.1,<4",    # FIDO2/WebAuthn owner passkey ceremonies (MIA-COMP-04)
+]
 voice = [
   "faster-whisper>=1.1,<2",
 ]
@@ -70,6 +73,7 @@ mia = "mia.__main__:main"
 mia-credentials = "mia.credentials_cli:main"
 mia-backup = "mia.backup_cli:main"
 mia-companion = "mia.companion.cli:main"
+mia-owner-auth = "mia.owner_auth_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -79,7 +83,7 @@ where = ["src"]
 "mia.brain" = ["diagnostics.html"]
 "mia.life" = ["life.html", "tasks.html", "projects.html", "research.html", "workflows.html"]
 "mia.knowledge" = ["file_index.html"]
-"mia.security" = ["companion.html"]
+"mia.security" = ["companion.html", "owner_auth.html"]
 "mia.memory" = ["knowledge_graph.html"]
 "mia.gateway" = ["dashboard.html"]
 "mia.codegraph" = ["graph.html"]
