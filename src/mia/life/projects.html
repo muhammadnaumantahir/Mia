@@ -77,10 +77,11 @@ dialog ul{padding-left:20px;margin:8px 0;overflow-wrap:anywhere}
 <div class="row"><button id="setup" type="button">Set up this project</button></div>
 </div>
 <div id="registered" hidden>
-<form id="editForm" class="edit" aria-label="Goal and status">
+<form id="editForm" class="edit" aria-label="Project details">
+<label>Project name<input id="editName" required maxlength="64"></label>
 <label>Goal<textarea id="editGoal" maxlength="2000" rows="3"></textarea></label>
 <div class="row"><label>Status<select id="editStatus"><option value="active">Active</option><option value="paused">Paused</option><option value="completed">Completed</option><option value="archived">Archived</option></select></label>
-<button type="submit">Save goal and status</button>
+<button type="submit">Save project</button>
 <button id="deleteProject" class="danger" type="button">Delete project…</button></div>
 </form>
 <h3 id="msHeading">Milestones</h3>
@@ -132,10 +133,6 @@ function plural(n,one,many){return n+' '+(n===1?one:many);}
 function toIso(value){return value?new Date(value).toISOString():null;}
 function toLocal(iso){if(!iso)return '';const d=new Date(iso);const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes());}
 function dueText(iso){return new Date(iso).toLocaleString([],{weekday:'short',day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});}
-// The API addresses a project by its name inside the URL path, so a name containing "/" cannot be opened yet.
-const openable=name=>!String(name).includes('/');
-const CANNOT_OPEN="This project's name contains a “/”, which Mia's project pages cannot open yet. Its tasks, decisions and conversations are not affected.";
-
 /* ---------- confirm dialog (promise based, focus returns to the opener) ---------- */
 let confirmResolve=null,confirmOpener=null;
 function confirmDialog({title,lines,yes,no},opener){
@@ -187,12 +184,6 @@ function clearDetail(){
 }
 async function openProject(name,{focus=false,quiet=false}={}){
  const mine=++seq;current=name;renderList();
- if(!openable(name)){
-  // Say so instead of failing silently, and never show a previous project under this name.
-  view=null;showShell(name);$('registered').hidden=true;$('unregistered').hidden=true;$('material').hidden=true;
-  $('detailTags').replaceChildren(tag('Cannot be opened here',true));say(CANNOT_OPEN,true);
-  if(focus)$('detailTitle').focus();return;
- }
  let data;
  try{data=await api('/api/projects/'+enc(name));}
  catch(error){if(mine!==seq)return;say('Could not open “'+name+'”: '+error.message,true);return;}
@@ -215,7 +206,7 @@ function renderDetail(){
  const tags=$('detailTags');tags.replaceChildren(tag(v.registered?'Status: '+(STATUS[v.status]||v.status):'Not set up yet',!v.registered));
  $('unregistered').hidden=v.registered;$('registered').hidden=!v.registered;$('material').hidden=false;
  if(v.registered){
-  $('editGoal').value=v.goal||'';$('editStatus').value=v.status;
+  $('editName').value=v.name;$('editGoal').value=v.goal||'';$('editStatus').value=v.status;
   renderMilestones();
  }
  fill('tasks',v.tasks,'No open tasks labelled with this project.',t=>{
@@ -301,7 +292,6 @@ $('msForm').addEventListener('submit',async e=>{
 $('addForm').addEventListener('submit',async e=>{
  e.preventDefault();
  const name=$('addName').value.trim();
- if(!openable(name)){say('Project names cannot contain “/”. Use a different name.',true);$('addName').focus();return;}
  try{await api('/api/projects',{method:'POST',body:JSON.stringify({name,goal:$('addGoal').value,status:$('addStatus').value})});}
  catch(error){say('Could not create the project: '+error.message,true);return;}
  $('addForm').reset();await loadList();say('Project created: '+name);
@@ -314,10 +304,17 @@ $('setup').addEventListener('click',async()=>{
  say('Project set up: '+name);await refresh('#editGoal');
 });
 $('editForm').addEventListener('submit',async e=>{
- e.preventDefault();const name=view&&view.name;if(!name)return;
- try{await api('/api/projects/'+enc(name),{method:'PATCH',body:JSON.stringify({goal:$('editGoal').value,status:$('editStatus').value})});say('Saved goal and status.');}
- catch(error){say('Could not save: '+error.message,true);return;}
- await refresh('#editGoal');
+ e.preventDefault();const oldName=view&&view.name;if(!oldName)return;
+ const newName=$('editName').value.trim();
+ try{
+  const result=await api('/api/projects/'+enc(oldName),{
+   method:'PATCH',
+   body:JSON.stringify({name:newName,goal:$('editGoal').value,status:$('editStatus').value})
+  });
+  current=result.project?.name||newName;
+  say(current===oldName?'Saved project details.':'Renamed project to “'+current+'” and kept its linked material.');
+ }catch(error){say('Could not save: '+error.message,true);return;}
+ await refresh('#editName');
 });
 $('deleteProject').addEventListener('click',async e=>{
  const v=view;if(!v)return;
