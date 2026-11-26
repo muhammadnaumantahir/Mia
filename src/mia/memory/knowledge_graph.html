@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
+<title>Mia — Knowledge Graph</title>
+<style>
+:root{font-family:Inter,Segoe UI,system-ui,sans-serif;color:#eef4f2;background:#0c1214}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#0c1214}
+.shell{max-width:1080px;margin:0 auto;padding:24px 16px 64px}
+nav{display:flex;flex-wrap:wrap;gap:4px 16px;margin-bottom:20px}nav a{color:#9be5c5;font-size:14px;padding:6px 0}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:17px;margin:0 0 10px}h3{font-size:14px;margin:0 0 8px}
+.sub{color:#a9bdb6;font-size:13px;line-height:1.55;margin:4px 0 14px}
+.panel{background:#131d20;border:1px solid #2b4044;border-radius:14px;padding:16px;margin-top:14px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+@media(min-width:860px){.grid{grid-template-columns:minmax(290px,370px) minmax(0,1fr);align-items:start}}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:8px 0}
+label{font-size:12px;color:#c3d3ce;display:flex;flex-direction:column;gap:5px;flex:1;min-width:130px}
+input,select,textarea,button{font:inherit;font-size:13px;min-height:40px}
+input,select,textarea{background:#0e1719;color:#eef4f2;border:1px solid #4c6a66;border-radius:8px;padding:8px 10px;width:100%;max-width:100%}
+textarea{min-height:64px;resize:vertical}
+button{background:#1f7a5c;color:#fff;border:1px solid #1f7a5c;border-radius:8px;padding:8px 13px;cursor:pointer}
+button.alt{background:#1b2a2c;border-color:#4c6a66;color:#e3ece8}
+button.danger{background:#813c32;border-color:#813c32}
+button:disabled{opacity:.55;cursor:not-allowed}
+:focus-visible{outline:3px solid #ffd27a;outline-offset:2px}
+#notice{min-height:22px;font-size:13px;color:#a6e3c4;margin-top:10px}#notice.error{color:#ffb4a3}
+.list{display:grid;gap:10px}
+.edge{border:1px solid #31484a;border-radius:10px;padding:12px;background:#0e1719}
+.edge-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.endpoint{font-weight:600;overflow-wrap:anywhere}
+.arrow{color:#83bba4;font-size:12px;margin:6px 0}
+.meta{display:flex;gap:6px;flex-wrap:wrap;margin:7px 0}
+.tag{font-size:11px;border:1px solid #4c6a66;border-radius:999px;padding:2px 8px;color:#d5e3de}
+.tag.warn{border-color:#d9a441;color:#ffd98f}.tag.good{border-color:#398d69;color:#a6e3c4}.tag.bad{border-color:#a5574b;color:#ffb4a3}
+.evidence{font-size:12px;color:#a9bdb6;overflow-wrap:anywhere;white-space:pre-wrap}
+.actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+details{margin-top:10px;border-top:1px solid #2b4044;padding-top:8px}
+summary{cursor:pointer;color:#9be5c5;font-size:12px}
+.empty{border:1px dashed #4c6a66;border-radius:10px;padding:14px;color:#b6c8c2;text-align:center}
+.small{font-size:11px;color:#91a9a0}
+@media(max-width:560px){.row{flex-direction:column;align-items:stretch}button{min-height:44px}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+</style></head>
+<body><main class="shell">
+<nav aria-label="Mia pages"><a href="/assistant">Assistant</a><a href="/memory">Memory</a><a href="/projects">Projects</a><a href="/files">Files</a><a href="/life">Autonomous life</a></nav>
+<h1>Personal Knowledge Graph</h1>
+<p class="sub">Connect people, projects, topics, decisions, tasks and their evidence. Owner-created links are confirmed; source-backed or inferred links remain proposals until you review them. Project filtering never combines edges from different projects.</p>
+<div id="notice" role="status" aria-live="polite"></div>
+<div class="grid">
+<section class="panel" aria-labelledby="createHeading">
+<h2 id="createHeading">Create a connection</h2>
+<form id="edgeForm">
+<div class="row"><label>Project filter
+<select id="projectFilter"><option value="">All projects</option></select></label></div>
+<div class="row"><label>From node<select id="fromNode" required></select></label></div>
+<div class="row"><label>Relationship
+<select id="relation">
+<option value="related_to">Related to</option><option value="part_of">Part of</option>
+<option value="works_on">Works on</option><option value="involves">Involves</option>
+<option value="decided_in">Decided in</option><option value="depends_on">Depends on</option>
+<option value="blocks">Blocks</option><option value="caused_by">Caused by</option>
+<option value="follows">Follows</option><option value="owned_by">Owned by</option>
+<option value="evidences">Evidence for</option><option value="references">References</option>
+</select></label></div>
+<div class="row"><label>To node<select id="toNode" required></select></label></div>
+<div class="row"><label>Provenance
+<select id="provenance"><option value="owner_provided">Owner provided</option>
+<option value="source_backed">Source backed</option><option value="observed">Observed</option>
+<option value="inferred">Inferred</option><option value="hypothesis">Hypothesis</option>
+<option value="validated">Validated</option></select></label>
+<label>Confidence (0–1)<input id="confidence" type="number" min="0" max="1" step="0.01" value="1"></label></div>
+<div class="row"><label>Evidence type<input id="evidenceType" maxlength="20" placeholder="url, message, file…"></label></div>
+<label>Evidence reference<input id="evidenceRef" maxlength="500" placeholder="URL, message ID, file hash or source reference"></label>
+<label>Note (optional)<textarea id="note" maxlength="500" rows="2"></textarea></label>
+<div class="row"><button type="submit">Add connection</button><button class="alt" id="refresh" type="button">Refresh graph</button></div>
+<p class="small">Evidence references are stored as provenance pointers. Mia does not automatically fetch or execute them.</p>
+</form>
+</section>
+<section class="panel" aria-labelledby="graphHeading">
+<div class="edge-head"><div><h2 id="graphHeading">Connections</h2><div class="sub" id="summary">Loading graph…</div></div><label style="max-width:230px">Search nodes<input id="search" type="search" placeholder="Filter by name or type"></label></div>
+<div class="row"><label class="inline"><input id="showInferred" type="checkbox" checked style="width:auto;min-height:0"> Show inferred proposals</label><label class="inline"><input id="showPrivate" type="checkbox" style="width:auto;min-height:0"> Include private links</label></div>
+<div id="edges" class="list" aria-live="polite"><div class="empty">Loading graph…</div></div>
+</section>
+</div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let nodes=[],edges=[],projects=[];
+const encode=encodeURIComponent;
+function say(message,error=false){$('notice').textContent=message;$('notice').className=error?'error':'';$('notice').setAttribute('role',error?'alert':'status');}
+async function api(url,options={}){
+ const response=await fetch(url,{headers:{'Content-Type':'application/json'},...options});
+ let body={};try{body=await response.json();}catch{}
+ if(!response.ok)throw new Error(typeof body.detail==='string'?body.detail:'Request failed ('+response.status+')');
+ return body;
+}
+const nodeKey=n=>n.node_type+':'+n.node_id;
+const labelNode=n=>n.title+' · '+n.node_type+(n.kind&&n.kind!==n.node_type?' / '+n.kind:'')+(n.project?' · '+n.project:'');
+function fillSelect(el,items,placeholder){
+ el.replaceChildren();
+ if(placeholder){const opt=document.createElement('option');opt.value='';opt.textContent=placeholder;el.append(opt);}
+ for(const n of items){const opt=document.createElement('option');opt.value=nodeKey(n);opt.textContent=labelNode(n);el.append(opt);}
+}
+function renderNodes(){
+ const filter=$('search').value.trim().toLowerCase();
+ const available=nodes.filter(n=>!filter||(n.title+' '+n.kind+' '+n.node_type+' '+(n.project||'')).toLowerCase().includes(filter));
+ fillSelect($('fromNode'),available,'Choose a node');
+ fillSelect($('toNode'),available,'Choose a node');
+}
+function tag(text,kind=''){const el=document.createElement('span');el.className='tag '+kind;el.textContent=text;return el;}
+function makeButton(text,action,kind='alt'){
+ const b=document.createElement('button');b.type='button';b.className=kind;b.textContent=text;b.addEventListener('click',action);return b;
+}
+function appendNode(container,node){
+ const el=document.createElement('div');el.className='endpoint';el.textContent=labelNode(node);container.append(el);
+}
+function renderEdges(){
+ const root=$('edges');root.replaceChildren();
+ const shown=edges.filter(e=>{
+  if(!$('showInferred').checked&&e.state==='inferred')return false;
+  if(!$('showPrivate').checked&&e.visibility==='private')return false;
+  const needle=$('search').value.trim().toLowerCase();
+  return !needle||(labelNode(e.from_node)+' '+labelNode(e.to_node)+' '+e.relation+' '+e.note).toLowerCase().includes(needle);
+ });
+ $('summary').textContent=shown.length+' connection(s) · '+nodes.length+' available node(s)';
+ if(!shown.length){const d=document.createElement('div');d.className='empty';d.textContent='No connections match this view yet. Create one from the nodes on the left.';root.append(d);return;}
+ for(const edge of shown){
+  const card=document.createElement('article');card.className='edge';
+  const head=document.createElement('div');head.className='edge-head';
+  const left=document.createElement('div');appendNode(left,edge.from_node);
+  const status=document.createElement('div');status.append(tag(edge.state,edge.state==='confirmed'?'good':edge.state==='rejected'?'bad':'warn'));
+  head.append(left,status);card.append(head);
+  const arrow=document.createElement('div');arrow.className='arrow';arrow.textContent='— '+edge.relation.replaceAll('_',' ')+' →';card.append(arrow);
+  appendNode(card,edge.to_node);
+  const meta=document.createElement('div');meta.className='meta';
+  meta.append(tag(edge.provenance.replaceAll('_',' ')),tag('Confidence '+Number(edge.confidence).toFixed(2)));
+  if(edge.project_key)meta.append(tag('Project: '+(edge.project||edge.project_key)));
+  if(edge.visibility==='private')meta.append(tag('Private','warn'));
+  card.append(meta);
+  if(edge.note){const note=document.createElement('div');note.className='evidence';note.textContent=edge.note;card.append(note);}
+  if(edge.evidence?.length){const ev=document.createElement('div');ev.className='evidence';ev.textContent='Evidence: '+edge.evidence.map(x=>x.type+': '+x.ref).join(' · ');card.append(ev);}
+  const actions=document.createElement('div');actions.className='actions';
+  if(edge.state==='inferred'){
+   actions.append(makeButton('Confirm',()=>review(edge.edge_id,'confirm'),''));
+   actions.append(makeButton('Reject',()=>review(edge.edge_id,'reject'),'alt'));
+  }
+  actions.append(makeButton('Delete',()=>removeEdge(edge),'danger'));card.append(actions);
+  const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Correct connection';details.append(summary);
+  const form=document.createElement('form');form.className='correction';
+  const select=document.createElement('select');
+  for(const rel of ['related_to','part_of','works_on','involves','decided_in','depends_on','blocks','caused_by','follows','owned_by','evidences','references']){
+   const op=document.createElement('option');op.value=rel;op.textContent=rel.replaceAll('_',' ');if(rel===edge.relation)op.selected=true;select.append(op);
+  }
+  const provenance=document.createElement('select');
+  for(const value of ['owner_provided','observed','source_backed','inferred','hypothesis','validated']){
+   const op=document.createElement('option');op.value=value;op.textContent=value.replaceAll('_',' ');if(value===edge.provenance)op.selected=true;provenance.append(op);
+  }
+  const confidence=document.createElement('input');confidence.type='number';confidence.min='0';confidence.max='1';confidence.step='0.01';confidence.value=String(edge.confidence);
+  const noteInput=document.createElement('textarea');noteInput.maxLength=500;noteInput.value=edge.note||'';
+  const evidenceInput=document.createElement('textarea');evidenceInput.rows=2;evidenceInput.value=JSON.stringify(edge.evidence||[]);
+  for(const [caption,input] of [['Relationship',select],['Provenance',provenance],['Confidence',confidence],['Note',noteInput],['Evidence JSON',evidenceInput]]){
+   const label=document.createElement('label');label.textContent=caption;label.append(input);form.append(label);
+  }
+  const save=document.createElement('button');save.type='submit';save.textContent='Save correction';form.append(save);
+  form.addEventListener('submit',async event=>{
+   event.preventDefault();
+   try{
+    const evidence=JSON.parse(evidenceInput.value);
+    await api('/api/memory/graph/edges/'+encode(edge.edge_id),{method:'PATCH',body:JSON.stringify({
+     relation:select.value,provenance:provenance.value,confidence:Number(confidence.value),note:noteInput.value,evidence
+    })});
+    say('Connection corrected. Derived claims return to inferred review.');
+    await loadGraph();
+   }catch(error){say('Could not correct connection: '+error.message,true);}
+  });
+  details.append(form);card.append(details);root.append(card);
+ }
+}
+async function loadGraph(){
+ try{
+  const project=$('projectFilter').value;
+  const qs=new URLSearchParams();if(project)qs.set('project',project);
+  const q=$('search').value.trim();if(q)qs.set('q',q);
+  const [nodeData,graphData,projectData]=await Promise.all([
+   api('/api/memory/graph/nodes?'+qs.toString()),
+   api('/api/memory/graph?'+new URLSearchParams({...(project?{project}:{}),include_inferred:'true',include_rejected:'false',include_private:$('showPrivate').checked?'true':'false'}).toString()),
+   api('/api/projects')
+  ]);
+  nodes=nodeData.items||[];edges=graphData.edges||[];projects=projectData.projects||[];
+  const selected=project;
+  const projectSelect=$('projectFilter');const existing=projectSelect.value;
+  projectSelect.replaceChildren();const all=document.createElement('option');all.value='';all.textContent='All projects';projectSelect.append(all);
+  for(const p of projects){const opt=document.createElement('option');opt.value=p.name;opt.textContent=p.name;if(p.name===selected)opt.selected=true;projectSelect.append(opt);}
+  if(existing&&!projects.some(p=>p.name===existing))projectSelect.value='';
+  renderNodes();renderEdges();
+ }catch(error){say('Could not load the knowledge graph: '+error.message,true);}
+}
+async function review(id,decision){
+ try{await api('/api/memory/graph/edges/'+encode(id)+'/review',{method:'POST',body:JSON.stringify({decision})});say(decision==='confirm'?'Inferred connection confirmed.':'Inferred connection rejected.');await loadGraph();}
+ catch(error){say('Could not review the connection: '+error.message,true);}
+}
+async function removeEdge(edge){
+ if(!window.confirm('Delete this connection? Its linked memory and task records will remain.'))return;
+ try{await api('/api/memory/graph/edges/'+encode(edge.edge_id),{method:'DELETE'});say('Connection deleted.');await loadGraph();}
+ catch(error){say('Could not delete the connection: '+error.message,true);}
+}
+$('edgeForm').addEventListener('submit',async event=>{
+ event.preventDefault();
+ try{
+  const from=nodes.find(n=>nodeKey(n)===$('fromNode').value);
+  const to=nodes.find(n=>nodeKey(n)===$('toNode').value);
+  if(!from||!to)throw new Error('Choose both graph nodes.');
+  const provenance=$('provenance').value;
+  const ref=$('evidenceRef').value.trim(),type=$('evidenceType').value.trim();
+  const evidence=ref||type?[{type,ref}]:[];
+  await api('/api/memory/graph/edges',{method:'POST',body:JSON.stringify({
+   from_type:from.node_type,from_id:from.node_id,to_type:to.node_type,to_id:to.node_id,
+   relation:$('relation').value,provenance,confidence:Number($('confidence').value),
+   evidence,note:$('note').value,project:$('projectFilter').value||null
+  })});
+  say(provenance==='owner_provided'?'Connection added as confirmed.':'Connection added as an inferred proposal for your review.');
+  $('note').value='';$('evidenceType').value='';$('evidenceRef').value='';await loadGraph();
+ }catch(error){say('Could not add connection: '+error.message,true);}
+});
+$('refresh').addEventListener('click',loadGraph);
+$('projectFilter').addEventListener('change',loadGraph);
+$('showInferred').addEventListener('change',renderEdges);
+$('showPrivate').addEventListener('change',loadGraph);
+$('search').addEventListener('input',()=>{renderNodes();renderEdges();});
+loadGraph();
+</script></body></html>
