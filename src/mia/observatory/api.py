@@ -5688,30 +5688,6 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    @app.patch("/api/projects/{name:path}")
-    def patch_project(name: str, item: ProjectPatch) -> dict[str, Any]:
-        fields = item.model_dump(exclude_unset=True)
-        new_name = fields.pop("name", None)
-        try:
-            changed = memory_store.projects.update(name, new_name=new_name, **fields)
-        except ProjectNotFoundError as exc:
-            raise HTTPException(status_code=404, detail="Project workspace not found") from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        current_name = new_name or name
-        return {"project": memory_store.projects.get(current_name), "changed": changed}
-
-    @app.delete("/api/projects/{name:path}")
-    def delete_project(name: str) -> dict[str, Any]:
-        """Remove goal, status and milestones; tasks, decisions and chats keep their label."""
-        try:
-            removed = memory_store.projects.delete(name)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        if not removed:
-            raise HTTPException(status_code=404, detail="Project workspace not found")
-        return {"deleted": name}
-
     @app.post("/api/projects/{name:path}/milestones", status_code=201)
     def add_project_milestone(name: str, item: MilestoneInput) -> dict[str, Any]:
         try:
@@ -5747,6 +5723,30 @@ def create_app(
         if not removed:
             raise HTTPException(status_code=404, detail="Milestone not found")
         return {"deleted": milestone_id}
+
+    @app.patch("/api/projects/{name:path}")
+    def patch_project(name: str, item: ProjectPatch) -> dict[str, Any]:
+        fields = item.model_dump(exclude_unset=True)
+        new_name = fields.pop("name", None)
+        try:
+            changed = memory_store.projects.update(name, new_name=new_name, **fields)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Project workspace not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        current_name = new_name or name
+        return {"project": memory_store.projects.get(current_name), "changed": changed}
+
+    @app.delete("/api/projects/{name:path}")
+    def delete_project(name: str) -> dict[str, Any]:
+        """Remove goal, status and milestones; tasks, decisions and chats keep their label."""
+        try:
+            removed = memory_store.projects.delete(name)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not removed:
+            raise HTTPException(status_code=404, detail="Project workspace not found")
+        return {"deleted": name}
 
     @app.post("/api/personal/items", status_code=201)
     def add_personal_item(item: PersonalItemInput) -> dict[str, Any]:
