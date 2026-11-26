@@ -42,6 +42,12 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("start", help="Start the agent in the current-user session")
     sub.add_parser("stop", help="Request graceful stop; never force-kills the process")
 
+    forget = sub.add_parser(
+        "forget", help="Remove this user's protected local identity after the device has been revoked in Mia"
+    )
+    forget.add_argument("--confirm", action="store_true",
+                        help="Confirm deletion of the local protected device identity")
+
     for name, help_text in (
         ("install", "Install an explicit current-user logon task at Limited privilege"),
         ("uninstall", "Remove the current-user logon task"),
@@ -81,6 +87,19 @@ def main() -> int:
                 agent.close()
 
         manager = _lifecycle(identity)
+        if args.command == "forget":
+            if not args.confirm:
+                raise RuntimeError(
+                    "forget deletes the protected local device identity; pass --confirm after revoking it in Mia"
+                )
+            manager.stop(timeout_seconds=20)
+            deleted = identity.clear()
+            _print({
+                "forgotten_locally": deleted,
+                "server_device_revoked": False,
+                "note": "Revoke the device in Mia's Companion devices page before forgetting it here.",
+            })
+            return 0
         if args.command == "status":
             _print(manager.status())
             return 0
