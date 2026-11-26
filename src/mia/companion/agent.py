@@ -230,7 +230,7 @@ class CompanionAgent:
             from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
         except ImportError as exc:
             raise CompanionAgentError(
-                "Install the optional companion extra: pip install -e ".[companion]""
+                "Install the optional companion extra: pip install -e .[companion]"
             ) from exc
         server = validate_server_url(server_url)
         server_host = urlsplit(server).hostname.casefold()
@@ -294,6 +294,12 @@ class CompanionAgent:
                 "signature": signature,
             },
         )
+        if session.get("device_id") != data["device_id"]:
+            raise CompanionAgentError("The companion server returned a different device identity")
+        if not str(session.get("token") or "").startswith("mia-dev_"):
+            raise CompanionAgentError("The companion server did not issue a valid device session")
+        if sorted({str(scope) for scope in session.get("scopes", [])}) != data["scopes"]:
+            raise CompanionAgentError("The companion device scopes changed; owner review is required")
         data["session_token"] = str(session["token"])
         data["expires_at"] = str(session["expires_at"])
         self.identity.save(data)
