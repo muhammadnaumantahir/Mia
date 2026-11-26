@@ -225,13 +225,14 @@ def test_create_project_writes_to_the_store_and_opens_it(page):
     assert page.evaluate("document.activeElement.id") == "detailTitle"
 
 
-def test_create_rejects_a_slash_and_a_duplicate_with_a_clear_message(page):
+def test_create_accepts_slashes_and_still_rejects_duplicates(page):
     page.memory.projects.create("Atlas")
     visit(page)
     page.fill("#addName", "a/b")
+    page.fill("#addGoal", "A slash-safe goal")
     page.click("#addForm button[type=submit]")
-    assert "cannot contain" in page.inner_text("#notice") and page.get_attribute("#notice", "role") == "alert"
-    assert page.memory.projects.get("a/b") is None
+    page.wait_for_function("document.getElementById('detailTitle').textContent === 'a/b'")
+    assert page.memory.projects.get("a/b")["goal"] == "A slash-safe goal"
     page.fill("#addName", "atlas")
     page.click("#addForm button[type=submit]")
     page.wait_for_function("document.getElementById('notice').textContent.includes('Could not create')")
@@ -324,14 +325,43 @@ def test_an_unregistered_project_can_be_set_up_without_touching_its_material(pag
     assert [t["title"] for t in page.memory.personal.list(kind="task", project="Zephyr")] == ["orphan task"]
 
 
-def test_a_name_with_a_slash_is_explained_not_silently_broken(page):
+def test_a_project_with_a_slash_opens_and_supports_milestone_actions(page):
+    page.memory.projects.create("front/back", goal="Keep route names intact")
     page.memory.personal.add(kind="task", title="slash task", project="front/back")
     visit(page)
     page.click('#projects button[data-name="front/back"]')
-    page.wait_for_function("document.getElementById('notice').className === 'error'")
-    assert "contains a" in page.inner_text("#notice") and "/" in page.inner_text("#notice")
-    assert "Cannot be opened here" in page.inner_text("#detailTags")
-    assert page.is_hidden("#registered") and page.is_hidden("#material")
+    page.wait_for_function("document.getElementById('detailTitle').textContent === 'front/back'")
+    assert "slash task" in page.inner_text("#tasks")
+
+    page.fill("#msTitle", "Path parameter test")
+    page.click("#msForm button[type=submit]")
+    page.wait_for_selector("#milestones li:has-text('Path parameter test')")
+    stored = page.memory.projects.milestones("front/back")
+    assert [item["title"] for item in stored] == ["Path parameter test"]
+
+    # A deep link uses query encoding rather than path separators.
+    page.goto(page.base + "/projects?name=front%2Fback")
+    page.wait_for_function("document.getElementById('detailTitle').textContent === 'front/back'")
+    assert "slash task" in page.inner_text("#tasks")
+
+
+def test_project_rename_keeps_all_workspace_material_and_updates_the_page(page):
+    seed(page.memory)
+    visit(page)
+    open_project(page, "Atlas")
+    page.fill("#editName", "Atlas/Next")
+    page.fill("#editGoal", "New importer")
+    page.click("#editForm button[type=submit]")
+    page.wait_for_function("document.getElementById('detailTitle').textContent === 'Atlas/Next'")
+    assert "Renamed project" in page.inner_text("#notice")
+    assert page.memory.projects.get("Atlas") is None
+    assert page.memory.projects.get("Atlas/Next")["goal"] == "New importer"
+    assert [task["project"] for task in page.memory.personal.list(kind="task", project="Atlas/Next")] == [
+        "Atlas/Next", "Atlas/Next"
+    ]
+    assert "Atlas alpha" in page.inner_text("#milestones")
+    assert "atlas task" in page.inner_text("#tasks")
+    assert "Atlas uses PostgreSQL" in page.inner_text("#decisions")
 
 
 def test_failures_are_reported_not_swallowed(page):
