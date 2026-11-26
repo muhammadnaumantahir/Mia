@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from mia.security.pairing import auth_statement, b64e, pairing_statement
+from mia.security.pairing import ALLOWED_SCOPES, auth_statement, b64e, pairing_statement
 
 DEFAULT_HEARTBEAT_SECONDS = 60
 SESSION_RENEW_BEFORE_SECONDS = 180
@@ -217,8 +217,12 @@ class CompanionAgent:
         if not str(session.get("token") or "").startswith("mia-dev_"):
             raise CompanionAgentError("The companion server did not issue a valid device session")
         scopes = sorted({str(scope) for scope in session.get("scopes", [])})
+        if not scopes or not set(scopes) <= ALLOWED_SCOPES:
+            raise CompanionAgentError("The companion server returned unsupported scopes")
         if scopes != sorted({str(scope) for scope in data["scopes"]}):
             raise CompanionAgentError("The companion device scopes changed; owner review is required")
+        if "companion.heartbeat" not in scopes:
+            raise CompanionAgentError("The companion heartbeat scope is not enabled")
         self.identity.update_session(str(session["token"]), str(session["expires_at"]))
         updated = self.identity.load()
         return updated
@@ -279,6 +283,13 @@ class CompanionAgent:
                 "signature": signature,
             },
         )
+        device_scopes = sorted({str(scope) for scope in device.get("scopes", [])})
+        if not device_scopes or not set(device_scopes) <= ALLOWED_SCOPES:
+            raise CompanionAgentError("Mia returned an unsupported companion scope set")
+        if "companion.heartbeat" not in device_scopes:
+            raise CompanionAgentError(
+                "This agent requires the companion.heartbeat scope; revoke this device and create a new code with heartbeat enabled"
+            )
         data = {
             "server_url": server,
             "device_id": str(device["device_id"]),
@@ -287,7 +298,7 @@ class CompanionAgent:
             "private_key": private_bytes,
             "session_token": "",
             "expires_at": "",
-            "scopes": sorted({str(scope) for scope in device["scopes"]}),
+            "scopes": device_scopes,
             "created_at": str(device["created_at"]),
         }
         # Persist the private key before attempting session creation. If Mia restarts
@@ -327,6 +338,10 @@ class CompanionAgent:
     def poll_once(self) -> dict[str, Any]:
         data = self.identity.load()
         server = validate_server_url(data["server_url"])
+        if "companion.heartbeat" not in data["scopes"]:
+            raise CompanionAgentError(
+                "The companion heartbeat scope is missing; owner re-pairing is required"
+            )
         expiry_text = data.get("expires_at") or ""
         expiry = _parse_expiry(expiry_text) if expiry_text else None
         if expiry is None or expiry <= self.clock() + timedelta(seconds=SESSION_RENEW_BEFORE_SECONDS):
