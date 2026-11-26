@@ -1,5 +1,7 @@
 """MIA-LIFE-10: source-backed, reviewable personal knowledge graph."""
 
+import sqlite3
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -271,3 +273,28 @@ def test_knowledge_graph_page_is_served(tmp_path):
     response = client.get("/knowledge-graph")
     assert response.status_code == 200
     assert "Personal Knowledge Graph" in response.text
+
+def test_v8_memory_database_upgrades_additively_to_graph_schema(tmp_path):
+    path = tmp_path / "legacy-memory.sqlite3"
+    first = MemoryStore(path)
+    record_a = add_record(first, "Legacy project record", "Atlas")
+    record_b = add_record(first, "Legacy decision", "Atlas", "decision")
+    legacy_link, created = first.relationships.add(record_a, record_b, "related_to")
+    assert created
+
+    with sqlite3.connect(path) as db:
+        db.execute("DROP TABLE knowledge_graph_edge_history")
+        db.execute("DROP TABLE knowledge_graph_edges")
+        db.execute("UPDATE schema_migrations SET version = 8 WHERE version = 9")
+        db.commit()
+
+    reopened = MemoryStore(path)
+    assert reopened.structured.get(record_a)["title"] == "Legacy project record"
+    assert reopened.relationships.for_record(record_a)[0]["relationship_id"] == legacy_link
+    assert reopened.knowledge_graph.list_edges() == []
+    with sqlite3.connect(path) as db:
+        assert db.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 9
+        tables = {row[0] for row in db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )}
+    assert {"knowledge_graph_edges", "knowledge_graph_edge_history"} <= tables
