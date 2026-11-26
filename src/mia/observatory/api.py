@@ -6496,6 +6496,10 @@ def create_app(
             policy,
             capability_registry,
             path_resolver=brain_tool_permission_path,
+            owner_session=(
+                (lambda: CURRENT_OWNER_SESSION.get())
+                if local_guard else (lambda: True)
+            ),
         ),
     )
     brain = Brain(
