@@ -13,12 +13,17 @@ import hmac
 import json
 import secrets
 import sqlite3
+from http.cookies import SimpleCookie
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
+
+from fastapi.responses import JSONResponse
+
+from mia.security.capabilities import ApprovalClass, classify
 
 SESSION_TTL_SECONDS = 8 * 60 * 60
 CHALLENGE_TTL_SECONDS = 5 * 60
@@ -485,3 +490,102 @@ class OwnerAuthService:
             "session_ttl_seconds": SESSION_TTL_SECONDS,
             "origin_requirement": "http://localhost:<port> or https://localhost:<port>",
         }
+
+class OwnerAuthGuard:
+    """Require a verified owner passkey session for high-risk API mutations.
+
+    Safety reductions such as stop-all, revoke-all and rejection remain available even
+    without a session. High-risk confirmation, grant-gated and execute routes fail closed
+    until an owner passkey has been enrolled and the browser has a live HttpOnly session.
+    """
+
+    def __init__(self, app, service: OwnerAuthService) -> None:  # noqa: ANN001
+        self.app = app
+        self.service = service
+
+    @staticmethod
+    def requires_owner(method: str, path: str) -> bool:
+        if method.upper() in {"GET", "HEAD", "OPTIONS"}:
+            return False
+        capability = classify(method, path)
+        if capability is None:
+            return False
+        return capability.approval in {
+            ApprovalClass.OWNER_CONFIRM,
+            ApprovalClass.PREVIEW_THEN_EXECUTE,
+            ApprovalClass.GRANT_GATED,
+        }
+
+    @staticmethod
+    def _cookie(headers: dict[str, str]) -> str | None:
+        cookie = SimpleCookie()
+        try:
+            cookie.load(headers.get("cookie", ""))
+            morsel = cookie.get(COOKIE_NAME)
+            return morsel.value if morsel else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _headers(scope) -> dict[str, str]:  # noqa: ANN001
+        return {
+            key.decode("latin-1").lower(): value.decode("latin-1")
+            for key, value in scope.get("headers", [])
+        }
+
+    async def __call__(self, scope, receive, send) -> None:  # noqa: ANN001
+        if scope.get("type") != "http" or not self.requires_owner(
+            scope.get("method", "GET"), scope.get("path", "")
+        ):
+            await self.app(scope, receive, send)
+            return
+
+        headers = self._headers(scope)
+        host = headers.get("host", "")
+        origin = headers.get("origin", "")
+        scheme = scope.get("scheme", "http")
+        try:
+            # A passkey credential is explicitly registered for RP ID localhost. Even
+            # when LoopbackGuard is disabled in a test harness, an owner session cannot
+            # be used from an IP, foreign host, missing Origin or different browser origin.
+            _origin(origin, host, scheme)
+        except OwnerAuthError as exc:
+            response = JSONResponse(
+                {"detail": str(exc), "code": "owner_auth_origin_required",
+                 "login_url": "/owner-auth"},
+                status_code=403,
+                headers={"Cache-Control": "no-store"},
+            )
+            await response(scope, receive, send)
+            return
+
+        if not self.service.is_configured:
+            response = JSONResponse(
+                {
+                    "detail": "Owner passkey setup is required before this high-risk action.",
+                    "code": "owner_auth_setup_required",
+                    "login_url": "/owner-auth",
+                    "bootstrap_command": "mia-owner-auth bootstrap",
+                },
+                status_code=428,
+                headers={"Cache-Control": "no-store"},
+            )
+            await response(scope, receive, send)
+            return
+
+        token = self._cookie(headers)
+        if not self.service.has_valid_session(token):
+            response = JSONResponse(
+                {
+                    "detail": "Authenticate with the owner passkey before this high-risk action.",
+                    "code": "owner_auth_required",
+                    "login_url": "/owner-auth",
+                },
+                status_code=401,
+                headers={"Cache-Control": "no-store"},
+            )
+            await response(scope, receive, send)
+            return
+
+        await self.app(scope, receive, send)
+
