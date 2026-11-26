@@ -186,6 +186,36 @@ def test_first_passkey_registration_and_login_require_user_verification(owner_se
     assert fake.authentication_verified["require_user_verification"] is True
 
 
+def test_non_increasing_passkey_sign_counter_is_rejected(owner_service):
+    service, fake, _clock = owner_service
+    bootstrap = service.create_bootstrap_code()
+    options = service.begin_registration(
+        origin="http://localhost:8765", bootstrap_code=bootstrap["code"]
+    )
+    service.finish_registration(
+        challenge_id=options["challenge_id"],
+        credential={"id": FakeWebAuthn.b64encode(b"credential-id-1"), "response": {}},
+        origin="http://localhost:8765",
+        bootstrap_code=bootstrap["code"],
+    )
+
+    first = service.begin_authentication(origin="http://localhost:8765")
+    session = service.finish_authentication(
+        challenge_id=first["challenge_id"],
+        credential={"id": FakeWebAuthn.b64encode(b"credential-id-1"), "response": {}},
+        origin="http://localhost:8765",
+    )
+    assert service.has_valid_session(session)
+
+    replayed_counter = service.begin_authentication(origin="http://localhost:8765")
+    with pytest.raises(OwnerAuthError, match="counter did not advance"):
+        service.finish_authentication(
+            challenge_id=replayed_counter["challenge_id"],
+            credential={"id": FakeWebAuthn.b64encode(b"credential-id-1"), "response": {}},
+            origin="http://localhost:8765",
+        )
+
+
 def test_registration_challenge_is_single_use_and_bound_to_exact_origin(owner_service):
     service, _fake, _clock = owner_service
     code = service.create_bootstrap_code()["code"]
