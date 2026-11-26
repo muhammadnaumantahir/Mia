@@ -232,6 +232,11 @@ class CompanionAgent:
             raise CompanionAgentError(
                     "Install the optional companion extra: pip install -e .[companion]"
             ) from exc
+        if self.identity.exists:
+            raise CompanionAgentError(
+                "This companion already has a protected identity. Revoke it in Mia, then run "
+                "'mia-companion forget --confirm' before pairing a replacement."
+            )
         server = validate_server_url(server_url)
         server_host = urlsplit(server).hostname.casefold()
         if server_host not in {"localhost", "127.0.0.1", "::1"}:
