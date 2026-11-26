@@ -210,6 +210,15 @@ function ownerAuthUrl(data){
  return target.href;
 }
 function goToOwnerAuth(data){if(!ownerAuthRequired(data))return false;location.assign(ownerAuthUrl(data));return true;}
+const _miaFetch=window.fetch.bind(window);
+window.fetch=async(input,init={})=>{
+ const response=await _miaFetch(input,init);
+ const method=String(init.method||(typeof input==='object'&&input.method)||'GET').toUpperCase();
+ if(!['GET','HEAD','OPTIONS'].includes(method)&&[401,403,428].includes(response.status)){
+  try{const data=await response.clone().json();if(ownerAuthRequired(data))goToOwnerAuth(data);}catch(error){}
+ }
+ return response;
+};
 // MIA-HOLO-04: publish runtime evidence (event names only, never message text) to the /hologram page
 // open in this same browser, over a same-origin BroadcastChannel. It reports what really happened here;
 // the server's contract (/api/runtime/contract) decides what state that means.
