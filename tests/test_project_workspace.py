@@ -128,6 +128,47 @@ def test_create_update_delete_and_validation(store):
     assert store.projects.delete("atlas one") is False
 
 
+
+def test_project_rename_migrates_linked_tasks_decisions_chats_and_milestones(store):
+    seed(store)
+    milestone_id = store.projects.add_milestone("Atlas", "Atlas migration milestone")
+
+    changed = store.projects.update(
+        "Atlas", new_name="Front/Back", goal="Move the importer", status="paused"
+    )
+
+    assert changed == ["goal", "name", "status"]
+    assert store.projects.get("Atlas") is None
+    renamed = store.projects.get("Front/Back")
+    assert renamed["name"] == "Front/Back"
+    assert renamed["goal"] == "Move the importer" and renamed["status"] == "paused"
+    assert store.projects.milestones("Front/Back")[0]["milestone_id"] == milestone_id
+
+    view = ws.workspace(store, "front/back")
+    assert view["registered"] is True
+    assert {task["title"] for task in view["tasks"]} == {"atlas task", "Atlas task two"}
+    assert [decision["title"] for decision in view["decisions"]] == ["Atlas db"]
+    assert [chat["conversation_id"] for chat in view["conversations"]] == ["conv-atlas"]
+    assert ws.list_projects(store)[0]["name"] == "Borealis"
+    assert store.personal.list(kind="task", project="Atlas", limit=20) == []
+
+
+def test_project_rename_refuses_to_merge_an_existing_or_discovered_name(store):
+    store.projects.create("Atlas")
+    store.projects.create("Borealis")
+    store.personal.add(kind="task", title="unregistered item", project="Ghost")
+
+    with pytest.raises(ValueError, match="workspace for the new project name"):
+        store.projects.update("Atlas", new_name="Borealis")
+    with pytest.raises(ValueError, match="already used by labelled material"):
+        store.projects.update("Atlas", new_name="Ghost")
+
+    assert store.projects.get("Atlas") is not None
+    assert store.projects.get("Borealis") is not None
+    assert [item["title"] for item in store.personal.list(project="Ghost")] == [
+        "unregistered item"
+    ]
+
 def test_delete_removes_workspace_metadata_but_not_labelled_work(store):
     seed(store)
     mid = store.projects.add_milestone("Atlas", "Beta")
@@ -251,3 +292,44 @@ def test_api_workspace_flow_and_isolation(tmp_path, monkeypatch):
 
     assert client.delete("/api/projects/cirrus one").status_code == 200
     assert client.delete("/api/projects/cirrus one").status_code == 404
+
+
+def test_api_supports_slash_names_for_workspace_milestones_and_rename(tmp_path, monkeypatch):
+    client, memory, _ = client_for(tmp_path, monkeypatch)
+    created = client.post(
+        "/api/projects", json={"name": "Front/Back", "goal": "Build the site map"}
+    )
+    assert created.status_code == 201
+    memory.personal.add(kind="task", title="route task", project="Front/Back")
+    memory.structured.add(
+        record_type="decision", title="routing choice",
+        body="Use a shared path resolver.", project="Front/Back",
+    )
+    memory.ensure_conversation("conv-front-back-01")
+    memory.append_message("conv-front-back-01", "user", "Plan the routes.")
+    memory.set_conversation_project("conv-front-back-01", "Front/Back")
+
+    made = client.post("/api/projects/Front%2FBack/milestones", json={"title": "Route tests"})
+    assert made.status_code == 201, made.text
+    milestone_id = made.json()["milestone_id"]
+    view = client.get("/api/projects/Front%2FBack")
+    assert view.status_code == 200, view.text
+    assert view.json()["counts"] == {
+        "open_tasks": 1, "decisions": 1, "conversations": 1, "open_milestones": 1
+    }
+
+    renamed = client.patch(
+        "/api/projects/Front%2FBack",
+        json={"name": "Routes/Phase 2", "status": "paused"},
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["project"]["name"] == "Routes/Phase 2"
+    assert renamed.json()["changed"] == ["name", "status"]
+    assert client.get("/api/projects/Front%2FBack").status_code == 404
+    after = client.get("/api/projects/Routes%2FPhase%202")
+    assert after.status_code == 200, after.text
+    assert after.json()["tasks"][0]["title"] == "route task"
+    assert client.patch(
+        f"/api/projects/Routes%2FPhase%202/milestones/{milestone_id}",
+        json={"status": "done"},
+    ).json() == {"changed": ["status"]}
