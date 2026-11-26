@@ -45,6 +45,10 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <h1>Companion Devices</h1>
 <p class="sub">Pair a Windows companion using a one-time code. Device credentials are separate from owner authority. Each device receives only the scopes you select; revocation immediately invalidates its sessions. First-time pairing and administration remain local to Mia.</p>
 <div id="notice" role="status" aria-live="polite"></div>
+<section class="panel" style="border-color:#8a6640">
+<h2>Local trust boundary</h2>
+<p class="sub">This page and the pairing endpoints are restricted to Mia's loopback/Origin boundary, but the owner browser/API session is not yet cryptographically authenticated. A different process running as the same local user may still reach owner administration APIs until <code>MIA-COMP-04-OWNER</code> is complete. Do not treat this page as protection against malware or another untrusted local process.</p>
+</section>
 <section class="panel" aria-labelledby="pairHeading">
 <h2 id="pairHeading">Create a one-time pairing code</h2>
 <form id="pairForm">
