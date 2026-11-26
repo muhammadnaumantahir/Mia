@@ -2311,6 +2311,13 @@ def create_app(
             raise HTTPException(status_code=404, detail="Knowledge graph interface is not installed")
         return FileResponse(page, media_type="text/html")
 
+    @app.get("/companion")
+    def companion_page() -> FileResponse:
+        page = Path(__file__).resolve().parents[1] / "security" / "companion.html"
+        if not page.is_file():
+            raise HTTPException(status_code=404, detail="Companion devices interface is not installed")
+        return FileResponse(page, media_type="text/html")
+
     @app.get("/identity")
     def identity_page() -> FileResponse:
         page = Path(__file__).with_name("identity.html")
