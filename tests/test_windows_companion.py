@@ -3,7 +3,6 @@
 import base64
 import json
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
@@ -11,6 +10,7 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from mia.companion.agent import CompanionAgent, CompanionAgentError, validate_server_url
+from mia.companion import cli as companion_cli
 from mia.companion.dpapi import CompanionSecretProtectionError, WindowsDPAPI
 from mia.companion.identity import CompanionIdentity
 from mia.companion.lifecycle import (
@@ -357,4 +357,31 @@ def test_status_does_not_expose_bearer_or_private_key(tmp_path):
     assert "private_key" not in rendered
     assert result["outbound_only"] is True
     assert result["elevated"] is False
+    agent.close()
+
+def test_existing_identity_cannot_be_replaced_without_explicit_forget(tmp_path):
+    agent, identity, server, _ = pair_agent(tmp_path)
+    replacement = CompanionAgent(identity, client=FakeCompanionServer())
+    with pytest.raises(CompanionAgentError, match="already has a protected identity"):
+        replacement.pair("http://127.0.0.1:8765", "NEWCODE2345", "Replacement")
+    assert server.device_id == identity.load()["device_id"]
+    agent.close()
+    replacement.close()
+
+
+def test_set_server_command_requires_confirmation_and_validates_https(monkeypatch, tmp_path, capsys):
+    agent, identity, _server, _ = pair_agent(tmp_path)
+    monkeypatch.setattr(companion_cli, "_identity", lambda: identity)
+    monkeypatch.setattr(
+        companion_cli.sys, "argv",
+        ["mia-companion", "set-server", "--url", "https://mia.example.com"],
+    )
+    assert companion_cli.main() == 2
+    assert identity.load()["server_url"] == "http://127.0.0.1:8765"
+    monkeypatch.setattr(
+        companion_cli.sys, "argv",
+        ["mia-companion", "set-server", "--url", "https://mia.example.com", "--confirm"],
+    )
+    assert companion_cli.main() == 0
+    assert identity.load()["server_url"] == "https://mia.example.com"
     agent.close()
