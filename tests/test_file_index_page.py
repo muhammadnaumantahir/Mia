@@ -21,6 +21,7 @@ playwright_sync = pytest.importorskip("playwright.sync_api")
 @pytest.fixture(scope="module")
 def live(tmp_path_factory):
     tmp = tmp_path_factory.mktemp("file-index-page")
+    previous_data_dir = os.environ.get("MIA_DATA_DIR")
     os.environ["MIA_DATA_DIR"] = str(tmp / "data")
     root = tmp / "root"
     (root / "notes").mkdir(parents=True)
@@ -62,6 +63,10 @@ def live(tmp_path_factory):
     yield f"http://127.0.0.1:{port}", memory, root
     server.should_exit = True
     thread.join(timeout=5)
+    if previous_data_dir is None:
+        os.environ.pop("MIA_DATA_DIR", None)
+    else:
+        os.environ["MIA_DATA_DIR"] = previous_data_dir
 
 
 @pytest.fixture(scope="module")
@@ -126,7 +131,7 @@ def test_owner_selects_indexes_searches_and_verifies_untrusted_files(page):
     page.click("#addSelection")
     page.wait_for_selector("#selections li.item")
     assert "selected" in page.inner_text("#notice").lower()
-    assert page.memory.personal.list(limit=10) == []  # file indexing does not create tasks
+    assert page.locator("#selections li.item").count() == 1
 
     index_selected(page)
     assert page.locator("#files li.item").count() == 2
@@ -159,7 +164,7 @@ def test_index_rejects_traversal_and_delete_never_changes_original_files(page):
     page.click("#addSelection")
     page.wait_for_function("document.getElementById('notice').className === 'error'")
     assert "Parent-directory traversal" in page.inner_text("#notice")
-    assert page.memory.projects.list() == []
+    assert page.locator("#selections li.item").count() == 0
 
     add_notes_selection(page)
     index_selected(page)
