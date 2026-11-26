@@ -6143,8 +6143,8 @@ def create_app(
     ) -> dict[str, Any]:
         try:
             return {"edge": memory_store.knowledge_graph.review(edge_id, item.decision)}
-        except GraphEdgeNotFoundError as exc:
-            raise HTTPException(status_code=404, detail="Graph edge not found") from exc
+        except (GraphEdgeNotFoundError, GraphNodeNotFoundError) as exc:
+            raise HTTPException(status_code=404, detail="Graph edge or endpoint not found") from exc
         except KnowledgeGraphError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
