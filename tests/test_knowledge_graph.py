@@ -208,7 +208,7 @@ def test_project_delete_removes_project_node_edges_but_keeps_record_task_edges(m
         relation="works_on",
     )
     assert memory.projects.delete("Atlas")
-    assert memory.knowledge_graph.get(project_edge) if False else True
+    assert memory.knowledge_graph.remove(project_edge) is False
     assert [item["edge_id"] for item in memory.knowledge_graph.list_edges()] == [task_edge]
 
 
