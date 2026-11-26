@@ -161,11 +161,12 @@ def test_pairing_uses_ed25519_and_encrypts_private_key_and_session_token(tmp_pat
     assert status["device_id"] == server.device_id
     assert status["scopes"] == server.scopes
     assert b"mia-dev_session" not in public_file
-    assert server.public_key.encode() not in public_file
+    assert server.public_key.encode() in public_file  # public-key metadata is not a secret
     assert b"protected:" in public_file
     loaded = identity.load()
     assert loaded["session_token"] == server.active_token
     assert len(loaded["private_key"]) == 32
+    assert loaded["private_key"] not in public_file
     assert not any("Authorization" in call[3] for call in server.calls)
     agent.close()
 
@@ -368,7 +369,7 @@ def test_existing_identity_cannot_be_replaced_without_explicit_forget(tmp_path):
     replacement.close()
 
 
-def test_set_server_command_requires_confirmation_and_validates_https(monkeypatch, tmp_path, capsys):
+def test_set_server_command_requires_confirmation_and_validates_https(monkeypatch, tmp_path):
     agent, identity, _server, _ = pair_agent(tmp_path)
     monkeypatch.setattr(companion_cli, "_identity", lambda: identity)
     monkeypatch.setattr(
