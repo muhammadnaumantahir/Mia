@@ -7,16 +7,34 @@
 
 ### Owner authority
 
-Mia currently runs as a single-owner local workspace. The owner boundary is the local loopback API plus the machine account that runs Mia. There is **not yet a cryptographically authenticated owner-user session** for the browser/API.
+Mia still runs as a single-owner local workspace, but high-risk owner actions in the production
+`local_guard=True` deployment now require a WebAuthn passkey session (MIA-COMP-04-OWNER).
 
-Consequences:
+- The first passkey is enrolled only after the owner runs `mia-owner-auth bootstrap` on the Mia
+  host and enters the short-lived, one-use code in `/owner-auth`.
+- The relying-party ID is `localhost`; the browser must use the exact `http://localhost:<port>`
+  or `https://localhost:<port>` origin. `127.0.0.1` and other hostnames are refused for owner
+  passkey ceremonies and protected owner requests.
+- Registration and authentication require WebAuthn user verification. Private passkey keys stay
+  with the authenticator; Mia stores credential public keys, challenge state and sign counters.
+- Successful authentication issues an eight-hour HttpOnly, SameSite=Strict cookie. Mia stores
+  only a hash of the session token, and logout revokes the corresponding session.
+- Approval decisions, high-risk previews/execution, owner permission administration, pending
+  approval review and companion administration reads are guarded by that owner session.
+- Brain write-mode tools also require the live owner-session context, even when a long-lived
+  permission grant exists. Read-only and preview tools remain available; previewed actions still
+  need owner approval before execution.
 
-- A local process that can reach the loopback API may call owner routes.
-- Pairing-code creation, device revocation and owner approvals must not be considered protected against another local process until COMP-04-OWNER is complete.
-- A companion device token is never an owner credential and must never be accepted for owner administration or approval.
+Safety reductions deliberately remain reachable without a passkey: stop-all/emergency stop,
+permission revocation, companion-device revocation and approval rejection. This allows the owner
+to reduce authority when authentication is unavailable.
 
-This is a known limitation, not a claim that loopback is equivalent to owner authentication.
-
+This is local single-owner authentication, not a multi-user account system. A compromised browser
+session or malware running as the same Windows user remains a serious threat; keep the host and
+browser profile protected. Retain more than one passkey where practical. Mia currently has no
+self-service reset after every registered passkey is lost; do not delete the owner-auth database
+as a casual recovery step.
+ 
 ### Paired device identity
 
 A companion device has a separate Ed25519 keypair:
@@ -81,9 +99,10 @@ Sources: `src/mia/security/pairing.py`, `src/mia/security/sync.py`; tests: `test
 
 ```text
 Owner on Mia host
-  └─ local loopback owner routes
-       ├─ pairing-code creation / device revocation
-       └─ owner approvals (COMP-04-OWNER: not yet authenticated)
+  └─ localhost owner routes + WebAuthn passkey session
+       ├─ pairing-code creation / high-risk administration (passkey required)
+       ├─ high-risk approvals and Brain write-mode tools (passkey required)
+       └─ safety reductions (stop/revoke/reject remain reachable)
 
 Paired companion
   └─ Ed25519 device identity
@@ -98,6 +117,15 @@ Remote request ─X─ pairing, owner APIs, browser routes, arbitrary Mia APIs
 
 ## 6. Remaining security gap
 
-The device identity and transport boundary are implemented, but the **owner identity boundary is still local-process trust**. COMP-04-OWNER must authenticate the owner at the final approval decision boundary, reject forged/local-process approval, and remain safe under revocation races. Until then, do not claim owner approvals are protected from another local process.
+The final approval HTTP boundary and Brain write-mode broker now require a live WebAuthn owner
+session. Remaining limits are: the whole local API is not a multi-user authenticated service;
+read-only and preview routes intentionally remain usable without a passkey; safety reductions
+remain unauthenticated by design; an active same-user browser session or compromised host can
+still be abused; and recovery after all owner passkeys are lost is currently an offline/manual
+host-recovery concern. Do not expose Mia's owner API to a network or another user account.
 
-Real TLS certificate, firewall/DNS, Windows CurrentUser DPAPI, Task Scheduler/logon behavior, physical companion pairing and browser accessibility remain owner verification. Regression tests for companion pairing, Windows client/lifecycle and sync/remote behavior have been authored but not executed in this development pass.
+The WebAuthn ceremony and owner-session tests have been authored but not executed in this
+development pass. Real Windows Hello/security-key verification, browser-origin behavior, cookie
+lifecycle and local-host recovery remain owner verification. Existing TLS certificate,
+firewall/DNS, Windows CurrentUser DPAPI, Task Scheduler/logon behavior, physical companion pairing
+and browser accessibility checks also remain owner verification.
