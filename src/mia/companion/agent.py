@@ -97,7 +97,6 @@ class CompanionAgent:
         *,
         client=None,
         clock=_utcnow,
-        sleep=time.sleep,
         random_value=random.random,
         heartbeat_seconds: int = DEFAULT_HEARTBEAT_SECONDS,
     ) -> None:
@@ -105,7 +104,6 @@ class CompanionAgent:
             raise ValueError("heartbeat_seconds must be between 10 and 300")
         self.identity = identity
         self.clock = clock
-        self.sleep = sleep
         self.random_value = random_value
         self.heartbeat_seconds = heartbeat_seconds
         owns_client = client is None
@@ -176,7 +174,7 @@ class CompanionAgent:
             raise CompanionAgentError("The companion server returned an unexpected response")
         return result
 
-    def _new_session(self, data: dict[str, Any], *, allow_expired_local: bool = False) -> dict[str, Any]:
+    def _new_session(self, data: dict[str, Any]) -> dict[str, Any]:
         server = validate_server_url(data["server_url"])
         token = data.get("session_token") or ""
         local = urlsplit(server).hostname.casefold() in {"localhost", "127.0.0.1", "::1"}
