@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
+<title>Mia — Owner Passkey</title>
+<style>
+:root{font-family:Inter,Segoe UI,system-ui,sans-serif;color:#eef4f2;background:#0c1214}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#0c1214;display:grid;place-items:center;padding:20px}
+main{width:min(620px,100%);background:#131d20;border:1px solid #2b4044;border-radius:16px;padding:22px}
+h1{font-size:22px;margin:0 0 6px}.sub{color:#a9bdb6;font-size:13px;line-height:1.55;margin:5px 0 14px}
+label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:#c3d3ce;margin:10px 0}
+input,button{font:inherit;font-size:14px;min-height:42px;border-radius:8px;padding:9px 12px}
+input{width:100%;background:#0e1719;color:#eef4f2;border:1px solid #4c6a66}
+button{background:#1f7a5c;color:white;border:1px solid #1f7a5c;cursor:pointer;margin:4px 7px 4px 0}
+button.alt{background:#1b2a2c;border-color:#4c6a66;color:#e3ece8}
+button:disabled{opacity:.5;cursor:not-allowed}
+:focus-visible{outline:3px solid #ffd27a;outline-offset:2px}
+.panel{border:1px solid #31484a;border-radius:10px;padding:14px;margin-top:14px}
+#notice{min-height:22px;color:#a6e3c4;font-size:13px;margin-top:12px}#notice.error{color:#ffb4a3}
+.warning{border-color:#8a6640}.small{font-size:11px;color:#91a9a0;line-height:1.5}
+.hidden{display:none!important}
+</style></head>
+<body><main>
+<h1>Owner passkey</h1>
+<p class="sub">Mia uses a passkey with user verification for high-risk approvals, computer actions and owner administration. The authenticator must verify your presence (for example Windows Hello, a device PIN/biometric, or a security key). Mia receives only the public credential and signed assertions; your private key remains with the authenticator.</p>
+<div id="notice" role="status" aria-live="polite"></div>
+<section class="panel warning">
+<strong>Use the localhost address</strong>
+<p class="sub">Browser passkeys are bound to the relying-party origin <code>localhost</code>. Open this page at <code>http://localhost:PORT/owner-auth</code>, using the same port as Mia. The IP address <code>127.0.0.1</code> is not the passkey origin for this setup.</p>
+</section>
+<section id="setup" class="panel hidden">
+<h2>Register the first owner passkey</h2>
+<p class="sub">On the Mia host, install the optional package and generate a short-lived one-time code in a local terminal:</p>
+<pre class="small">python -m pip install -e ".[owner-auth]"
+mia-owner-auth bootstrap</pre>
+<label>One-time bootstrap code<input id="bootstrapCode" type="password" autocomplete="one-time-code" spellcheck="false" placeholder="Paste the code shown by mia-owner-auth"></label>
+<button id="registerFirst">Register owner passkey</button>
+<p class="small">The code is valid for five minutes and can be used once. Do not share it or paste it into a third-party tool.</p>
+</section>
+<section id="login" class="panel hidden">
+<h2>Authenticate</h2>
+<p class="sub">Use your registered passkey. Mia requires user verification for every authentication ceremony.</p>
+<button id="loginButton">Continue with passkey</button>
+</section>
+<section id="signedIn" class="panel hidden">
+<h2>Owner session active</h2>
+<p class="sub" id="sessionInfo">This browser has an authenticated owner session.</p>
+<button id="addPasskey" class="alt">Add another passkey</button>
+<button id="logout" class="alt">Sign out</button>
+</section>
+<section id="add" class="panel hidden">
+<h2>Add another passkey</h2>
+<p class="sub">Your current authenticated owner session is required before Mia will accept another credential.</p>
+<button id="registerAnother">Register this passkey</button>
+<button id="cancelAdd" class="alt">Cancel</button>
+</section>
+<p class="small">Owner sessions are held in an HttpOnly, SameSite=Strict cookie for up to eight hours. Signing out revokes the server-side session. Stop-all, pause and revocation controls remain available even when a passkey session is not active.</p>
+<div class="small" style="margin-top:12px"><a href="/assistant" style="color:#9be5c5">Return to Mia</a></div>
+<script>
+const $=id=>document.getElementById(id);
+const state={configured:false,authenticated:false};
+function say(message,error=false){$('notice').textContent=message;$('notice').className=error?'error':'';$('notice').setAttribute('role',error?'alert':'status');}
+function show(id,visible=true){$(id).classList.toggle('hidden',!visible);}
+function safeReturn(){
+ const value=new URLSearchParams(location.search).get('return')||'/assistant';
+ return value.startsWith('/')&&!value.startsWith('//')&&!value.startsWith('/owner-auth')?value:'/assistant';
+}
+function localOrigin(){
+ if(location.hostname!=='localhost'){
+  const target='http://localhost:'+location.port+'/owner-auth';
+  say('Owner passkeys are bound to localhost. Open '+target+' to continue.',true);
+  return false;
+ }
+ return true;
+}
+function decodeBase64Url(value){
+ const padded=value.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-value.length%4)%4);
+ const binary=atob(padded),bytes=new Uint8Array(binary.length);
+ for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+ return bytes.buffer;
+}
+function encodeBase64Url(buffer){
+ const bytes=new Uint8Array(buffer);let binary='';
+ for(let i=0;i<bytes.length;i++)binary+=String.fromCharCode(bytes[i]);
+ return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function convertOptions(options){
+ const value=structuredClone(options);
+ value.challenge=decodeBase64Url(value.challenge);
+ if(value.user)value.user.id=decodeBase64Url(value.user.id);
+ for(const key of ['allowCredentials','excludeCredentials']){
+  if(Array.isArray(value[key]))for(const item of value[key])item.id=decodeBase64Url(item.id);
+ }
+ return value;
+}
+function serializeCredential(credential){
+ const response={clientDataJSON:encodeBase64Url(credential.response.clientDataJSON)};
+ if(credential.response.attestationObject){
+  response.attestationObject=encodeBase64Url(credential.response.attestationObject);
+  if(credential.response.getTransports)response.transports=credential.response.getTransports();
+ }else{
+  response.authenticatorData=encodeBase64Url(credential.response.authenticatorData);
+  response.signature=encodeBase64Url(credential.response.signature);
+  response.userHandle=credential.response.userHandle?encodeBase64Url(credential.response.userHandle):null;
+ }
+ return {
+  id:credential.id,
+  rawId:encodeBase64Url(credential.rawId),
+  type:credential.type,
+  response,
+  clientExtensionResults:credential.getClientExtensionResults?credential.getClientExtensionResults():{}
+ };
+}
+async function api(url,body){
+ const response=await fetch(url,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
+ let data={};try{data=await response.json();}catch{}
+ if(!response.ok)throw new Error(typeof data.detail==='string'?data.detail:'Request failed ('+response.status+')');
+ return data;
+}
+async function status(){
+ try{
+  const response=await fetch('/api/owner-auth/status',{credentials:'same-origin',cache:'no-store'});
+  const data=await response.json();
+  if(!response.ok)throw new Error(data.detail||'Could not read owner-auth status');
+  state.configured=!!data.configured;state.authenticated=!!data.authenticated;
+  show('setup',!state.configured);
+  show('login',state.configured&&!state.authenticated);
+  show('signedIn',state.authenticated);
+  show('add',false);
+  if(state.authenticated){
+   $('sessionInfo').textContent='Owner session active · '+data.credential_count+' registered passkey(s) · user verification required.';
+   say('Owner passkey verified for this browser session.');
+   if(new URLSearchParams(location.search).has('return'))location.replace(safeReturn());
+  }else if(state.configured){
+   say('Mia has an owner passkey registered. Authenticate to continue.');
+  }else{
+   say('No owner passkey is registered. Generate a one-time bootstrap code on the Mia host.');
+  }
+ }catch(error){say('Could not read owner-auth status: '+error.message,true);}
+}
+async function registerPasskey(bootstrapCode){
+ if(!localOrigin())return;
+ if(!window.PublicKeyCredential||!navigator.credentials?.create){
+  say('This browser does not support WebAuthn passkeys.',true);return;
+ }
+ try{
+  const optionsData=await api('/api/owner-auth/registration/options',{bootstrap_code:bootstrapCode||null});
+  const credential=await navigator.credentials.create({publicKey:convertOptions(optionsData.publicKey)});
+  if(!credential)throw new Error('The authenticator did not complete registration.');
+  await api('/api/owner-auth/registration/verify',{
+   challenge_id:optionsData.challenge_id,
+   bootstrap_code:bootstrapCode||null,
+   credential:serializeCredential(credential)
+  });
+  say('Owner passkey registered and verified.');
+  await status();
+ }catch(error){say('Could not register the passkey: '+error.message,true);}
+}
+async function login(){
+ if(!localOrigin())return;
+ if(!window.PublicKeyCredential||!navigator.credentials?.get){
+  say('This browser does not support WebAuthn passkeys.',true);return;
+ }
+ try{
+  const optionsData=await api('/api/owner-auth/authentication/options',{});
+  const credential=await navigator.credentials.get({publicKey:convertOptions(optionsData.publicKey)});
+  if(!credential)throw new Error('The authenticator did not complete sign-in.');
+  await api('/api/owner-auth/authentication/verify',{
+   challenge_id:optionsData.challenge_id,
+   credential:serializeCredential(credential)
+  });
+  say('Owner passkey verified.');
+  await status();
+ }catch(error){say('Could not authenticate the owner passkey: '+error.message,true);}
+}
+$('registerFirst').addEventListener('click',()=>registerPasskey($('bootstrapCode').value.trim()));
+$('loginButton').addEventListener('click',login);
+$('addPasskey').addEventListener('click',()=>{show('signedIn',false);show('add',true);});
+$('registerAnother').addEventListener('click',()=>registerPasskey(null));
+$('cancelAdd').addEventListener('click',()=>{show('add',false);show('signedIn',true);});
+$('logout').addEventListener('click',async()=>{
+ try{await api('/api/owner-auth/logout',{});say('Owner session revoked.');await status();}
+ catch(error){say('Could not sign out: '+error.message,true);}
+});
+if(localOrigin())status();
+</script>
+</main></body></html>
