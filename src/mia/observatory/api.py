@@ -134,6 +134,11 @@ from mia.life.workflows import (
 from mia.memory import projects as project_workspaces
 from mia.memory.briefing import generate_briefing
 from mia.memory.capture import CaptureService
+from mia.memory.knowledge_graph import (
+    GraphEdgeNotFoundError,
+    GraphNodeNotFoundError,
+    KnowledgeGraphError,
+)
 from mia.memory.identity import (
     identity_system_prompt,
     render_identity_prompt,
@@ -505,6 +510,39 @@ class RelationshipVisibility(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     visibility: str = Field(min_length=1, max_length=10)
+
+
+class KnowledgeGraphEdgeInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    from_type: str = Field(pattern="^(record|task|project)$")
+    from_id: str = Field(min_length=1, max_length=160)
+    to_type: str = Field(pattern="^(record|task|project)$")
+    to_id: str = Field(min_length=1, max_length=160)
+    relation: str = Field(min_length=1, max_length=30)
+    provenance: str = Field(default="owner_provided", max_length=20)
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    evidence: list[EvidenceRef] = Field(default_factory=list, max_length=20)
+    note: str = Field(default="", max_length=500)
+    visibility: str = Field(default="normal", max_length=10)
+    project: str | None = Field(default=None, max_length=64)
+
+
+class KnowledgeGraphEdgeCorrection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    relation: str | None = Field(default=None, min_length=1, max_length=30)
+    provenance: str | None = Field(default=None, max_length=20)
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    evidence: list[EvidenceRef] | None = Field(default=None, max_length=20)
+    note: str | None = Field(default=None, max_length=500)
+    visibility: str | None = Field(default=None, max_length=10)
+
+
+class KnowledgeGraphReviewInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    decision: str = Field(pattern="^(confirm|reject)$")
 
 
 class MemoryCaptureInput(BaseModel):
@@ -2265,6 +2303,13 @@ def create_app(
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok", "service": "mia"}
+
+    @app.get("/knowledge-graph")
+    def knowledge_graph_page() -> FileResponse:
+        page = Path(__file__).resolve().parents[1] / "memory" / "knowledge_graph.html"
+        if not page.is_file():
+            raise HTTPException(status_code=404, detail="Knowledge graph interface is not installed")
+        return FileResponse(page, media_type="text/html")
 
     @app.get("/identity")
     def identity_page() -> FileResponse:
@@ -6028,6 +6073,84 @@ def create_app(
     @app.delete("/api/memory/relationships/{relationship_id}")
     def delete_memory_relationship(relationship_id: str) -> dict[str, bool]:
         return {"deleted": memory_store.relationships.remove(relationship_id)}
+
+    @app.get("/api/memory/graph/nodes")
+    def knowledge_graph_nodes(
+        project: str | None = None, q: str | None = None, limit: int = 200
+    ) -> dict[str, Any]:
+        return {"items": memory_store.knowledge_graph.nodes(
+            project=project, query=q, limit=limit
+        )}
+
+    @app.get("/api/memory/graph")
+    def knowledge_graph(
+        project: str | None = None,
+        include_inferred: bool = True,
+        include_rejected: bool = False,
+        include_private: bool = False,
+        limit: int = 300,
+    ) -> dict[str, Any]:
+        edges = memory_store.knowledge_graph.list_edges(
+            project=project, include_inferred=include_inferred,
+            include_rejected=include_rejected, include_private=include_private,
+            limit=limit,
+        )
+        nodes: dict[tuple[str, str], dict[str, Any]] = {}
+        for edge in edges:
+            for node in (edge["from_node"], edge["to_node"]):
+                nodes[(node["node_type"], node["node_id"])] = node
+        return {"nodes": list(nodes.values()), "edges": edges}
+
+    @app.post("/api/memory/graph/edges", status_code=201)
+    def create_knowledge_graph_edge(item: KnowledgeGraphEdgeInput) -> dict[str, Any]:
+        try:
+            edge_id, created = memory_store.knowledge_graph.add(
+                from_type=item.from_type, from_id=item.from_id,
+                to_type=item.to_type, to_id=item.to_id, relation=item.relation,
+                provenance=item.provenance, confidence=item.confidence,
+                evidence=[ref.model_dump() for ref in item.evidence],
+                note=item.note, visibility=item.visibility, project=item.project,
+            )
+            return {"edge": memory_store.knowledge_graph.get(edge_id), "created": created}
+        except GraphNodeNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Graph node not found or not visible") from exc
+        except KnowledgeGraphError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/memory/graph/edges/{edge_id}")
+    def get_knowledge_graph_edge(edge_id: str) -> dict[str, Any]:
+        try:
+            return {"edge": memory_store.knowledge_graph.get(edge_id)}
+        except (GraphEdgeNotFoundError, GraphNodeNotFoundError) as exc:
+            raise HTTPException(status_code=404, detail="Graph edge or endpoint not found") from exc
+
+    @app.patch("/api/memory/graph/edges/{edge_id}")
+    def correct_knowledge_graph_edge(
+        edge_id: str, item: KnowledgeGraphEdgeCorrection
+    ) -> dict[str, Any]:
+        try:
+            return {"edge": memory_store.knowledge_graph.correct(
+                edge_id, **item.model_dump(exclude_unset=True)
+            )}
+        except GraphEdgeNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Graph edge not found") from exc
+        except (GraphNodeNotFoundError, KnowledgeGraphError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/memory/graph/edges/{edge_id}/review")
+    def review_knowledge_graph_edge(
+        edge_id: str, item: KnowledgeGraphReviewInput
+    ) -> dict[str, Any]:
+        try:
+            return {"edge": memory_store.knowledge_graph.review(edge_id, item.decision)}
+        except GraphEdgeNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Graph edge not found") from exc
+        except KnowledgeGraphError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.delete("/api/memory/graph/edges/{edge_id}")
+    def delete_knowledge_graph_edge(edge_id: str) -> dict[str, bool]:
+        return {"deleted": memory_store.knowledge_graph.remove(edge_id)}
 
     @app.post("/api/conversations/{conversation_id}/temporary")
     def set_conversation_temporary(
