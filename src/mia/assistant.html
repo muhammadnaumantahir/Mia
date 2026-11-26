@@ -200,6 +200,16 @@ select{background:#172522;color:#b4c9c1;border:1px solid #2c4840;border-radius:9
 </section></main></div>
 <script>
 const $=id=>document.getElementById(id);
+function ownerAuthRequired(data){
+ return !!data&&['owner_auth_required','owner_auth_setup_required','owner_auth_origin_required'].includes(data.code);
+}
+function ownerAuthUrl(data){
+ const fallback='http://localhost:'+(location.port||'80')+'/owner-auth';
+ const target=new URL(data&&data.login_url||fallback,location.href);
+ target.searchParams.set('return',location.pathname+location.search+location.hash);
+ return target.href;
+}
+function goToOwnerAuth(data){if(!ownerAuthRequired(data))return false;location.assign(ownerAuthUrl(data));return true;}
 // MIA-HOLO-04: publish runtime evidence (event names only, never message text) to the /hologram page
 // open in this same browser, over a same-origin BroadcastChannel. It reports what really happened here;
 // the server's contract (/api/runtime/contract) decides what state that means.
@@ -625,6 +635,7 @@ function renderApprovalCards(actions){
      body:JSON.stringify({kind:action.kind,payload:action.payload})
     });
     const result=await response.json();
+    if(!response.ok&&goToOwnerAuth(result))return;
     if(!response.ok)throw new Error(result.detail||'Action was not executed');
     state.textContent='Completed: '+(result.result?.relative_path||result.result?.display_name||result.result?.title||action.kind);
     state.style.color='#a9ebcb';
@@ -639,6 +650,7 @@ function renderApprovalCards(actions){
        const reply=await fetch('/api/computer/files/write/undo',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({root_id:action.payload.root_id,relative_path:action.payload.relative_path,expected_sha256:written.sha256,backup:written.backup||null})});
        const data=await reply.json();
+       if(!reply.ok&&goToOwnerAuth(data))return;
        if(!reply.ok)throw new Error(typeof data.detail==='string'?data.detail:'Nothing was undone');
        state.textContent=data.result?.action==='removed_created_file'?'Undone: the file Mia created was removed. A recovery copy is kept.':'Undone: the earlier version was restored. The version it replaced is kept in the recovery folder.';
        state.style.color='#c7b8a9';undo.remove();
@@ -702,8 +714,15 @@ async function cancelVoicePendingApprovals(){
 async function restorePendingApprovals(){
  try{
   const response=await fetch('/api/computer/approvals/cards',{cache:'no-store'});
-  if(!response.ok)return;
   const data=await response.json();
+  if(!response.ok){
+   if(ownerAuthRequired(data)){
+    const bubble=addMessage('assistant','Reviewing pending actions requires your owner passkey. No action has been executed.');
+    const link=document.createElement('a');link.href=ownerAuthUrl(data);link.textContent='Authenticate with owner passkey';
+    link.style.cssText='display:inline-block;margin-top:8px;color:#9be5c5';bubble.append(document.createElement('br'),link);
+   }
+   return;
+  }
   const fresh=(Array.isArray(data.items)?data.items:[]).filter(item=>item.approval_id&&!renderedApprovals.has(item.approval_id));
   if(!fresh.length)return;
   addMessage('assistant',fresh.length===1?'One action is still waiting for your approval from earlier. Nothing has been done yet.':fresh.length+' actions are still waiting for your approval from earlier. Nothing has been done yet.');
