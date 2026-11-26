@@ -42,6 +42,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("start", help="Start the agent in the current-user session")
     sub.add_parser("stop", help="Request graceful stop; never force-kills the process")
 
+    set_server = sub.add_parser(
+        "set-server", help="Change the server URL for an already paired device"
+    )
+    set_server.add_argument("--url", required=True, help="Loopback HTTP or verified HTTPS URL")
+    set_server.add_argument("--confirm", action="store_true",
+                            help="Confirm sending the device token to this server host")
+
     forget = sub.add_parser(
         "forget", help="Remove this user's protected local identity after the device has been revoked in Mia"
     )
@@ -87,6 +94,20 @@ def main() -> int:
                 agent.close()
 
         manager = _lifecycle(identity)
+        if args.command == "set-server":
+            if not args.confirm:
+                raise RuntimeError(
+                    "changing the server sends this device's bearer token to the selected host; pass --confirm"
+                )
+            if not identity.exists:
+                raise FileNotFoundError("Pair this companion first")
+            from mia.companion.agent import validate_server_url
+
+            data = identity.load()
+            data["server_url"] = validate_server_url(args.url)
+            identity.save(data)
+            _print(identity.public_status())
+            return 0
         if args.command == "forget":
             if not args.confirm:
                 raise RuntimeError(
