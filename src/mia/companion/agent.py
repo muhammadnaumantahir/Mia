@@ -260,6 +260,15 @@ class CompanionAgent:
             format=serialization.PublicFormat.Raw,
         )
         public_key = b64e(public_bytes)
+        # Fail before consuming the one-time server code if DPAPI is unavailable.
+        try:
+            self.identity.protector.protect(private_bytes)
+            self.identity.protector.protect(b"pending")
+            self.identity.home.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            raise CompanionAgentError(
+                "Windows DPAPI storage is unavailable; the pairing code was not redeemed"
+            ) from exc
         signature = b64e(private.sign(pairing_statement(pairing_code, public_key, name)))
         device = self._request(
             "POST", "/api/companion/pair", server_url=server,
