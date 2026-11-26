@@ -2336,6 +2336,13 @@ def create_app(
             raise HTTPException(status_code=404, detail="Workflows page asset not found")
         return FileResponse(page, media_type="text/html")
 
+    @app.get("/files")
+    def file_index_page() -> FileResponse:
+        page = Path(__file__).resolve().parents[1] / "knowledge" / "file_index.html"
+        if not page.is_file():
+            raise HTTPException(status_code=404, detail="File intelligence page asset not found")
+        return FileResponse(page, media_type="text/html")
+
     @app.get("/projects")
     def projects_page() -> FileResponse:
         page = Path(__file__).resolve().parents[1] / "life" / "projects.html"
