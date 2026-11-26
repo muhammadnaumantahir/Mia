@@ -113,14 +113,14 @@ class OwnerPermissionEvaluator(DefaultPermissionEvaluator):
         self.owner_session = owner_session
 
     def evaluate(self, tool: ToolDefinition, arguments: dict[str, Any]) -> GateDecision:
-        baseline = super().evaluate(tool, arguments)
-        if not baseline.allowed:
-            return baseline
         if tool.mode == "write" and self.owner_session is not None and not self.owner_session():
             return GateDecision(
                 False, "permission",
                 "an authenticated owner passkey session is required for write-mode tools",
             )
+        baseline = super().evaluate(tool, arguments)
+        if not baseline.allowed:
+            return baseline
 
         # Memory retrieval is governed by MemoryStore settings and the gateway's
         # separate local-only data-egress gate, not by computer filesystem grants.
