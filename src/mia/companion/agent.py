@@ -125,6 +125,7 @@ class CompanionAgent:
         self._stop = threading.Event()
         self.status_path = self.identity.home / "runtime" / "status.json"
         self.stop_path = self.identity.home / "runtime" / "stop.request"
+        self._started_at = time.time()
         self.last_error: str | None = None
         self.last_success: str | None = None
         self.last_attempt: str | None = None
@@ -395,10 +396,7 @@ class CompanionAgent:
     def run_forever(self, *, stop_event: threading.Event | None = None) -> int:
         external_stop = stop_event or threading.Event()
         self._stop.clear()
-        try:
-            self.stop_path.unlink()
-        except FileNotFoundError:
-            pass
+        self._started_at = time.time()
         self.state = "starting" if self.identity.exists else "unpaired"
         self.publish_status()
         if not self.identity.exists:
@@ -409,7 +407,7 @@ class CompanionAgent:
         delay = 5.0
         try:
             while not self._stop.is_set() and not external_stop.is_set():
-                if self.stop_path.exists():
+                if self._stop_requested():
                     break
                 self.last_attempt = self.clock().isoformat()
                 try:
@@ -433,12 +431,22 @@ class CompanionAgent:
             self.publish_status()
         return 0
 
+    def _stop_requested(self) -> bool:
+        if self._stop.is_set():
+            return True
+        try:
+            # A stale marker from a previous shutdown must not stop a new logon
+            # session, but a fresh request is never deleted by the startup path.
+            return self.stop_path.stat().st_mtime >= self._started_at
+        except FileNotFoundError:
+            return False
+
     def _wait_for_next_heartbeat(
         self, seconds: float, external_stop: threading.Event
     ) -> None:
         deadline = time.monotonic() + max(0.0, seconds)
         while time.monotonic() < deadline:
-            if self._stop.is_set() or external_stop.is_set() or self.stop_path.exists():
+            if self._stop.is_set() or external_stop.is_set() or self._stop_requested():
                 return
             self._stop.wait(min(1.0, deadline - time.monotonic()))
 
