@@ -655,10 +655,13 @@ def register_file_index_routes(app: Any, index: FileIndex, record: Callable[...,
 
     @app.delete("/api/file-index")
     def fi_purge() -> dict[str, Any]:
+        # Do not leave an owner-started refresh worker running after its selections
+        # and indexed content have been permanently cleared.
+        watcher.stop()
         index.purge_all()
         record(event_type="file_index_purged", summary="Owner deleted the whole file index",
                outcome="success", payload={})
-        return {"purged": True}
+        return {"purged": True, "watcher": watcher.status()}
 
     @app.get("/api/file-index/files")
     def fi_files(limit: int = 200) -> dict[str, Any]:
