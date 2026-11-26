@@ -285,7 +285,7 @@ def test_v8_memory_database_upgrades_additively_to_graph_schema(tmp_path):
     with sqlite3.connect(path) as db:
         db.execute("DROP TABLE knowledge_graph_edge_history")
         db.execute("DROP TABLE knowledge_graph_edges")
-        db.execute("UPDATE schema_migrations SET version = 8 WHERE version = 9")
+        db.execute("DELETE FROM schema_migrations WHERE version = 9")
         db.commit()
 
     reopened = MemoryStore(path)
