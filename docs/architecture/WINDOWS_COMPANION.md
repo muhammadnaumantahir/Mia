@@ -75,9 +75,21 @@ For a safe replacement:
 
 Remote companion requests require direct HTTPS, exact owner-configured allowlisted hosts and an existing live device token. First-time pairing and owner administration remain local-only. If a remote session expires while disconnected, switch the configured URL back to the loopback Mia endpoint, let the client prove its key and renew locally, then set the HTTPS URL again. The client never bypasses token expiry, TLS verification or the host allowlist. The remote companion allowlist and TLS boundary are configured by the server owner as described in [Companion Sync](COMPANION_SYNC.md).
 
-## Owner trust limitation
+## Owner passkey boundary
 
-The Companion Devices page is protected by the current loopback Host/Origin guard, but it is not a cryptographically authenticated owner session. Another process running locally as the same user may still call owner administration endpoints. This is a tracked limitation under `MIA-COMP-04-OWNER`; do not interpret pairing administration as protected against local malware until that work is complete.
+The Companion Devices page and other high-risk owner administration actions require a verified
+WebAuthn owner session in Mia's production `local_guard=True` deployment. The first passkey is
+enrolled through the local `mia-owner-auth bootstrap` CLI ceremony; use
+`http://localhost:<port>/owner-auth` (not `127.0.0.1`) for the browser ceremony.
+
+Approval decisions, permission administration, high-risk previews/execution, approval-card
+inspection, companion administration reads and Brain write-mode tools require the session.
+Emergency stop, permission revocation, device revocation and approval rejection remain reachable
+without authentication because they reduce authority.
+
+This does not turn Mia into a multi-user service or protect against a compromised browser session
+or malware running as the same Windows user. Keep Mia local-only. Retain multiple passkeys where
+possible; automatic recovery after losing every registered passkey is not currently implemented.
 
 ## Verification
 
