@@ -1312,3 +1312,31 @@ Key commits pushed directly to `main`:
 - `f2441b03cf3d7f8974332861f493e522a5f39ef9` and `2a259856942e486e81fa97fb6c9280e972bd6afa` — task board and project status.
 
 **Verification and limits:** Tests were authored but not executed, per the owner's instruction to defer test execution until development is complete. No passing test or live UI claim is made. The graph is manual-first: it does not automatically extract or invent relations from all conversations, and attached evidence pointers are not independently fetched/verified by this service. Real-browser accessibility and owner acceptance remain outstanding. Code Graph refresh/impact analysis remains pending a local checkout.
+
+
+## 2026-11-26 — MIA-COMP-03 Windows companion lifecycle implementation complete (Coordinator)
+
+Resumed the next dependency-ready P4 implementation after LIFE-10. COMP-02 pairing/device sessions and the LIFE-13 remote companion transport contract were already on `main`. The previous companion task had no committed Windows client/lifecycle implementation.
+
+**Implemented on `main`:**
+- Added optional `.[companion]` dependencies (`cryptography`, `httpx`) and the `mia-companion` CLI without changing the core install requirements.
+- Added `src/mia/companion/dpapi.py` and `identity.py`. Windows CurrentUser DPAPI protects the Ed25519 private key and bearer token; the public key and non-secret device metadata remain readable. There is no plaintext fallback. Pending-first-session state is stored as a protected sentinel so a local retry can recover after the server redeemed the one-time code but session establishment was interrupted. DPAPI is preflighted before consuming a pairing code.
+- Added `agent.py`: loopback-only first pairing, signed Ed25519 pair/auth statements, strict device ID/token/scope checks, mandatory heartbeat scope for the current runtime, short-lived session renewal, heartbeat, refusal of redirects and environment proxies, bounded jittered reconnect, runtime status without secrets, and outbound-only/no-inbound-listener behavior. Existing identities cannot be overwritten by pairing.
+- Added `lifecycle.py`: status/start/stop/restart/update/uninstall, stop marker, graceful shutdown (never force-kill), process health and bounded logs. Explicit-confirmation installation uses Windows ScheduledTasks with the current interactive user, `Interactive` logon type and `Limited` run level; it stores no user password and uses neither SYSTEM nor elevated privilege.
+- Added CLI commands for `pair`, `run`, `status`, `start`, `stop`, `set-server --confirm`, `forget --confirm`, `install --confirm`, `update --confirm` and `uninstall --confirm`. Re-pairing requires server-side device revocation followed by explicit local forget. Forget removes an installed task and refuses to clear secrets if the agent does not stop.
+- Added owner page `/companion` to create one-time pairing codes, choose scopes, view key fingerprints/last-seen metadata and revoke devices; linked it in the assistant navigation and packaged the HTML. The page explicitly warns that owner browser/API authentication is not yet cryptographically enforced.
+- Added `docs/architecture/WINDOWS_COMPANION.md`, refreshed `docs/architecture/IDENTITY_TRUST_MODEL.md`, and reconciled COMP-02/COMP-03, project status and board evidence.
+- Added 17 mocked tests in `tests/test_windows_companion.py` plus Companion Devices page coverage in `tests/test_companion_pairing.py`. A final lifecycle race was fixed: an old stop marker is no longer deleted on process startup, so a fresh graceful stop request cannot be lost; stale markers are ignored using the current process start time.
+
+Key commits pushed directly to `main`:
+- `523bb1b8` — companion package scaffold and DPAPI.
+- `9395e4c4`, `4108784b`, `e0f4da8a` — DPAPI-backed protected identity and pending-session recovery.
+- `e5544121`, `5271ba09`, `f2229022`, `67b9ec69`, `43f430ac`, `c27f835c`, `95d13693`, `4c39ce03`, `3570a68f`, `42898e3f` — signed outbound client, recovery, scope, stop and heartbeat safeguards.
+- `4e9d72c9`, `4039fe38`, `8a0f8050`, `3db30c2d`, `ed7e77ba` — Windows lifecycle, Limited Scheduled Task, stop/reconnect and status.
+- `da6595e6`, `50e64394`, `4c3b4f3f`, `6b356c27`, `d181df66` — CLI, optional extra, endpoint configuration and safe identity removal.
+- `f87a16ef`, `a1e7e670`, `b7b64414`, `bb0ddc66`, `162a63df`, `5f9a0b9f`, `a7c5033f` — owner Companion Devices page, API/nav/package wiring and scope guard.
+- `a804e958`, `06613db8`, `949195cb`, `3b63f62f`, `63beaa3c`, `fb4f97c1` — mocked protocol, lifecycle, stop-marker and page regression coverage.
+- `ace1ef6e`, `26117c27`, `8b7b9b51` — companion setup/trust documentation.
+- `cdf19e13` and `a60ebc0a` — task board and project status reconciliation.
+
+**Verification and boundaries:** Tests were authored but not executed, per the owner's instruction to defer the full test run until development is complete. No automated pass or physical Windows check is claimed. Owner verification still required: actual CurrentUser DPAPI round-trip, Scheduled Task registration/logon/run-level, start/stop/restart/uninstall, first pairing and revocation, remote HTTPS hostname allowlist/TLS, browser accessibility and companion recovery on the user's Windows device. The current agent actively supports heartbeat only; it does not execute computer actions or automatically sync merely because those scopes exist. The `/companion` page remains under the known local-process owner-trust limitation. `MIA-COMP-04-OWNER` remains open; no owner-authentication or approval bypass was introduced. Code Graph impact/refresh remains pending a local checkout.
