@@ -114,7 +114,7 @@ class CompanionAgent:
                 import httpx
             except ImportError as exc:  # pragma: no cover - environment dependent
                 raise CompanionAgentError(
-                    "Install the optional companion extra: pip install -e ".[companion]""
+                    "Install the optional companion extra: pip install -e \".[companion]\""
                 ) from exc
             client = httpx.Client(
                 timeout=10.0,
