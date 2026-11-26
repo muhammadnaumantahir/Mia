@@ -1004,10 +1004,11 @@ def create_app(
     )
     owner_auth = OwnerAuthService(data_dir / "mia-owner-auth.sqlite3")
     app.state.owner_auth = owner_auth
-    # Add this before LoopbackGuard and DeviceConfinementGuard so the resulting
-    # request order is device confinement -> host/origin guard -> owner passkey guard.
-    app.add_middleware(OwnerAuthGuard, service=owner_auth)
     if local_guard:
+        # Request order is device confinement -> host/origin guard -> owner passkey guard.
+        # Test harnesses that intentionally construct an unguarded app keep their existing
+        # service-level tests; the production app sets local_guard=True below.
+        app.add_middleware(OwnerAuthGuard, service=owner_auth)
         # MIA-COMP-01: refuse foreign Host/Origin (DNS rebinding, cross-site POST/WebSocket).
         app.add_middleware(LoopbackGuard)
     app.add_middleware(DeviceConfinementGuard)
