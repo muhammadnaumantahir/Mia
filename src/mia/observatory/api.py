@@ -521,7 +521,7 @@ class KnowledgeGraphEdgeInput(BaseModel):
     to_id: str = Field(min_length=1, max_length=160)
     relation: str = Field(min_length=1, max_length=30)
     provenance: str = Field(default="owner_provided", max_length=20)
-    confidence: float | None = Field(default=None, ge=0, le=1)
+    confidence: float | None = Field(default=None, ge=0, le=1, strict=True)
     evidence: list[EvidenceRef] = Field(default_factory=list, max_length=20)
     note: str = Field(default="", max_length=500)
     visibility: str = Field(default="normal", max_length=10)
@@ -533,7 +533,7 @@ class KnowledgeGraphEdgeCorrection(BaseModel):
 
     relation: str | None = Field(default=None, min_length=1, max_length=30)
     provenance: str | None = Field(default=None, max_length=20)
-    confidence: float | None = Field(default=None, ge=0, le=1)
+    confidence: float | None = Field(default=None, ge=0, le=1, strict=True)
     evidence: list[EvidenceRef] | None = Field(default=None, max_length=20)
     note: str | None = Field(default=None, max_length=500)
     visibility: str | None = Field(default=None, max_length=10)
