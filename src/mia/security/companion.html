@@ -94,7 +94,14 @@ function say(message,error=false){$('notice').textContent=message;$('notice').cl
 async function api(url,options={}){
  const response=await fetch(url,{headers:{'Content-Type':'application/json'},...options});
  let data={};try{data=await response.json();}catch{}
- if(!response.ok)throw new Error(typeof data.detail==='string'?data.detail:'Request failed ('+response.status+')');
+ if(!response.ok){
+  if(['owner_auth_required','owner_auth_setup_required','owner_auth_origin_required'].includes(data.code)){
+   const target=new URL(data.login_url||('http://localhost:'+(location.port||'80')+'/owner-auth'),location.href);
+   target.searchParams.set('return',location.pathname+location.search+location.hash);
+   location.assign(target.href);
+  }
+  throw new Error(typeof data.detail==='string'?data.detail:'Request failed ('+response.status+')');
+ }
  return data;
 }
 function node(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;}
