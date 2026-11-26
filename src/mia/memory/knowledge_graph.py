@@ -401,11 +401,15 @@ class KnowledgeGraph:
                 if visibility not in VISIBILITIES:
                     raise KnowledgeGraphError("visibility must be normal or private")
                 updates["visibility"] = visibility
-            if provenance is not None:
-                # Any change to the source claim needs owner review again unless explicitly
-                # based on owner-provided provenance.
-                updates["state"] = "confirmed" if new_provenance == "owner_provided" else "inferred"
+            if new_provenance != "owner_provided" and {
+                "relation", "provenance", "confidence", "evidence_json"
+            }.intersection(updates):
+                # Material changes to a derived claim invalidate its previous review.
+                updates["state"] = "inferred"
                 updates["reviewed_at"] = None
+            elif provenance == "owner_provided":
+                updates["state"] = "confirmed"
+                updates["reviewed_at"] = _now()
             if not updates:
                 raise KnowledgeGraphError("no edge correction was supplied")
             if "relation" in updates:
