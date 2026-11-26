@@ -59,15 +59,24 @@ def _b64(value: bytes) -> str:
 def _origin(value: str | None, host: str | None, scheme: str) -> str:
     if not value or not host:
         raise OwnerAuthError("Open Mia at http://localhost:<port>; an exact browser Origin is required")
-    parts = urlsplit(value)
-    if (
-        parts.scheme not in {"http", "https"}
-        or parts.hostname != RP_ID
-        or parts.netloc.casefold() != host.casefold()
-        or parts.path or parts.query or parts.fragment
-        or parts.username is not None or parts.password is not None
-        or parts.scheme != scheme
-    ):
+    try:
+        parts = urlsplit(value)
+        host_parts = urlsplit("//" + host)
+        default_port = 443 if parts.scheme == "https" else 80
+        origin_port = parts.port or default_port
+        request_port = host_parts.port or default_port
+        valid = (
+            parts.scheme in {"http", "https"}
+            and (parts.hostname or "").casefold() == RP_ID
+            and (host_parts.hostname or "").casefold() == RP_ID
+            and origin_port == request_port
+            and not parts.path and not parts.query and not parts.fragment
+            and parts.username is None and parts.password is None
+            and parts.scheme == scheme
+        )
+    except ValueError:
+        valid = False
+    if not valid:
         raise OwnerAuthError("Owner passkeys are bound to the exact localhost browser origin")
     return value
 
