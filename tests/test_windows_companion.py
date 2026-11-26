@@ -240,7 +240,6 @@ def test_run_loop_exits_after_graceful_stop_signal(tmp_path):
     server = FakeCompanionServer()
     agent = CompanionAgent(
         identity, client=server, clock=FakeClock(), heartbeat_seconds=10,
-        sleep=lambda _seconds: None,
     )
     agent.pair("http://127.0.0.1:8765", "ABCD2345EF", "Mia laptop")
     server.on_heartbeat = lambda: agent.stop_path.write_text("stop", encoding="ascii")
