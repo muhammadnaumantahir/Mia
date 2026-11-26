@@ -20,14 +20,22 @@ This adds the Ed25519 `cryptography` package and the `httpx` client. The core Mi
 
 1. Open Mia locally at `http://127.0.0.1:8765/companion`.
 2. Enter a device label, select only the required scopes, and generate a one-time code. The code expires after the selected 1–5 minute period and is shown once.
-3. On the Windows user account that will run the companion, execute:
+3. On the Windows machine hosting Mia, execute:
 
    ```powershell
    mia-companion pair --server http://127.0.0.1:8765 --name "My Windows PC"
    ```
 
-4. Enter the one-time code when prompted. The CLI does not echo the code. Pairing and initial key enrollment are loopback-only by design.
+4. Enter the one-time code when prompted. The CLI does not echo the code. Pairing and initial key enrollment are loopback-only by design; this release does not support first-time pairing directly to a remote HTTPS host.
 5. Confirm the new device appears in Mia's Companion Devices page. Use `mia-companion status` to inspect the local client state.
+
+After local enrollment, the owner may point the already-paired identity at a remote HTTPS hostname only when remote companion access is enabled on the Mia host:
+
+```powershell
+mia-companion set-server --url https://mia.example.com --confirm
+```
+
+The hostname must be in the server's exact `MIA_REMOTE_ALLOWED_HOSTS` allowlist, the connection must use valid direct TLS, and the current device token must still be live. This command only changes the outbound destination; it does not pair a new device or widen its scopes.
 
 The client generates an Ed25519 private key locally. The private key and session bearer token are protected with Windows CurrentUser DPAPI before they are written to `%LOCALAPPDATA%\Mia\Companion\device.json`. No plaintext fallback is permitted on other platforms. The public key, device label, scopes and server URL are not secrets and are stored as ordinary metadata. Runtime status and logs are stored under `%LOCALAPPDATA%\Mia\Companion\runtime\`; they do not contain the private key or bearer token.
 
@@ -37,9 +45,11 @@ The client generates an Ed25519 private key locally. The private key and session
 mia-companion status
 mia-companion start
 mia-companion stop
+mia-companion set-server --url https://mia.example.com --confirm
 mia-companion install --confirm
 mia-companion update --confirm
 mia-companion uninstall --confirm
+mia-companion forget --confirm
 ```
 
 - `start` runs the companion in the current user's session. If it is already running, Mia reports the existing status.
@@ -63,7 +73,7 @@ For a safe replacement:
 3. Run `mia-companion forget --confirm` to remove the local DPAPI-protected identity. This does not revoke the server-side device.
 4. Generate a new one-time code in Mia and pair again.
 
-Remote companion requests require direct HTTPS, exact owner-configured allowlisted hosts and an existing live device token. First-time pairing and owner administration remain local-only. A remote session that expires while the device is disconnected must be re-established from the local Mia host; the client does not bypass this transport rule. The remote companion allowlist and TLS boundary are configured by the server owner as described in [Companion Sync](COMPANION_SYNC.md).
+Remote companion requests require direct HTTPS, exact owner-configured allowlisted hosts and an existing live device token. First-time pairing and owner administration remain local-only. If a remote session expires while disconnected, switch the configured URL back to the loopback Mia endpoint, let the client prove its key and renew locally, then set the HTTPS URL again. The client never bypasses token expiry, TLS verification or the host allowlist. The remote companion allowlist and TLS boundary are configured by the server owner as described in [Companion Sync](COMPANION_SYNC.md).
 
 ## Owner trust limitation
 
