@@ -364,9 +364,17 @@ def test_watch_refresh_picks_up_changes_and_removes_deleted_files(api):
     assert app.state.file_index.search("pineapple") == []
 
 
-def test_http_purge_all(api):
+def test_http_purge_all_stops_refresh_and_removes_index(api):
     c, _ = api
     sid = c.post("/api/file-index/selections", json={"root_id": "root_1", "path": "notes"}).json()["id"]
     c.post(f"/api/file-index/selections/{sid}/reindex")
-    assert c.delete("/api/file-index").json() == {"purged": True}
-    assert c.get("/api/file-index/status").json()["files"] == 0
+    started = c.post(
+        "/api/file-index/watch/start",
+        json={"interval_seconds": 5, "max_selections_per_cycle": 1},
+    )
+    assert started.status_code == 200 and started.json()["enabled"] is True
+    result = c.delete("/api/file-index")
+    assert result.status_code == 200 and result.json()["purged"] is True
+    assert result.json()["watcher"]["enabled"] is False
+    status = c.get("/api/file-index/status").json()
+    assert status["files"] == 0 and status["selections"] == 0
