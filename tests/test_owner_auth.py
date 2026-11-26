@@ -7,6 +7,8 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
+from mia.brain.broker import OwnerPermissionEvaluator
+
 from mia.observatory.api import create_app
 from mia.observatory.store import ObservatoryStore
 from mia.security.owner_auth import (
@@ -263,6 +265,17 @@ def test_owner_session_is_hashed_expires_and_can_be_revoked(owner_service):
     assert service.has_valid_session(token) is False
     clock.advance(seconds=SESSION_TTL_SECONDS + 1)
     assert service.has_valid_session(token) is False
+
+
+def test_brain_write_mode_tools_require_owner_session_even_with_existing_grants():
+    evaluator = OwnerPermissionEvaluator(
+        permission_policy=object(),
+        capability_registry=object(),
+        owner_session=lambda: False,
+    )
+    decision = evaluator.evaluate(SimpleNamespace(mode="write"), {})
+    assert decision.allowed is False
+    assert "authenticated owner passkey session" in decision.reason
 
 
 def test_guard_requires_owner_auth_but_preserves_safety_controls():
