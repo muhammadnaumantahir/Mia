@@ -100,6 +100,8 @@ _RULES: tuple[Capability, ...] = (
     Capability("POST /api/life/cycle", _S.EXTERNAL_NETWORK, _A.NONE, "life", "pause/emergency stop"),
     # Wide or destructive owner-data operations.
     Capability("POST /api/workflows*", _S.OWNER_DATA, _A.NONE, "workflows", "internal non-destructive steps only; completed tasks can be reopened; cancel/pause"),
+    Capability("POST /api/owner-auth/logout", _S.SAFETY_CONTROL, _A.ALWAYS_ALLOWED, "owner-auth", "authenticate again"),
+    Capability("POST /api/owner-auth/*", _S.INTERNAL_STATE, _A.NONE, "owner-auth", "local passkey enrollment/login; challenge-bound and user-verified"),
     Capability("POST /api/companion-admin/revoke-all", _S.SAFETY_CONTROL, _A.ALWAYS_ALLOWED, "companion", "pair devices again"),
     Capability("POST /api/companion-admin/devices/*/revoke", _S.SAFETY_CONTROL, _A.ALWAYS_ALLOWED, "companion", "pair the device again"),
     Capability("POST /api/companion-admin/*", _S.OWNER_DATA, _A.OWNER_CONFIRM, "companion", "revoke the device; codes expire in 5 minutes"),
