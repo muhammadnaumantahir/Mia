@@ -190,9 +190,9 @@ def test_project_rename_migrates_graph_scope_and_project_nodes(memory):
 
     assert memory.knowledge_graph.get(edge_id)["to_node"]["title"] == "Atlas/Next"
     assert memory.knowledge_graph.get(task_edge)["project_key"] == "atlas/next"
-    assert [item["edge_id"] for item in memory.knowledge_graph.list_edges(project="Atlas/Next")] == [
+    assert {item["edge_id"] for item in memory.knowledge_graph.list_edges(project="Atlas/Next")} == {
         edge_id, task_edge
-    ]
+    }
 
 
 def test_project_delete_removes_project_node_edges_but_keeps_record_task_edges(memory):
@@ -252,6 +252,10 @@ def test_graph_api_supports_project_nodes_review_correction_and_delete(tmp_path)
     )
     assert corrected.status_code == 200, corrected.text
     assert corrected.json()["edge"]["relation"] == "involves"
+    assert corrected.json()["edge"]["state"] == "inferred"
+    assert client.get(
+        "/api/memory/graph/nodes", params={"project": "Unregistered"}
+    ).json()["items"] == []
 
     removed = client.delete(f"/api/memory/graph/edges/{edge_id}")
     assert removed.status_code == 200 and removed.json()["deleted"] is True
