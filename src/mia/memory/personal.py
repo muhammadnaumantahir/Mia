@@ -411,6 +411,11 @@ class PersonalData:
             ).fetchone()
             if row is None:
                 return False
+            db.execute(
+                "DELETE FROM knowledge_graph_edges WHERE "
+                "(from_type = 'task' AND from_id = ?) OR (to_type = 'task' AND to_id = ?)",
+                (item_id, item_id),
+            )
             db.execute("DELETE FROM personal_items WHERE item_id = ?", (item_id,))
             db.execute("DELETE FROM personal_item_history WHERE item_id = ?", (item_id,))
             AuditLog.write(
