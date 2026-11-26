@@ -214,6 +214,8 @@ class CompanionAgent:
         )
         if session.get("device_id") != data["device_id"]:
             raise CompanionAgentError("The companion server returned a different device identity")
+        if not str(session.get("token") or "").startswith("mia-dev_"):
+            raise CompanionAgentError("The companion server did not issue a valid device session")
         scopes = sorted({str(scope) for scope in session.get("scopes", [])})
         if scopes != sorted({str(scope) for scope in data["scopes"]}):
             raise CompanionAgentError("The companion device scopes changed; owner review is required")
@@ -305,8 +307,9 @@ class CompanionAgent:
     def poll_once(self) -> dict[str, Any]:
         data = self.identity.load()
         server = validate_server_url(data["server_url"])
-        expiry = _parse_expiry(data["expires_at"])
-        if expiry <= self.clock() + timedelta(seconds=SESSION_RENEW_BEFORE_SECONDS):
+        expiry_text = data.get("expires_at") or ""
+        expiry = _parse_expiry(expiry_text) if expiry_text else None
+        if expiry is None or expiry <= self.clock() + timedelta(seconds=SESSION_RENEW_BEFORE_SECONDS):
             data = self._new_session(data)
         result = self._request(
             "POST", "/api/companion/heartbeat", server_url=server,
