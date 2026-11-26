@@ -226,8 +226,8 @@ def test_sandbox_rejects_missing_or_contradictory_worker_evidence(corruption, me
     runner = DockerSandboxRunner(subprocess_run=CorruptReportDocker())
     with pytest.raises(SandboxExecutionError, match=message):
         runner.validate_candidate(
-            source_code="def run(input_data): return {}\\n",
-            test_source_code="def test_run(): assert True\\n",
+            source_code="def run(input_data): return {}\n",
+            test_source_code="def test_run(): assert True\n",
         )
 
 def test_candidate_tests_are_skipped_after_security_findings():
