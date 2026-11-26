@@ -108,6 +108,7 @@ class CompanionAgent:
         self.sleep = sleep
         self.random_value = random_value
         self.heartbeat_seconds = heartbeat_seconds
+        owns_client = client is None
         if client is None:
             try:
                 import httpx
@@ -122,7 +123,7 @@ class CompanionAgent:
                 verify=True,
             )
         self.client = client
-        self._owns_client = client is not None
+        self._owns_client = owns_client
         self._stop = threading.Event()
         self.status_path = self.identity.home / "runtime" / "status.json"
         self.stop_path = self.identity.home / "runtime" / "stop.request"
@@ -177,16 +178,17 @@ class CompanionAgent:
 
     def _new_session(self, data: dict[str, Any], *, allow_expired_local: bool = False) -> dict[str, Any]:
         server = validate_server_url(data["server_url"])
-        expiry = _parse_expiry(data["expires_at"])
-        token = data["session_token"]
+        token = data.get("session_token") or ""
         local = urlsplit(server).hostname.casefold() in {"localhost", "127.0.0.1", "::1"}
-        if expiry <= self.clock() and not local:
+        expiry_text = data.get("expires_at") or ""
+        expiry = _parse_expiry(expiry_text) if expiry_text else None
+        if (expiry is None or expiry <= self.clock()) and not local:
             raise CompanionAgentError(
                 "This remote session expired while disconnected. Reconnect to Mia locally and pair again."
             )
         # Remote session renewal is bound to a still-live bearer token. Local loopback
         # renewal can re-prove the Ed25519 key after expiry without sending an expired token.
-        auth_token = token if expiry > self.clock() else None
+        auth_token = token if token and expiry and expiry > self.clock() else None
         challenge = self._request(
             "POST", "/api/companion/challenge", server_url=server,
             token=auth_token,
@@ -229,6 +231,11 @@ class CompanionAgent:
                 "Install the optional companion extra: pip install -e ".[companion]""
             ) from exc
         server = validate_server_url(server_url)
+        server_host = urlsplit(server).hostname.casefold()
+        if server_host not in {"localhost", "127.0.0.1", "::1"}:
+            raise CompanionAgentError(
+                "First-time companion pairing must be performed against Mia on loopback"
+            )
         name = " ".join((device_name or "").split())
         if not 1 <= len(name) <= 80:
             raise CompanionAgentError("Device name must contain 1–80 characters")
@@ -262,15 +269,14 @@ class CompanionAgent:
             "device_name": str(device["name"]),
             "public_key": public_key,
             "private_key": private_bytes,
-            "session_token": "mia-dev_pending",
-            "expires_at": "1970-01-01T00:00:00+00:00",
+            "session_token": "",
+            "expires_at": "",
             "scopes": sorted({str(scope) for scope in device["scopes"]}),
             "created_at": str(device["created_at"]),
         }
-        # First authentication proves possession of the new private key. DPAPI is used
-        # for the first durable write; the placeholder token is replaced immediately.
-        data["session_token"] = ""
-        self.identity.save_initial_key_only = False if not hasattr(self.identity, "save_initial_key_only") else self.identity.save_initial_key_only
+        # Persist the private key before attempting session creation. If Mia restarts
+        # between redemption and login, a local retry can still prove device identity.
+        self.identity.save(data)
         challenge = self._request(
             "POST", "/api/companion/challenge", server_url=server,
             body={"device_id": data["device_id"]},
@@ -373,14 +379,16 @@ class CompanionAgent:
                 try:
                     self.poll_once()
                     delay = 5.0
-                    self._stop.wait(self.heartbeat_seconds)
+                    self._wait_for_next_heartbeat(self.heartbeat_seconds, external_stop)
                 except CompanionAgentError as exc:
                     self.consecutive_failures += 1
                     self.last_error = str(exc)[:240]
                     self.state = "degraded"
                     self.publish_status()
                     jitter = 0.8 + (self.random_value() * 0.4)
-                    self._stop.wait(min(MAX_RECONNECT_SECONDS, delay) * jitter)
+                    self._wait_for_next_heartbeat(
+                        min(MAX_RECONNECT_SECONDS, delay) * jitter, external_stop
+                    )
                     delay = min(MAX_RECONNECT_SECONDS, delay * 2)
         except KeyboardInterrupt:
             pass
@@ -389,7 +397,16 @@ class CompanionAgent:
             self.publish_status()
         return 0
 
+    def _wait_for_next_heartbeat(
+        self, seconds: float, external_stop: threading.Event
+    ) -> None:
+        deadline = time.monotonic() + max(0.0, seconds)
+        while time.monotonic() < deadline:
+            if self._stop.is_set() or external_stop.is_set() or self.stop_path.exists():
+                return
+            self._stop.wait(min(1.0, deadline - time.monotonic()))
+
     def close(self) -> None:
         close = getattr(self.client, "close", None)
-        if callable(close):
+        if self._owns_client and callable(close):
             close()
