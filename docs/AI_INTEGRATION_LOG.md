@@ -1283,3 +1283,32 @@ Commits pushed directly to `main`:
 - `4e2ef653c8a8d4fcc17d87aea82ddd7b6402ff4a` — status update.
 
 **Verification:** Regression tests were authored but not executed, per the owner's instruction to defer test execution until development is complete. No pass is claimed. Real screen-reader and non-Chromium browser checks remain `OWNER_VERIFICATION_REQUIRED`. Code Graph impact/refresh was not run because no local checkout is available in this environment. The parent MIA-LIFE-06 and its UI child are now DONE for implementation.
+
+
+## 2026-11-26 — MIA-LIFE-10 personal knowledge graph implementation complete (Coordinator)
+
+Resumed the stale MIA-LIFE-10 claim after confirming its A1 heartbeat was 2026-11-25T05:46Z and no graph implementation commit/checkpoint was present on remote `main`. Dependencies LIFE-04, LIFE-06 and LIFE-07 are now implementation-complete, so the previous "file indexing not met" blocker was no longer current.
+
+**Implemented on `main`:**
+- Added additive schema migration v9 for `knowledge_graph_edges` and `knowledge_graph_edge_history`; existing `memory_relationships` and its two-hop retrieval behavior are preserved.
+- Added `src/mia/memory/knowledge_graph.py` with typed `record`, `task` and `project` nodes. Structured record types cover entities/people, topics, facts, decisions, goals and source-backed research findings; task nodes reuse the personal task store; project nodes reuse registered project workspaces.
+- Added typed relations, provenance, finite 0–1 confidence, evidence-reference pointers, optional private visibility, project scope, inferred/confirmed/rejected state, explicit confirm/reject review, correction snapshots and deletion snapshots.
+- Source-backed, inferred, hypothesis and validated edges require evidence pointers. Non-owner-provided edges begin in inferred state; material correction to a derived claim resets its review state. Evidence pointers are stored but not automatically fetched or verified by this graph service.
+- Enforced project scope at edge creation, excluded private tasks and temporary/retired records, filtered project graph queries, and failed closed for unknown project filters. Cross-project edges are refused.
+- Integrated edge cleanup with task/record/project deletion and updated graph project endpoint IDs/scope during project rename. Project deletion removes project-node edges but preserves record/task links whose labels remain with their source records.
+- Added API endpoints under `/api/memory/graph`, the owner-facing `/knowledge-graph` page, package-data registration, navigation links and `docs/architecture/PERSONAL_KNOWLEDGE_GRAPH.md`.
+- Added `tests/test_knowledge_graph.py` for mixed node types, evidence/provenance/confidence, owner review, correction history, private-node refusal, project isolation, deletion/rename integrity, API lifecycle, page serving and schema-v8 additive upgrade.
+
+Key commits pushed directly to `main`:
+- `ca4866dfeed7985d43fc3c5ba15f0c19109600f2` — schema v9.
+- `6586e350f975ae5fcf662c0948a9483676100da9` — graph service.
+- `52120658c2b27b509f0f5af1db25bc01996bf13f` — MemoryStore integration.
+- `5b8c4350b7966a1a5ec5c3b404b3a67ba39a8b97`, `4af54aeea85a94539533fc9b8863849736299079`, `6a98c1ac9ec7e4287efcf495495566d6182081ce` — node deletion/rename integrity.
+- `4b93d19b191f3f0c97f822ee7faf8cc3bacd13cd` — API and page route.
+- `539c1ea5d23a8cdf98e489f05a7beef3e33403fc` — graph UI.
+- `a03fd4875570946e4229ddf253b8b7f7b60e2f67` — package data.
+- `5a94774e89048f898ac3586ce3756d3092d0cca4`, `876753c814701e7f181357f215c28646b3f5322c`, `0024e788842b3f0c35fa60613153af367ce7f38c`, `d844dfc0fb5ce6591252ca71fb5b5be9a8774715`, `390bbfd8e0baccf9dee4bd674b7e467d7da56c5c` — graph lifecycle, migration and project-isolation tests.
+- `8891106ab1f5af50572c73a64c56766cc2594366` — graph trust contract documentation.
+- `f2441b03cf3d7f8974332861f493e522a5f39ef9` and `2a259856942e486e81fa97fb6c9280e972bd6afa` — task board and project status.
+
+**Verification and limits:** Tests were authored but not executed, per the owner's instruction to defer test execution until development is complete. No passing test or live UI claim is made. The graph is manual-first: it does not automatically extract or invent relations from all conversations, and attached evidence pointers are not independently fetched/verified by this service. Real-browser accessibility and owner acceptance remain outstanding. Code Graph refresh/impact analysis remains pending a local checkout.
