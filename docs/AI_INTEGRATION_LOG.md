@@ -1246,3 +1246,40 @@ Commits pushed directly to `main`:
 - `10e4446e3db0de4d6a0e656bd5bb07ebe57a0155` — project-workspace status update.
 
 **Verification:** Regression tests were authored but not executed, per the owner's instruction to defer test execution until development is complete. No test pass is claimed. Owner screen-reader/non-Chromium checks remain `OWNER_VERIFICATION_REQUIRED`. Code Graph impact/refresh was not run because there is no local checkout available in this environment. The LIFE-06 parent description was corrected to reflect that its Brain/Gateway and watch/extraction children are DONE; only the A6 UI child remains IN_PROGRESS.
+
+
+## 2026-11-26 — MIA-LIFE-06-UI complete; File Intelligence available at /files (Coordinator)
+
+Resumed the A6-owned UI residual after refreshing `main`, the task board, agent registry and integration log. The A6 registry heartbeat and only matching claim were from 2026-11-25T18:10Z; there was no later source commit or integration checkpoint for the UI. The existing backend, Brain/Gateway tool, bounded watcher and document extraction work were re-read before building the UI.
+
+**Implemented on `main`:**
+- Added `src/mia/knowledge/file_index.html` and a `/files` page route. The page is included in the `mia.knowledge` package data and linked from the Life, Tasks, Research, Workflows and Projects navigation.
+- The owner can choose a configured filesystem root, browse directories, explicitly add a folder selection, and separately trigger indexing. The UI never auto-selects or auto-indexes a directory.
+- Added selected-folder status and skip reasons, indexed-file inventory, individual index deletion, selection deletion and full-index purge. These actions remove only Mia's indexed copy; source files are never changed.
+- Added local FTS keyword search results with relative source path, line ranges, staleness, untrusted-content labels and prompt-injection warnings. Each result can be re-verified against the live file and unchanged file hash.
+- Added explicit automatic-refresh start/stop controls with bounded interval/batch inputs and live watcher status. The worker remains off unless the owner starts it.
+- Hardened the full-index purge endpoint so it stops the refresh worker before removing selections and indexed chunks. Added a regression test for that lifecycle.
+- Clarified in the UI that deleting one file from an active selection may allow a future refresh to index it again; removing its selection is the durable opt-out.
+- Added `tests/test_file_index_page.py` for the real API/Chromium page flow, selected-folder browsing, index/search/source verification, injection flags, traversal rejection, deletion without source modification, refresh start/stop, purge shutdown and narrow-screen reflow.
+- Added `docs/architecture/FILE_INDEX.md` with the UI, trust, privacy, refresh and limitation contracts.
+
+Commits pushed directly to `main`:
+- `26a8a886f914da0b49dfc9011d6b2807c1a655c5` — initial owner file intelligence workspace.
+- `3dc3ffbc4911c5304af1e55f72e5e66ad2646351` — `/files` page route.
+- `c1a2a63978ee58212554db26d4894addcd0c144d` — package data.
+- `86b15035203e284487fae8274543b16ff25b3add` — Life navigation.
+- `2e1d40190a555006824a1f080b41c256d30e441f` — Tasks navigation.
+- `964e4156de993d680ddfab59f6cc445753817796` — Research navigation.
+- `746858776cb3fe838150a3738fd3f08d6d9da8e6` — Workflows navigation.
+- `17a2027207df589a875436d9fd5ab72ca53234e1` — Projects navigation.
+- `70520b775f4a2f05587707b3e7216da0a8af53b0` — browser page tests.
+- `3ba85f7dc2f864ed2ffa21f6a5733e72f93e4d88` — test environment isolation.
+- `8ce276616b78f720d576e8e259932f4ccdd0a5c7` — purge stops refresh worker.
+- `31c58eed797aeda9f745f66dfe2e9dc5f1f26890` — purge lifecycle regression test.
+- `dc7306460a10bda317fcee2649b509db6934f748` — refresh/deletion UX clarifications.
+- `ef93227674bd17d7749f1e038adcc49b53d9de80` — browser purge-stop/source-preservation test.
+- `f55d03369951b100f24d71a89f54fc4f210ae6f2` — architecture/trust contract.
+- `beebb3f722626d2e23d90d112e1724776c504404` — task board completion evidence.
+- `4e2ef653c8a8d4fcc17d87aea82ddd7b6402ff4a` — status update.
+
+**Verification:** Regression tests were authored but not executed, per the owner's instruction to defer test execution until development is complete. No pass is claimed. Real screen-reader and non-Chromium browser checks remain `OWNER_VERIFICATION_REQUIRED`. Code Graph impact/refresh was not run because no local checkout is available in this environment. The parent MIA-LIFE-06 and its UI child are now DONE for implementation.
