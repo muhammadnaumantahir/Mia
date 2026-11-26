@@ -595,7 +595,7 @@ class OwnerAuthGuard:
                 {
                     "detail": "Owner passkey setup is required before this high-risk action.",
                     "code": "owner_auth_setup_required",
-                    "login_url": "/owner-auth",
+                    "login_url": login_url,
                     "bootstrap_command": "mia-owner-auth bootstrap",
                 },
                 status_code=428,
@@ -610,7 +610,7 @@ class OwnerAuthGuard:
                 {
                     "detail": "Authenticate with the owner passkey before this high-risk action.",
                     "code": "owner_auth_required",
-                    "login_url": "/owner-auth",
+                    "login_url": login_url,
                 },
                 status_code=401,
                 headers={"Cache-Control": "no-store"},
