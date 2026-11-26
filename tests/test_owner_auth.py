@@ -284,6 +284,7 @@ def test_live_app_fails_closed_until_owner_passkey_is_enrolled(tmp_path, monkeyp
         "/api/computer/approvals/not-real/approve",
         headers={"Host": "127.0.0.1:8765", "Origin": "http://127.0.0.1:8765"},
     )
-    assert ip_origin.status_code == 400
+    assert ip_origin.status_code == 403
+    assert ip_origin.json()["code"] == "owner_auth_origin_required"
     page = client.get("/owner-auth")
     assert page.status_code == 200 and "Owner passkey" in page.text
