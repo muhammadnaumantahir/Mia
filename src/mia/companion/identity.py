@@ -68,7 +68,7 @@ class CompanionIdentity:
                 raise ValueError("unsupported companion identity format")
             private_key = self.protector.unprotect(_decode(payload["private_key_dpapi"]))
             token = self.protector.unprotect(_decode(payload["session_token_dpapi"]))
-            if len(private_key) != 32 or not token.startswith(b"mia-dev_"):
+            if len(private_key) != 32 or (token and not token.startswith(b"mia-dev_")):
                 raise ValueError("protected companion identity is invalid")
             data = {
                 "server_url": payload["server_url"],
@@ -97,7 +97,7 @@ class CompanionIdentity:
             raise ValueError("companion identity is incomplete")
         private_key = bytes(data["private_key"])
         session_token = str(data["session_token"]).encode("ascii")
-        if len(private_key) != 32 or not session_token.startswith(b"mia-dev_"):
+        if len(private_key) != 32 or (session_token and not session_token.startswith(b"mia-dev_")):
             raise ValueError("refusing to persist an invalid companion identity")
         self.home.mkdir(parents=True, exist_ok=True)
         payload = {
