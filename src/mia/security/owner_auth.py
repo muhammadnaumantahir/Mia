@@ -453,19 +453,33 @@ class OwnerAuthService:
         except Exception as exc:
             raise OwnerAuthError("The passkey assertion could not be verified") from exc
         new_count = int(verified.new_sign_count)
-        old_count = int(stored["sign_count"])
-        # Synced multi-device passkeys may report a zero counter. Preserve a prior
-        # positive counter, but reject a non-zero replay/non-increasing counter.
-        if new_count and old_count and new_count <= old_count:
-            raise OwnerAuthError("The authenticator signature counter did not advance")
         now = self.clock().isoformat()
         with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            current = db.execute(
+                "SELECT sign_count, public_key FROM owner_credentials WHERE credential_id=?",
+                (credential_id,),
+            ).fetchone()
+            if current is None or not hmac.compare_digest(
+                bytes(current["public_key"]), bytes(stored["public_key"])
+            ):
+                db.execute("ROLLBACK")
+                raise OwnerAuthError("The owner credential changed during authentication")
+            current_count = int(current["sign_count"])
+            # Synced multi-device passkeys may report zero. Otherwise compare against
+            # the current value inside the write transaction to prevent concurrent
+            # assertions from rolling a newer sign counter backwards.
+            if new_count and current_count and new_count <= current_count:
+                db.execute("ROLLBACK")
+                raise OwnerAuthError("The authenticator signature counter did not advance")
             changed = db.execute(
                 "UPDATE owner_credentials SET sign_count=?, last_used_at=? WHERE credential_id=?",
-                (max(old_count, new_count), now, credential_id),
+                (max(current_count, new_count), now, credential_id),
             )
             if changed.rowcount != 1:
+                db.execute("ROLLBACK")
                 raise OwnerAuthError("The owner credential changed during authentication")
+            db.execute("COMMIT")
         return self._create_session()
 
     def _create_session(self) -> str:
