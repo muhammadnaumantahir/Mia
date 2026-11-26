@@ -251,6 +251,28 @@ def test_run_loop_exits_after_graceful_stop_signal(tmp_path):
     agent.close()
 
 
+def test_stale_stop_marker_is_not_discarded_or_treated_as_a_new_stop(tmp_path):
+    import os
+    import threading
+    import time
+
+    clock = FakeClock()
+    server = FakeCompanionServer()
+    agent, identity, server, _ = pair_agent(tmp_path, clock=clock, server=server)
+    stale_time = time.time() - 120
+    agent.stop_path.write_text("previous process stopped", encoding="ascii")
+    os.utime(agent.stop_path, (stale_time, stale_time))
+    original_mtime = agent.stop_path.stat().st_mtime
+    stop_event = threading.Event()
+    server.on_heartbeat = stop_event.set
+
+    assert agent.run_forever(stop_event=stop_event) == 0
+    assert agent.stop_path.exists()
+    assert agent.stop_path.stat().st_mtime == original_mtime
+    assert agent.state == "stopped"
+    agent.close()
+
+
 def test_dpapi_has_no_plaintext_fallback_off_windows(monkeypatch):
     monkeypatch.setattr("mia.companion.dpapi.sys.platform", "linux")
     with pytest.raises(CompanionSecretProtectionError, match="DPAPI"):
