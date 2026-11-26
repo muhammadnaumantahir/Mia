@@ -1195,3 +1195,27 @@ Commits, all pushed directly to `main`:
 - `84086209f8ab5a0c1c4e903176070c5d8aa4adba` — task board evidence/status.
 
 **Verification:** Tests were authored but not executed, per the owner's instruction to defer test execution until development is complete. No test pass is claimed. A local repository checkout was unavailable in this environment (GitHub DNS resolution failed), so Code Graph impact analysis and `python scripts/update_code_graph.py` were not run. The new code and test files were confirmed on remote `main` through repository fetches. No Docker execution or live candidate validation was performed here.
+
+
+## 2026-11-26 — MIA-LIFE-07-INJECTION complete; LIFE-07 reconciled (Coordinator)
+
+Resumed the stale research-injection child after refreshing the board, source, tests and integration log. Its previous A7 claim had no later implementation checkpoint/commit in the remote history; no source ownership conflict was found.
+
+**Finding:** the research feature already used a separate system message that treats page content as untrusted evidence, same-run exact-quote validation, citation refusal for flagged spans, owner review and a default local-only synthesis route. However, the injection detector scanned only the literal source text. It could miss some common visual/format obfuscations, including compatibility-width characters, zero-width formatting controls, selected Unicode lookalikes and instructions broken across lines.
+
+**Implemented on `main`:**
+- Added a scan-only Unicode NFKC/case-fold normalization pass, selected Cyrillic/Greek lookalike folding, zero-width format-control removal and whitespace/line-break collapsing.
+- Preserved an offset map from every normalized character back to its original source range. Returned excerpts and citation-overlap checks continue to operate on the untouched source text.
+- Expanded patterns for role/developer labels, instruction override, secret/prompt exfiltration, command execution, data transfer and concealment.
+- Added adversarial tests for compatibility characters, newline breaks, zero-width insertion, selected homoglyphs, source-offset integrity, refusal of an obfuscated citation, and ordinary Urdu/Hindi text.
+- Added `docs/research/RESEARCH_TRUST_BOUNDARY.md`, documenting the layered safeguards and explicitly stating that the detector is heuristic, not a semantic proof.
+- Reconciled the LIFE-07 parent task: bounded search, Gateway synthesis, UI, owner-reviewed findings, project-scoped memory and injection-hardening children are now implemented. Real-site and accessibility acceptance remain owner verification.
+
+Commits pushed directly to `main`:
+- `a3401a8b691d5574d717840918d5b922f9ed057f` — normalize and harden injection detection.
+- `947ee65a202f23422fd8025e698b9eff9eac7b44` — add adversarial research tests.
+- `f648955f31d573c1bfe6b4c105838921bed68baa` — document the research trust boundary.
+- `6d5e93f01abc6049a05f4aaf7e49e4186627b033` — reconcile task board parent/child status.
+- `e7edc67090163099a1f7b14a77901807d2ac1cec` — update digital-life status.
+
+**Verification:** Regression tests were authored but not executed, per the owner's instruction to defer test execution until development is complete. No test pass is claimed. Live-provider, real-site, browser accessibility and novel semantic-obfuscation behavior are not verified. The detector deliberately remains defense in depth; a clean result is not proof of safe content. Code Graph impact/refresh remains unavailable without a local checkout.
