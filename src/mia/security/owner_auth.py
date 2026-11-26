@@ -554,6 +554,15 @@ class OwnerAuthGuard:
         origin = headers.get("origin", "")
         scheme = scope.get("scheme", "http")
         try:
+            host_parts = urlsplit("//" + host)
+            port = host_parts.port
+            login_url = (
+                f"{scheme}://localhost:{port}/owner-auth"
+                if port else f"{scheme}://localhost/owner-auth"
+            )
+        except ValueError:
+            login_url = "http://localhost/owner-auth"
+        try:
             # A passkey credential is explicitly registered for RP ID localhost. Even
             # when LoopbackGuard is disabled in a test harness, an owner session cannot
             # be used from an IP, foreign host, missing Origin or different browser origin.
@@ -561,7 +570,7 @@ class OwnerAuthGuard:
         except OwnerAuthError as exc:
             response = JSONResponse(
                 {"detail": str(exc), "code": "owner_auth_origin_required",
-                 "login_url": "/owner-auth"},
+                 "login_url": login_url},
                 status_code=403,
                 headers={"Cache-Control": "no-store"},
             )
