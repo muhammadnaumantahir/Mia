@@ -1219,3 +1219,30 @@ Commits pushed directly to `main`:
 - `e7edc67090163099a1f7b14a77901807d2ac1cec` — update digital-life status.
 
 **Verification:** Regression tests were authored but not executed, per the owner's instruction to defer test execution until development is complete. No test pass is claimed. Live-provider, real-site, browser accessibility and novel semantic-obfuscation behavior are not verified. The detector deliberately remains defense in depth; a clean result is not proof of safe content. Code Graph impact/refresh remains unavailable without a local checkout.
+
+
+## 2026-11-26 — MIA-LIFE-04 complete; MIA-LIFE-06 board reconciled (Coordinator)
+
+Refreshed the project store, API, Projects UI, Brain context builder, task board and existing tests before changing source. The task board's A2 residual claim was stale (last heartbeat 2026-11-24); source inspection showed the Brain project-context slice had already landed and had its own regression suite.
+
+**Existing behavior verified from source/tests:** `src/mia/memory/context.py` supplies the active conversation's own registered project goal, status and bounded open milestones. It skips unassigned/unregistered project labels, excludes other projects, wraps owner data in the memory-data envelope, and applies the existing local-only memory privacy routing. `tests/test_project_context.py` already covers these conditions, including temporary chats. No duplicate context implementation was added.
+
+**Implemented on `main`:**
+- Extended `ProjectStore.update` with an atomic `new_name` rename. In one SQLite transaction it updates the project registry key/display name, milestone ownership, and the project labels on conversations, personal tasks and structured-memory records.
+- The rename refuses a target name already used by another registered workspace or existing labelled material. It will not silently merge two projects. Audit events keep field names and per-table linked counts, not goal/task/decision text.
+- Converted project-name API routes to path converters, including nested milestone routes, and added `name` to the strict project patch model.
+- Updated the Projects page to create/open/deep-link slash-containing names and edit the project name alongside its goal and status.
+- Added store/API tests for complete linked-material migration and collision refusal; added Chromium page tests for slash-name create/open/milestone operations/deep links and UI rename.
+- Added `docs/architecture/PROJECT_WORKSPACE.md` to document the identity, rename, Brain-context and privacy contract.
+
+Commits pushed directly to `main`:
+- `df3c901bde1d722aefa2d248bb853c0c6cea8d26` — atomic rename across project-linked stores.
+- `3e9f43abd138be81d6d3c78ca5e86372d844a9bf` — slash-safe API routes and rename payload.
+- `e174580de3511363d676b9a9f3269af094cba6a6` — project rename and slash names in UI.
+- `5a799e4fc38e8c240e544d897bf933d7f3d95d51` — unit/API regression tests.
+- `c2199627d538634d39037d1b085044182029483b` — browser page regression tests.
+- `2f3036650a4c936d6cddd006bbd6745491298d23` — project workspace architecture documentation.
+- `31ddf531f0760190c2b4f107ffc484c2149c7455` — task board reconciliation.
+- `10e4446e3db0de4d6a0e656bd5bb07ebe57a0155` — project-workspace status update.
+
+**Verification:** Regression tests were authored but not executed, per the owner's instruction to defer test execution until development is complete. No test pass is claimed. Owner screen-reader/non-Chromium checks remain `OWNER_VERIFICATION_REQUIRED`. Code Graph impact/refresh was not run because there is no local checkout available in this environment. The LIFE-06 parent description was corrected to reflect that its Brain/Gateway and watch/extraction children are DONE; only the A6 UI child remains IN_PROGRESS.
