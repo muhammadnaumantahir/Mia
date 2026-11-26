@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -142,20 +143,44 @@ class WindowsCompanionLifecycle:
             return False
         return result.returncode == 0
 
+    @staticmethod
+    def _ps_quote(value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
+
     def install(self, *, confirmed: bool = False) -> dict[str, Any]:
         self._require_windows()
         self._require_confirmation(confirmed, "install")
         if not self.identity.exists:
             raise CompanionLifecycleError("Pair this companion before installing its lifecycle task")
-        action = f'"{self.python_executable}" -m mia.companion.cli run'
-        # No /RU other user and no /RL HIGHEST: Task Scheduler uses the current user
-        # and the limited integrity level. /IT means it only runs in that user's session.
-        self._run([
-            "schtasks.exe", "/Create", "/SC", "ONLOGON",
-            "/TN", self.task_name, "/TR", action, "/RL", "LIMITED", "/IT", "/F",
+        powershell = shutil.which("powershell.exe") or "powershell.exe"
+        # RegisterTaskDefinition with an Interactive principal uses the currently
+        # logged-on user's token; no password is stored or requested. Limited is the
+        # least-privilege run level. No SYSTEM account, elevation or hidden persistence.
+        script = "\n".join([
+            "$ErrorActionPreference = 'Stop'",
+            "$user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name",
+            "$action = New-ScheduledTaskAction -Execute "
+            + self._ps_quote(self.python_executable)
+            + " -Argument '-m mia.companion.cli run' -WorkingDirectory "
+            + self._ps_quote(str(self.home)),
+            "$trigger = New-ScheduledTaskTrigger -AtLogOn -User $user",
+            "$principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited",
+            "$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries",
+            "Register-ScheduledTask -TaskName " + self._ps_quote(self.task_name)
+            + " -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null",
         ])
-        return {"installed": True, "task_name": self.task_name, "run_level": "LIMITED",
-                "logon_type": "interactive_current_user", "elevated": False}
+        self._run([
+            powershell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+            "-Command", script,
+        ])
+        return {
+            "installed": True,
+            "task_name": self.task_name,
+            "run_level": "LIMITED",
+            "logon_type": "interactive_current_user",
+            "password_stored": False,
+            "elevated": False,
+        }
 
     def uninstall(self, *, confirmed: bool = False) -> dict[str, Any]:
         self._require_windows()
