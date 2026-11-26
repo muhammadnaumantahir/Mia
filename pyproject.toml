@@ -77,6 +77,7 @@ where = ["src"]
 "mia.brain" = ["diagnostics.html"]
 "mia.life" = ["life.html", "tasks.html", "projects.html", "research.html", "workflows.html"]
 "mia.knowledge" = ["file_index.html"]
+"mia.memory" = ["knowledge_graph.html"]
 "mia.gateway" = ["dashboard.html"]
 "mia.codegraph" = ["graph.html"]
 
