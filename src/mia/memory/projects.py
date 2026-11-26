@@ -163,10 +163,17 @@ class ProjectStore:
         return [dict(r) for r in rows]
 
     def update(
-        self, name: str, *, goal: str | None = None, status: str | None = None,
-        actor: str = "owner",
+        self, name: str, *, new_name: str | None = None, goal: str | None = None,
+        status: str | None = None, actor: str = "owner",
     ) -> list[str]:
+        """Update project metadata and optionally rename it without losing linked material.
+
+        Project names are the shared labels used by conversations, tasks and structured
+        records. Rename therefore updates every same-database reference in one transaction.
+        It refuses to merge with a different project label rather than silently combining data.
+        """
         _, key = _name_and_key(name)
+        target_name, target_key = _name_and_key(new_name) if new_name is not None else (None, key)
         changes: dict[str, Any] = {}
         if goal is not None:
             changes["goal"] = _clean_goal(goal)
@@ -174,25 +181,99 @@ class ProjectStore:
             if status not in PROJECT_STATUSES:
                 raise ValueError("status must be one of " + ", ".join(sorted(PROJECT_STATUSES)))
             changes["status"] = status
-        if not changes:
-            raise ValueError("nothing to change")
+
         with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
             row = db.execute("SELECT * FROM projects WHERE project_key = ?", (key,)).fetchone()
             if row is None:
                 raise ProjectNotFoundError(key)
-            changed = sorted(k for k, v in changes.items() if row[k] != v)
+
+            changed: set[str] = {
+                field for field, value in changes.items() if row[field] != value
+            }
+            renamed = target_name is not None and row["name"] != target_name
+            key_changed = target_key != key
+
+            if key_changed:
+                if db.execute(
+                    "SELECT 1 FROM projects WHERE project_key = ?", (target_key,)
+                ).fetchone():
+                    raise ValueError("a workspace for the new project name already exists")
+
+                # An unregistered label may already own tasks, decisions or chats. Do not
+                # merge those materials into this workspace as a side effect of renaming.
+                from mia.memory.store import project_key
+
+                for table in ("conversations", "personal_items", "structured_memory"):
+                    columns = {
+                        item["name"] for item in db.execute(f"PRAGMA table_info({table})")
+                    }
+                    if "project" not in columns:
+                        continue
+                    rows = db.execute(
+                        f"SELECT project FROM {table} WHERE project IS NOT NULL"
+                    ).fetchall()
+                    if any(project_key(item["project"]) == target_key for item in rows):
+                        raise ValueError(
+                            "the new project name is already used by labelled material"
+                        )
+
+            if renamed:
+                changed.add("name")
+
+            linked_counts: dict[str, int] = {}
+            if key_changed or renamed:
+                from mia.memory.store import project_key
+
+                for table in ("conversations", "personal_items", "structured_memory"):
+                    columns = {
+                        item["name"] for item in db.execute(f"PRAGMA table_info({table})")
+                    }
+                    if "project" not in columns:
+                        continue
+                    rows = db.execute(
+                        f"SELECT rowid, project FROM {table} WHERE project IS NOT NULL"
+                    ).fetchall()
+                    rowids = [
+                        item["rowid"] for item in rows
+                        if project_key(item["project"]) == key
+                    ]
+                    for rowid in rowids:
+                        db.execute(
+                            f"UPDATE {table} SET project = ? WHERE rowid = ?",
+                            (target_name or row["name"], rowid),
+                        )
+                    linked_counts[table] = len(rowids)
+
+            if key_changed:
+                db.execute(
+                    "UPDATE project_milestones SET project_key = ? WHERE project_key = ?",
+                    (target_key, key),
+                )
+
+            project_updates: dict[str, Any] = {}
+            if renamed:
+                project_updates["name"] = target_name
+            if key_changed:
+                project_updates["project_key"] = target_key
+            project_updates.update(changes)
+
+            if project_updates:
+                fields = list(project_updates)
+                db.execute(
+                    f"UPDATE projects SET {', '.join(f'{field} = ?' for field in fields)}, "
+                    "updated_at = ? WHERE project_key = ?",
+                    (*[project_updates[field] for field in fields], _now(), key),
+                )
             if not changed:
                 return []
-            db.execute(
-                f"UPDATE projects SET {', '.join(f'{k} = ?' for k in changed)}, updated_at = ? "  # noqa: S608
-                "WHERE project_key = ?",
-                (*[changes[k] for k in changed], _now(), key),
-            )
+            result = sorted(changed)
             AuditLog.write(
                 db, actor=actor, action="project_updated", target_type="project",
-                target_id=key, detail={"fields": changed},
+                target_id=key,
+                detail={"fields": result, "linked_material_counts": linked_counts},
             )
-        return changed
+        return result
 
     def delete(self, name: str, *, actor: str = "owner") -> bool:
         """Remove the goal, status and milestones. Tasks, decisions and chats keep their label."""
