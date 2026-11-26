@@ -264,7 +264,7 @@ class FakeTaskScheduler:
 
     def __call__(self, args, **kwargs):
         self.calls.append(list(args))
-        if "/Create" in args:
+        if any("Register-ScheduledTask" in arg for arg in args):
             self.installed = True
         elif "/Delete" in args:
             self.installed = False
@@ -284,11 +284,14 @@ def test_install_requires_confirmation_and_uses_limited_current_user_task(tmp_pa
         manager.install()
     result = manager.install(confirmed=True)
     assert result["installed"] is True
-    create = next(call for call in scheduler.calls if "/Create" in call)
-    assert "LIMITED" in create
-    assert "/IT" in create
-    assert "HIGHEST" not in create
-    assert "/RU" not in create
+    create = next(call for call in scheduler.calls if "-Command" in call)
+    script = create[-1]
+    assert "-RunLevel Limited" in script
+    assert "-LogonType Interactive" in script
+    assert "WindowsIdentity]::GetCurrent().Name" in script
+    assert "HIGHEST" not in script and "SYSTEM" not in script
+    assert "Register-ScheduledTask" in script
+    assert "password" not in script.casefold()
     agent.close()
 
 
