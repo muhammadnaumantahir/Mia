@@ -110,7 +110,7 @@ class FakeCompanionServer:
                 auth_statement(json["device_id"], json["challenge_id"], f"nonce-{self.challenge_counter}"),
             )
             self.active_token = f"mia-dev_session-{self.challenge_counter}"
-            self.expires_at = "2026-11-26T12:15:00+00:00"
+            self.expires_at = "2026-11-26T12:15:00+00:00" if self.challenge_counter == 1 else "2026-11-26T12:30:00+00:00"
             return FakeResponse({
                 "device_id": self.device_id,
                 "token": self.active_token,
@@ -179,8 +179,13 @@ def test_first_pairing_is_loopback_only_even_when_server_uses_https(tmp_path):
 
 def test_pending_pairing_key_can_recover_after_first_session_failure(tmp_path):
     class SessionInterruptedServer(FakeCompanionServer):
+        def __init__(self):
+            super().__init__()
+            self.interrupted = False
+
         def request(self, method, url, *, json=None, headers=None):
-            if url.endswith("/api/companion/session"):
+            if url.endswith("/api/companion/session") and not self.interrupted:
+                self.interrupted = True
                 request = httpx.Request("POST", url)
                 response = httpx.Response(503, request=request)
                 raise httpx.HTTPStatusError("offline", request=request, response=response)
@@ -306,7 +311,8 @@ def test_start_uses_existing_current_user_task_when_installed(tmp_path):
     agent, identity, _server, _status = pair_agent(tmp_path)
     scheduler = FakeTaskScheduler(installed=True)
     manager = WindowsCompanionLifecycle(
-        identity, platform_name="win32", run=scheduler
+        identity, platform_name="win32", run=scheduler,
+        process_alive=lambda _pid: False,
     )
     result = manager.start()
     assert result["scheduled_task"] is True
