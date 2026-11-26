@@ -161,6 +161,10 @@ class WindowsCompanionLifecycle:
         self._require_windows()
         self._require_confirmation(confirmed, "uninstall")
         stopped = self.stop(timeout_seconds=20)
+        if not stopped:
+            raise CompanionLifecycleError(
+                "The companion has not stopped gracefully; the scheduled task was retained"
+            )
         deleted = False
         if self._task_exists():
             self._run(["schtasks.exe", "/Delete", "/TN", self.task_name, "/F"])
@@ -211,7 +215,7 @@ class WindowsCompanionLifecycle:
         while self.monotonic() < deadline:
             state = self._read_status()
             pid = int(state.get("pid") or self._read_process_pid() or 0)
-            if state.get("state") == "stopped" or not _process_is_alive(pid):
+            if state.get("state") == "stopped" or not self.process_alive(pid):
                 try:
                     self.process_path.unlink()
                 except FileNotFoundError:
