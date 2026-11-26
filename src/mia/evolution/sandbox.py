@@ -145,6 +145,110 @@ class DockerSandboxRunner:
         except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
             pass
 
+    @staticmethod
+    def _validate_worker_report(
+        report: Any,
+        *,
+        source_sha256: str,
+        test_sha256: str | None,
+    ) -> dict[str, Any]:
+        """Validate the worker's evidence before attaching trusted host metadata.
+
+        A successful container exit is not validation evidence by itself. The worker must
+        report hashes for the exact read-only inputs and stage details that agree with every
+        top-level gate. Missing, malformed or contradictory evidence fails closed.
+        """
+        required_flags = {
+            "static_checks", "unit_tests", "security_checks", "regression_tests",
+        }
+        if (
+            not isinstance(report, dict)
+            or not required_flags.issubset(report)
+            or any(not isinstance(report.get(key), bool) for key in required_flags)
+        ):
+            raise SandboxExecutionError("Sandbox worker returned an invalid validation report")
+
+        evidence = report.get("evidence")
+        evidence_keys = {
+            "source_sha256", "test_sha256", "parse_errors", "security_findings",
+            "static", "unit", "regression", "security_policy",
+        }
+        if not isinstance(evidence, dict) or not evidence_keys.issubset(evidence):
+            raise SandboxExecutionError("Sandbox worker returned incomplete validation evidence")
+
+        if evidence.get("source_sha256") != source_sha256:
+            raise SandboxExecutionError(
+                "Sandbox worker candidate source hash does not match the mounted candidate"
+            )
+        if evidence.get("test_sha256") != test_sha256:
+            raise SandboxExecutionError(
+                "Sandbox worker candidate test hash does not match the mounted tests"
+            )
+
+        parse_errors = evidence.get("parse_errors")
+        if not isinstance(parse_errors, list) or any(
+            not isinstance(item, str) or not item for item in parse_errors
+        ):
+            raise SandboxExecutionError("Sandbox worker returned invalid parse-error evidence")
+
+        findings = evidence.get("security_findings")
+        if (
+            not isinstance(findings, dict)
+            or set(findings) != {"candidate", "tests"}
+            or any(
+                not isinstance(findings.get(key), list)
+                or any(not isinstance(item, str) or not item for item in findings[key])
+                for key in ("candidate", "tests")
+            )
+        ):
+            raise SandboxExecutionError("Sandbox worker returned invalid security evidence")
+
+        stages: dict[str, bool] = {}
+        for name in ("static", "unit", "regression"):
+            result = evidence.get(name)
+            if not isinstance(result, dict) or not {
+                "passed", "exit_code", "stdout", "stderr",
+            }.issubset(result):
+                raise SandboxExecutionError(
+                    f"Sandbox worker returned invalid {name} stage evidence"
+                )
+            passed = result.get("passed")
+            exit_code = result.get("exit_code")
+            stdout = result.get("stdout")
+            stderr = result.get("stderr")
+            if (
+                not isinstance(passed, bool)
+                or (
+                    exit_code is not None
+                    and (not isinstance(exit_code, int) or isinstance(exit_code, bool))
+                )
+                or not isinstance(stdout, str)
+                or not isinstance(stderr, str)
+                or len(stdout) > 8_000
+                or len(stderr) > 8_000
+                or passed != (exit_code == 0)
+            ):
+                raise SandboxExecutionError(
+                    f"Sandbox worker returned inconsistent {name} stage evidence"
+                )
+            stages[name] = passed
+
+        if evidence.get("security_policy") != "static AST denylist; defense in depth, not a proof":
+            raise SandboxExecutionError("Sandbox worker used an unknown security policy")
+
+        expected_flags = {
+            "static_checks": stages["static"] and not parse_errors,
+            "unit_tests": stages["unit"] and test_sha256 is not None,
+            "security_checks": not any(findings.values()),
+            "regression_tests": stages["regression"],
+        }
+        for name, expected in expected_flags.items():
+            if report[name] is not expected:
+                raise SandboxExecutionError(
+                    f"Sandbox worker {name} flag contradicts its supporting evidence"
+                )
+        return report
+
     def validate_candidate(
         self,
         *,
@@ -269,17 +373,12 @@ class DockerSandboxRunner:
             raise SandboxExecutionError(
                 "Sandbox worker did not return a JSON validation report"
             ) from exc
-        required = {"static_checks", "unit_tests", "security_checks", "regression_tests"}
-        if (
-            not isinstance(report, dict)
-            or not required.issubset(report)
-            or any(not isinstance(report.get(key), bool) for key in required)
-        ):
-            raise SandboxExecutionError("Sandbox worker returned an invalid validation report")
-
-        evidence = report.get("evidence")
-        if not isinstance(evidence, dict):
-            evidence = {}
+        report = self._validate_worker_report(
+            report,
+            source_sha256=actual_source_hash,
+            test_sha256=actual_test_hash,
+        )
+        evidence = report["evidence"]
         evidence.update({
             "runner": "docker-isolated-v1",
             "image": self.image,
