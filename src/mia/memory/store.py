@@ -17,6 +17,7 @@ from typing import Any
 
 from mia.memory import schema
 from mia.memory.identity import IdentityStore
+from mia.memory.knowledge_graph import KnowledgeGraph
 from mia.memory.personal import PersonalData
 from mia.memory.projects import ProjectStore
 from mia.memory.relationships import RelationshipStore
@@ -121,6 +122,7 @@ class MemoryStore:
             self._connection, timezone=lambda: self.settings.get("owner_timezone")
         )
         self.projects = ProjectStore(self._connection)
+        self.knowledge_graph = KnowledgeGraph(self._connection)
         self._initialize()
 
     @contextmanager
