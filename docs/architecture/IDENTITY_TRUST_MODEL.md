@@ -1,6 +1,6 @@
 # Mia identity and remote trust model
 
-**Status:** source-backed current-state contract, 2026-11-25  
+**Status:** source-backed current-state contract, 2026-11-26  
 **Related work:** COMP-02 device pairing, LIFE-13 companion sync, COMP-04 owner approval enforcement.
 
 ## 1. Two distinct identities
@@ -31,6 +31,10 @@ A companion device has a separate Ed25519 keypair:
 
 Source: `src/mia/security/pairing.py`; protocol tests: `tests/test_companion_pairing.py`.
 
+The first Windows companion client is now implemented in `src/mia/companion/` (COMP-03). It generates and retains the Ed25519 private key on the device, stores that key and its bearer token using Windows CurrentUser DPAPI, renews short-lived sessions with a fresh signed challenge, sends a heartbeat, and supports bounded reconnect. It initiates outbound HTTP(S) requests only and exposes no inbound listener. First-time enrollment is loopback-only. The owner can configure an already-paired device to use an allowlisted HTTPS hostname; if that remote session expires while offline, renewal must be performed from the loopback Mia host. The Windows logon task runs as the current interactive user with Limited privilege and no stored password.
+
+The owner Companion Devices page is served at `/companion`. It creates one-time codes, displays paired-device metadata and revokes devices. It does not create an authenticated owner session; the owner-authority limitation below still applies.
+
 ## 2. Device scopes
 
 The device may hold only these explicitly granted scopes:
@@ -41,9 +45,9 @@ The device may hold only these explicitly granted scopes:
 - `companion.sync.read`
 - `companion.sync.write`
 
-A device cannot grant itself scopes, create pairing codes, approve owner actions, revoke devices or access owner administration. Read and write sync scopes are separate. The sync service exposes only `companion_state` and `preferences`, not conversations, personal memory, files, credentials or governance records.
+A device cannot grant itself scopes, create pairing codes, approve owner actions, revoke devices or access owner administration. Read and write sync scopes are separate. The sync service exposes only `companion_state` and `preferences`, not conversations, personal memory, files, credentials or governance records. The current Windows companion client actively uses `companion.heartbeat`; observe/act/sync scope labels do not imply that remote action execution or automatic sync is enabled in that client release.
 
-Source: `src/mia/security/pairing.py`, `src/mia/security/companion_api.py`, `src/mia/security/sync.py`.
+Source: `src/mia/security/pairing.py`, `src/mia/security/companion_api.py`, `src/mia/security/sync.py`, `src/mia/companion/agent.py`.
 
 ## 3. Transport and remote boundary
 
@@ -96,4 +100,4 @@ Remote request ─X─ pairing, owner APIs, browser routes, arbitrary Mia APIs
 
 The device identity and transport boundary are implemented, but the **owner identity boundary is still local-process trust**. COMP-04-OWNER must authenticate the owner at the final approval decision boundary, reject forged/local-process approval, and remain safe under revocation races. Until then, do not claim owner approvals are protected from another local process.
 
-Real TLS certificate, firewall/DNS and physical companion checks remain owner verification. Automated tests for the new sync/remote contract have been authored but not executed in this session.
+Real TLS certificate, firewall/DNS, Windows CurrentUser DPAPI, Task Scheduler/logon behavior, physical companion pairing and browser accessibility remain owner verification. Regression tests for companion pairing, Windows client/lifecycle and sync/remote behavior have been authored but not executed in this development pass.
