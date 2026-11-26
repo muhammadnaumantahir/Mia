@@ -20,7 +20,7 @@ import json
 import os
 import re
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -101,6 +101,7 @@ class OwnerPermissionEvaluator(DefaultPermissionEvaluator):
         *,
         path_resolver: Any | None = None,
         deny_permissions: Iterable[str] = (),
+        owner_session: Callable[[], bool] | None = None,
     ) -> None:
         super().__init__(
             deny_permissions=deny_permissions,
@@ -109,11 +110,17 @@ class OwnerPermissionEvaluator(DefaultPermissionEvaluator):
         self.permission_policy = permission_policy
         self.capability_registry = capability_registry
         self.path_resolver = path_resolver
+        self.owner_session = owner_session
 
     def evaluate(self, tool: ToolDefinition, arguments: dict[str, Any]) -> GateDecision:
         baseline = super().evaluate(tool, arguments)
         if not baseline.allowed:
             return baseline
+        if tool.mode == "write" and self.owner_session is not None and not self.owner_session():
+            return GateDecision(
+                False, "permission",
+                "an authenticated owner passkey session is required for write-mode tools",
+            )
 
         # Memory retrieval is governed by MemoryStore settings and the gateway's
         # separate local-only data-egress gate, not by computer filesystem grants.
