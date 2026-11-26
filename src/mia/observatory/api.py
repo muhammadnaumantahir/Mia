@@ -157,6 +157,13 @@ from mia.security.capabilities import bind_route_capabilities
 from mia.security.companion_api import register_companion_routes
 from mia.security.local_guard import LoopbackGuard
 from mia.security.pairing import DeviceConfinementGuard, PairingService
+from mia.security.owner_auth import (
+    COOKIE_NAME as OWNER_AUTH_COOKIE,
+    OwnerAuthError,
+    OwnerAuthGuard,
+    OwnerAuthService,
+    _origin as validate_owner_origin,
+)
 from mia.security.sync import CompanionSyncStore
 from mia.voice.action_readback import describe_action
 from mia.voice.stt import FasterWhisperTranscriber, SpeechToTextProvider, normalize_stt_language
@@ -307,6 +314,27 @@ class ApprovalExecutionInput(BaseModel):
         pattern=r"^(filesystem\.write|application\.launch|browser\.click|desktop\.type_text)$"
     )
     payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class OwnerRegistrationOptionsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bootstrap_code: str | None = Field(default=None, min_length=20, max_length=128)
+
+
+class OwnerRegistrationVerifyInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    challenge_id: str = Field(min_length=16, max_length=128)
+    bootstrap_code: str | None = Field(default=None, min_length=20, max_length=128)
+    credential: dict[str, Any]
+
+
+class OwnerAuthenticationVerifyInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    challenge_id: str = Field(min_length=16, max_length=128)
+    credential: dict[str, Any]
 
 
 class SpeechSynthesisInput(BaseModel):
@@ -974,6 +1002,11 @@ def create_app(
         version="0.1.0",
         description="Local-first, evidence-backed evolution telemetry and AI gateway.",
     )
+    owner_auth = OwnerAuthService(data_dir / "mia-owner-auth.sqlite3")
+    app.state.owner_auth = owner_auth
+    # Add this before LoopbackGuard and DeviceConfinementGuard so the resulting
+    # request order is device confinement -> host/origin guard -> owner passkey guard.
+    app.add_middleware(OwnerAuthGuard, service=owner_auth)
     if local_guard:
         # MIA-COMP-01: refuse foreign Host/Origin (DNS rebinding, cross-site POST/WebSocket).
         app.add_middleware(LoopbackGuard)
@@ -2300,6 +2333,94 @@ def create_app(
             raise HTTPException(status_code=404, detail="Journal entry not found")
         return entry
 
+    # ---- owner passkey sessions (MIA-COMP-04-OWNER) ------------------------------
+    def _owner_origin(request: Request) -> str:
+        try:
+            return validate_owner_origin(
+                request.headers.get("origin"),
+                request.headers.get("host"),
+                request.url.scheme,
+            )
+        except OwnerAuthError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    def _set_owner_cookie(response: Response, token: str, request: Request) -> Response:
+        response.set_cookie(
+            OWNER_AUTH_COOKIE,
+            token,
+            max_age=8 * 60 * 60,
+            httponly=True,
+            secure=request.url.scheme == "https",
+            samesite="strict",
+            path="/",
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.get("/api/owner-auth/status")
+    def owner_auth_status(request: Request) -> dict[str, Any]:
+        return owner_auth.status(request.cookies.get(OWNER_AUTH_COOKIE))
+
+    @app.post("/api/owner-auth/registration/options")
+    def owner_registration_options(
+        request: Request, item: OwnerRegistrationOptionsInput
+    ) -> dict[str, Any]:
+        try:
+            return owner_auth.begin_registration(
+                origin=_owner_origin(request),
+                bootstrap_code=item.bootstrap_code,
+                session_token=request.cookies.get(OWNER_AUTH_COOKIE),
+            )
+        except OwnerAuthError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    @app.post("/api/owner-auth/registration/verify")
+    def owner_registration_verify(
+        request: Request, item: OwnerRegistrationVerifyInput
+    ) -> Response:
+        try:
+            token = owner_auth.finish_registration(
+                challenge_id=item.challenge_id,
+                credential=item.credential,
+                origin=_owner_origin(request),
+                bootstrap_code=item.bootstrap_code,
+                session_token=request.cookies.get(OWNER_AUTH_COOKIE),
+            )
+        except OwnerAuthError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        response = JSONResponse({"authenticated": True, "registered": True})
+        return _set_owner_cookie(response, token, request)
+
+    @app.post("/api/owner-auth/authentication/options")
+    def owner_authentication_options(request: Request) -> dict[str, Any]:
+        try:
+            return owner_auth.begin_authentication(origin=_owner_origin(request))
+        except OwnerAuthError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    @app.post("/api/owner-auth/authentication/verify")
+    def owner_authentication_verify(
+        request: Request, item: OwnerAuthenticationVerifyInput
+    ) -> Response:
+        try:
+            token = owner_auth.finish_authentication(
+                challenge_id=item.challenge_id,
+                credential=item.credential,
+                origin=_owner_origin(request),
+            )
+        except OwnerAuthError as exc:
+            raise HTTPException(status_code=401, detail=str(exc)) from exc
+        response = JSONResponse({"authenticated": True})
+        return _set_owner_cookie(response, token, request)
+
+    @app.post("/api/owner-auth/logout")
+    def owner_auth_logout(request: Request) -> Response:
+        owner_auth.revoke_session(request.cookies.get(OWNER_AUTH_COOKIE))
+        response = JSONResponse({"authenticated": False})
+        response.delete_cookie(OWNER_AUTH_COOKIE, path="/", httponly=True, samesite="strict")
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok", "service": "mia"}
@@ -2310,6 +2431,13 @@ def create_app(
         if not page.is_file():
             raise HTTPException(status_code=404, detail="Knowledge graph interface is not installed")
         return FileResponse(page, media_type="text/html")
+
+    @app.get("/owner-auth")
+    def owner_auth_page() -> FileResponse:
+        page = Path(__file__).resolve().parents[1] / "security" / "owner_auth.html"
+        if not page.is_file():
+            raise HTTPException(status_code=404, detail="Owner passkey interface is not installed")
+        return FileResponse(page, media_type="text/html", headers={"Cache-Control": "no-store"})
 
     @app.get("/companion")
     def companion_page() -> FileResponse:
