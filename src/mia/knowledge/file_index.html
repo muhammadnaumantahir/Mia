@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
+<title>Mia — File intelligence</title>
+<style>
+:root{font-family:Inter,Segoe UI,system-ui,sans-serif;color:#eef4f2;background:#0c1214}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 10% 0%,#15312c 0,transparent 38%),#0c1214}
+.shell{max-width:1120px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:17px;margin:0 0 10px}h3{font-size:15px;margin:15px 0 8px}
+nav{display:flex;flex-wrap:wrap;gap:4px 16px;margin-bottom:16px}nav a{color:#9be5c5;font-size:14px;padding:6px 0}
+a{color:#9be5c5}.sub,.muted{color:#a9bdb6;font-size:13px;line-height:1.5}
+.panel{background:linear-gradient(145deg,#172225,#111a1d);border:1px solid #2b4044;border-radius:14px;padding:16px;margin-top:16px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.row{display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end;margin:8px 0}
+label{font-size:13px;color:#c3d3ce;display:flex;flex-direction:column;gap:4px;min-width:0}
+input,select,textarea,button{font:inherit;font-size:14px;min-height:40px}
+input,select,textarea{background:#0e1719;color:#eef4f2;border:1px solid #4c6a66;border-radius:8px;padding:8px 10px;max-width:100%;width:100%}
+button{background:#1f7a5c;color:#fff;border:1px solid #1f7a5c;border-radius:8px;padding:8px 14px;cursor:pointer}
+button.alt{background:#1b2a2c;border-color:#4c6a66;color:#e3ece8}button.danger{background:#9b3a2c;border-color:#9b3a2c}
+button:disabled{opacity:.55;cursor:not-allowed}
+:focus-visible{outline:3px solid #ffd27a;outline-offset:2px}
+#notice{min-height:22px;font-size:14px;color:#a6e3c4;margin-top:10px}#notice.error{color:#ffb4a3}
+.tags{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0}.tag{font-size:12px;border:1px solid #4c6a66;border-radius:999px;padding:3px 9px;color:#d5e3de}.tag.good{border-color:#5fbf97;color:#a6e3c4}.tag.warn{border-color:#d9a441;color:#ffd98f}.tag.bad{border-color:#e08a7a;color:#ffb4a3}
+ul.items{list-style:none;margin:0;padding:0}li.item{border-top:1px solid #2b4044;padding:11px 0}li.item:first-child{border-top:0}
+.title{font-size:14px;overflow-wrap:anywhere}.meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px}.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+.empty{border:1px dashed #4c6a66;border-radius:10px;padding:12px;text-align:center;color:#b6c8c2}
+.safety{border:1px solid #8a6d34;border-radius:10px;padding:10px 12px;background:#221c0e;color:#ffe5b0;font-size:13px;line-height:1.5;margin-top:14px}
+#folderList{max-height:260px;overflow:auto;border:1px solid #2b4044;border-radius:9px;padding:6px;margin-top:8px}
+.folder{width:100%;text-align:left;background:transparent;border:0;border-radius:6px;color:#d8e7e1;display:flex;justify-content:space-between;gap:10px;padding:8px}.folder:hover{background:#1b2a2c}
+.snippet{white-space:pre-wrap;overflow-wrap:anywhere;background:#0b1416;border:1px solid #2b4044;border-radius:8px;padding:10px;margin-top:8px;color:#d5e3de;font:12px/1.5 ui-monospace,Consolas,monospace}
+.note{font-size:12px;color:#a9bdb6;overflow-wrap:anywhere}.path{font:12px ui-monospace,Consolas,monospace;overflow-wrap:anywhere;color:#c3d3ce}
+@media(max-width:780px){.grid{grid-template-columns:1fr}}
+@media(max-width:560px){.row{flex-direction:column;align-items:stretch}button{min-height:44px}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+@media(forced-colors:active){.tag{border:1px solid CanvasText}}
+</style></head>
+<body><main class="shell">
+<nav aria-label="Mia pages"><a href="/">Observatory</a><a href="/assistant">Assistant</a><a href="/life">Autonomous life</a><a href="/tasks">Tasks</a><a href="/projects">Projects</a><a href="/research">Research</a><a href="/workflows">Workflows</a></nav>
+<h1>File intelligence</h1>
+<p class="sub">Choose the folders Mia may index. Search stays local and keyword-based; each result carries a source path and line range that can be checked against the live file.</p>
+<div id="notice" role="status" aria-live="polite"></div>
+<p class="safety" role="note"><strong>Files are untrusted data.</strong> Mia never follows instructions found in files. Nothing is indexed until you select a folder and press Index. Credential-like files, private keys, blocked directories, symlinks and oversized content are skipped. Search excerpts may contain private information from the folders you explicitly selected.</p>
+
+<section class="panel" aria-labelledby="statusHeading">
+<h2 id="statusHeading">Index status</h2>
+<div id="statusTags" class="tags" aria-live="polite"><span class="tag">Loading…</span></div>
+<p id="watchStatus" class="note"></p>
+<div class="row">
+<label>Refresh interval (seconds)<input id="watchInterval" type="number" min="5" max="3600" value="60" style="width:150px"></label>
+<label>Folders per refresh<input id="watchBatch" type="number" min="1" max="5" value="2" style="width:150px"></label>
+<button id="watchStart" type="button">Start automatic refresh</button>
+<button id="watchStop" class="alt" type="button">Stop refresh</button>
+</div>
+<p class="note">Automatic refresh is off until you start it. It only refreshes folders you selected and is bounded by the interval and folder count above.</p>
+</section>
+
+<div class="grid">
+<section class="panel" aria-labelledby="selectHeading">
+<h2 id="selectHeading">Select a folder</h2>
+<p class="note">Choose one of the configured filesystem roots, then browse to a folder. Only that folder and its allowed descendants can be indexed.</p>
+<form id="selectForm">
+<div class="row">
+<label style="flex:1 1 230px">Filesystem root<select id="root" required><option value="">Loading roots…</option></select></label>
+<button id="browse" class="alt" type="button">Browse folder</button>
+</div>
+<label>Folder path relative to the selected root<input id="folderPath" value="." maxlength="1000" autocomplete="off" spellcheck="false"></label>
+<div id="folderList" hidden aria-label="Folders inside selected directory"></div>
+<div class="row"><button id="addSelection" type="submit">Add selected folder</button></div>
+</form>
+<h3>Selected folders</h3>
+<ul id="selections" class="items"><li class="empty">Loading selected folders…</li></ul>
+</section>
+
+<section class="panel" aria-labelledby="searchHeading">
+<h2 id="searchHeading">Search indexed files</h2>
+<form id="searchForm">
+<label>Words to find<input id="query" required minlength="1" maxlength="300" placeholder="e.g. deployment configuration"></label>
+<div class="row"><label>Maximum results<select id="limit"><option>5</option><option selected>10</option><option>20</option><option>50</option></select></label><button type="submit">Search</button></div>
+</form>
+<p id="searchSummary" class="note">Search runs only over content already indexed from your selected folders.</p>
+<ul id="results" class="items"><li class="empty">No search yet.</li></ul>
+</section>
+</div>
+
+<section class="panel" aria-labelledby="filesHeading">
+<h2 id="filesHeading">Indexed files</h2>
+<p class="note">Deleting an indexed entry removes its stored text from Mia's index; it never deletes the original file.</p>
+<ul id="files" class="items"><li class="empty">Loading indexed files…</li></ul>
+<div class="actions"><button id="purge" class="danger" type="button">Delete entire index…</button></div>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let roots=[],selections=[],currentHits=[],browsePath='.',busy=false;
+function say(message,error=false){const n=$('notice');n.textContent=message;n.className=error?'error':'';n.setAttribute('role',error?'alert':'status');}
+const mk=(tag,text,cls)=>{const e=document.createElement(tag);if(text!==undefined&&text!==null)e.textContent=String(text);if(cls)e.className=cls;return e;};
+const tag=(text,kind)=>mk('span',text,'tag'+(kind?' '+kind:''));
+const plural=(n,one,many)=>n+' '+(n===1?one:many);
+const enc=encodeURIComponent;
+async function api(path,method='GET',body){
+ const r=await fetch(path,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
+ let data=null;try{data=await r.json();}catch(e){}
+ if(!r.ok){const d=data&&data.detail;const msg=typeof d==='string'?d:Array.isArray(d)?d.map(x=>x.msg).join('; '):'Request failed ('+r.status+')';const err=new Error(msg);err.status=r.status;throw err;}
+ return data;
+}
+function pathLabel(rootId,path){const root=roots.find(x=>x.root_id===rootId);return (root?root.path:rootId)+(path==='.'?'':' / '+path);}
+async function loadRoots(){
+ const data=await api('/api/computer/roots');roots=data.items||[];
+ const select=$('root');select.replaceChildren();
+ if(!roots.length){select.append(new Option('No filesystem roots configured',''));say('No filesystem roots are available. Configure MIA_COMPUTER_ROOTS or the workspace folder first.',true);return;}
+ for(const root of roots)select.append(new Option(root.root_id+' · '+root.path,root.root_id));
+}
+async function loadStatus(){
+ const d=await api('/api/file-index/status'),w=d.watcher||{};
+ const tags=$('statusTags');tags.replaceChildren();
+ tags.append(tag(plural(d.selections,'selected folder','selected folders')));
+ tags.append(tag(plural(d.files,'indexed file','indexed files')));
+ tags.append(tag(plural(d.chunks,'searchable chunk','searchable chunks')));
+ tags.append(tag(w.enabled?'Automatic refresh running':'Automatic refresh stopped',w.enabled?'good':'warn'));
+ $('watchStatus').textContent='Watcher: '+(w.state||'unknown')+' · interval '+(w.interval_seconds||60)+'s · '+(w.max_selections_per_cycle||2)+' folder(s) per cycle'+(w.last_run_at?' · last run '+new Date(w.last_run_at).toLocaleString():' · not run yet')+(w.last_error?' · last issue: '+w.last_error:'');
+ $('watchStop').disabled=!w.enabled;
+ $('watchStart').disabled=w.enabled||!d.selections;
+}
+async function loadSelections(){
+ const d=await api('/api/file-index/selections');selections=d.items||[];
+ const list=$('selections');list.replaceChildren();
+ if(!selections.length){list.append(mk('li','No folders selected yet. Nothing has been indexed.','empty'));return;}
+ for(const s of selections){
+  const li=mk('li',undefined,'item');
+  li.append(mk('div',pathLabel(s.root_id,s.rel_path),'title'));
+  li.append(mk('div','Indexed '+plural(s.file_count,'file','files')+' · '+(s.last_indexed_at?'last indexed '+new Date(s.last_indexed_at).toLocaleString():'not indexed yet'),'meta'));
+  const actions=mk('div',undefined,'actions');
+  const index=mk('button','Index now');index.type='button';index.addEventListener('click',()=>reindex(s,index));
+  const remove=mk('button','Remove folder','danger');remove.type='button';remove.addEventListener('click',()=>removeSelection(s));
+  actions.append(index,remove);li.append(actions);
+  if(s.skipped&&s.skipped.length){
+   const details=mk('details');const summary=mk('summary','Skipped items: '+s.skipped.length);
+   const ul=mk('ul');for(const item of s.skipped.slice(0,30))ul.append(mk('li',item.rel_path+' · '+item.reason));
+   details.append(summary,ul);li.append(details);
+  }
+  list.append(li);
+ }
+}
+async function loadFiles(){
+ const data=await api('/api/file-index/files?limit=500');
+ const list=$('files');list.replaceChildren();
+ if(!data.items.length){list.append(mk('li','No indexed files. Add a folder and press Index now.','empty'));return;}
+ for(const f of data.items){
+  const li=mk('li',undefined,'item');
+  li.append(mk('div',f.rel_path,'title'),mk('div',pathLabel(f.root_id,'.')+' · '+f.location_kind+' · '+plural(f.size,'byte','bytes')+' · '+new Date(f.indexed_at).toLocaleString(),'meta'));
+  const remove=mk('button','Delete from index','danger');remove.type='button';remove.addEventListener('click',()=>deleteFile(f,remove));
+  const actions=mk('div',undefined,'actions');actions.append(remove);li.append(actions);list.append(li);
+ }
+}
+async function refresh(){
+ try{await Promise.all([loadStatus(),loadSelections(),loadFiles()]);}
+ catch(e){say('Could not refresh the file index: '+e.message,true);}
+}
+async function reindex(selection,button){
+ if(busy)return;busy=true;button.disabled=true;say('Indexing '+selection.rel_path+'… This may take a little while.');
+ try{
+  const d=await api('/api/file-index/selections/'+enc(selection.id)+'/reindex','POST');
+  say('Index complete: '+d.indexed+' indexed, '+d.unchanged+' unchanged, '+d.removed+' removed, '+d.skipped+' skipped.');
+  await refresh();
+ }catch(e){say(e.status===409?'Indexing stopped: '+e.message:'Could not index folder: '+e.message,true);}
+ finally{busy=false;button.disabled=false;}
+}
+async function removeSelection(s){
+ if(!window.confirm('Remove this selected folder and permanently delete its stored indexed text? The original files will not be changed.\n\n'+s.rel_path))return;
+ try{await api('/api/file-index/selections/'+enc(s.id),'DELETE');say('Folder selection and its indexed text were removed.');await refresh();$('results').replaceChildren(mk('li','Run a new search after changing the index.','empty'));}
+ catch(e){say('Could not remove this selection: '+e.message,true);}
+}
+async function deleteFile(f,button){
+ if(!window.confirm('Delete this file from Mia’s index? The original file remains untouched.\n\n'+f.rel_path))return;
+ button.disabled=true;
+ try{await api('/api/file-index/files/'+enc(f.id),'DELETE');say('Indexed file removed.');await refresh();}
+ catch(e){say('Could not remove indexed file: '+e.message,true);button.disabled=false;}
+}
+$('selectForm').addEventListener('submit',async e=>{
+ e.preventDefault();const rootId=$('root').value,path=$('folderPath').value.trim()||'.';
+ if(!rootId){say('Select a configured filesystem root first.',true);return;}
+ $('addSelection').disabled=true;
+ try{
+  const d=await api('/api/file-index/selections','POST',{root_id:rootId,path});
+  $('folderPath').value=d.rel_path;say('Folder selected. Press Index now to read its allowed files.');
+  await refresh();
+ }catch(err){say('Folder was not selected: '+err.message,true);}
+ finally{$('addSelection').disabled=false;}
+});
+$('browse').addEventListener('click',async()=>{
+ const rootId=$('root').value;if(!rootId){say('Select a filesystem root first.',true);return;}
+ const path=$('folderPath').value.trim()||'.';browsePath=path;
+ try{
+  const d=await api('/api/computer/files?root_id='+enc(rootId)+'&relative_path='+enc(path));
+  const box=$('folderList');box.replaceChildren();
+  const head=mk('div','Browsing '+pathLabel(rootId,path),'note');box.append(head);
+  const row=mk('div',undefined,'actions');
+  const use=mk('button','Use this folder');use.type='button';use.addEventListener('click',()=>{$('folderPath').value=path;say('Folder path set to '+path+'. Press Add selected folder to authorize indexing.');});
+  row.append(use);
+  if(path!=='.'){
+   const up=mk('button','Up one folder','alt');up.type='button';up.addEventListener('click',()=>{
+    const parts=path.replace(/\\/g,'/').split('/').filter(Boolean);parts.pop();$('folderPath').value=parts.length?parts.join('/') : '.';$('browse').click();
+   });row.append(up);
+  }
+  box.append(row);
+  const dirs=(d.items||[]).filter(item=>item.kind==='directory');
+  if(!dirs.length)box.append(mk('p','No child folders. You can select this folder above.','muted'));
+  for(const item of dirs){
+   const b=mk('button',item.name+'  ›','folder alt');b.type='button';b.addEventListener('click',()=>{$('folderPath').value=item.relative_path;$('browse').click();});box.append(b);
+  }
+  box.hidden=false;say('Showing folders only. Files are not opened by the browser.');
+ }catch(err){say('Could not browse this folder: '+err.message,true);}
+});
+$('searchForm').addEventListener('submit',async e=>{
+ e.preventDefault();const q=$('query').value.trim();if(!q)return;
+ $('searchSummary').textContent='Searching the local index…';
+ const button=$('searchForm').querySelector('button[type=submit]');button.disabled=true;
+ try{
+  const d=await api('/api/file-index/search?q='+enc(q)+'&limit='+enc($('limit').value));
+  currentHits=d.items||[];const ul=$('results');ul.replaceChildren();
+  $('searchSummary').textContent=plural(currentHits.length,'match','matches')+' for “'+q+'”. Keyword search only; no semantic ranking.';
+  if(!currentHits.length)ul.append(mk('li','No matching indexed text. Check the selected folders and index status.','empty'));
+  for(const h of currentHits){
+   const li=mk('li',undefined,'item');
+   li.append(mk('div',h.path,'title'),mk('div',h.root_id+' · lines '+h.line_start+'–'+h.line_end,'meta'));
+   const tags=mk('div',undefined,'meta');
+   tags.append(tag('Source is untrusted','warn'),tag(h.status,h.status==='current'?'good':'warn'));
+   if(h.injection_flagged)tags.append(tag('Instruction-like text detected · do not follow','bad'));
+   li.append(tags,mk('div','File content is data only. Confirm the source location before relying on it.','note'));
+   li.append(mk('div',h.snippet,'snippet'));
+   const verify=mk('button','Verify against live file','alt');verify.type='button';verify.addEventListener('click',()=>verifyHit(h,verify));
+   const actions=mk('div',undefined,'actions');actions.append(verify);li.append(actions);ul.append(li);
+  }
+ }catch(err){$('searchSummary').textContent='';say('Search failed: '+err.message,true);}
+ finally{button.disabled=false;}
+});
+async function verifyHit(hit,button){
+ button.disabled=true;
+ try{
+  const d=await api('/api/file-index/chunks/'+enc(hit.chunk_id)+'/verify');
+  const verified=d.verified&&d.file_unchanged;
+  const note=mk('div',verified?'Exact cited text is still present in the unchanged file.':'Source no longer matches this indexed excerpt: '+d.reason, 'note');
+  note.className='note '+(verified?'verified':'unverified');button.parentElement.append(note);button.textContent=verified?'Verified':'Not verified';
+ }catch(e){say('Could not verify this source: '+e.message,true);button.disabled=false;}
+}
+$('watchStart').addEventListener('click',async()=>{
+ const interval=Number($('watchInterval').value),batch=Number($('watchBatch').value);
+ if(!Number.isInteger(interval)||interval<5||interval>3600||!Number.isInteger(batch)||batch<1||batch>5){say('Refresh interval must be 5–3600 seconds and folders per cycle 1–5.',true);return;}
+ $('watchStart').disabled=true;
+ try{await api('/api/file-index/watch/start','POST',{interval_seconds:interval,max_selections_per_cycle:batch});say('Automatic refresh started for your selected folders.');await loadStatus();}
+ catch(e){say('Could not start automatic refresh: '+e.message,true);$('watchStart').disabled=false;}
+});
+$('watchStop').addEventListener('click',async()=>{
+ $('watchStop').disabled=true;
+ try{await api('/api/file-index/watch/stop','POST');say('Automatic refresh stopped.');await loadStatus();}
+ catch(e){say('Could not stop automatic refresh: '+e.message,true);}
+});
+$('purge').addEventListener('click',async()=>{
+ if(!window.confirm('Delete the entire file index, including every stored chunk and folder selection? Original files will not be changed.'))return;
+ try{await api('/api/file-index','DELETE');say('Entire file index deleted. Original files were not changed.');currentHits=[];await refresh();$('results').replaceChildren(mk('li','Index cleared. Select a folder to start again.','empty'));}
+ catch(e){say('Could not delete the index: '+e.message,true);}
+});
+(async()=>{
+ try{await loadRoots();await refresh();}
+ catch(e){say('File intelligence could not be loaded: '+e.message,true);}
+})();
+</script></main></body></html>
