@@ -211,6 +211,13 @@ class WindowsCompanionLifecycle:
             self._run(["schtasks.exe", "/Run", "/TN", self.task_name])
             return {"started": True, "scheduled_task": True, "task_name": self.task_name}
 
+        if self.log_path.is_file() and self.log_path.stat().st_size > 2 * 1024 * 1024:
+            previous = self.log_path.with_suffix(".log.1")
+            try:
+                previous.unlink()
+            except FileNotFoundError:
+                pass
+            os.replace(self.log_path, previous)
         log = self.log_path.open("a", encoding="utf-8")
         try:
             process = self.spawn_process(
@@ -288,6 +295,7 @@ class WindowsCompanionLifecycle:
             state = data.get("state") or ("running" if running else "stopped")
         result = {
             "installed": installed,
+            "paired": self.identity.exists,
             "task_name": self.task_name,
             "running": running,
             "pid": pid if running else None,
