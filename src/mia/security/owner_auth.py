@@ -465,23 +465,6 @@ class OwnerAuthService:
             )
         return token
 
-    def has_valid_session(self, token: str | None) -> bool:
-        if not token or len(token) > 256:
-            return False
-        now = self.clock().isoformat()
-        with self._db() as db:
-            row = db.execute(
-                "SELECT token_hash FROM owner_sessions WHERE token_hash=? AND revoked_at IS NULL AND expires_at>?",
-                (_hash(token), now),
-            ).fetchone()
-            if row is None:
-                return False
-            db.execute(
-                "UPDATE owner_sessions SET last_used_at=? WHERE token_hash=?",
-                (now, row["token_hash"]),
-            )
-        return True
-
     def revoke_session(self, token: str | None) -> bool:
         if not token:
             return False
