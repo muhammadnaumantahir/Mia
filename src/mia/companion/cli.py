@@ -113,7 +113,10 @@ def main() -> int:
                 raise RuntimeError(
                     "forget deletes the protected local device identity; pass --confirm after revoking it in Mia"
                 )
-            if not manager.stop(timeout_seconds=20):
+            current = manager.status()
+            if current.get("installed"):
+                manager.uninstall(confirmed=True)
+            elif not manager.stop(timeout_seconds=20):
                 raise RuntimeError(
                     "The companion is still running; local identity was not removed"
                 )
