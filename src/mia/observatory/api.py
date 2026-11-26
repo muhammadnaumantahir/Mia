@@ -427,6 +427,7 @@ class ProjectInput(BaseModel):
 class ProjectPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    name: str | None = Field(default=None, min_length=1, max_length=64)
     goal: str | None = Field(default=None, max_length=2_000)
     status: str | None = Field(default=None, max_length=12)
 
@@ -5673,24 +5674,27 @@ def create_app(
     def list_project_workspaces() -> dict[str, Any]:
         return {"projects": project_workspaces.list_projects(memory_store)}
 
-    @app.get("/api/projects/{name}")
+    @app.get("/api/projects/{name:path}")
     def get_project_workspace(name: str) -> dict[str, Any]:
         try:
             return project_workspaces.workspace(memory_store, name)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    @app.patch("/api/projects/{name}")
+    @app.patch("/api/projects/{name:path}")
     def patch_project(name: str, item: ProjectPatch) -> dict[str, Any]:
+        fields = item.model_dump(exclude_unset=True)
+        new_name = fields.pop("name", None)
         try:
-            changed = memory_store.projects.update(name, **item.model_dump(exclude_unset=True))
+            changed = memory_store.projects.update(name, new_name=new_name, **fields)
         except ProjectNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Project workspace not found") from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return {"project": memory_store.projects.get(name), "changed": changed}
+        current_name = new_name or name
+        return {"project": memory_store.projects.get(current_name), "changed": changed}
 
-    @app.delete("/api/projects/{name}")
+    @app.delete("/api/projects/{name:path}")
     def delete_project(name: str) -> dict[str, Any]:
         """Remove goal, status and milestones; tasks, decisions and chats keep their label."""
         try:
@@ -5701,7 +5705,7 @@ def create_app(
             raise HTTPException(status_code=404, detail="Project workspace not found")
         return {"deleted": name}
 
-    @app.post("/api/projects/{name}/milestones", status_code=201)
+    @app.post("/api/projects/{name:path}/milestones", status_code=201)
     def add_project_milestone(name: str, item: MilestoneInput) -> dict[str, Any]:
         try:
             milestone_id = memory_store.projects.add_milestone(
@@ -5713,7 +5717,7 @@ def create_app(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"milestone_id": milestone_id}
 
-    @app.patch("/api/projects/{name}/milestones/{milestone_id}")
+    @app.patch("/api/projects/{name:path}/milestones/{milestone_id}")
     def patch_project_milestone(
         name: str, milestone_id: str, item: MilestonePatch
     ) -> dict[str, Any]:
@@ -5727,7 +5731,7 @@ def create_app(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"changed": changed}
 
-    @app.delete("/api/projects/{name}/milestones/{milestone_id}")
+    @app.delete("/api/projects/{name:path}/milestones/{milestone_id}")
     def delete_project_milestone(name: str, milestone_id: str) -> dict[str, Any]:
         try:
             removed = memory_store.projects.delete_milestone(name, milestone_id)
