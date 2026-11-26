@@ -175,6 +175,11 @@ class KnowledgeGraph:
                 "SELECT project_key, name, goal, status FROM projects ORDER BY name COLLATE NOCASE"
             ).fetchall()
 
+        if project is not None and (
+            scope is None or not any(row["project_key"] == scope for row in projects)
+        ):
+            return []
+
         def include(node: dict[str, Any]) -> None:
             if scope is not None:
                 if node["node_type"] == "project" and node["project_key"] != scope:
