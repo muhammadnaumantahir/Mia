@@ -140,6 +140,7 @@ async function loadDevices(){
 $('pairForm').addEventListener('submit',async event=>{
  event.preventDefault();$('codeBox').hidden=true;
  const scopes=[...document.querySelectorAll('input[name="scope"]:checked')].map(input=>input.value);
+ if(!scopes.includes('companion.heartbeat')){say('The current Windows companion requires heartbeat scope.',true);return;}
  if(!scopes.length){say('Select at least one device scope.',true);return;}
  const label=$('label').value.trim();if(!label){say('Enter a device label.',true);return;}
  try{
