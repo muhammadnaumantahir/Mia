@@ -514,7 +514,14 @@ class OwnerAuthGuard:
 
     @staticmethod
     def requires_owner(method: str, path: str) -> bool:
-        if method.upper() in {"GET", "HEAD", "OPTIONS"}:
+        method = method.upper()
+        if method in {"GET", "HEAD"}:
+            return path in {
+                "/api/computer/approvals",
+                "/api/computer/approvals/cards",
+                "/api/computer/permissions",
+            } or path.startswith("/api/companion-admin/")
+        if method == "OPTIONS":
             return False
         capability = classify(method, path)
         if capability is None:
@@ -563,11 +570,17 @@ class OwnerAuthGuard:
         except ValueError:
             login_url = "http://localhost/owner-auth"
         try:
-            # A passkey credential is explicitly registered for RP ID localhost. Even
-            # when LoopbackGuard is disabled in a test harness, an owner session cannot
-            # be used from an IP, foreign host, missing Origin or different browser origin.
-            _origin(origin, host, scheme)
-        except OwnerAuthError as exc:
+            method = scope.get("method", "GET").upper()
+            if method in {"GET", "HEAD"}:
+                # Same-origin GETs usually omit Origin. They are restricted to the
+                # WebAuthn RP host; unsafe methods additionally require exact Origin.
+                host_parts = urlsplit("//" + host)
+                if (host_parts.hostname or "").casefold() != RP_ID:
+                    raise OwnerAuthError("Owner passkeys are available only from localhost")
+                _ = host_parts.port
+            else:
+                _origin(origin, host, scheme)
+        except (OwnerAuthError, ValueError) as exc:
             response = JSONResponse(
                 {"detail": str(exc), "code": "owner_auth_origin_required",
                  "login_url": login_url},
