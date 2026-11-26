@@ -194,6 +194,25 @@ def test_refresh_is_explicitly_owner_started_and_can_be_stopped(page):
     )
 
 
+def test_purge_button_stops_refresh_and_keeps_original_files(page):
+    visit(page)
+    add_notes_selection(page)
+    index_selected(page)
+    page.click("#watchStart")
+    page.wait_for_function(
+        "document.getElementById('watchStatus').textContent.includes('running')"
+    )
+    page.on("dialog", lambda dialog: dialog.accept())
+    page.click("#purge")
+    page.wait_for_function(
+        "document.getElementById('watchStatus').textContent.includes('stopped')"
+    )
+    assert page.locator("#selections li.item").count() == 0
+    assert page.locator("#files li.item").count() == 0
+    assert (page.root / "notes" / "garden.md").exists()
+    assert "Original files were not changed" in page.inner_text("#notice")
+
+
 @pytest.mark.parametrize("width", [320, 375, 768])
 def test_files_page_reflows_without_horizontal_scroll(live, browser, width):
     base, _memory, _root = live
