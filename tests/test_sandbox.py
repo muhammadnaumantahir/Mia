@@ -14,13 +14,39 @@ from mia.evolution.sandbox import (
 from mia.evolution.sandbox_worker import _security_findings
 
 
-def _report():
+def _stage(*, passed=True, exit_code=0, stdout="", stderr=""):
+    return {
+        "passed": passed,
+        "exit_code": exit_code,
+        "stdout": stdout,
+        "stderr": stderr,
+    }
+
+
+def _report(staging: Path):
+    source = (staging / "candidate.py").read_bytes()
+    test_path = staging / "test_candidate.py"
+    test_source = test_path.read_bytes() if test_path.exists() else None
+    unit = (
+        _stage()
+        if test_source is not None
+        else _stage(passed=False, exit_code=None, stderr="No candidate test source was supplied")
+    )
     return {
         "static_checks": True,
-        "unit_tests": True,
+        "unit_tests": test_source is not None,
         "security_checks": True,
         "regression_tests": True,
-        "evidence": {"unit": {"passed": True}},
+        "evidence": {
+            "source_sha256": hashlib.sha256(source).hexdigest(),
+            "test_sha256": hashlib.sha256(test_source).hexdigest() if test_source is not None else None,
+            "parse_errors": [],
+            "security_findings": {"candidate": [], "tests": []},
+            "static": _stage(),
+            "unit": unit,
+            "regression": _stage(),
+            "security_policy": "static AST denylist; defense in depth, not a proof",
+        },
     }
 
 
@@ -56,7 +82,7 @@ class FakeDocker:
             return subprocess.CompletedProcess(
                 command,
                 0,
-                stdout=json.dumps(_report()),
+                stdout=json.dumps(_report(staging)),
                 stderr="",
             )
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
@@ -139,7 +165,9 @@ def test_sandbox_accepts_large_but_bounded_json_reports():
             if command[1:3] == ["image", "inspect"]:
                 return super().__call__(command, **kwargs)
             if command[1] == "run":
-                report = _report()
+                mount = command[command.index("--mount") + 1]
+                source_dir = mount.split("source=", 1)[1].split(",target=", 1)[0]
+                report = _report(Path(source_dir))
                 report["evidence"]["large_detail"] = "x" * 20_000
                 return subprocess.CompletedProcess(
                     command,
@@ -158,6 +186,49 @@ def test_sandbox_accepts_large_but_bounded_json_reports():
     assert result["unit_tests"] is True
     assert len(result["evidence"]["large_detail"]) == 20_000
 
+
+@pytest.mark.parametrize(
+    ("corruption", "message"),
+    [
+        ("source_hash", "source hash"),
+        ("gate_mismatch", "contradicts"),
+        ("missing_stage", "regression stage evidence"),
+        ("security_mismatch", "contradicts"),
+    ],
+)
+def test_sandbox_rejects_missing_or_contradictory_worker_evidence(corruption, message):
+    class CorruptReportDocker(FakeDocker):
+        def __call__(self, command, **kwargs):
+            if command[1:3] == ["image", "inspect"]:
+                return super().__call__(command, **kwargs)
+            if command[1] == "run":
+                mount = command[command.index("--mount") + 1]
+                source_dir = mount.split("source=", 1)[1].split(",target=", 1)[0]
+                report = _report(Path(source_dir))
+                if corruption == "source_hash":
+                    report["evidence"]["source_sha256"] = "0" * 64
+                elif corruption == "gate_mismatch":
+                    report["evidence"]["static"] = _stage(passed=False, exit_code=1)
+                elif corruption == "missing_stage":
+                    report["evidence"].pop("regression")
+                elif corruption == "security_mismatch":
+                    report["evidence"]["security_findings"]["candidate"].append(
+                        "forbidden import: os"
+                    )
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout=json.dumps(report),
+                    stderr="",
+                )
+            return super().__call__(command, **kwargs)
+
+    runner = DockerSandboxRunner(subprocess_run=CorruptReportDocker())
+    with pytest.raises(SandboxExecutionError, match=message):
+        runner.validate_candidate(
+            source_code="def run(input_data): return {}\\n",
+            test_source_code="def test_run(): assert True\\n",
+        )
 
 def test_candidate_tests_are_skipped_after_security_findings():
     from pathlib import Path
