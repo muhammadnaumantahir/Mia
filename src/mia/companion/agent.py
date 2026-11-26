@@ -114,7 +114,7 @@ class CompanionAgent:
                 import httpx
             except ImportError as exc:  # pragma: no cover - environment dependent
                 raise CompanionAgentError(
-                    "Install the optional companion extra: pip install -e \".[companion]\""
+                    "Install the optional companion extra: pip install -e .[companion]"
                 ) from exc
             client = httpx.Client(
                 timeout=10.0,
@@ -230,7 +230,7 @@ class CompanionAgent:
             from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
         except ImportError as exc:
             raise CompanionAgentError(
-                "Install the optional companion extra: pip install -e .[companion]"
+                    "Install the optional companion extra: pip install -e .[companion]"
             ) from exc
         server = validate_server_url(server_url)
         server_host = urlsplit(server).hostname.casefold()
