@@ -1173,3 +1173,25 @@ Key implementation commits: `a0d9449167` (sync store), `de0ea05148` / `ce925fa96
 ## 2026-11-25 — MIA-COMP-01-IDENTITY complete
 
 Created `docs/architecture/IDENTITY_TRUST_MODEL.md` as the source-backed trust contract. It distinguishes local owner authority from Ed25519 paired-device identity, documents short-lived sessions, device scopes, revocation, replay/conflict protections, optional HTTPS exact-host remote companion access and the no-public-unauthenticated boundary. It explicitly records the remaining gap: local processes are not yet cryptographically distinguished as owner; COMP-04-OWNER must close that gap. No code behavior or test status was changed by this documentation task.
+
+
+## 2026-11-26 — MIA-EVOL-02 implementation complete (Coordinator)
+
+Resumed the stale MIA-EVOL-02 validation-pipeline task after refreshing `main`, the task board, registry, backlog and integration log. The prior A5 heartbeat was from 2026-11-21; no newer EVOL-02 implementation checkpoint or commit was present, so the validation gap was re-audited before making a bounded change.
+
+**Finding:** the host-side Docker runner checked only that the worker returned four boolean gate flags, and it then overwrote worker source/test hash evidence with host values. This did not verify that the worker's detailed stage evidence actually described the exact immutable files being validated, or that its top-level pass flags agreed with those details. A malformed or internally contradictory report could therefore be stored as passing validation evidence.
+
+**Implemented on `main`:**
+- Added strict worker-report validation in `src/mia/evolution/sandbox.py`. The host now verifies exact candidate/test hashes, parse-error shape, separate candidate/test security findings, static/unit/regression stage evidence, exit-code/result consistency, bounded diagnostics, and the known security-policy identifier.
+- Re-derives each top-level gate from its supporting evidence and rejects any contradiction, including passing unit tests without stored test source.
+- Added adversarial report-contract regression coverage in `tests/test_sandbox.py` for hash mismatch, missing evidence, stage/gate contradiction and security findings accompanied by a false pass.
+- Added `docs/evolution/VALIDATION_REPORT_CONTRACT.md` documenting the worker/host contract and its limits.
+
+Commits, all pushed directly to `main`:
+- `1bc3b4924676edf59d85501ea01e524b1121df2a` — host-side evidence validation.
+- `e7de1c8dd5096b08ef83a8d9b19766b4e0f89eef` — regression tests.
+- `3c9f868b0a62046845c32396b6d71ddc9d0da114` — corrected test fixture source literals.
+- `054a76561a029b741aa6a2c747b66cfe60e41b2e` — validation contract documentation.
+- `84086209f8ab5a0c1c4e903176070c5d8aa4adba` — task board evidence/status.
+
+**Verification:** Tests were authored but not executed, per the owner's instruction to defer test execution until development is complete. No test pass is claimed. A local repository checkout was unavailable in this environment (GitHub DNS resolution failed), so Code Graph impact analysis and `python scripts/update_code_graph.py` were not run. The new code and test files were confirmed on remote `main` through repository fetches. No Docker execution or live candidate validation was performed here.
