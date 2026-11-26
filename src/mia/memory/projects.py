@@ -250,6 +250,20 @@ class ProjectStore:
                     "UPDATE project_milestones SET project_key = ? WHERE project_key = ?",
                     (target_key, key),
                 )
+                db.execute(
+                    "UPDATE knowledge_graph_edges SET project_key = ? WHERE project_key = ?",
+                    (target_key, key),
+                )
+                db.execute(
+                    "UPDATE knowledge_graph_edges SET from_id = ? "
+                    "WHERE from_type = 'project' AND from_id = ?",
+                    (target_key, key),
+                )
+                db.execute(
+                    "UPDATE knowledge_graph_edges SET to_id = ? "
+                    "WHERE to_type = 'project' AND to_id = ?",
+                    (target_key, key),
+                )
 
             project_updates: dict[str, Any] = {}
             if renamed:
@@ -284,6 +298,11 @@ class ProjectStore:
             gone = db.execute(
                 "DELETE FROM project_milestones WHERE project_key = ?", (key,)
             ).rowcount
+            db.execute(
+                "DELETE FROM knowledge_graph_edges WHERE "
+                "(from_type = 'project' AND from_id = ?) OR (to_type = 'project' AND to_id = ?)",
+                (key, key),
+            )
             db.execute("DELETE FROM projects WHERE project_key = ?", (key,))
             AuditLog.write(
                 db, actor=actor, action="project_deleted", target_type="project",
