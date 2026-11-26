@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
+<title>Mia — Companion Devices</title>
+<style>
+:root{font-family:Inter,Segoe UI,system-ui,sans-serif;color:#eef4f2;background:#0c1214}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#0c1214}
+.shell{max-width:960px;margin:0 auto;padding:24px 16px 64px}
+nav{display:flex;gap:4px 16px;flex-wrap:wrap;margin-bottom:20px}nav a{color:#9be5c5;font-size:13px;padding:5px 0}
+h1{font-size:24px;margin:0 0 5px}h2{font-size:17px;margin:0 0 10px}
+.sub{font-size:13px;line-height:1.55;color:#a9bdb6;margin:4px 0 14px}
+.panel{background:#131d20;border:1px solid #2b4044;border-radius:14px;padding:16px;margin-top:15px}
+.row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:8px 0}
+label{display:flex;flex-direction:column;gap:5px;color:#c3d3ce;font-size:12px;min-width:180px;flex:1}
+input,select,button{font:inherit;font-size:13px;min-height:40px}
+input,select{background:#0e1719;color:#eef4f2;border:1px solid #4c6a66;border-radius:8px;padding:8px 10px}
+button{background:#1f7a5c;color:#fff;border:1px solid #1f7a5c;border-radius:8px;padding:8px 13px;cursor:pointer}
+button.alt{background:#1b2a2c;border-color:#4c6a66;color:#e3ece8}
+button.danger{background:#813c32;border-color:#813c32}
+button:disabled{opacity:.5;cursor:not-allowed}
+:focus-visible{outline:3px solid #ffd27a;outline-offset:2px}
+.scopes{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin:12px 0}
+.scope{display:flex;flex-direction:row;min-width:0;align-items:flex-start;gap:8px;padding:9px;border:1px solid #31484a;border-radius:8px;background:#0e1719}
+.scope input{min-height:0;margin-top:2px}
+.scope span{display:block}.scope small{display:block;color:#91a9a0;font-size:11px;margin-top:2px;line-height:1.4}
+#notice{min-height:22px;color:#a6e3c4;font-size:13px;margin-top:10px}#notice.error{color:#ffb4a3}
+.codebox{border:1px dashed #d9a441;border-radius:10px;padding:14px;margin-top:14px;background:#201d15}
+.code{font:700 24px ui-monospace,Consolas,monospace;letter-spacing:3px;color:#ffe0a0;overflow-wrap:anywhere}
+.device{border-top:1px solid #2b4044;padding:13px 0}
+.device:first-child{border-top:0}
+.device-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.name{font-weight:650;font-size:14px;overflow-wrap:anywhere}
+.meta{font-size:11px;color:#a9bdb6;line-height:1.6;overflow-wrap:anywhere}
+.tags{display:flex;gap:5px;flex-wrap:wrap;margin:6px 0}
+.tag{font-size:11px;border:1px solid #4c6a66;border-radius:999px;padding:2px 8px;color:#d5e3de}
+.tag.active{border-color:#398d69;color:#a6e3c4}.tag.revoked{border-color:#a5574b;color:#ffb4a3}
+.small{font-size:11px;color:#91a9a0}
+.empty{border:1px dashed #4c6a66;border-radius:10px;padding:14px;text-align:center;color:#b6c8c2}
+@media(max-width:560px){.row{flex-direction:column;align-items:stretch}button{min-height:44px}.device-head{flex-direction:column}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+</style></head>
+<body><main class="shell">
+<nav aria-label="Mia pages"><a href="/assistant">Assistant</a><a href="/life">Autonomous life</a><a href="/projects">Projects</a><a href="/knowledge-graph">Knowledge Graph</a><a href="/">Observatory</a></nav>
+<h1>Companion Devices</h1>
+<p class="sub">Pair a Windows companion using a one-time code. Device credentials are separate from owner authority. Each device receives only the scopes you select; revocation immediately invalidates its sessions. First-time pairing and administration remain local to Mia.</p>
+<div id="notice" role="status" aria-live="polite"></div>
+<section class="panel" aria-labelledby="pairHeading">
+<h2 id="pairHeading">Create a one-time pairing code</h2>
+<form id="pairForm">
+<div class="row"><label>Device label<input id="label" required maxlength="80" value="Windows Companion"></label>
+<label>Code lifetime<select id="ttl"><option value="300">5 minutes</option><option value="180">3 minutes</option><option value="60">1 minute</option></select></label></div>
+<div class="scopes" role="group" aria-label="Device permissions">
+<label class="scope"><input type="checkbox" name="scope" value="companion.heartbeat" checked><span>Heartbeat<small>Let Mia know the device is reachable.</small></span></label>
+<label class="scope"><input type="checkbox" name="scope" value="companion.observe"><span>Observe<small>Reserved for read-only companion status and observation.</small></span></label>
+<label class="scope"><input type="checkbox" name="scope" value="companion.act"><span>Act<small>Reserved for explicitly mediated companion actions; does not grant owner approval.</small></span></label>
+<label class="scope"><input type="checkbox" name="scope" value="companion.sync.read"><span>Sync read<small>Read the limited companion-state and preferences namespaces.</small></span></label>
+<label class="scope"><input type="checkbox" name="scope" value="companion.sync.write"><span>Sync write<small>Update only the versioned companion-state and preferences namespaces.</small></span></label>
+</div>
+<div class="row"><button type="submit">Generate one-time code</button></div>
+</form>
+<div id="codeBox" class="codebox" hidden>
+<div class="small">Shown once · expires <span id="codeExpiry"></span></div>
+<div id="codeValue" class="code" aria-label="One-time pairing code"></div>
+<div class="meta" id="codeScopes"></div>
+<div class="row"><button id="copyCode" type="button">Copy code</button><button id="hideCode" class="alt" type="button">Hide code</button></div>
+<p class="small">On the Windows device, run <code>mia-companion pair --server http://127.0.0.1:8765 --name "My Windows PC"</code>, then enter this code when prompted. Install <code>.[companion]</code> first. Do not send the code to anyone or paste it into a third-party service.</p>
+</div>
+</section>
+<section class="panel" aria-labelledby="devicesHeading">
+<div class="device-head"><div><h2 id="devicesHeading">Paired devices</h2><div class="sub" id="summary">Loading devices…</div></div><button id="refresh" class="alt" type="button">Refresh</button></div>
+<div id="devices" aria-live="polite"><div class="empty">Loading devices…</div></div>
+</section>
+<section class="panel">
+<h2>Windows companion commands</h2>
+<p class="sub">Run these in the Windows user's terminal after installing the optional companion extra:</p>
+<pre class="meta">pip install -e ".[companion]"
+mia-companion status
+mia-companion install --confirm
+mia-companion start
+mia-companion stop
+mia-companion uninstall --confirm</pre>
+<p class="small">The Scheduled Task is installed only when you explicitly confirm it. It runs at the current user's logon with Limited privilege. The companion opens outbound connections only; it does not listen for inbound commands.</p>
+</section>
+<script>
+const $=id=>document.getElementById(id);
+const enc=encodeURIComponent;
+function say(message,error=false){$('notice').textContent=message;$('notice').className=error?'error':'';$('notice').setAttribute('role',error?'alert':'status');}
+async function api(url,options={}){
+ const response=await fetch(url,{headers:{'Content-Type':'application/json'},...options});
+ let data={};try{data=await response.json();}catch{}
+ if(!response.ok)throw new Error(typeof data.detail==='string'?data.detail:'Request failed ('+response.status+')');
+ return data;
+}
+function node(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;}
+function tag(text,cls=''){return node('span',text,'tag '+cls);}
+function timestamp(value){
+ if(!value)return 'Never';
+ const date=new Date(value);return Number.isNaN(date.getTime())?'Unknown':date.toLocaleString();
+}
+async function loadDevices(){
+ try{
+  const data=await api('/api/companion-admin/devices');
+  const items=data.items||[];const root=$('devices');root.replaceChildren();
+  $('summary').textContent=items.length+' paired device(s)';
+  if(!items.length){root.append(node('div','No companion devices are paired yet. Create a one-time code above to pair the first one.','empty'));return;}
+  for(const device of items){
+   const card=node('article',undefined,'device'),head=node('div',undefined,'device-head'),main=node('div');
+   main.append(node('div',device.name,'name'),node('div',device.label,'meta'));
+   const state=node('div',device.status, 'tag '+(device.status==='active'?'active':'revoked'));
+   head.append(main,state);card.append(head);
+   const meta=node('div',undefined,'meta');
+   meta.textContent='Device ID: '+device.device_id+' · Key fingerprint: '+device.key_fingerprint+
+    '\nLast seen: '+timestamp(device.last_seen)+' · Paired: '+timestamp(device.created_at);
+   card.append(meta);
+   const scopes=node('div',undefined,'tags');
+   for(const scope of device.scopes||[])scopes.append(tag(scope));
+   card.append(scopes);
+   if(device.status==='active'){
+    const actions=node('div',undefined,'row');
+    const revoke=node('button','Revoke device','danger');revoke.type='button';
+    revoke.addEventListener('click',async()=>{
+     if(!window.confirm('Revoke '+device.name+'? Its sessions and outstanding challenges will be invalidated.'))return;
+     try{
+      await api('/api/companion-admin/devices/'+enc(device.device_id)+'/revoke',{method:'POST',body:'{}'});
+      say('Device revoked. Its existing sessions are no longer valid.');
+      await loadDevices();
+     }catch(error){say('Could not revoke device: '+error.message,true);}
+    });
+    actions.append(revoke);card.append(actions);
+   }
+   root.append(card);
+  }
+ }catch(error){say('Could not load paired devices: '+error.message,true);}
+}
+$('pairForm').addEventListener('submit',async event=>{
+ event.preventDefault();$('codeBox').hidden=true;
+ const scopes=[...document.querySelectorAll('input[name="scope"]:checked')].map(input=>input.value);
+ if(!scopes.length){say('Select at least one device scope.',true);return;}
+ const label=$('label').value.trim();if(!label){say('Enter a device label.',true);return;}
+ try{
+  const data=await api('/api/companion-admin/pairing-codes',{
+   method:'POST',body:JSON.stringify({label,scopes,ttl_seconds:Number($('ttl').value)})
+  });
+  $('codeValue').textContent=data.code;
+  $('codeExpiry').textContent=timestamp(data.expires_at);
+  $('codeScopes').textContent='Scopes: '+data.scopes.join(', ');
+  $('codeBox').hidden=false;
+  say('One-time code created. It will not be shown again after you hide or refresh this page.');
+ }catch(error){say('Could not create pairing code: '+error.message,true);}
+});
+$('copyCode').addEventListener('click',async()=>{
+ try{await navigator.clipboard.writeText($('codeValue').textContent);say('Pairing code copied. Treat it as a one-time credential.');}
+ catch{say('Clipboard unavailable. Select and copy the code manually.',true);}
+});
+$('hideCode').addEventListener('click',()=>{
+ $('codeBox').hidden=true;$('codeValue').textContent='';say('The pairing code is hidden. Generate a new one if it was not used.');
+});
+$('refresh').addEventListener('click',loadDevices);
+loadDevices();
+</script></main></body></html>
