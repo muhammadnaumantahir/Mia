@@ -381,3 +381,11 @@ def test_token_is_rechecked_against_the_device_record_on_every_use(svc, tmp_path
     assert db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 1, "the session row is still there"
     with pytest.raises(PairingError):
         service.verify_token(token)
+
+def test_companion_devices_owner_page_is_served(api):
+    client, _ = api
+    response = client.get("/companion")
+    assert response.status_code == 200
+    assert "Companion Devices" in response.text
+    assert "one-time pairing code" in response.text
+    assert "not yet cryptographically authenticated" in response.text
