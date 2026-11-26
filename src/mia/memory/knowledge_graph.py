@@ -267,6 +267,10 @@ class KnowledgeGraph:
             explicit_scope = self._project_key(project)
             if project is not None and explicit_scope is None:
                 raise KnowledgeGraphError("project scope is invalid")
+            if explicit_scope and not db.execute(
+                "SELECT 1 FROM projects WHERE project_key = ?", (explicit_scope,)
+            ).fetchone():
+                raise KnowledgeGraphError("project scope must name a registered project")
             if explicit_scope and scopes and explicit_scope not in scopes:
                 raise KnowledgeGraphError("edge project does not match its endpoint scope")
             scope = explicit_scope or (next(iter(scopes)) if scopes else None)
