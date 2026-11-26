@@ -21,6 +21,7 @@ import hashlib
 import json
 import re
 import sqlite3
+import unicodedata
 import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -50,28 +51,93 @@ FETCH_TIMEOUT = 10.0
 # Phrases that address an AI reader or try to steer one. A hit never blocks reading the page;
 # it marks the passage so it cannot be cited, and tells the owner the page tried to give orders.
 _INJECTION_PATTERNS = (
-    ("override_instructions", r"\b(ignore|disregard|forget|override)\b[^.\n]{0,40}\b(previous|prior|above|earlier|all|any|your)\b[^.\n]{0,30}\b(instructions?|rules?|prompts?|guidelines?)\b"),
-    ("role_reassignment", r"\byou are (now|no longer)\b|\bact as (an?|the)\b[^.\n]{0,30}\b(assistant|ai|agent|system)\b|\bnew instructions?\b"),
-    ("prompt_exfiltration", r"\b(reveal|show|print|repeat|output|leak)\b[^.\n]{0,40}\b(system prompt|hidden prompt|instructions|api key|password|secret|token|credentials?)\b"),
-    ("chat_markup", r"<\|?(im_start|im_end|system|assistant)\|?>|^\s*(system|assistant)\s*:|\[/?INST\]"),
-    ("run_command", r"\b(run|execute|paste|type)\b[^.\n]{0,30}\b(this|the following)\b[^.\n]{0,20}\b(command|script|code)\b|\b(curl|wget|powershell|rm -rf|sudo)\b[^\n]{0,60}"),
-    ("send_data", r"\b(send|post|email|upload|forward|submit)\b[^.\n]{0,50}\b(to|at)\b[^.\n]{0,20}(https?://|\S+@\S+)"),
-    ("conceal_from_user", r"\b(do not|don't|never)\b[^.\n]{0,20}\b(tell|inform|show|mention)\b[^.\n]{0,20}\b(the )?(user|owner)\b"),
-    ("address_to_ai", r"\b(attention|note to|message for|instructions? for)\b[^.\n]{0,20}\b(ai|assistant|language model|llm|agent|chatbot)\b"),
+    ("override_instructions", r"\b(ignore|disregard|forget|override)\b[^.\n]{0,80}\b(previous|prior|above|earlier|all|any|your)\b[^.\n]{0,60}\b(instructions?|rules?|prompts?|guidelines?)\b"),
+    ("role_reassignment", r"\byou are (now|no longer)\b|\bact as (an?|the)\b[^.\n]{0,40}\b(assistant|ai|agent|system)\b|\bnew instructions?\b"),
+    ("prompt_exfiltration", r"\b(reveal|show|print|repeat|output|leak|expose)\b[^.\n]{0,60}\b(system prompt|hidden prompt|instructions|api key|password|secret|token|credentials?)\b"),
+    ("chat_markup", r"<\|?(im_start|im_end|system|assistant)\|?>|^\s*(system|developer|assistant)\s*:|\b(system|developer|assistant)\s*:|\[/?INST\]"),
+    ("run_command", r"\b(run|execute|paste|type)\b[^.\n]{0,50}\b(this|the following)\b[^.\n]{0,40}\b(command|script|code)\b|\b(curl|wget|powershell|rm -rf|sudo)\b[^\n]{0,60}"),
+    ("send_data", r"\b(send|post|email|upload|forward|submit|exfiltrate)\b[^.\n]{0,70}\b(to|at|into)\b[^.\n]{0,30}(https?://|\S+@\S+)"),
+    ("conceal_from_user", r"\b(do not|don't|never)\b[^.\n]{0,30}\b(tell|inform|show|mention)\b[^.\n]{0,30}\b(the )?(user|owner)\b"),
+    ("address_to_ai", r"\b(attention|note to|message for|instructions? for)\b[^.\n]{0,30}\b(ai|assistant|language model|llm|agent|chatbot)\b"),
 )
 _COMPILED = tuple((name, re.compile(rx, re.IGNORECASE | re.MULTILINE)) for name, rx in _INJECTION_PATTERNS)
 
+# These characters are visually confusable with Latin letters in prompt-injection phrases.
+# The mapping is deliberately narrow; it is a detector aid, not general transliteration.
+_CONFUSABLES = str.maketrans({
+    "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "х": "x", "у": "y",
+    "і": "i", "ј": "j", "ӏ": "l", "ԁ": "d",
+    "α": "a", "ε": "e", "ο": "o", "ρ": "p", "τ": "t", "ι": "i", "κ": "k",
+})
+
+
+def _normalise_injection_scan_text(text: str) -> tuple[str, list[tuple[int, int]]]:
+    """Build a scan-only NFKC/casefold view and map each output character to source offsets.
+
+    Zero-width formatting controls are ignored, compatibility characters are normalised,
+    common lookalike letters are folded into Latin, and line breaks/spacing are collapsed.
+    The returned offsets always refer to the original, unmodified source text.
+    """
+    output: list[str] = []
+    offsets: list[tuple[int, int]] = []
+    for index, character in enumerate(text):
+        category = unicodedata.category(character)
+        if category == "Cf" or (category == "Cc" and character not in "\n\r\t"):
+            continue
+        if character.isspace():
+            if output and output[-1] == " ":
+                offsets[-1] = (offsets[-1][0], index + 1)
+            elif output:
+                output.append(" ")
+                offsets.append((index, index + 1))
+            continue
+        folded = unicodedata.normalize("NFKC", character).casefold().translate(_CONFUSABLES)
+        for item in folded:
+            if item.isspace():
+                if output and output[-1] == " ":
+                    offsets[-1] = (offsets[-1][0], index + 1)
+                elif output:
+                    output.append(" ")
+                    offsets.append((index, index + 1))
+                continue
+            output.append(item)
+            offsets.append((index, index + 1))
+    while output and output[-1] == " ":
+        output.pop()
+        offsets.pop()
+    return "".join(output), offsets
+
 
 def detect_injection(text: str, *, limit: int = 20) -> list[dict[str, Any]]:
-    """Instruction-like spans in untrusted text: [{pattern, start, end, excerpt}]."""
+    """Find instruction-like spans while returning offsets into the untouched source text.
+
+    Detection is intentionally heuristic. Normalisation catches common Unicode, zero-width
+    and line-break obfuscations; it cannot prove arbitrary semantic text is harmless.
+    """
+    if not isinstance(text, str) or limit <= 0:
+        return []
+    scan_text, offsets = _normalise_injection_scan_text(text)
     spans: list[dict[str, Any]] = []
+    seen: set[tuple[str, int, int]] = set()
     for name, rx in _COMPILED:
-        for match in rx.finditer(text):
-            spans.append({"pattern": name, "start": match.start(), "end": match.end(),
-                          "excerpt": text[match.start():match.end()][:160]})
+        for match in rx.finditer(scan_text):
+            if not offsets or match.start() >= len(offsets) or match.end() <= 0:
+                continue
+            start = offsets[match.start()][0]
+            end = offsets[match.end() - 1][1]
+            identity = (name, start, end)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            spans.append({
+                "pattern": name,
+                "start": start,
+                "end": end,
+                "excerpt": text[start:end][:160],
+            })
             if len(spans) >= limit:
-                return sorted(spans, key=lambda s: s["start"])
-    return sorted(spans, key=lambda s: s["start"])
+                return sorted(spans, key=lambda item: item["start"])
+    return sorted(spans, key=lambda item: item["start"])
 
 
 class _MetaDates(HTMLParser):
