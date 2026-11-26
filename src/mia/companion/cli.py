@@ -92,7 +92,10 @@ def main() -> int:
                 raise RuntimeError(
                     "forget deletes the protected local device identity; pass --confirm after revoking it in Mia"
                 )
-            manager.stop(timeout_seconds=20)
+            if not manager.stop(timeout_seconds=20):
+                raise RuntimeError(
+                    "The companion is still running; local identity was not removed"
+                )
             deleted = identity.clear()
             _print({
                 "forgotten_locally": deleted,
