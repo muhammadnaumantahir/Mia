@@ -673,6 +673,11 @@ class StructuredMemory:
                     (target, target),
                 )
                 db.execute(
+                    "DELETE FROM knowledge_graph_edges WHERE "
+                    "(from_type = 'record' AND from_id = ?) OR (to_type = 'record' AND to_id = ?)",
+                    (target, target),
+                )
+                db.execute(
                     "DELETE FROM memory_usage WHERE ref_type = 'record' AND ref_id = ?", (target,)
                 )
                 db.execute("DELETE FROM structured_memory WHERE record_id = ?", (target,))
