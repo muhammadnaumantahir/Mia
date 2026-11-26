@@ -15,6 +15,7 @@ import secrets
 import sqlite3
 from http.cookies import SimpleCookie
 from collections.abc import Callable, Iterator
+from contextvars import ContextVar
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -32,6 +33,8 @@ COOKIE_NAME = "mia_owner"
 RP_ID = "localhost"
 RP_NAME = "Mia Personal AI"
 USER_ID = b"mia-owner-account-v1"
+
+CURRENT_OWNER_SESSION: ContextVar[bool] = ContextVar("mia_owner_session_authenticated", default=False)
 
 
 class OwnerAuthError(RuntimeError):
@@ -564,10 +567,85 @@ class OwnerAuthGuard:
         }
 
     async def __call__(self, scope, receive, send) -> None:  # noqa: ANN001
-        if scope.get("type") != "http" or not self.requires_owner(
-            scope.get("method", "GET"), scope.get("path", "")
-        ):
+        if scope.get("type") != "http":
             await self.app(scope, receive, send)
+            return
+
+        headers = self._headers(scope)
+        owner_token = self._cookie(headers)
+        session_valid = self.service.has_valid_session(owner_token)
+        context_token = CURRENT_OWNER_SESSION.set(session_valid)
+        try:
+            method = scope.get("method", "GET").upper()
+            path = scope.get("path", "")
+            if not self.requires_owner(method, path):
+                await self.app(scope, receive, send)
+                return
+
+            host = headers.get("host", "")
+            origin = headers.get("origin", "")
+            scheme = scope.get("scheme", "http")
+            try:
+                host_parts = urlsplit("//" + host)
+                port = host_parts.port
+                login_url = (
+                    f"{scheme}://localhost:{port}/owner-auth"
+                    if port else f"{scheme}://localhost/owner-auth"
+                )
+            except ValueError:
+                login_url = "http://localhost/owner-auth"
+
+            try:
+                if method in {"GET", "HEAD"}:
+                    # Same-origin GETs usually omit Origin. They are restricted to the
+                    # WebAuthn RP host; unsafe methods additionally require exact Origin.
+                    host_parts = urlsplit("//" + host)
+                    if (host_parts.hostname or "").casefold() != RP_ID:
+                        raise OwnerAuthError("Owner passkeys are available only from localhost")
+                    _ = host_parts.port
+                else:
+                    _origin(origin, host, scheme)
+            except (OwnerAuthError, ValueError) as exc:
+                response = JSONResponse(
+                    {"detail": str(exc), "code": "owner_auth_origin_required",
+                     "login_url": login_url},
+                    status_code=403,
+                    headers={"Cache-Control": "no-store"},
+                )
+                await response(scope, receive, send)
+                return
+
+            if not self.service.is_configured:
+                response = JSONResponse(
+                    {
+                        "detail": "Owner passkey setup is required before this high-risk action.",
+                        "code": "owner_auth_setup_required",
+                        "login_url": login_url,
+                        "bootstrap_command": "mia-owner-auth bootstrap",
+                    },
+                    status_code=428,
+                    headers={"Cache-Control": "no-store"},
+                )
+                await response(scope, receive, send)
+                return
+
+            if not session_valid:
+                response = JSONResponse(
+                    {
+                        "detail": "Authenticate with the owner passkey before this high-risk action.",
+                        "code": "owner_auth_required",
+                        "login_url": login_url,
+                    },
+                    status_code=401,
+                    headers={"Cache-Control": "no-store"},
+                )
+                await response(scope, receive, send)
+                return
+
+            await self.app(scope, receive, send)
+        finally:
+            CURRENT_OWNER_SESSION.reset(context_token)
+
             return
 
         headers = self._headers(scope)
