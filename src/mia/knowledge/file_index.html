@@ -29,7 +29,7 @@ ul.items{list-style:none;margin:0;padding:0}li.item{border-top:1px solid #2b4044
 #folderList{max-height:260px;overflow:auto;border:1px solid #2b4044;border-radius:9px;padding:6px;margin-top:8px}
 .folder{width:100%;text-align:left;background:transparent;border:0;border-radius:6px;color:#d8e7e1;display:flex;justify-content:space-between;gap:10px;padding:8px}.folder:hover{background:#1b2a2c}
 .snippet{white-space:pre-wrap;overflow-wrap:anywhere;background:#0b1416;border:1px solid #2b4044;border-radius:8px;padding:10px;margin-top:8px;color:#d5e3de;font:12px/1.5 ui-monospace,Consolas,monospace}
-.note{font-size:12px;color:#a9bdb6;overflow-wrap:anywhere}.path{font:12px ui-monospace,Consolas,monospace;overflow-wrap:anywhere;color:#c3d3ce}
+.note{font-size:12px;color:#a9bdb6;overflow-wrap:anywhere}.note.verified{color:#a6e3c4}.note.unverified{color:#ffb4a3}.path{font:12px ui-monospace,Consolas,monospace;overflow-wrap:anywhere;color:#c3d3ce}
 @media(max-width:780px){.grid{grid-template-columns:1fr}}
 @media(max-width:560px){.row{flex-direction:column;align-items:stretch}button{min-height:44px}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
@@ -38,7 +38,7 @@ ul.items{list-style:none;margin:0;padding:0}li.item{border-top:1px solid #2b4044
 <body><main class="shell">
 <nav aria-label="Mia pages"><a href="/">Observatory</a><a href="/assistant">Assistant</a><a href="/life">Autonomous life</a><a href="/tasks">Tasks</a><a href="/projects">Projects</a><a href="/research">Research</a><a href="/workflows">Workflows</a></nav>
 <h1>File intelligence</h1>
-<p class="sub">Choose the folders Mia may index. Search stays local and keyword-based; each result carries a source path and line range that can be checked against the live file.</p>
+<p class="sub">Choose the folders Mia may index. Search stays local and keyword-based; each result carries a source path and line range that can be checked against the live file. For an AI explanation, ask Mia in the <a href="/assistant">Assistant</a>; its file-search tool uses live-verified chunks and source citations.</p>
 <div id="notice" role="status" aria-live="polite"></div>
 <p class="safety" role="note"><strong>Files are untrusted data.</strong> Mia never follows instructions found in files. Nothing is indexed until you select a folder and press Index. Credential-like files, private keys, blocked directories, symlinks and oversized content are skipped. Search excerpts may contain private information from the folders you explicitly selected.</p>
 
@@ -85,7 +85,7 @@ ul.items{list-style:none;margin:0;padding:0}li.item{border-top:1px solid #2b4044
 
 <section class="panel" aria-labelledby="filesHeading">
 <h2 id="filesHeading">Indexed files</h2>
-<p class="note">Deleting an indexed entry removes its stored text from Mia's index; it never deletes the original file.</p>
+<p class="note">Deleting an indexed entry removes its stored text from Mia's index; it never deletes the original file. A file inside a still-selected folder may be indexed again during the next automatic refresh. Remove the folder selection to stop indexing all of its contents.</p>
 <ul id="files" class="items"><li class="empty">Loading indexed files…</li></ul>
 <div class="actions"><button id="purge" class="danger" type="button">Delete entire index…</button></div>
 </section>
@@ -258,7 +258,7 @@ $('watchStop').addEventListener('click',async()=>{
 });
 $('purge').addEventListener('click',async()=>{
  if(!window.confirm('Delete the entire file index, including every stored chunk and folder selection? Original files will not be changed.'))return;
- try{await api('/api/file-index','DELETE');say('Entire file index deleted. Original files were not changed.');currentHits=[];await refresh();$('results').replaceChildren(mk('li','Index cleared. Select a folder to start again.','empty'));}
+ try{const result=await api('/api/file-index','DELETE');say('Entire file index deleted. Automatic refresh '+(result.watcher&&result.watcher.enabled?'is still running':'is stopped')+'. Original files were not changed.');currentHits=[];await refresh();$('results').replaceChildren(mk('li','Index cleared. Select a folder to start again.','empty'));}
  catch(e){say('Could not delete the index: '+e.message,true);}
 });
 (async()=>{
