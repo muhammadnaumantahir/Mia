@@ -98,6 +98,7 @@ class CapabilityStore:
                     upstream_uri TEXT,
                     license_id TEXT,
                     permissions_json TEXT NOT NULL,
+                    dependencies_json TEXT NOT NULL DEFAULT '[]',
                     source_sha256 TEXT NOT NULL,
                     source_path TEXT NOT NULL,
                     test_sha256 TEXT,
@@ -139,6 +140,10 @@ class CapabilityStore:
                 db.execute("ALTER TABLE capability_versions ADD COLUMN test_sha256 TEXT")
             if "test_source_path" not in columns:
                 db.execute("ALTER TABLE capability_versions ADD COLUMN test_source_path TEXT")
+            if "dependencies_json" not in columns:
+                db.execute(
+                    "ALTER TABLE capability_versions ADD COLUMN dependencies_json TEXT NOT NULL DEFAULT '[]'"
+                )
 
     def record_candidate(
         self,
@@ -154,6 +159,7 @@ class CapabilityStore:
         upstream_uri: str | None = None,
         license_id: str | None = None,
         permissions: list[str] | None = None,
+        dependencies: list[dict[str, str]] | None = None,
         test_source_code: str | None = None,
     ) -> dict[str, Any]:
         cap_id = capability_id.strip().lower()
@@ -176,6 +182,28 @@ class CapabilityStore:
         safe_permissions = sorted(set(permissions or []))
         if any(not item or len(item) > 100 for item in safe_permissions):
             raise ValueError("permissions must be non-empty strings of at most 100 characters")
+        normalized_dependencies: list[dict[str, str]] = []
+        seen_dependencies: set[tuple[str, str]] = set()
+        for dependency in dependencies or []:
+            if not isinstance(dependency, dict) or set(dependency) != {"capability_id", "version"}:
+                raise ValueError("each dependency must contain capability_id and version only")
+            dep_id = dependency["capability_id"]
+            dep_version = dependency["version"]
+            if (
+                not isinstance(dep_id, str) or not _CAPABILITY_ID.fullmatch(dep_id)
+                or not isinstance(dep_version, str) or not _VERSION.fullmatch(dep_version)
+            ):
+                raise ValueError("dependency capability_id/version is invalid")
+            if (dep_id, dep_version) == (cap_id, version):
+                raise ValueError("a capability cannot depend on itself")
+            if (dep_id, dep_version) in seen_dependencies:
+                raise ValueError("duplicate capability dependency")
+            dep = self.get(dep_id, dep_version)
+            if dep is None or dep["status"] not in {"registered", "active", "deprecated"}:
+                raise ValueError("dependencies must reference an existing registered capability version")
+            seen_dependencies.add((dep_id, dep_version))
+            normalized_dependencies.append({"capability_id": dep_id, "version": dep_version})
+        normalized_dependencies.sort(key=lambda item: (item["capability_id"], item["version"]))
         source_hash = hashlib.sha256(encoded).hexdigest()
         test_encoded = test_source_code.encode("utf-8") if test_source_code is not None else None
         if test_encoded is not None and (
@@ -262,10 +290,10 @@ class CapabilityStore:
                 INSERT INTO capability_versions (
                     capability_id, version, name, parent_id, parent_version,
                     rationale, source_kind, upstream_uri, license_id,
-                    permissions_json, source_sha256, source_path,
+                    permissions_json, dependencies_json, source_sha256, source_path,
                     test_sha256, test_source_path, status, validation_json,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', NULL, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', NULL, ?, ?)
                 """,
                 (
                     cap_id,
@@ -278,6 +306,7 @@ class CapabilityStore:
                     upstream_uri,
                     license_id,
                     permissions_json,
+                    _canonical({"items": normalized_dependencies})[9:-1],
                     source_hash,
                     str(target_path),
                     test_hash,
@@ -771,6 +800,8 @@ class CapabilityStore:
     def _decode(row: sqlite3.Row) -> dict[str, Any]:
         result = dict(row)
         result["permissions"] = json.loads(result.pop("permissions_json"))
+        raw_dependencies = result.pop("dependencies_json", "[]")
+        result["dependencies"] = json.loads(raw_dependencies)
         raw_report = result.pop("validation_json")
         result["validation"] = json.loads(raw_report) if raw_report else None
         return result
