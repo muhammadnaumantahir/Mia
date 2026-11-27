@@ -51,7 +51,7 @@ Source: `src/mia/security/pairing.py`; protocol tests: `tests/test_companion_pai
 
 The first Windows companion client is now implemented in `src/mia/companion/` (COMP-03). It generates and retains the Ed25519 private key on the device, stores that key and its bearer token using Windows CurrentUser DPAPI, renews short-lived sessions with a fresh signed challenge, sends a heartbeat, and supports bounded reconnect. It initiates outbound HTTP(S) requests only and exposes no inbound listener. First-time enrollment is loopback-only. The owner can configure an already-paired device to use an allowlisted HTTPS hostname; if that remote session expires while offline, renewal must be performed from the loopback Mia host. The Windows logon task runs as the current interactive user with Limited privilege and no stored password.
 
-The owner Companion Devices page is served at `/companion`. It creates one-time codes, displays paired-device metadata and revokes devices. It does not create an authenticated owner session; the owner-authority limitation below still applies.
+The owner Companion Devices page is served at `/companion`. It creates one-time codes, displays paired-device metadata and revokes devices. Creating pairing codes and reading device administration require the verified WebAuthn owner session described above; device revocation remains available without a passkey as a safety reduction.
 
 ## 2. Device scopes
 
