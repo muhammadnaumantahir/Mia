@@ -1530,7 +1530,7 @@ def create_app(
         "personal.add", "personal.list", "personal.complete", "notify.submit",
     }) & frozenset(workflow_engine.handlers)
 
-    def tool_workflow_preview(args: dict[str, Any]) -> ToolResult:
+    async def tool_workflow_preview(args: dict[str, Any]) -> ToolResult:
         steps = args["steps"]
         if any(step.get("capability") not in workflow_brain_capabilities for step in steps):
             return ToolResult({
@@ -1540,7 +1540,7 @@ def create_app(
         source = "voice" if CURRENT_BRAIN_INTERFACE.get() == "voice" else "brain"
         try:
             task = workflow_engine.create_task(args["title"], steps, source=source)
-            preview = workflow_engine.plan_summary(task["task_id"])
+            preview = await workflow_engine.plan_summary_async(task["task_id"])
         except TaskPlanError as exc:
             return ToolResult({"ok": False, "error": str(exc), "error_type": "ValueError"})
         return ToolResult({
