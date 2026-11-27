@@ -244,7 +244,8 @@ function renderDetail(task,preview,events,rep){
   const meta=mk('div',undefined,'meta');
   const [stext,skind]=ST[s.status]||[s.status,''];meta.append(tag(stext,skind));
   if(p.risk)meta.append(tag(RISK[p.risk]||('Risk: '+p.risk),p.risk==='low'?'':'warn'));
-  if(p.allowed===false)meta.append(tag('Denied by policy','bad'));
+  if(p.validation_error)meta.append(tag('Cannot validate','bad'));
+  else if(p.allowed===false)meta.append(tag('Denied by policy','bad'));
   else meta.append(tag(p.needs_approval?'Needs your approval':'No approval needed',p.needs_approval?'warn':''));
   if(p.needs_approval&&s.args){
    const details=mk('details');const summary=mk('summary','Review exact action details');
