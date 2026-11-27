@@ -117,6 +117,43 @@ def test_unregistered_and_unsupported_steps_are_refused_at_plan_time(env, capabi
     assert memory.personal.list(limit=10) == [] and client.get("/api/workflows").json()["items"] == []
 
 
+def test_async_browser_inspector_is_awaited_in_workflow_preview(env):
+    client, *_ = env
+    response = create(client, [{
+        "capability": "browser.navigate",
+        "args": {"url": "https://example.com"},
+    }])
+    assert response.status_code == 201, response.text
+    preview = response.json()["preview"][0]
+    assert preview["risk"] == "low"
+    assert preview["needs_approval"] is False
+    assert preview["arguments"] == {"url": "https://example.com"}
+
+
+def test_preview_shows_resolved_arguments_for_owner_approval(env):
+    client, _memory, *_ = env
+    root_id = client.app.state.computer_files.list_roots()[0]["root_id"]
+    response = create(client, [
+        add_step("Create reference"),
+        {
+            "capability": "filesystem.write",
+            "args": {
+                "root_id": root_id,
+                "relative_path": "resolved-reference.txt",
+                "content": "Reference: ${steps.1.item_id}",
+            },
+        },
+    ], title="Resolve before approval")
+    assert response.status_code == 201, response.text
+    wid = response.json()["workflow"]["task_id"]
+    waiting = client.post(f"/api/workflows/{wid}/run").json()
+    assert waiting["status"] == "awaiting_approval"
+    item_id = waiting["steps"][0]["result"]["item_id"]
+    preview = client.get(f"/api/workflows/{wid}/preview").json()["preview"]
+    assert preview[1]["arguments"]["content"] == f"Reference: {item_id}"
+    assert preview[1]["needs_approval"] is True
+
+
 def test_computer_write_workflow_waits_for_exact_owner_approval(env):
     client, _memory, *_ = env
     root_id = client.app.state.computer_files.list_roots()[0]["root_id"]
