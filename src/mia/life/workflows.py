@@ -32,7 +32,7 @@ from typing import Any, Literal
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from mia.computer.approvals import ApprovalStore
+from mia.computer.approvals import ApprovalError, ApprovalStore
 from mia.computer.control import CURRENT_TASK_ID, AutomationControl
 from mia.computer.tasks import (
     Inspection,
@@ -189,6 +189,31 @@ class WorkflowEngine(TaskEngine):
         if step is not None and step["status"] == "interrupted":
             raise TaskPlanError("Interrupted workflow steps must be reconciled before retry")
         super().retry_step(task_id, idx)
+
+    def reject_step(self, task_id: str, idx: int) -> dict[str, Any]:
+        """Reject one pending workflow approval and fail the workflow without running it."""
+        task = self.get_task(task_id)
+        step = next((item for item in task["steps"] if item["idx"] == idx), None)
+        if step is None:
+            raise TaskPlanError("Unknown workflow step")
+        if step["status"] != "awaiting_approval" or not step.get("approval_id"):
+            raise TaskPlanError("Only a step waiting for owner approval can be rejected")
+        try:
+            self.approvals.reject(step["approval_id"])
+        except ApprovalError:
+            # A concurrent/repeated rejection is safe only when the stored state is
+            # already rejected; every other state must be reviewed by the caller.
+            if self.approvals.status(step["approval_id"]) != "rejected":
+                raise
+        self._set_step(
+            task_id, idx, status="failed", error="The owner rejected this step.",
+            note="No action was executed.", finished_at=_now(),
+        )
+        self._set_task(task_id, status="failed", outcome="owner_rejected", final_report=None)
+        self._event(task_id, "approval_rejected",
+                    f"Owner rejected workflow step {idx}; no action was executed", idx)
+        self._set_task(task_id, final_report=self.report(task_id))
+        return self.get_task(task_id)
 
     def reconcile_timeout(
         self, task_id: str, idx: int, *, decision: Literal["applied", "not_applied"] | None = None
@@ -484,6 +509,15 @@ def register_workflow_routes(app: FastAPI, engine: WorkflowEngine, record: Calla
         except (KeyError, TaskPlanError) as exc:
             raise error(exc) from exc
         return engine.get_task(workflow_id)
+
+    @app.post(base + "/{workflow_id}/reject-step")
+    def reject_step(workflow_id: str, item: WorkflowRetry) -> dict[str, Any]:
+        try:
+            return engine.reject_step(workflow_id, item.step)
+        except (KeyError, TaskPlanError) as exc:
+            raise error(exc) from exc
+        except ApprovalError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.post(base + "/{workflow_id}/reconcile-step")
     def reconcile(workflow_id: str, item: WorkflowReconcile) -> dict[str, Any]:
