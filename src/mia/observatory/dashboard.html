@@ -794,7 +794,8 @@ el('capabilityForm').addEventListener('submit',async event=>{
  const source=el('capSource').value,testSource=el('capTests').value;
  if(!source.trim()||!testSource.trim()){setCapabilityNotice('Both source and test source are required.',true);return;}
  const button=el('saveCapability');button.disabled=true;setCapabilityNotice('Saving immutable candidate source and tests…');
- const payload={
+ try{
+  const payload={
   capability_id:el('capId').value.trim(),
   version:el('capVersion').value.trim(),
   name:el('capName').value.trim(),
@@ -807,7 +808,6 @@ el('capabilityForm').addEventListener('submit',async event=>{
   permissions:el('capPermissions').value.split(',').map(value=>value.trim()).filter(Boolean),
    dependencies:parseCapabilityDependencies()
  };
- try{
   const response=await fetch('/api/capabilities',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   const result=await response.json();if(!response.ok)throw new Error(result.detail||'Candidate could not be saved');
   setCapabilityNotice('Saved '+result.capability_id+' '+result.version+'. It is immutable and has not been executed.');
