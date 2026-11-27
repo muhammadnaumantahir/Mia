@@ -177,15 +177,19 @@ class WorkflowEngine(TaskEngine):
                 summary = info.summary
                 if permission is not None and not permission.allowed:
                     summary = f"PERMISSION DENIED: {permission.reason}; {summary}"
-                output.append({
+                item = {
                     "step": step["idx"],
                     "capability": step["capability"],
                     "description": step["description"],
                     "risk": info.risk,
                     "needs_approval": needs_approval,
                     "summary": summary,
-                    "arguments": resolved,
-                })
+                }
+                # Avoid duplicating large user payloads in every preview response.
+                # The stored args are already exact unless a prior-step template resolved.
+                if resolved != step["args"]:
+                    item["arguments"] = resolved
+                output.append(item)
             except Exception as exc:
                 output.append({
                     "step": step["idx"],
