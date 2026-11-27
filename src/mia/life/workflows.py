@@ -90,6 +90,9 @@ _ACTIVE_WORKFLOW_STEP: contextvars.ContextVar[int | None] = contextvars.ContextV
 _EXTERNAL_PREFIXES = ("computer.", "browser.", "terminal.", "filesystem.", "desktop.", "apps.", "process.")
 _ADD_KEYS = {"kind", "title", "details", "due_at", "project", "priority"}
 _LIST_KEYS = {"kind", "status", "project", "limit"}
+_INTERNAL_WORKFLOW_CAPABILITIES = frozenset({
+    "personal.add", "personal.list", "personal.complete", "notify.submit",
+})
 
 
 class WorkflowEngine(TaskEngine):
@@ -161,6 +164,13 @@ class WorkflowEngine(TaskEngine):
                     f"Step {idx} timed out; waiting for worker reconciliation", idx)
         self._set_task(task_id, final_report=self.report(task_id))
         return False
+
+    def _permission_decision(self, capability: str, args: dict[str, Any], info: Inspection) -> Any | None:
+        # Personal/notification workflow steps use their own narrow internal contracts.
+        # The shared computer registry intentionally does not contain these capabilities.
+        if capability in _INTERNAL_WORKFLOW_CAPABILITIES:
+            return None
+        return super()._permission_decision(capability, args, info)
 
     async def plan_summary_async(self, task_id: str) -> list[dict[str, Any]]:
         """Inspect workflow steps, awaiting async adapters without running side effects."""
