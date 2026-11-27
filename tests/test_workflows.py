@@ -72,6 +72,8 @@ def test_workflow_computer_handlers_share_the_governed_task_runtime(env):
     assert set(task_handlers) <= items
     for capability, handler in task_handlers.items():
         assert workflow_handlers[capability] is handler
+        if capability != "terminal.run":
+            assert client.app.state.capability_registry.get(capability).name == capability
     assert client.app.state.workflow_engine.permission_policy is client.app.state.permission_policy
     assert client.app.state.workflow_engine.capability_registry is client.app.state.capability_registry
 
