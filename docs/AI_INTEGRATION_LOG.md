@@ -1351,3 +1351,11 @@ Key commits pushed directly to `main`:
 - A source review caught a missing `CURRENT_OWNER_SESSION` import in `src/mia/observatory/api.py`; fixed on main in `0ebeff458c591acde45246cd8d440fec4303bb34`.
 - Other implementation commits include `5d44c0179e57f7fcdba41acca4d900ed8b55e8bc`, `02c75f79c9427ff453a571e9676e625f97ec5626`, `8b15f02939a23962793ec03c52e4022845a93fd9`, `d57371f8a3ebfeff66f46334427e0b92b7d60fbe`, `fc79222f4dd5a83d3e9207290b00a56ea3d73921`, `7852dcce482b65558cad89185daa0b7f8956a6bc` and `ddca1a8737b4c0ce0a9d437b0d12cf726a45ee8c`.
 - Regression tests are authored but **not executed** per the development workflow. Do not interpret this checkpoint as a passing test result. Remaining acceptance: execute tests/static checks after implementation is complete; verify real Windows Hello/security-key ceremonies, browser cookie/origin behavior and recovery after losing all passkeys. Keep the task IN_PROGRESS until those gates are addressed.
+
+## 2026-11-27 — Workflow execution owner-auth boundary
+
+- Added explicit route classifications: `POST /api/workflows/{id}/run` requires preview-then-execute owner authentication; retry and timeout reconciliation require owner confirmation; pause and cancel remain always-available safety reductions.
+- Added regression assertions for the route classifications and live-app fail-closed behavior before workflow run/retry/reconcile.
+- Updated the Workflows page API helper to redirect protected actions to `/owner-auth` and return to the same page after passkey verification.
+- Commits: `a7ed836ff660f1cdb27b8bfdfb08236d415107b7`, `2b5028d18537f3f1eec7e9f4aa358a738624dc14`, `1c9f091361a5640c473f5f21e57bd3ec03dc052e`, `0031a9d502e7d702599aba0704fce6bdf05a4403`.
+- Tests remain authored but not executed. This closes the route-classification/UI handoff gap; it does not yet add external/destructive computer steps to workflow plans. The MIA-LIFE-08-APPROVAL implementation remains blocked until the COMP-04 owner-auth acceptance gate is verified.
