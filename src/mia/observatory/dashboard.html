@@ -113,6 +113,7 @@ footer{margin-top:24px;color:#6f8580;font-size:11px;line-height:1.6}
    <div class="cap-field"><label for="capName">Display name</label><input id="capName" required maxlength="120" placeholder="Example capability"></div>
    <div class="cap-field"><label for="capSourceKind">Source type</label><select id="capSourceKind"><option value="generated">Generated</option><option value="adapted">Adapted</option><option value="reused">Reused</option><option value="composed">Composed</option></select></div>
    <div class="cap-field"><label for="capPermissions">Requested permissions (comma-separated)</label><input id="capPermissions" maxlength="1000" placeholder="Leave empty for pure logic"></div>
+   <div class="cap-field"><label for="capDependencies">Versioned dependencies (id@version, comma-separated)</label><input id="capDependencies" maxlength="2000" placeholder="helper-capability@1.0.0"></div>
   </div>
   <div class="cap-fields" id="capProvenance" hidden>
    <div class="cap-field"><label for="capUpstream">Upstream source URI</label><input id="capUpstream" maxlength="2000" placeholder="https://github.com/owner/repo"></div>
@@ -657,7 +658,8 @@ async function loadCapabilities(){
    const left=document.createElement('div');
    const title=document.createElement('div');title.className='cap-card-title';title.textContent=cap.name+' · '+cap.version;
    const meta=document.createElement('div');meta.className='cap-card-meta';
-   meta.textContent=cap.capability_id+' · '+cap.source_kind+' · source '+String(cap.source_sha256||'').slice(0,16)+'… · tests '+String(cap.test_sha256||'missing').slice(0,16);
+   const dependencyLabel=(cap.dependencies||[]).map(dep=>dep.capability_id+'@'+dep.version).join(', ')||'none';
+   meta.textContent=cap.capability_id+' · '+cap.source_kind+' · dependencies '+dependencyLabel+' · source '+String(cap.source_sha256||'').slice(0,16)+'… · tests '+String(cap.test_sha256||'missing').slice(0,16);
    left.append(title,meta);
    const state=document.createElement('span');state.className='cap-status';state.textContent=cap.status;
    head.append(left,state);card.append(head);
@@ -802,7 +804,8 @@ el('capabilityForm').addEventListener('submit',async event=>{
   source_kind:el('capSourceKind').value,
   upstream_uri:el('capUpstream').value.trim()||null,
   license_id:el('capLicense').value.trim()||null,
-  permissions:el('capPermissions').value.split(',').map(value=>value.trim()).filter(Boolean)
+  permissions:el('capPermissions').value.split(',').map(value=>value.trim()).filter(Boolean),
+   dependencies:parseCapabilityDependencies()
  };
  try{
   const response=await fetch('/api/capabilities',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
@@ -814,6 +817,15 @@ el('capabilityForm').addEventListener('submit',async event=>{
  }catch(error){setCapabilityNotice(error.message,true);}
  finally{button.disabled=false;}
 });
+function parseCapabilityDependencies(){
+ const raw=el('capDependencies').value.trim();
+ if(!raw)return [];
+ return raw.split(',').map(value=>{
+  const entry=value.trim(),separator=entry.lastIndexOf('@');
+  if(separator<1||separator===entry.length-1)throw new Error('Dependencies must use capability-id@version.');
+  return {capability_id:entry.slice(0,separator).trim(),version:entry.slice(separator+1).trim()};
+ });
+}
 function updateCapabilityProvenance(){
  const required=el('capSourceKind').value!=='generated';
  el('capProvenance').hidden=!required;
@@ -836,7 +848,7 @@ async function draftCapabilityWithMia(){
  try{
   const response=await fetch('/api/capabilities/draft',{
    method:'POST',headers:{'Content-Type':'application/json'},
-   body:JSON.stringify({capability_id:capabilityId,name,objective})
+   body:JSON.stringify({capability_id:capabilityId,name,objective,dependencies:parseCapabilityDependencies()})
   });
   const result=await response.json();if(!response.ok)throw new Error(result.detail||'Capability drafting failed');
   el('capSource').value=result.source_code;
