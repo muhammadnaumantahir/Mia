@@ -129,7 +129,7 @@ def test_computer_action_without_per_action_adapter_needs_an_owner_grant(env):
     preview = response.json()["preview"][0]
     assert preview["allowed"] is False
     assert "owner grant" in preview["summary"]
-    assert "Denied by policy" not in preview["summary"]
+    assert preview["summary"].startswith("PERMISSION DENIED:")
 
 
 def test_async_browser_inspector_is_awaited_in_workflow_preview(env):
