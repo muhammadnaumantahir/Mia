@@ -284,6 +284,11 @@ def test_guard_requires_owner_auth_but_preserves_safety_controls():
     assert not OwnerAuthGuard.requires_owner("POST", "/api/computer/stop-all")
     assert not OwnerAuthGuard.requires_owner("POST", "/api/computer/permissions/revoke-all")
     assert not OwnerAuthGuard.requires_owner("POST", "/api/approvals/abc/reject")
+    assert OwnerAuthGuard.requires_owner("POST", "/api/workflows/abc/run")
+    assert OwnerAuthGuard.requires_owner("POST", "/api/workflows/abc/retry-step")
+    assert OwnerAuthGuard.requires_owner("POST", "/api/workflows/abc/reconcile-step")
+    assert not OwnerAuthGuard.requires_owner("POST", "/api/workflows/abc/pause")
+    assert not OwnerAuthGuard.requires_owner("POST", "/api/workflows/abc/cancel")
     assert OwnerAuthGuard.requires_owner("GET", "/api/computer/approvals")
     assert OwnerAuthGuard.requires_owner("GET", "/api/computer/approvals/cards")
     assert OwnerAuthGuard.requires_owner("GET", "/api/companion-admin/devices")
@@ -307,6 +312,27 @@ def test_live_app_fails_closed_until_owner_passkey_is_enrolled(tmp_path, monkeyp
     assert response.status_code == 428
     assert response.json()["code"] == "owner_auth_setup_required"
     assert response.json()["bootstrap_command"] == "mia-owner-auth bootstrap"
+
+    workflow_run = client.post(
+        "/api/workflows/not-real/run",
+        headers={"Origin": "http://localhost:8765"},
+    )
+    assert workflow_run.status_code == 428
+    assert workflow_run.json()["code"] == "owner_auth_setup_required"
+
+    workflow_retry = client.post(
+        "/api/workflows/not-real/retry-step",
+        json={"step": 1},
+        headers={"Origin": "http://localhost:8765"},
+    )
+    assert workflow_retry.status_code == 428
+
+    workflow_reconcile = client.post(
+        "/api/workflows/not-real/reconcile-step",
+        json={"step": 1, "decision": "not_applied"},
+        headers={"Origin": "http://localhost:8765"},
+    )
+    assert workflow_reconcile.status_code == 428
 
     safety = client.post(
         "/api/computer/stop-all",
