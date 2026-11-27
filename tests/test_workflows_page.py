@@ -191,6 +191,7 @@ def test_computer_write_step_requires_approval_before_file_is_written(page):
     plan(page, "Approved file write")
     wait_detail(page, "Approved file write")
     assert "Needs your approval" in page.locator("#plan").inner_text()
+    assert "approved by owner" in page.locator("#plan details pre").inner_text()
     assert not target.exists()
 
     page.click("#runBtn")
