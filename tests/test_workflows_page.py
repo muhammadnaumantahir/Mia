@@ -31,6 +31,7 @@ def browser():
 @pytest.fixture
 def page(tmp_path, browser, monkeypatch):
     monkeypatch.setenv("MIA_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("MIA_COMPUTER_ROOTS", str(tmp_path / "computer-root"))
     memory = MemoryStore(tmp_path / "memory.sqlite3")
     app = create_app(store=ObservatoryStore(tmp_path / "o.sqlite3"), memory=memory)
     with socket.socket() as sock:
@@ -112,12 +113,15 @@ def test_page_is_served_linked_and_packaged(page):
     assert "workflows.html" in (root / "pyproject.toml").read_text()
 
 
-def test_builder_offers_only_the_engines_capabilities(page):
+def test_builder_offers_only_registered_governed_capabilities(page):
     visit(page)
     add_step(page, "personal.add")
     options = page.locator("#steps select.cap option").all_text_contents()
-    assert options == ["notify.submit", "personal.add", "personal.complete", "personal.list"]
-    assert not any(o.split(".")[0] in {"computer", "browser", "terminal", "filesystem", "desktop"} for o in options)
+    available = page.request.get(page.base + "/api/workflows/capabilities").json()["items"]
+    assert options == available
+    assert {"notify.submit", "personal.add", "personal.complete", "personal.list"} <= set(options)
+    assert {"filesystem.write", "filesystem.delete", "terminal.run",
+            "apps.launch", "process.terminate"} <= set(options)
 
 
 def test_empty_states_and_no_steps(page):
@@ -172,6 +176,55 @@ def test_run_button_is_busy_and_cannot_double_run(page):
     held[0].continue_()
     wait_status(page, "Completed")
     assert len([u for u in page.posts if u.endswith("/run")]) == 1
+
+
+def test_computer_write_step_requires_approval_before_file_is_written(page):
+    import json
+
+    visit(page)
+    root_id = page.app.state.computer_files.list_roots()[0]["root_id"]
+    target = page.app.state.computer_files.roots[root_id] / "ui-approved.txt"
+    box = add_step(page, "filesystem.write")
+    box.locator("[data-name=raw]").fill(json.dumps({
+        "root_id": root_id, "relative_path": "ui-approved.txt", "content": "approved by owner"
+    }))
+    plan(page, "Approved file write")
+    wait_detail(page, "Approved file write")
+    assert "Needs your approval" in page.locator("#plan").inner_text()
+    assert not target.exists()
+
+    page.click("#runBtn")
+    wait_status(page, "Waiting for your approval")
+    assert page.locator("#plan button[data-approve-step='1']").count() == 1
+    assert not target.exists(), "the pending step must not write"
+
+    page.click("#plan button[data-approve-step='1']")
+    assert page.locator("#confirm").evaluate("e => e.open")
+    page.click("#confirmYes")
+    wait_status(page, "Completed")
+    assert target.read_text(encoding="utf-8") == "approved by owner"
+
+
+def test_rejecting_computer_workflow_step_leaves_target_unchanged(page):
+    import json
+
+    visit(page)
+    root_id = page.app.state.computer_files.list_roots()[0]["root_id"]
+    target = page.app.state.computer_files.roots[root_id] / "ui-rejected.txt"
+    box = add_step(page, "filesystem.write")
+    box.locator("[data-name=raw]").fill(json.dumps({
+        "root_id": root_id, "relative_path": "ui-rejected.txt", "content": "must not be written"
+    }))
+    plan(page, "Rejected file write")
+    wait_detail(page, "Rejected file write")
+    page.click("#runBtn")
+    wait_status(page, "Waiting for your approval")
+    page.click("#plan button[data-reject-step='1']")
+    assert page.locator("#confirm").evaluate("e => e.open")
+    page.click("#confirmYes")
+    wait_status(page, "Failed")
+    assert "rejected" in page.locator("#plan").inner_text().lower()
+    assert not target.exists()
 
 
 # ------------------------------------------------------------------------------ refusals
