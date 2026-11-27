@@ -142,7 +142,7 @@ def test_async_browser_inspector_is_awaited_in_workflow_preview(env):
     preview = response.json()["preview"][0]
     assert preview["risk"] == "low"
     assert preview["needs_approval"] is False
-    assert preview["arguments"] == {"url": "https://example.com"}
+    assert "arguments" not in preview, "unchanged args are already present on the workflow step"
 
 
 def test_preview_shows_resolved_arguments_for_owner_approval(env):
