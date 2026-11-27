@@ -3417,6 +3417,10 @@ def create_app(
     workflow_engine = workflows or make_workflow_engine(
         data_dir / "mia-workflows.sqlite3", approval_store, personal=memory_store.personal,
         notifications=notification_center, control=control,
+        computer_handlers=task_handlers,
+        permission_policy=policy,
+        capability_registry=capability_registry,
+        permission_path=computer_permission_path,
     )
     app.state.workflow_engine = workflow_engine
 
