@@ -118,3 +118,14 @@ container. Execution metadata and hashes are logged, not the raw input or
 result. This is an explicit one-shot invocation, not activation, hot-loading
 or background use. Candidates declaring any permissions remain blocked until
 a permission broker and separate authorization model are implemented.
+
+## Versioned provenance and dependency contract
+
+A candidate may name an exact parent version and exact dependencies using
+`capability_id@version` references. The parent is used for immutable source comparison;
+the Capability Lab exposes a hash-verified unified diff from the parent source to the
+candidate source. Dependency references are persisted with the candidate and rechecked
+before registration, activation and one-shot execution. A missing, retired or rolled-back
+dependency blocks the lifecycle operation. Dependencies are metadata only: they do not
+grant host access or import other candidate code into the worker. Host actions remain
+separately declared permissions and are converted into owner-reviewed computer tasks.
