@@ -245,6 +245,33 @@ def test_already_approved_workflow_step_offers_run_without_reapproving(page):
     assert target.read_text(encoding="utf-8") == "approved once"
 
 
+def test_owner_can_revoke_approved_workflow_step_from_the_page(page):
+    import json
+
+    visit(page)
+    root_id = page.app.state.computer_files.list_roots()[0]["root_id"]
+    target = page.app.state.computer_files.roots[root_id] / "ui-revoked.txt"
+    box = add_step(page, "filesystem.write")
+    box.locator("[data-name=raw]").fill(json.dumps({
+        "root_id": root_id, "relative_path": "ui-revoked.txt", "content": "must not run"
+    }))
+    plan(page, "Revoke approved action")
+    wait_detail(page, "Revoke approved action")
+    page.click("#runBtn")
+    wait_status(page, "Waiting for your approval")
+    wid = page.locator("#list button").get_attribute("data-id")
+    step = page.app.state.workflow_engine.get_task(wid)["steps"][0]
+    page.app.state.approvals.approve(step["approval_id"])
+    page.click("#refreshBtn")
+    page.wait_for_selector("#plan button[data-reject-step='1']")
+    page.click("#plan button[data-reject-step='1']")
+    assert page.locator("#confirm").evaluate("e => e.open")
+    page.click("#confirmYes")
+    wait_status(page, "Failed")
+    assert page.app.state.approvals.status(step["approval_id"]) == "rejected"
+    assert not target.exists()
+
+
 def test_rejecting_computer_workflow_step_leaves_target_unchanged(page):
     import json
 
