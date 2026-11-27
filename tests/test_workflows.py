@@ -92,6 +92,8 @@ def test_preview_changes_nothing_and_run_executes_in_order_with_step_references(
     body = r.json()
     wid = body["workflow"]["task_id"]
     assert [p["capability"] for p in body["preview"]] == ["personal.add", "personal.complete", "personal.list"]
+    assert all(not p["needs_approval"] and not p["summary"].startswith("PERMISSION DENIED")
+               for p in body["preview"])
     assert memory.personal.list(limit=50) == [], "creating and previewing must not act"
     assert client.get(f"/api/workflows/{wid}/preview").status_code == 200
     done = client.post(f"/api/workflows/{wid}/run").json()
