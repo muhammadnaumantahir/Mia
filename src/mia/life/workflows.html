@@ -246,7 +246,11 @@ function renderDetail(task,preview,events,rep){
   if(p.risk)meta.append(tag(RISK[p.risk]||('Risk: '+p.risk),p.risk==='low'?'':'warn'));
   if(p.validation_error)meta.append(tag('Cannot validate','bad'));
   else if(p.allowed===false)meta.append(tag('Denied by policy','bad'));
-  else meta.append(tag(p.needs_approval?'Needs your approval':'No approval needed',p.needs_approval?'warn':''));
+  else if(s.approval_status==='approved')meta.append(tag('Approved, not run','good'));
+  else if(s.approval_status==='pending')meta.append(tag('Approval pending','warn'));
+  else if(s.approval_status==='expired')meta.append(tag('Approval expired','bad'));
+  else if(s.approval_status==='rejected')meta.append(tag('Approval rejected','bad'));
+  else if(s.approval_status!=='consumed')meta.append(tag(p.needs_approval?'Needs your approval':'No approval needed',p.needs_approval?'warn':''));
   if(p.needs_approval&&s.args){
    const details=mk('details');const summary=mk('summary','Review exact action details');
    const pre=mk('pre',JSON.stringify(p.arguments||s.args,null,2));pre.className='report';
