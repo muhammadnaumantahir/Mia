@@ -317,6 +317,27 @@ def test_cancel_waits_for_unknown_step_reconciliation(env):
     assert memory.personal.list(limit=10) == []
 
 
+def test_rejecting_pending_computer_approval_fails_workflow_without_side_effect(env):
+    client, _memory, *_ = env
+    root_id = client.app.state.computer_files.list_roots()[0]["root_id"]
+    target = client.app.state.computer_files.roots[root_id] / "rejected.txt"
+    wid = create(client, [{
+        "capability": "filesystem.write",
+        "args": {"root_id": root_id, "relative_path": "rejected.txt", "content": "must not appear"},
+    }]).json()["workflow"]["task_id"]
+    waiting = client.post(f"/api/workflows/{wid}/run").json()
+    assert waiting["status"] == "awaiting_approval"
+    assert not target.exists()
+
+    rejected = client.post(f"/api/workflows/{wid}/reject-step", json={"step": 1})
+    assert rejected.status_code == 200, rejected.text
+    task = rejected.json()
+    assert task["status"] == "failed" and task["outcome"] == "owner_rejected"
+    assert task["steps"][0]["status"] == "failed"
+    assert client.app.state.approvals.status(waiting["steps"][0]["approval_id"]) == "rejected"
+    assert not target.exists()
+
+
 def test_reconcile_step_api_requires_explicit_post_restart_decision(env):
     client, *_ = env
     wid = create(client, [add_step("Reconcile me")]).json()["workflow"]["task_id"]
