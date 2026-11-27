@@ -16,6 +16,7 @@ from mia.observatory.store import ObservatoryStore
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     monkeypatch.setenv("MIA_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("MIA_COMPUTER_ROOTS", str(tmp_path / "computer-root"))
     memory = MemoryStore(tmp_path / "memory.sqlite3")
     store = ObservatoryStore(tmp_path / "obs.sqlite3")
     client = TestClient(create_app(store=store, memory=memory))
@@ -60,10 +61,27 @@ def test_workflow_execution_intent_fails_closed(prompt, expected):
     assert explicit_workflow_execution_requested(prompt) is expected
 
 
-def test_capabilities_are_only_the_internal_ones(env):
+def test_workflow_computer_handlers_share_the_governed_task_runtime(env):
     client, *_ = env
-    items = client.get("/api/workflows/capabilities").json()["items"]
-    assert items == ["notify.submit", "personal.add", "personal.complete", "personal.list"]
+    items = set(client.get("/api/workflows/capabilities").json()["items"])
+    task_handlers = client.app.state.task_engine.handlers
+    workflow_handlers = client.app.state.workflow_engine.handlers
+    assert {"notify.submit", "personal.add", "personal.complete", "personal.list"} <= items
+    assert {"filesystem.write", "filesystem.delete", "terminal.run",
+            "apps.launch", "process.terminate"} <= items
+    assert set(task_handlers) <= items
+    for capability, handler in task_handlers.items():
+        assert workflow_handlers[capability] is handler
+    assert client.app.state.workflow_engine.permission_policy is client.app.state.permission_policy
+    assert client.app.state.workflow_engine.capability_registry is client.app.state.capability_registry
+
+    # Brain may compose only the safe internal subset, never computer actions.
+    brain_tool = next(
+        item for item in client.app.state.tool_registry.definitions()
+        if item["name"] == "workflow.preview_internal"
+    )
+    allowed = brain_tool["parameters"]["properties"]["steps"]["items"]["properties"]["capability"]["enum"]
+    assert set(allowed) == {"notify.submit", "personal.add", "personal.complete", "personal.list"}
 
 
 def test_preview_changes_nothing_and_run_executes_in_order_with_step_references(env):
@@ -91,15 +109,42 @@ def test_preview_changes_nothing_and_run_executes_in_order_with_step_references(
 
 
 @pytest.mark.parametrize("capability", [
-    "terminal.run", "filesystem.write", "filesystem.delete", "browser.fill", "desktop.type_text",
-    "personal.delete", "apps.launch", "process.terminate",
+    "computer.approve", "desktop.type_text", "personal.delete", "filesystem.delete_forever",
+    "browser.submit_payment", "terminal.root_shell",
 ])
-def test_external_and_destructive_steps_are_refused_at_plan_time(env, capability):
+def test_unregistered_and_unsupported_steps_are_refused_at_plan_time(env, capability):
     client, memory, *_ = env
     r = create(client, [add_step("x"), {"capability": capability, "args": {}}])
     assert r.status_code == 422
     assert "workflows only run internal" in r.json()["detail"]
     assert memory.personal.list(limit=10) == [] and client.get("/api/workflows").json()["items"] == []
+
+
+def test_computer_write_workflow_waits_for_exact_owner_approval(env):
+    client, _memory, *_ = env
+    root_id = client.app.state.computer_files.list_roots()[0]["root_id"]
+    target = client.app.state.computer_files.roots[root_id] / "workflow-note.txt"
+    response = create(client, [{
+        "capability": "filesystem.write",
+        "args": {"root_id": root_id, "relative_path": "workflow-note.txt", "content": "approved text"},
+    }], title="Write a note")
+    assert response.status_code == 201, response.text
+    wid = response.json()["workflow"]["task_id"]
+    preview = response.json()["preview"][0]
+    assert preview["needs_approval"] is True
+    assert not target.exists(), "planning and preview must not write"
+
+    waiting = client.post(f"/api/workflows/{wid}/run").json()
+    assert waiting["status"] == "awaiting_approval"
+    step = waiting["steps"][0]
+    assert step["status"] == "awaiting_approval" and step["approval_id"]
+    assert not target.exists(), "a pending approval must have no side effect"
+
+    client.app.state.approvals.approve(step["approval_id"])
+    completed = client.post(f"/api/workflows/{wid}/run").json()
+    assert completed["status"] == "completed", completed
+    assert target.read_text(encoding="utf-8") == "approved text"
+    assert completed["steps"][0]["status"] == "succeeded"
 
 
 def test_unknown_capability_extra_fields_and_forward_references_are_rejected(env):
