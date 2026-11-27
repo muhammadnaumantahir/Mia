@@ -59,13 +59,14 @@ dialog::backdrop{background:#000a}
 <body><main class="shell">
 <nav aria-label="Mia pages"><a href="/">Observatory</a><a href="/assistant">Assistant</a><a href="/life">Autonomous life</a><a href="/tasks">Tasks</a><a href="/projects">Projects</a><a href="/research">Research</a><a href="/files">Files</a></nav>
 <h1>Workflows</h1>
-<p class="sub">Chain a few of Mia's own safe actions into one plan. You see the whole plan and what each step would do before anything runs. Only the actions listed here can be used; anything that controls your computer, a browser or a terminal is refused.</p>
+<p class="sub">Chain Mia's internal actions or supported computer actions into one plan. Every step is previewed and revalidated before it runs. Computer, browser, terminal and desktop actions use the shared owner permission policy and exact one-time approvals; running or retrying a workflow requires your owner passkey. Unsupported capabilities fail closed. Pause and Cancel remain available as safety controls.</p>
 <div id="notice" role="status" aria-live="polite"></div>
 
 <section class="panel" aria-labelledby="newHeading"><h2 id="newHeading" tabindex="-1">New workflow</h2>
 <form id="planForm" autocomplete="off">
 <label>Title<input id="wfTitle" required maxlength="200"></label>
 <div id="steps"></div>
+<p class="note">For actions without a built-in form, enter the adapter arguments as a JSON object. The preview shows current risk and whether an owner approval is required. A workflow run cannot bypass the underlying computer permission grants or per-action approval.</p>
 <p class="note">A later step can use an earlier result by writing <span class="hint">${steps.1.item_id}</span> in a field (step numbers start at 1). Up to <span id="maxSteps">20</span> steps.</p>
 <div class="row"><button id="addStep" class="alt" type="button">Add a step</button><button id="planBtn" type="submit">Create plan and preview</button></div>
 </form></section>
