@@ -76,11 +76,8 @@ def test_workflow_computer_handlers_share_the_governed_task_runtime(env):
     assert client.app.state.workflow_engine.capability_registry is client.app.state.capability_registry
 
     # Brain may compose only the safe internal subset, never computer actions.
-    brain_tool = next(
-        item for item in client.app.state.tool_registry.definitions()
-        if item["name"] == "workflow.preview_internal"
-    )
-    allowed = brain_tool["parameters"]["properties"]["steps"]["items"]["properties"]["capability"]["enum"]
+    brain_tool = client.app.state.tool_registry._tools["workflow.preview_internal"]
+    allowed = brain_tool.parameters["properties"]["steps"]["items"]["properties"]["capability"]["enum"]
     assert set(allowed) == {"notify.submit", "personal.add", "personal.complete", "personal.list"}
 
 
