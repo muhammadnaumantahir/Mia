@@ -162,6 +162,7 @@ from mia.security.owner_auth import (
     OwnerAuthError,
     OwnerAuthGuard,
     OwnerAuthService,
+    CURRENT_OWNER_SESSION,
     _origin as validate_owner_origin,
 )
 from mia.security.sync import CompanionSyncStore
