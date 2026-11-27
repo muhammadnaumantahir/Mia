@@ -113,6 +113,7 @@ footer{margin-top:24px;color:#6f8580;font-size:11px;line-height:1.6}
    <div class="cap-field"><label for="capName">Display name</label><input id="capName" required maxlength="120" placeholder="Example capability"></div>
    <div class="cap-field"><label for="capSourceKind">Source type</label><select id="capSourceKind"><option value="generated">Generated</option><option value="adapted">Adapted</option><option value="reused">Reused</option><option value="composed">Composed</option></select></div>
    <div class="cap-field"><label for="capPermissions">Requested permissions (comma-separated)</label><input id="capPermissions" maxlength="1000" placeholder="Leave empty for pure logic"></div>
+   <div class="cap-field"><label for="capParent">Parent version for immutable diff (optional id@version)</label><input id="capParent" maxlength="160" placeholder="previous-capability@0.1.0"></div>
    <div class="cap-field"><label for="capDependencies">Versioned dependencies (id@version, comma-separated)</label><input id="capDependencies" maxlength="2000" placeholder="helper-capability@1.0.0"></div>
   </div>
   <div class="cap-fields" id="capProvenance" hidden>
@@ -623,6 +624,22 @@ function capabilityButton(label,callback,secondary=false){
  if(secondary){button.style.background='#263535';button.style.color='#d8e2dd';}
  button.addEventListener('click',callback);return button;
 }
+function showCapabilityDiff(details,capability){
+ const summary=document.createElement('summary');summary.textContent='Inspect immutable source diff';
+ const pre=document.createElement('pre');pre.textContent='Open to load the hash-verified parent-to-candidate diff.';
+ pre.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto;background:#101916;padding:10px;border-radius:8px;font:11px ui-monospace,monospace';
+ details.append(summary,pre);
+ details.addEventListener('toggle',async()=>{
+  if(!details.open||details.dataset.loaded==='true'||details.dataset.loaded==='loading')return;
+  details.dataset.loaded='loading';pre.textContent='Loading…';
+  try{
+   const response=await fetch('/api/capabilities/'+encodeURIComponent(capability.capability_id)+'/'+encodeURIComponent(capability.version)+'/diff');
+   const data=await response.json();if(!response.ok)throw new Error(data.detail||'Source diff unavailable');
+   pre.textContent=data.diff_available?data.diff+(data.truncated?'\n\n[Diff truncated at 120,000 characters.]':''):data.reason;
+   details.dataset.loaded='true';
+  }catch(error){pre.textContent=error.message;details.dataset.loaded='false';}
+ });
+}
 function showCapabilitySource(details,capability){
  const summary=document.createElement('summary');summary.textContent='Inspect immutable source and tests';
  const content=document.createElement('div');content.className='cap-source-content';
@@ -663,6 +680,7 @@ async function loadCapabilities(){
    left.append(title,meta);
    const state=document.createElement('span');state.className='cap-status';state.textContent=cap.status;
    head.append(left,state);card.append(head);
+   if(cap.parent_id&&cap.parent_version){const diff=document.createElement('details');diff.className='cap-source';showCapabilityDiff(diff,cap);card.append(diff);}
    if(cap.validation){
     const validation=document.createElement('div');validation.className='cap-card-meta';
     validation.textContent='Validation: static '+(cap.validation.static_checks?'pass':'fail')+
@@ -806,7 +824,8 @@ el('capabilityForm').addEventListener('submit',async event=>{
   upstream_uri:el('capUpstream').value.trim()||null,
   license_id:el('capLicense').value.trim()||null,
   permissions:el('capPermissions').value.split(',').map(value=>value.trim()).filter(Boolean),
-   dependencies:parseCapabilityDependencies()
+   dependencies:parseCapabilityDependencies(),
+   ...parseCapabilityParent()
  };
   const response=await fetch('/api/capabilities',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   const result=await response.json();if(!response.ok)throw new Error(result.detail||'Candidate could not be saved');
@@ -817,6 +836,13 @@ el('capabilityForm').addEventListener('submit',async event=>{
  }catch(error){setCapabilityNotice(error.message,true);}
  finally{button.disabled=false;}
 });
+function parseCapabilityParent(){
+ const raw=el('capParent').value.trim();
+ if(!raw)return {parent_id:null,parent_version:null};
+ const separator=raw.lastIndexOf('@');
+ if(separator<1||separator===raw.length-1)throw new Error('Parent must use capability-id@version.');
+ return {parent_id:raw.slice(0,separator).trim(),parent_version:raw.slice(separator+1).trim()};
+}
 function parseCapabilityDependencies(){
  const raw=el('capDependencies').value.trim();
  if(!raw)return [];
