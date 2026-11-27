@@ -447,6 +447,48 @@ def test_expired_workflow_approval_is_replaced_before_execution(env):
     assert not target.exists()
 
 
+def test_rejecting_already_approved_workflow_step_revokes_before_execution(env):
+    client, _memory, *_ = env
+    root_id = client.app.state.computer_files.list_roots()[0]["root_id"]
+    target = client.app.state.computer_files.roots[root_id] / "revoke-approved.txt"
+    wid = create(client, [{
+        "capability": "filesystem.write",
+        "args": {"root_id": root_id, "relative_path": "revoke-approved.txt", "content": "must not run"},
+    }]).json()["workflow"]["task_id"]
+    waiting = client.post(f"/api/workflows/{wid}/run").json()
+    approval_id = waiting["steps"][0]["approval_id"]
+    client.app.state.approvals.approve(approval_id)
+
+    rejected = client.post(f"/api/workflows/{wid}/reject-step", json={"step": 1})
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["status"] == "failed"
+    assert client.app.state.approvals.status(approval_id) == "rejected"
+    assert not target.exists()
+
+
+@pytest.mark.parametrize("approve_first", [False, True])
+def test_workflow_cancel_revokes_pending_or_approved_action_tokens(env, approve_first):
+    client, _memory, *_ = env
+    root_id = client.app.state.computer_files.list_roots()[0]["root_id"]
+    target = client.app.state.computer_files.roots[root_id] / f"cancel-{approve_first}.txt"
+    wid = create(client, [{
+        "capability": "filesystem.write",
+        "args": {"root_id": root_id, "relative_path": target.name, "content": "must not run"},
+    }]).json()["workflow"]["task_id"]
+    waiting = client.post(f"/api/workflows/{wid}/run").json()
+    approval_id = waiting["steps"][0]["approval_id"]
+    if approve_first:
+        client.app.state.approvals.approve(approval_id)
+
+    cancelled = client.post(f"/api/workflows/{wid}/cancel")
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "cancelled"
+    assert client.app.state.approvals.status(approval_id) == "rejected"
+    final = client.post(f"/api/workflows/{wid}/run").json()
+    assert final["status"] == "cancelled"
+    assert not target.exists()
+
+
 def test_rejecting_pending_computer_approval_fails_workflow_without_side_effect(env):
     client, _memory, *_ = env
     root_id = client.app.state.computer_files.list_roots()[0]["root_id"]
