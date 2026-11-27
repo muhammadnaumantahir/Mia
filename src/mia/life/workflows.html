@@ -258,12 +258,22 @@ function renderDetail(task,preview,events,rep){
   if(s.error)li.append(mk('div','Problem: '+s.error,'note'));
   if(s.note)li.append(mk('div',s.note,'note'));
   if(s.status==='awaiting_approval'&&s.approval_id){
-   const a=mk('div',undefined,'actions');
-   const approve=mk('button','Approve & run','alt');approve.type='button';approve.dataset.approveStep=s.idx;
-   approve.addEventListener('click',()=>approveWorkflowStep(s.idx,s.approval_id,approve));
-   const reject=mk('button','Reject step','danger');reject.type='button';reject.dataset.rejectStep=s.idx;
-   reject.addEventListener('click',()=>rejectWorkflowStep(s.idx,reject));
-   a.append(approve,reject);li.append(a);
+   if(s.approval_status==='pending'){
+    const a=mk('div',undefined,'actions');
+    const approve=mk('button','Approve & run','alt');approve.type='button';approve.dataset.approveStep=s.idx;
+    approve.addEventListener('click',()=>approveWorkflowStep(s.idx,s.approval_id,approve));
+    const reject=mk('button','Reject step','danger');reject.type='button';reject.dataset.rejectStep=s.idx;
+    reject.addEventListener('click',()=>rejectWorkflowStep(s.idx,reject));
+    a.append(approve,reject);li.append(a);
+   }else if(s.approval_status==='approved'){
+    const a=mk('div',undefined,'actions');
+    const runApproved=mk('button','Run approved step','alt');runApproved.type='button';runApproved.dataset.runApprovedStep=s.idx;
+    runApproved.addEventListener('click',()=>runApprovedWorkflowStep(runApproved));
+    a.append(runApproved);li.append(a);
+    li.append(mk('div','This exact action is approved but has not completed. Run it to continue.','note'));
+   }else{
+    li.append(mk('div','Approval '+(s.approval_status||'is no longer available')+'. Press Run workflow to prepare a fresh approval.','note'));
+   }
   }
   if(s.status==='interrupted'&&task.status!=='completed'&&task.status!=='cancelled'){
    const a=mk('div',undefined,'actions');
@@ -323,6 +333,12 @@ async function approveWorkflowStep(step,approvalId,btn){
   await api('/api/computer/approvals/'+encodeURIComponent(approvalId)+'/approve','POST');
   const task=await api('/api/workflows/'+encodeURIComponent(id)+'/run','POST');
   say(task.status==='awaiting_approval'?'This step completed; another step is waiting for approval.':'Workflow: '+((WF[task.status]||[task.status])[0])+'.',task.status==='failed');
+ },btn);
+}
+async function runApprovedWorkflowStep(btn){
+ await act('Run approved step',async id=>{
+  const task=await api('/api/workflows/'+encodeURIComponent(id)+'/run','POST');
+  say('Workflow: '+((WF[task.status]||[task.status])[0])+'.',task.status==='failed');
  },btn);
 }
 async function rejectWorkflowStep(step,btn){
