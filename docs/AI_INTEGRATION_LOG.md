@@ -1359,3 +1359,11 @@ Key commits pushed directly to `main`:
 - Updated the Workflows page API helper to redirect protected actions to `/owner-auth` and return to the same page after passkey verification.
 - Commits: `a7ed836ff660f1cdb27b8bfdfb08236d415107b7`, `2b5028d18537f3f1eec7e9f4aa358a738624dc14`, `1c9f091361a5640c473f5f21e57bd3ec03dc052e`, `0031a9d502e7d702599aba0704fce6bdf05a4403`.
 - Tests remain authored but not executed. This closes the route-classification/UI handoff gap; it does not yet add external/destructive computer steps to workflow plans. The MIA-LIFE-08-APPROVAL implementation remains blocked until the COMP-04 owner-auth acceptance gate is verified.
+
+## 2026-11-27 — MIA-COMP-04-OWNER implementation complete
+
+- Source review confirms the owner passkey guard, request-scoped Brain write gate, high-risk route inventory, workflow run/retry/reconcile classification and UI passkey handoff are connected on main.
+- Added regression tests for exact origin, bootstrap/session lifecycle, sign-counter replay, Brain write denial even with a simulated active grant, request-context isolation, fail-closed owner routes and safety exceptions. Tests remain unexecuted per the development workflow; real Windows/browser verification is OWNER_VERIFICATION_REQUIRED.
+- The implementation task is marked DONE on the same evidence standard used for other development tasks with deferred test execution. Do not claim tests passed or owner verification complete.
+- COMP-04-OWNER commits include `0ebeff458c591acde45246cd8d440fec4303bb34`, `a7ed836ff660f1cdb27b8bfdfb08236d415107b7`, `2b5028d18537f3f1eec7e9f4aa358a738624dc14`, `1c9f091361a5640c473f5f21e57bd3ec03dc052e`, `0031a9d502e7d702599aba0704fce6bdf05a4403` and `55cd73b3580eb00a260bdbb5e80760e5458a2dbd`.
+- Started MIA-LIFE-08-APPROVAL: reuse the existing computer TaskEngine handlers and shared permission/approval infrastructure in workflow plans; keep Brain workflow access restricted to safe internal actions.
