@@ -245,6 +245,12 @@ function renderDetail(task,preview,events,rep){
   const [stext,skind]=ST[s.status]||[s.status,''];meta.append(tag(stext,skind));
   if(p.risk)meta.append(tag(RISK[p.risk]||('Risk: '+p.risk),p.risk==='low'?'':'warn'));
   meta.append(tag(p.needs_approval?'Needs your approval':'No approval needed',p.needs_approval?'warn':''));
+  if(p.needs_approval&&s.args){
+   const details=mk('details');const summary=mk('summary','Review exact action details');
+   const pre=mk('pre',JSON.stringify(s.args,null,2));pre.className='report';
+   if(pre.textContent.length>12000)pre.textContent=pre.textContent.slice(0,12000)+'\n… details truncated in this view';
+   details.append(summary,pre);li.append(details);
+  }
   if(s.verified===true)meta.append(tag('Checked','good'));else if(s.verified===false)meta.append(tag('Check failed','bad'));
   if(s.attempts>1)meta.append(tag(plural(s.attempts,'attempt','attempts')));
   li.append(meta);
