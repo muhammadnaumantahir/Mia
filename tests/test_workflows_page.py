@@ -219,6 +219,34 @@ def test_computer_write_step_requires_approval_before_file_is_written(page):
     assert target.read_text(encoding="utf-8") == "approved by owner"
 
 
+def test_already_approved_workflow_step_offers_run_without_reapproving(page):
+    import json
+
+    visit(page)
+    root_id = page.app.state.computer_files.list_roots()[0]["root_id"]
+    target = page.app.state.computer_files.roots[root_id] / "approved-resume.txt"
+    box = add_step(page, "filesystem.write")
+    box.locator("[data-name=raw]").fill(json.dumps({
+        "root_id": root_id, "relative_path": "approved-resume.txt", "content": "approved once"
+    }))
+    plan(page, "Already approved")
+    wait_detail(page, "Already approved")
+    page.click("#runBtn")
+    wait_status(page, "Waiting for your approval")
+    approval_id = page.locator("#plan button[data-approve-step='1']").evaluate(
+        "(button) => button.closest('li').dataset.step"
+    )
+    step = page.app.state.workflow_engine.get_task(page.locator("#list button").get_attribute("data-id"))["steps"][0]
+    page.app.state.approvals.approve(step["approval_id"])
+    page.click("#refreshBtn")
+    page.wait_for_selector("#plan button[data-run-approved-step='1']")
+    assert page.locator("#plan button[data-approve-step]").count() == 0
+    assert not target.exists()
+    page.click("#plan button[data-run-approved-step='1']")
+    wait_status(page, "Completed")
+    assert target.read_text(encoding="utf-8") == "approved once"
+
+
 def test_rejecting_computer_workflow_step_leaves_target_unchanged(page):
     import json
 
