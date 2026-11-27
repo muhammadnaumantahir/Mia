@@ -233,10 +233,8 @@ def test_already_approved_workflow_step_offers_run_without_reapproving(page):
     wait_detail(page, "Already approved")
     page.click("#runBtn")
     wait_status(page, "Waiting for your approval")
-    approval_id = page.locator("#plan button[data-approve-step='1']").evaluate(
-        "(button) => button.closest('li').dataset.step"
-    )
-    step = page.app.state.workflow_engine.get_task(page.locator("#list button").get_attribute("data-id"))["steps"][0]
+    wid = page.locator("#list button").get_attribute("data-id")
+    step = page.app.state.workflow_engine.get_task(wid)["steps"][0]
     page.app.state.approvals.approve(step["approval_id"])
     page.click("#refreshBtn")
     page.wait_for_selector("#plan button[data-run-approved-step='1']")
