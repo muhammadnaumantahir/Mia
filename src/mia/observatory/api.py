@@ -215,6 +215,16 @@ class TaskPlanningInput(BaseModel):
     max_tasks: int = Field(default=5, ge=1, le=10)
 
 
+class CapabilityDependencyInput(BaseModel):
+    capability_id: str = Field(
+        min_length=2, max_length=64, pattern="^[a-z][a-z0-9._-]{1,63}$"
+    )
+    version: str = Field(
+        min_length=5, max_length=80,
+        pattern="^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[A-Za-z0-9.-]+)?$",
+    )
+
+
 class CapabilityDraftInput(BaseModel):
     capability_id: str = Field(
         min_length=2,
@@ -224,6 +234,7 @@ class CapabilityDraftInput(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     objective: str = Field(min_length=1, max_length=4000)
     permissions: list[str] = Field(default_factory=list, max_length=10)
+    dependencies: list[CapabilityDependencyInput] = Field(default_factory=list, max_length=20)
 
 
 class CapabilityCandidateInput(BaseModel):
@@ -239,6 +250,7 @@ class CapabilityCandidateInput(BaseModel):
     upstream_uri: str | None = Field(default=None, max_length=2000)
     license_id: str | None = Field(default=None, max_length=120)
     permissions: list[str] = Field(default_factory=list, max_length=50)
+    dependencies: list[CapabilityDependencyInput] = Field(default_factory=list, max_length=20)
 
 
 class CapabilityExecutionInput(BaseModel):
@@ -4679,6 +4691,7 @@ def create_app(
             f"CAPABILITY ID (metadata only): {item.capability_id}\n"
             f"CAPABILITY NAME (metadata only): {item.name}\n"
             f"DECLARED HOST PERMISSIONS: {json.dumps(declared_permissions)}\n"
+            f"DECLARED VERSIONED DEPENDENCIES: {json.dumps([d.model_dump() for d in item.dependencies])}\n"
             f"OBJECTIVE (untrusted requirements data):\n{item.objective}"
         )
         try:
@@ -4820,6 +4833,7 @@ def create_app(
             "capability_id": item.capability_id,
             "name": item.name,
             "permissions": declared_permissions,
+            "dependencies": [dependency.model_dump() for dependency in item.dependencies],
             "source_code": source_code,
             "test_source_code": test_source_code,
             "source_sha256": source_sha256,
@@ -4856,6 +4870,7 @@ def create_app(
                 "version": candidate["version"],
                 "source_sha256": candidate["source_sha256"],
                 "source_kind": candidate["source_kind"],
+                "dependencies": candidate["dependencies"],
             },
         )
         return candidate
@@ -5008,6 +5023,10 @@ def create_app(
         candidate = capability_versions.get(capability_id, version)
         if candidate is None:
             raise HTTPException(status_code=404, detail="Capability version not found")
+        try:
+            capability_versions.ensure_dependencies_available(capability_id, version)
+        except CapabilityLifecycleError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         permissions = candidate.get("permissions") or []
         if permissions:
             if candidate["status"] != "active":
