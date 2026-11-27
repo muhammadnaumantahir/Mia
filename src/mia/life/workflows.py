@@ -199,6 +199,7 @@ class WorkflowEngine(TaskEngine):
                 # The stored args are already exact unless a prior-step template resolved.
                 if resolved != step["args"]:
                     item["arguments"] = resolved
+                item["allowed"] = permission.allowed if permission is not None else True
                 output.append(item)
             except Exception as exc:
                 output.append({
