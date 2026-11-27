@@ -4827,6 +4827,7 @@ def create_app(
                 "persisted": False,
                 "executed": False,
                 "declared_permissions": declared_permissions,
+                "declared_dependencies": [dependency.model_dump() for dependency in item.dependencies],
                 "action_execution": "owner_review_only",
             },
         )
