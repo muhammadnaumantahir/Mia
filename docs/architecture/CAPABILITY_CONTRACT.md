@@ -13,7 +13,8 @@ Every tool or self-developed capability must publish a machine-readable contract
 | permissions | Explicit filesystem, network, application and system scopes |
 | side_effects | Files changed, messages sent, processes started or other effects |
 | resource_limits | CPU, memory, time, network and output ceilings |
-| dependencies | Exact capability ID + semantic version references; dependencies must already exist and remain registered/active/deprecated (retired or rolled-back dependencies block registration and execution) |\n| provenance | Author, upstream URL, license, parent capability and source commit |
+| dependencies | Exact capability ID + semantic version references; dependencies must already exist and remain registered/active/deprecated (retired or rolled-back dependencies block registration and execution) |
+| provenance | Author, upstream URL, license, parent capability and source commit |
 | validation | Static checks, tests, security checks and regression cases |
 | activation | Entry point, isolation boundary and health check |
 | rollback | Previous version and restoration procedure |
