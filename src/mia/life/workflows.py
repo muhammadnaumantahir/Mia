@@ -493,12 +493,26 @@ def register_workflow_routes(app: FastAPI, engine: WorkflowEngine, record: Calla
 
 
 def make_workflow_engine(
-    database_path: str | Path, approvals: ApprovalStore, *, personal: Any, notifications: Any | None = None,
-    control: AutomationControl | None = None, step_timeout: float = STEP_TIMEOUT_SECONDS,
+    database_path: str | Path, approvals: ApprovalStore, *, personal: Any,
+    notifications: Any | None = None, control: AutomationControl | None = None,
+    step_timeout: float = STEP_TIMEOUT_SECONDS,
+    computer_handlers: dict[str, StepHandler] | None = None,
+    permission_policy: Any | None = None,
+    capability_registry: Any | None = None,
+    permission_path: Callable[[str, dict[str, Any]], str | None] | None = None,
 ) -> WorkflowEngine:
+    handlers = build_workflow_handlers(personal=personal, notifications=notifications)
+    for capability, handler in (computer_handlers or {}).items():
+        if capability in handlers:
+            raise ValueError(f"workflow handler capability collision: {capability}")
+        handlers[capability] = handler
     engine = WorkflowEngine(
-        database_path, approvals, build_workflow_handlers(personal=personal, notifications=notifications),
-        control=control, step_timeout=step_timeout,
+        database_path, approvals, handlers,
+        control=control,
+        permission_policy=permission_policy,
+        capability_registry=capability_registry,
+        permission_path=permission_path,
+        step_timeout=step_timeout,
     )
     engine.recover()
     return engine
