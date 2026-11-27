@@ -134,7 +134,7 @@ $('confirmNo').addEventListener('click',()=>endConfirm(false));$('confirmYes').a
 $('confirm').addEventListener('close',()=>{if(confirmResolve){const r=confirmResolve;confirmResolve=null;r(false);}const o=confirmOpener;confirmOpener=null;if(o&&o.isConnected)o.focus();else $('listHeading').focus();});
 
 /* ---- builder ---- */
-function newStep(){return {capability:caps[0]||'',values:{},raw:'{}',description:''};}
+function newStep(){return {capability:caps.includes('personal.add')?'personal.add':(caps[0]||''),values:{},raw:'{}',description:''};}
 function renderSteps(focus){
  const box=$('steps');box.replaceChildren();
  draft.forEach((s,i)=>{
