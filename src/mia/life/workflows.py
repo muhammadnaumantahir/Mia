@@ -1,22 +1,24 @@
-"""Bounded workflow composer and checkpoint runtime for Mia's own data (MIA-LIFE-08, A7).
+"""Bounded workflow composer and checkpoint runtime for Mia (MIA-LIFE-08).
 
-A workflow is an ordered list of typed steps over *internal, non-destructive* actions: reading
-and adding tasks/notes, completing a task (reversible by reopening) and queueing a notification.
-It reuses the proven ``TaskEngine`` (SQLite checkpoint after every step transition, pause, cancel,
-explicit retry, automation stop-all, "interrupted step means unknown, never silently re-run")
-instead of a second runtime, with its own database so computer tasks and workflows never mix.
+A workflow can combine Mia's internal personal/notification actions with computer capabilities
+that already have a registered TaskEngine handler. Computer actions reuse the same adapters,
+owner PermissionPolicy, CapabilityRegistry, exact-payload one-time approvals and stop controls
+as direct computer tasks. Unsupported capabilities remain refused at plan time.
 
 Governance, by construction:
 
-* Only the handlers registered here exist. Anything else, in particular computer, browser,
-  terminal, filesystem or desktop capabilities and any delete, is refused when the plan is
-  created, with a message saying so. Those need the central permission broker (MIA-COMP-04)
-  and approvals, and must not be reachable through a workflow by naming them.
-* No step can grant permission or approve anything: handlers never touch approvals or grants.
-* ``preview`` shows what each step would do from current state without changing anything.
-* Each step has a wall-clock limit. A step that times out is reported as failed with unknown
-  outcome (a worker thread cannot be killed), never as success.
-* ``${steps.N.field}`` lets a later step use an earlier step's recorded result.
+* Only registered internal or computer handlers can be planned. Unknown, unimplemented and
+  unregistered destructive actions are refused; naming a capability never creates a handler.
+* Computer actions must pass the shared owner permission policy. Per-action approvals are
+  created and consumed by the same adapters used by direct computer tasks. The workflow run,
+  retry and reconciliation HTTP routes require the owner passkey in the production local app.
+* Brain's workflow tool surface remains restricted to the safe internal personal/notification
+  subset; it cannot create or execute computer workflows.
+* No step can grant permission or approve another action's pending approval.
+* Preview is side-effect-free and each step is revalidated immediately before execution.
+* Each step has a wall-clock limit. Unknown outcomes require reconciliation and are never
+  silently retried.
+* `${steps.N.field}` lets a later step use an earlier step's recorded result.
 """
 
 from __future__ import annotations
