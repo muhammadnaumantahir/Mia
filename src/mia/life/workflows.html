@@ -250,6 +250,14 @@ function renderDetail(task,preview,events,rep){
   li.append(meta);
   if(s.error)li.append(mk('div','Problem: '+s.error,'note'));
   if(s.note)li.append(mk('div',s.note,'note'));
+  if(s.status==='awaiting_approval'&&s.approval_id){
+   const a=mk('div',undefined,'actions');
+   const approve=mk('button','Approve & run','alt');approve.type='button';approve.dataset.approveStep=s.idx;
+   approve.addEventListener('click',()=>approveWorkflowStep(s.idx,s.approval_id,approve));
+   const reject=mk('button','Reject step','danger');reject.type='button';reject.dataset.rejectStep=s.idx;
+   reject.addEventListener('click',()=>rejectWorkflowStep(s.idx,reject));
+   a.append(approve,reject);li.append(a);
+  }
   if(s.status==='interrupted'&&task.status!=='completed'&&task.status!=='cancelled'){
    const a=mk('div',undefined,'actions');
    const applied=mk('button','Confirm action happened','alt');applied.type='button';applied.dataset.reconcile='applied';
@@ -296,6 +304,31 @@ $('cancelBtn').addEventListener('click',async()=>{
 $('refreshBtn').addEventListener('click',()=>{if(current)openWorkflow(current.task_id,false);loadList();});
 async function retryStep(step,btn){
  await act('Retry',async id=>{const t=await api('/api/workflows/'+encodeURIComponent(id)+'/retry-step','POST',{step:Number(step)});say('Step retried: workflow is now '+((WF[t.status]||[t.status])[0])+'.',t.status==='failed');},btn);
+}
+async function approveWorkflowStep(step,approvalId,btn){
+ const ok=await confirmDialog({
+  title:'Approve this workflow step?',
+  lines:['Review the action summary and risk above.','Mia will execute only the exact payload prepared for this step.','The workflow may continue to its next step after this one completes.'],
+  yes:'Approve and run',no:'Keep pending'
+ },btn);
+ if(!ok)return;
+ await act('Approve',async id=>{
+  await api('/api/computer/approvals/'+encodeURIComponent(approvalId)+'/approve','POST');
+  const task=await api('/api/workflows/'+encodeURIComponent(id)+'/run','POST');
+  say(task.status==='awaiting_approval'?'This step completed; another step is waiting for approval.':'Workflow: '+((WF[task.status]||[task.status])[0])+'.',task.status==='failed');
+ },btn);
+}
+async function rejectWorkflowStep(step,btn){
+ const ok=await confirmDialog({
+  title:'Reject this workflow step?',
+  lines:['Mia will not execute this action.','The workflow will stop and keep any earlier completed steps unchanged.'],
+  yes:'Reject step',no:'Keep pending'
+ },btn);
+ if(!ok)return;
+ await act('Reject',async id=>{
+  await api('/api/workflows/'+encodeURIComponent(id)+'/reject-step','POST',{step:Number(step)});
+  say('Step rejected. No action was executed.');
+ },btn);
 }
 async function reconcileStep(step,decision,btn){
  const applied=decision==='applied';
