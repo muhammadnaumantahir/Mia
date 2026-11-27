@@ -63,6 +63,7 @@ _RULES: tuple[Capability, ...] = (
     Capability("POST /api/computer/terminal/executions/*/cancel", _S.SAFETY_CONTROL, _A.ALWAYS_ALLOWED, "computer", "re-run"),
     Capability("POST /api/workflows/*/cancel", _S.SAFETY_CONTROL, _A.ALWAYS_ALLOWED, "workflows", "compose a new workflow"),
     Capability("POST /api/workflows/*/pause", _S.SAFETY_CONTROL, _A.ALWAYS_ALLOWED, "workflows", "POST .../run"),
+    Capability("POST /api/workflows/*/reject-step", _S.SAFETY_CONTROL, _A.ALWAYS_ALLOWED, "workflows", "re-create the step if still needed"),
     Capability("POST /api/workflows/*/run", _S.DEVICE_CONTROL, _A.PREVIEW_THEN_EXECUTE, "workflows", "owner passkey; pause/cancel"),
     Capability("POST /api/workflows/*/retry-step", _S.DEVICE_CONTROL, _A.OWNER_CONFIRM, "workflows", "owner review before re-arming a step"),
     Capability("POST /api/workflows/*/reconcile-step", _S.DEVICE_CONTROL, _A.OWNER_CONFIRM, "workflows", "owner decision on unknown step outcome"),
