@@ -306,7 +306,7 @@ class CapabilityStore:
                     upstream_uri,
                     license_id,
                     permissions_json,
-                    _canonical({"items": normalized_dependencies})[9:-1],
+                    json.dumps(normalized_dependencies, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
                     source_hash,
                     str(target_path),
                     test_hash,
@@ -326,6 +326,7 @@ class CapabilityStore:
                     "source_sha256": source_hash,
                     "test_sha256": test_hash,
                     "source_kind": source_kind,
+                    "dependencies": normalized_dependencies,
                 },
             )
         return self.get(cap_id, version) or {}
@@ -412,6 +413,7 @@ class CapabilityStore:
         return self.get(capability_id, version) or {}
 
     def register(self, capability_id: str, version: str) -> dict[str, Any]:
+        self.ensure_dependencies_available(capability_id, version)
         return self._transition(
             capability_id,
             version,
@@ -419,6 +421,18 @@ class CapabilityStore:
             new_status="registered",
             reason="Validated capability added to the registry; not activated",
         )
+
+    def ensure_dependencies_available(self, capability_id: str, version: str) -> None:
+        item = self.get(capability_id, version)
+        if item is None:
+            raise CapabilityLifecycleError("capability version not found")
+        for dependency in item.get("dependencies", []):
+            required = self.get(dependency["capability_id"], dependency["version"])
+            if required is None or required["status"] not in {"registered", "active", "deprecated"}:
+                raise CapabilityLifecycleError(
+                    "required capability dependency is missing, retired or rolled back: "
+                    f"{dependency['capability_id']} {dependency['version']}"
+                )
 
     def get_active(self, capability_id: str) -> dict[str, Any] | None:
         with self._connection() as db:
@@ -456,6 +470,7 @@ class CapabilityStore:
         item = self.get(capability_id, version)
         if item is None:
             raise CapabilityLifecycleError("capability version not found")
+        self.ensure_dependencies_available(capability_id, version)
         if item["status"] != "registered":
             raise CapabilityLifecycleError(
                 f"only a registered version can be activated, found {item['status']}"
