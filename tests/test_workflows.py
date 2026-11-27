@@ -119,6 +119,19 @@ def test_unregistered_and_unsupported_steps_are_refused_at_plan_time(env, capabi
     assert memory.personal.list(limit=10) == [] and client.get("/api/workflows").json()["items"] == []
 
 
+def test_computer_action_without_per_action_adapter_needs_an_owner_grant(env):
+    client, *_ = env
+    response = create(client, [{
+        "capability": "browser.fill",
+        "args": {"ref": "field-1", "text": "sample"},
+    }])
+    assert response.status_code == 201, response.text
+    preview = response.json()["preview"][0]
+    assert preview["allowed"] is False
+    assert "owner grant" in preview["summary"]
+    assert "Denied by policy" not in preview["summary"]
+
+
 def test_async_browser_inspector_is_awaited_in_workflow_preview(env):
     client, *_ = env
     response = create(client, [{
