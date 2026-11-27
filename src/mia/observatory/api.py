@@ -3413,7 +3413,7 @@ def create_app(
     task_engine.on_cancel(terminal_executor.cancel_task)
     app.state.task_engine = task_engine
 
-    # MIA-LIFE-08: internal, non-destructive workflows on the same checkpoint engine.
+    # MIA-LIFE-08: internal workflows plus permission/approval-gated computer adapters.
     workflow_engine = workflows or make_workflow_engine(
         data_dir / "mia-workflows.sqlite3", approval_store, personal=memory_store.personal,
         notifications=notification_center, control=control,
