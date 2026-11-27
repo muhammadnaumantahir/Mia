@@ -22,7 +22,7 @@ The original filesystem-only foundation has expanded into a permissioned compute
 
 Computer adapters execute on the machine running the Mia process. If Mia is deployed on Oracle Cloud, filesystem, process, application, browser and desktop capabilities target the Oracle VM—not the owner's Windows laptop or phone. Windows UI Automation is unavailable on a typical Linux cloud VM.
 
-**A paired local companion agent is not implemented yet.** To control the owner's laptop while Mia's Brain runs remotely, Mia will need an outbound-only, authenticated local agent/bridge with device pairing, scoped capabilities, owner-visible activity, exact per-action approvals and an emergency stop. Do not expose the current local computer API directly to the public internet as a workaround. The server API remains loopback-only until remote authentication, CSRF protection, owner identity and audit controls are complete.
+**A paired local companion client is implemented, but it is not yet a computer-action relay.** The Windows companion stores its Ed25519 identity and bearer token with CurrentUser DPAPI, renews signed sessions, sends heartbeat and reconnects over outbound HTTPS. Its current runtime is heartbeat-only; observe/act/sync scope labels do not mean those actions are enabled in the client. Authenticated companion sync is separately opt-in and restricted to approved state namespaces. Do not expose the general computer API publicly or assume a cloud-hosted Brain can control the owner's laptop until an explicitly scoped action relay is designed, implemented and owner-verified.
 
 ## API
 
@@ -35,7 +35,7 @@ Computer adapters execute on the machine running the Mia process. If Mia is depl
 - `POST /api/computer/approvals/{approval_id}/approve`
 - `POST /api/computer/files/write/execute`
 
-The service remains bound to localhost. Remote access must not be enabled until authentication, CSRF protection, audit controls and user identity are implemented.
+The general computer service remains loopback-only. The narrow companion remote surface is separately opt-in and requires direct HTTPS, exact Host allowlisting, a live device token and exact route/method scopes; it does not expose computer-control APIs.
 
 ## Current permission catalogue
 
@@ -57,14 +57,14 @@ Only capabilities with working adapters are registered. The exact live list is a
 | `terminal.run` | Restricted command execution inside configured roots | Per-command risk classification; high risk always needs approval; administrative/security/credential commands blocked |
 | `computer.tasks` | Durable multi-step plans over registered capabilities | Each step is revalidated and separately authorized; consequential steps are never auto-retried |
 
-## Remaining integrations
+## Remaining integrations and verification
 
-1. **Local companion agent:** pair the remote Brain with the owner's Windows desktop using an outbound-only authenticated channel. This is required for local computer control when Mia is hosted on Oracle Cloud.
-2. **Remote access security:** implement authenticated owner identity, CSRF protection, device pairing, revocation and remote audit before exposing any computer API beyond loopback.
-3. **Adapter hardening:** move shared permission checks deeper into every adapter method so alternate call paths cannot bypass the API/task/Brain boundary checks.
-4. **Cross-platform UI control:** validate the Windows adapter on real Windows hardware and decide whether macOS/Linux desktop adapters are worth maintaining.
-5. **Sandboxed code execution:** add an isolated worker for explicitly approved scripts; do not turn the restricted terminal into unrestricted shell access.
-6. **Browser session improvements:** retain the current isolated Mia-only profile and explicit login boundaries; never import the owner's default browser cookies or bypass CAPTCHA/access controls.
+1. **Local computer-action relay:** the Windows companion is heartbeat-only. A future relay must use narrowly scoped device identity, owner-visible activity, exact per-action approval and emergency stop; do not infer this from the current sync implementation.
+2. **Adapter hardening:** continue moving authorization into adapter boundaries and verify every alternate entry path; current shared policy/approval integration is not a claim of complete OS-level caller identity.
+3. **Real Windows verification:** validate DPAPI, Task Scheduler, PowerShell/cmd behavior, process protections, Windows UI Automation, UAC/security-window refusal and browser accessibility on the owner's Windows machine.
+4. **Security handoff:** complete the cross-adapter adversarial regression and owner runbook in MIA-COMP-11, including stop/revoke/reject drills and recovery checks.
+5. **Browser session boundary:** retain the isolated Mia-only profile and explicit login boundaries; never import the owner's default browser cookies or bypass CAPTCHA/access controls.
+6. **Capability sandbox:** one-shot pure-data capability execution already uses a disposable Docker worker with no network, a read-only candidate mount, non-root execution and bounded resources. It is not a general shell sandbox and does not grant host filesystem/process/network access.
 
 ## Non-negotiable safety boundaries
 
@@ -82,7 +82,7 @@ Only capabilities with working adapters are registered. The exact live list is a
 - Models cannot supply or modify executable arguments.
 - Shells and script hosts are blocked by the launcher.
 - Launch is previewed, approved and executed with `shell=False`.
-- Process termination and unrestricted terminal commands are not implemented.
+- Process termination is implemented only for eligible same-user processes with exact approval and protected-process checks. Unrestricted terminal execution is intentionally not implemented; terminal access remains risk-classified, root-confined and policy-gated.
 
 Copy `config/applications.example.json` to `config/applications.json` and edit it for the applications actually installed on the machine. The personal file is ignored by Git.
 
@@ -273,7 +273,7 @@ sub-requests, goes through the URL policy (public web only; loopback/private/res
 against a real Windows desktop**, real pywinauto element behavior (invoke patterns, toggle/selection state, scroll, `type_keys`
 quoting), or a real UAC prompt. Manual Windows verification is required before relying on this.
 
-> **2026-11-20 permission integration:** task plans and execution now evaluate the central owner permission catalogue for registered capabilities with an approval path. A matching medium-risk owner grant can bypass the separate approval pause, but the existing adapter still creates and consumes the exact request-specific one-time approval. High-risk operations (for example delete, process terminate, consequential browser click/upload and high-risk desktop actions) always wait for per-action approval. `terminal.run` remains governed directly by `TerminalExecutor` and the same policy. Directory grants use resolved filesystem paths and do not cover paths outside the grant. Direct API routes, no-approval browser preparation steps, and Brain/Voice tool integration remain separate pending work.
+> **2026-11-27 permission integration:** direct computer routes, the durable computer TaskEngine, supported Life workflows and Brain tools share the owner PermissionPolicy/CapabilityRegistry and adapter-specific exact one-time approvals. A matching medium-risk owner grant may authorize a narrowly scoped action; high-risk operations always wait for per-action approval. Directory grants use resolved filesystem paths. Brain write-mode tools additionally require the live WebAuthn owner-session context even when a standing grant exists. Brain/voice workflow entry remains restricted to safe internal personal/notification actions; they do not receive arbitrary computer execution.
 
 ## Multi-step computer tasks (Feature 4, M8)
 
