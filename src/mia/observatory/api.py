@@ -6,6 +6,7 @@ Authentication must be implemented before any remote network binding.
 from __future__ import annotations
 
 import ast
+import difflib
 import asyncio
 import hashlib
 import hmac
@@ -4919,6 +4920,46 @@ def create_app(
         except CapabilityLifecycleError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return {"items": items}
+
+    @app.get("/api/capabilities/{capability_id}/{version}/diff")
+    def capability_diff(capability_id: str, version: str) -> dict[str, Any]:
+        candidate = capability_versions.get(capability_id, version)
+        if candidate is None:
+            raise HTTPException(status_code=404, detail="Capability version not found")
+        parent_id = candidate.get("parent_id")
+        parent_version = candidate.get("parent_version")
+        if not parent_id or not parent_version:
+            return {
+                "capability_id": capability_id,
+                "version": version,
+                "diff_available": False,
+                "reason": "This immutable version has no declared parent version.",
+            }
+        try:
+            parent_source = capability_versions.read_source(parent_id, parent_version)
+            candidate_source = capability_versions.read_source(capability_id, version)
+        except (CapabilityLifecycleError, OSError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        diff_text = "".join(difflib.unified_diff(
+            parent_source.splitlines(keepends=True),
+            candidate_source.splitlines(keepends=True),
+            fromfile=f"{parent_id}@{parent_version}",
+            tofile=f"{capability_id}@{version}",
+        ))
+        truncated = len(diff_text) > 120_000
+        if truncated:
+            diff_text = diff_text[:120_000]
+        return {
+            "capability_id": capability_id,
+            "version": version,
+            "parent_id": parent_id,
+            "parent_version": parent_version,
+            "parent_source_sha256": capability_versions.get(parent_id, parent_version)["source_sha256"],
+            "source_sha256": candidate["source_sha256"],
+            "diff_available": True,
+            "truncated": truncated,
+            "diff": diff_text,
+        }
 
     @app.post("/api/capabilities/{capability_id}/{version}/validate/start")
     def begin_capability_validation(
