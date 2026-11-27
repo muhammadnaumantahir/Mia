@@ -334,6 +334,7 @@ def test_guard_requires_owner_auth_but_preserves_safety_controls():
     assert OwnerAuthGuard.requires_owner("POST", "/api/workflows/abc/reconcile-step")
     assert not OwnerAuthGuard.requires_owner("POST", "/api/workflows/abc/pause")
     assert not OwnerAuthGuard.requires_owner("POST", "/api/workflows/abc/cancel")
+    assert not OwnerAuthGuard.requires_owner("POST", "/api/workflows/abc/reject-step")
     assert OwnerAuthGuard.requires_owner("GET", "/api/computer/approvals")
     assert OwnerAuthGuard.requires_owner("GET", "/api/computer/approvals/cards")
     assert OwnerAuthGuard.requires_owner("GET", "/api/companion-admin/devices")
