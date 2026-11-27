@@ -162,6 +162,41 @@ class WorkflowEngine(TaskEngine):
         self._set_task(task_id, final_report=self.report(task_id))
         return False
 
+    async def plan_summary_async(self, task_id: str) -> list[dict[str, Any]]:
+        """Inspect workflow steps, awaiting async adapters without running side effects."""
+        output: list[dict[str, Any]] = []
+        for step in self.get_task(task_id)["steps"]:
+            handler = self.handlers[step["capability"]]
+            try:
+                resolved = self._resolve_args(task_id, step["args"], strict=False)
+                info = await self._call(handler, handler.inspect, resolved)
+                permission = self._permission_decision(step["capability"], resolved, info)
+                needs_approval = (
+                    permission.requires_approval if permission is not None else info.needs_approval
+                )
+                summary = info.summary
+                if permission is not None and not permission.allowed:
+                    summary = f"PERMISSION DENIED: {permission.reason}; {summary}"
+                output.append({
+                    "step": step["idx"],
+                    "capability": step["capability"],
+                    "description": step["description"],
+                    "risk": info.risk,
+                    "needs_approval": needs_approval,
+                    "summary": summary,
+                    "arguments": resolved,
+                })
+            except Exception as exc:
+                output.append({
+                    "step": step["idx"],
+                    "capability": step["capability"],
+                    "description": step["description"],
+                    "risk": "unknown",
+                    "needs_approval": True,
+                    "summary": f"cannot be checked now: {exc}",
+                })
+        return output
+
     async def advance(self, task_id: str) -> dict[str, Any]:
         task = self.get_task(task_id)
         # Workflow retries are never automatic after an interrupted/unknown step,
@@ -431,14 +466,15 @@ def register_workflow_routes(app: FastAPI, engine: WorkflowEngine, record: Calla
         return {"items": sorted(engine.handlers)}
 
     @app.post(base + "", status_code=201)
-    def create(item: WorkflowCreate) -> dict[str, Any]:
+    async def create(item: WorkflowCreate) -> dict[str, Any]:
         try:
             task = engine.create_task(item.title, [s.model_dump() for s in item.steps], source="text")
+            preview = await engine.plan_summary_async(task["task_id"])
         except TaskPlanError as exc:
             raise error(exc) from exc
         record(event_type="workflow_created", summary=f"Workflow planned: {item.title[:80]} ({len(item.steps)} steps)",
                outcome="success", payload={"workflow_id": task["task_id"]})
-        return {"workflow": task, "preview": engine.plan_summary(task["task_id"])}
+        return {"workflow": task, "preview": preview}
 
     @app.get(base + "")
     def listing(limit: int = 50) -> dict[str, Any]:
@@ -452,9 +488,9 @@ def register_workflow_routes(app: FastAPI, engine: WorkflowEngine, record: Calla
             raise error(exc) from exc
 
     @app.get(base + "/{workflow_id}/preview")
-    def preview(workflow_id: str) -> dict[str, Any]:
+    async def preview(workflow_id: str) -> dict[str, Any]:
         try:
-            return {"preview": engine.plan_summary(workflow_id)}
+            return {"preview": await engine.plan_summary_async(workflow_id)}
         except KeyError as exc:
             raise error(exc) from exc
 
