@@ -215,6 +215,42 @@ def test_capability_api_persists_dependencies_and_refuses_retired_dependency(tmp
     assert runner.execution_calls == []
 
 
+def test_capability_api_returns_hash_verified_parent_source_diff(tmp_path):
+    store = CapabilityStore(tmp_path / "capabilities.sqlite3", tmp_path / "generated")
+    client = TestClient(create_app(
+        store=ObservatoryStore(tmp_path / "observatory.sqlite3"),
+        capability_store=store,
+        sandbox_runner=FakeSandboxRunner(),
+    ))
+    parent_source = "def run(input_data):\n    return {'value': 1}\n"
+    parent_tests = "from candidate import run\ndef test_run(): assert run({}) == {'value': 1}\n"
+    parent = _create_candidate(client, "diff-tool", parent_source, parent_tests)
+    assert parent.status_code == 201
+    assert client.post("/api/capabilities/diff-tool/0.1.0/validate/start").status_code == 200
+    assert client.post("/api/capabilities/diff-tool/0.1.0/validate").status_code == 200
+    assert client.post("/api/capabilities/diff-tool/0.1.0/register").status_code == 200
+
+    child_source = "def run(input_data):\n    return {'value': 2}\n"
+    child = client.post("/api/capabilities", json={
+        "capability_id": "diff-tool",
+        "version": "0.2.0",
+        "name": "diff-tool",
+        "source_code": child_source,
+        "test_source_code": "from candidate import run\ndef test_run(): assert run({}) == {'value': 2}\n",
+        "rationale": "Change the returned value.",
+        "parent_id": "diff-tool",
+        "parent_version": "0.1.0",
+    })
+    assert child.status_code == 201
+    diff = client.get("/api/capabilities/diff-tool/0.2.0/diff")
+    assert diff.status_code == 200
+    assert diff.json()["diff_available"] is True
+    assert diff.json()["parent_source_sha256"] == parent.json()["source_sha256"]
+    assert diff.json()["source_sha256"] == child.json()["source_sha256"]
+    assert "-    return {'value': 1}" in diff.json()["diff"]
+    assert "+    return {'value': 2}" in diff.json()["diff"]
+
+
 def test_failed_sandbox_validation_cannot_be_registered(tmp_path):
     store = CapabilityStore(tmp_path / "capabilities.sqlite3", tmp_path / "generated")
     runner = FakeSandboxRunner(passing=False)
