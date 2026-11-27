@@ -115,3 +115,8 @@ def test_specific_rules_win_over_general():
 def test_workflow_routes_are_enumerated_and_classified(tmp_path):
     seen = {f"{m} {p}" for m, p in _mutating(tmp_path)}
     assert "POST /api/workflows" in seen and "POST /api/workflows/{workflow_id}/run" in seen
+    assert classify("POST", "/api/workflows/example/run").approval is ApprovalClass.PREVIEW_THEN_EXECUTE
+    assert classify("POST", "/api/workflows/example/retry-step").approval is ApprovalClass.OWNER_CONFIRM
+    assert classify("POST", "/api/workflows/example/reconcile-step").approval is ApprovalClass.OWNER_CONFIRM
+    assert classify("POST", "/api/workflows/example/pause").approval is ApprovalClass.ALWAYS_ALLOWED
+    assert classify("POST", "/api/workflows/example/cancel").approval is ApprovalClass.ALWAYS_ALLOWED
