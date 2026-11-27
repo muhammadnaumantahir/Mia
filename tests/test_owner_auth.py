@@ -16,6 +16,8 @@ from mia.security.owner_auth import (
     OwnerAuthGuard,
     OwnerAuthNotConfigured,
     OwnerAuthService,
+    CURRENT_OWNER_SESSION,
+    COOKIE_NAME,
     SESSION_TTL_SECONDS,
     _hash,
     _origin,
@@ -268,13 +270,56 @@ def test_owner_session_is_hashed_expires_and_can_be_revoked(owner_service):
 
 
 def test_brain_write_mode_tools_require_owner_session_even_with_existing_grants():
-    evaluator = OwnerPermissionEvaluator(
-        permission_policy=object(),
-        capability_registry=object(),
+    class GrantedPolicy:
+        def authorize(self, _spec, path=None):
+            return SimpleNamespace(allowed=True, requires_approval=False, reason="grant active")
+
+    class Registry:
+        def get(self, _name):
+            return object()
+
+    tool = SimpleNamespace(mode="write", name="workflow.run_internal",
+                           permission="workflow.run_internal")
+    policy, registry = GrantedPolicy(), Registry()
+    denied = OwnerPermissionEvaluator(
+        permission_policy=policy, capability_registry=registry,
         owner_session=lambda: False,
-    )
-    decision = evaluator.evaluate(SimpleNamespace(mode="write"), {})
-    assert decision.allowed is False
+    ).evaluate(tool, {})
+    assert denied.allowed is False
+    allowed = OwnerPermissionEvaluator(
+        permission_policy=policy, capability_registry=registry,
+        owner_session=lambda: True,
+    ).evaluate(tool, {})
+    assert allowed.allowed is True
+
+
+def test_owner_session_context_is_scoped_to_authenticated_asgi_request(owner_service):
+    service, _fake, _clock = owner_service
+    token = service._create_session()
+    observed = []
+
+    async def inner(scope, receive, send):
+        observed.append(CURRENT_OWNER_SESSION.get())
+        await send({"type": "http.response.start", "status": 204, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    guard = OwnerAuthGuard(inner, service)
+    scope = {
+        "type": "http", "method": "GET", "path": "/api/computer/approvals/cards",
+        "scheme": "http",
+        "headers": [
+            (b"host", b"localhost:8765"),
+            (b"cookie", f"{COOKIE_NAME}={token}".encode()),
+        ],
+    }
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+    async def send(_message):
+        return None
+
+    asyncio.run(guard(scope, receive, send))
+    assert observed == [True]
+    assert CURRENT_OWNER_SESSION.get() is False
 
 
 def test_guard_requires_owner_auth_but_preserves_safety_controls():
