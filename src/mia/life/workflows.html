@@ -114,7 +114,14 @@ function say(text,error=false){const n=$('notice');n.textContent=text;n.classNam
 async function api(path,method='GET',body){
  const r=await fetch(path,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
  let data=null;try{data=await r.json();}catch(e){}
- if(!r.ok){const d=data&&data.detail;const msg=typeof d==='string'?d:Array.isArray(d)?d.map(x=>x.msg).join('; '):'Request failed ('+r.status+')';const err=new Error(msg);err.status=r.status;throw err;}
+ if(!r.ok){
+  if(['owner_auth_required','owner_auth_setup_required','owner_auth_origin_required'].includes(data&&data.code)){
+   const target=new URL(data.login_url||('http://localhost:'+(location.port||'80')+'/owner-auth'),location.href);
+   target.searchParams.set('return',location.pathname+location.search+location.hash);
+   location.assign(target.href);
+  }
+  const d=data&&data.detail;const msg=typeof d==='string'?d:Array.isArray(d)?d.map(x=>x.msg).join('; '):'Request failed ('+r.status+')';const err=new Error(msg);err.status=r.status;throw err;
+ }
  return data;
 }
 
