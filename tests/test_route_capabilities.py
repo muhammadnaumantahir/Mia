@@ -121,3 +121,4 @@ def test_workflow_routes_are_enumerated_and_classified(tmp_path):
     assert classify("POST", "/api/workflows/example/pause").approval is ApprovalClass.ALWAYS_ALLOWED
     assert classify("POST", "/api/workflows/example/cancel").approval is ApprovalClass.ALWAYS_ALLOWED
     assert classify("POST", "/api/workflows/example/reject-step").approval is ApprovalClass.ALWAYS_ALLOWED
+    assert classify("POST", "/api/workflows/example/reject-step").approval is ApprovalClass.ALWAYS_ALLOWED
