@@ -249,3 +249,5 @@ def test_dashboard_offers_confirmed_promotion_and_rollback():
     assert "promoteCapability" in page and "rollbackCapability" in page
     assert "window.confirm" in page and "/rollback" in page
     assert "Activation is intentionally blocked" not in page
+    assert "capDependencies" in page and "capParent" in page
+    assert "showCapabilityDiff" in page and "/diff" in page
