@@ -162,6 +162,7 @@ class ApprovalStore:
         return {"approval_id": approval_id, "status": "approved", "summary": summary}
 
     def reject(self, approval_id: str) -> dict[str, str]:
+        """Reject a pending approval or revoke an approved action before it is consumed."""
         with self._connection() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute(
@@ -170,11 +171,11 @@ class ApprovalStore:
             ).fetchone()
             if not row:
                 raise ApprovalError("Approval was not found")
-            if row["status"] != "pending":
+            if row["status"] not in {"pending", "approved"}:
                 raise ApprovalError(_not_pending_message(row["status"]))
             if datetime.fromisoformat(row["expires_at"]) <= _now():
                 db.execute(
-                    "UPDATE action_approvals SET status = 'expired' WHERE approval_id = ?",
+                    "UPDATE action_approvals SET status = 'expired', card_json = NULL WHERE approval_id = ?",
                     (approval_id,),
                 )
                 expired = True
@@ -183,7 +184,7 @@ class ApprovalStore:
                     """
                     UPDATE action_approvals
                     SET status = 'rejected', card_json = NULL
-                    WHERE approval_id = ? AND status = 'pending'
+                    WHERE approval_id = ? AND status IN ('pending', 'approved')
                     """,
                     (approval_id,),
                 )
