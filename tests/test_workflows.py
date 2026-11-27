@@ -190,6 +190,8 @@ def test_computer_write_workflow_waits_for_exact_owner_approval(env):
     assert not target.exists(), "a pending approval must have no side effect"
 
     client.app.state.approvals.approve(step["approval_id"])
+    approved = client.get(f"/api/workflows/{wid}").json()
+    assert approved["steps"][0]["approval_status"] == "approved"
     completed = client.post(f"/api/workflows/{wid}/run").json()
     assert completed["status"] == "completed", completed
     assert target.read_text(encoding="utf-8") == "approved text"
@@ -367,6 +369,30 @@ def test_cancel_waits_for_unknown_step_reconciliation(env):
     final = engine.reconcile_timeout(wid, 1, decision="not_applied")
     assert final["status"] == "cancelled"
     assert memory.personal.list(limit=10) == []
+
+
+def test_approved_workflow_step_survives_stop_all_and_runs_after_resume(env):
+    client, _memory, *_ = env
+    root_id = client.app.state.computer_files.list_roots()[0]["root_id"]
+    target = client.app.state.computer_files.roots[root_id] / "resume-approved.txt"
+    wid = create(client, [{
+        "capability": "filesystem.write",
+        "args": {"root_id": root_id, "relative_path": "resume-approved.txt", "content": "resume safely"},
+    }]).json()["workflow"]["task_id"]
+    waiting = client.post(f"/api/workflows/{wid}/run").json()
+    approval_id = waiting["steps"][0]["approval_id"]
+    client.app.state.approvals.approve(approval_id)
+    client.post("/api/computer/stop-all")
+    paused = client.post(f"/api/workflows/{wid}/run").json()
+    assert paused["status"] == "paused"
+    current = client.get(f"/api/workflows/{wid}").json()
+    assert current["steps"][0]["approval_status"] == "approved"
+    assert not target.exists()
+
+    client.post("/api/computer/resume")
+    completed = client.post(f"/api/workflows/{wid}/run").json()
+    assert completed["status"] == "completed"
+    assert target.read_text(encoding="utf-8") == "resume safely"
 
 
 def test_rejecting_pending_computer_approval_fails_workflow_without_side_effect(env):
