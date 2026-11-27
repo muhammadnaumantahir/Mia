@@ -147,6 +147,74 @@ def test_capability_api_requires_all_sandbox_gates_before_registration(tmp_path)
     assert "sandbox" in activation.json()["detail"].lower()
 
 
+def test_capability_api_persists_dependencies_and_refuses_retired_dependency(tmp_path):
+    store = CapabilityStore(tmp_path / "capabilities.sqlite3", tmp_path / "generated")
+    dependency = store.record_candidate(
+        capability_id="base-helper",
+        version="1.0.0",
+        name="Base helper",
+        source_code="def run(input_data): return {'base': True}\n",
+        test_source_code="from candidate import run\ndef test_run(): assert run({}) == {'base': True}\n",
+        rationale="Dependency fixture.",
+    )
+    store.begin_validation("base-helper", "1.0.0")
+    store.record_validation("base-helper", "1.0.0", {
+        "static_checks": True,
+        "unit_tests": True,
+        "security_checks": True,
+        "regression_tests": True,
+        "evidence": {
+            "runner": "docker-isolated-v1",
+            "image_id": "sha256:test-image",
+            "source_sha256": dependency["source_sha256"],
+            "test_sha256": dependency["test_sha256"],
+        },
+    })
+    store.register("base-helper", "1.0.0")
+    runner = FakeSandboxRunner()
+    client = TestClient(create_app(
+        store=ObservatoryStore(tmp_path / "observatory.sqlite3"),
+        capability_store=store,
+        sandbox_runner=runner,
+    ))
+    response = client.post("/api/capabilities", json={
+        "capability_id": "composed-tool",
+        "version": "0.1.0",
+        "name": "Composed tool",
+        "source_code": "def run(input_data): return {'ok': True}\n",
+        "test_source_code": "from candidate import run\ndef test_run(): assert run({}) == {'ok': True}\n",
+        "rationale": "Pin an exact registered dependency version.",
+        "dependencies": [{"capability_id": "base-helper", "version": "1.0.0"}],
+    })
+    assert response.status_code == 201
+    assert response.json()["dependencies"] == [
+        {"capability_id": "base-helper", "version": "1.0.0"}
+    ]
+    store.begin_validation("composed-tool", "0.1.0")
+    candidate = store.get("composed-tool", "0.1.0")
+    store.record_validation("composed-tool", "0.1.0", {
+        "static_checks": True,
+        "unit_tests": True,
+        "security_checks": True,
+        "regression_tests": True,
+        "evidence": {
+            "runner": "docker-isolated-v1",
+            "image_id": "sha256:test-image",
+            "source_sha256": candidate["source_sha256"],
+            "test_sha256": candidate["test_sha256"],
+        },
+    })
+    store.register("composed-tool", "0.1.0")
+    store.retire("base-helper", "1.0.0", "Owner retired dependency")
+    execution = client.post(
+        "/api/capabilities/composed-tool/0.1.0/execute",
+        json={"input_data": {}},
+    )
+    assert execution.status_code == 409
+    assert "dependency" in execution.json()["detail"].lower()
+    assert runner.execution_calls == []
+
+
 def test_failed_sandbox_validation_cannot_be_registered(tmp_path):
     store = CapabilityStore(tmp_path / "capabilities.sqlite3", tmp_path / "generated")
     runner = FakeSandboxRunner(passing=False)
