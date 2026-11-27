@@ -274,8 +274,10 @@ function renderDetail(task,preview,events,rep){
     const a=mk('div',undefined,'actions');
     const runApproved=mk('button','Run approved step','alt');runApproved.type='button';runApproved.dataset.runApprovedStep=s.idx;
     runApproved.addEventListener('click',()=>runApprovedWorkflowStep(runApproved));
-    a.append(runApproved);li.append(a);
-    li.append(mk('div','This exact action is approved but has not completed. Run it to continue.','note'));
+    const revoke=mk('button','Revoke approval','danger');revoke.type='button';revoke.dataset.rejectStep=s.idx;
+    revoke.addEventListener('click',()=>rejectWorkflowStep(s.idx,revoke));
+    a.append(runApproved,revoke);li.append(a);
+    li.append(mk('div','This exact action is approved but has not completed. You can run it or revoke the approval.','note'));
    }else{
     li.append(mk('div','Approval '+(s.approval_status||'is no longer available')+'. Press Run workflow to prepare a fresh approval.','note'));
    }
