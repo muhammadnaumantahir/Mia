@@ -178,6 +178,19 @@ def test_run_button_is_busy_and_cannot_double_run(page):
     assert len([u for u in page.posts if u.endswith("/run")]) == 1
 
 
+def test_ungranted_browser_action_is_shown_as_denied_not_approvable(page):
+    import json
+
+    visit(page)
+    box = add_step(page, "browser.fill")
+    box.locator("[data-name=raw]").fill(json.dumps({"ref": "field-1", "text": "sample"}))
+    plan(page, "Browser action without grant")
+    wait_detail(page, "Browser action without grant")
+    assert "Denied by policy" in page.locator("#plan").inner_text()
+    assert "owner grant" in page.locator("#plan").inner_text().lower()
+    assert page.locator("#plan button[data-approve-step]").count() == 0
+
+
 def test_computer_write_step_requires_approval_before_file_is_written(page):
     import json
 
