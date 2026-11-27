@@ -238,6 +238,7 @@ def test_already_approved_workflow_step_offers_run_without_reapproving(page):
     page.app.state.approvals.approve(step["approval_id"])
     page.click("#refreshBtn")
     page.wait_for_selector("#plan button[data-run-approved-step='1']")
+    assert "Approved, not run" in page.locator("#plan").inner_text()
     assert page.locator("#plan button[data-approve-step]").count() == 0
     assert not target.exists()
     page.click("#plan button[data-run-approved-step='1']")
