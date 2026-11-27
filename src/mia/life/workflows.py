@@ -165,6 +165,15 @@ class WorkflowEngine(TaskEngine):
         self._set_task(task_id, final_report=self.report(task_id))
         return False
 
+    def get_task(self, task_id: str) -> dict[str, Any]:
+        task = super().get_task(task_id)
+        for step in task["steps"]:
+            approval_id = step.get("approval_id")
+            if approval_id:
+                step["approval_status"] = self.approvals.status(approval_id)
+                step["approval_expires_at"] = self.approvals.expires_at(approval_id)
+        return task
+
     def _permission_decision(self, capability: str, args: dict[str, Any], info: Inspection) -> Any | None:
         # Personal/notification workflow steps use their own narrow internal contracts.
         # The shared computer registry intentionally does not contain these capabilities.
