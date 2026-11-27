@@ -216,6 +216,7 @@ def test_workflow_cannot_approve_or_grant(env):
 def test_bad_step_arguments_fail_the_step_and_stop_the_workflow(env):
     client, memory, *_ = env
     r = create(client, [add_step("First"), {"capability": "personal.complete", "args": {"item_id": "nope"}}, add_step("Never")])
+    assert r.json()["preview"][1]["validation_error"] is True
     wid = r.json()["workflow"]["task_id"]
     final = client.post(f"/api/workflows/{wid}/run").json()
     assert final["status"] == "failed"
