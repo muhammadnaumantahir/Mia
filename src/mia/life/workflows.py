@@ -217,6 +217,8 @@ class WorkflowEngine(TaskEngine):
                     "description": step["description"],
                     "risk": "unknown",
                     "needs_approval": True,
+                    "allowed": False,
+                    "validation_error": True,
                     "summary": f"cannot be checked now: {exc}",
                 })
         return output
