@@ -237,6 +237,18 @@ class WorkflowEngine(TaskEngine):
 
     def cancel(self, task_id: str) -> None:
         task = self._require_open(task_id)
+        # A pending or approved-but-not-consumed one-time token must not outlive
+        # cancellation. ApprovalStore serializes this against concurrent execution.
+        for step in task["steps"]:
+            approval_id = step.get("approval_id")
+            if not approval_id:
+                continue
+            if self.approvals.status(approval_id) in {"pending", "approved"}:
+                try:
+                    self.approvals.reject(approval_id)
+                except ApprovalError:
+                    if self.approvals.status(approval_id) in {"pending", "approved"}:
+                        raise
         if any(step["status"] == "interrupted" for step in task["steps"]):
             # Do not report cancellation while a timed-out worker may still complete.
             self._set_task(task_id, cancel_requested=1)
