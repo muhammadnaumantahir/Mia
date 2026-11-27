@@ -10,8 +10,9 @@ Governance, by construction:
 * Only registered internal or computer handlers can be planned. Unknown, unimplemented and
   unregistered destructive actions are refused; naming a capability never creates a handler.
 * Computer actions must pass the shared owner permission policy. Per-action approvals are
-  created and consumed by the same adapters used by direct computer tasks. The workflow run,
-  retry and reconciliation HTTP routes require the owner passkey in the production local app.
+  created and consumed by the same adapters used by direct computer tasks. Pending and
+  approved-but-unconsumed tokens are revoked when a step is rejected or a workflow is cancelled.
+  The workflow run, retry and reconciliation HTTP routes require the owner passkey in production.
 * Brain's workflow tool surface remains restricted to the safe internal personal/notification
   subset; it cannot create or execute computer workflows.
 * No step can grant permission or approve another action's pending approval.
