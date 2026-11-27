@@ -396,6 +396,57 @@ def test_approved_workflow_step_survives_stop_all_and_runs_after_resume(env):
     assert target.read_text(encoding="utf-8") == "resume safely"
 
 
+def test_pending_workflow_approval_survives_app_restart(env):
+    client, _memory, store, tmp_path = env
+    root_id = client.app.state.computer_files.list_roots()[0]["root_id"]
+    target = client.app.state.computer_files.roots[root_id] / "restart-pending.txt"
+    wid = create(client, [{
+        "capability": "filesystem.write",
+        "args": {"root_id": root_id, "relative_path": "restart-pending.txt", "content": "after restart"},
+    }]).json()["workflow"]["task_id"]
+    waiting = client.post(f"/api/workflows/{wid}/run").json()
+    approval_id = waiting["steps"][0]["approval_id"]
+    assert waiting["status"] == "awaiting_approval" and not target.exists()
+
+    fresh = TestClient(create_app(
+        store=ObservatoryStore(tmp_path / "obs.sqlite3"),
+        memory=MemoryStore(tmp_path / "memory.sqlite3"),
+    ))
+    restored = fresh.get(f"/api/workflows/{wid}").json()
+    assert restored["status"] == "awaiting_approval"
+    assert restored["steps"][0]["approval_status"] == "pending"
+    assert restored["steps"][0]["approval_id"] == approval_id
+    fresh.app.state.approvals.approve(approval_id)
+    completed = fresh.post(f"/api/workflows/{wid}/run").json()
+    assert completed["status"] == "completed"
+    assert target.read_text(encoding="utf-8") == "after restart"
+
+
+def test_expired_workflow_approval_is_replaced_before_execution(env):
+    client, _memory, *_ = env
+    root_id = client.app.state.computer_files.list_roots()[0]["root_id"]
+    target = client.app.state.computer_files.roots[root_id] / "expired-approval.txt"
+    wid = create(client, [{
+        "capability": "filesystem.write",
+        "args": {"root_id": root_id, "relative_path": "expired-approval.txt", "content": "fresh approval"},
+    }]).json()["workflow"]["task_id"]
+    waiting = client.post(f"/api/workflows/{wid}/run").json()
+    old_id = waiting["steps"][0]["approval_id"]
+    with client.app.state.approvals._connection() as db:
+        db.execute(
+            "UPDATE action_approvals SET expires_at=? WHERE approval_id=?",
+            ("2000-01-01T00:00:00+00:00", old_id),
+        )
+    assert client.get(f"/api/workflows/{wid}").json()["steps"][0]["approval_status"] == "expired"
+
+    refreshed = client.post(f"/api/workflows/{wid}/run").json()
+    new_id = refreshed["steps"][0]["approval_id"]
+    assert refreshed["status"] == "awaiting_approval"
+    assert new_id != old_id
+    assert client.app.state.approvals.status(new_id) == "pending"
+    assert not target.exists()
+
+
 def test_rejecting_pending_computer_approval_fails_workflow_without_side_effect(env):
     client, _memory, *_ = env
     root_id = client.app.state.computer_files.list_roots()[0]["root_id"]
